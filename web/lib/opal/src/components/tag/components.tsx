@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-type TagColor = "green" | "purple" | "blue" | "gray" | "amber";
+type TagColor = "green" | "purple" | "blue" | "gray" | "amber" | "red";
 
 type TagSize = "sm" | "md";
 
@@ -34,6 +34,7 @@ const COLOR_CONFIG: Record<TagColor, { bg: string; text: string }> = {
   blue: { bg: "bg-theme-blue-01", text: "text-theme-blue-05" },
   purple: { bg: "bg-theme-purple-01", text: "text-theme-purple-05" },
   amber: { bg: "bg-theme-amber-01", text: "text-theme-amber-05" },
+  red: { bg: "bg-theme-red-01", text: "text-theme-red-05" },
   gray: { bg: "bg-background-tint-02", text: "text-text-03" },
 };
 

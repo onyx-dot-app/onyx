@@ -1,4 +1,4 @@
-"""SQLAlchemy models for Proposal Review (Argus)."""
+"""SQLAlchemy models for Proposal Review."""
 
 import datetime
 from uuid import UUID
@@ -91,6 +91,10 @@ class ProposalReviewRule(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    refinement_needed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    refinement_question: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -223,6 +227,7 @@ class ProposalReviewFinding(Base):
         PGUUID(as_uuid=True),
         ForeignKey("proposal_review_rule.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     review_run_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

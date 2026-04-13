@@ -1,4 +1,4 @@
-"""Pydantic request/response models for Proposal Review (Argus)."""
+"""Pydantic request/response models for Proposal Review."""
 
 from datetime import datetime
 from typing import Any
@@ -6,6 +6,20 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+
+from onyx.server.features.proposal_review.db.models import ProposalReviewAuditLog
+from onyx.server.features.proposal_review.db.models import ProposalReviewConfig
+from onyx.server.features.proposal_review.db.models import ProposalReviewDecision
+from onyx.server.features.proposal_review.db.models import ProposalReviewDocument
+from onyx.server.features.proposal_review.db.models import ProposalReviewFinding
+from onyx.server.features.proposal_review.db.models import ProposalReviewImportJob
+from onyx.server.features.proposal_review.db.models import ProposalReviewProposal
+from onyx.server.features.proposal_review.db.models import (
+    ProposalReviewProposalDecision,
+)
+from onyx.server.features.proposal_review.db.models import ProposalReviewRule
+from onyx.server.features.proposal_review.db.models import ProposalReviewRuleset
+from onyx.server.features.proposal_review.db.models import ProposalReviewRun
 
 
 # =============================================================================
@@ -41,7 +55,7 @@ class RulesetResponse(BaseModel):
     @classmethod
     def from_model(
         cls,
-        ruleset: Any,
+        ruleset: ProposalReviewRuleset,
         include_rules: bool = True,
     ) -> "RulesetResponse":
         return cls(
@@ -93,6 +107,12 @@ class RuleUpdate(BaseModel):
     is_hard_stop: bool | None = None
     priority: int | None = None
     is_active: bool | None = None
+    refinement_needed: bool | None = None
+    refinement_question: str | None = None
+
+
+class RuleRefinementRequest(BaseModel):
+    answer: str
 
 
 class RuleResponse(BaseModel):
@@ -109,11 +129,13 @@ class RuleResponse(BaseModel):
     is_hard_stop: bool
     priority: int
     is_active: bool
+    refinement_needed: bool
+    refinement_question: str | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, rule: Any) -> "RuleResponse":
+    def from_model(cls, rule: ProposalReviewRule) -> "RuleResponse":
         return cls(
             id=rule.id,
             ruleset_id=rule.ruleset_id,
@@ -128,6 +150,8 @@ class RuleResponse(BaseModel):
             is_hard_stop=rule.is_hard_stop,
             priority=rule.priority,
             is_active=rule.is_active,
+            refinement_needed=rule.refinement_needed,
+            refinement_question=rule.refinement_question,
             created_at=rule.created_at,
             updated_at=rule.updated_at,
         )
@@ -142,6 +166,13 @@ class BulkRuleUpdateRequest(BaseModel):
 
 class BulkRuleUpdateResponse(BaseModel):
     updated_count: int
+
+
+class RuleTestResponse(BaseModel):
+    rule_id: str
+    success: bool
+    error: str | None = None
+    result: dict[str, Any] | None = None
 
 
 # =============================================================================
@@ -164,7 +195,7 @@ class ProposalResponse(BaseModel):
     @classmethod
     def from_model(
         cls,
-        proposal: Any,
+        proposal: ProposalReviewProposal,
         metadata: dict[str, Any] | None = None,
     ) -> "ProposalResponse":
         return cls(
@@ -181,7 +212,7 @@ class ProposalResponse(BaseModel):
 class ProposalListResponse(BaseModel):
     proposals: list[ProposalResponse]
     total_count: int
-    config_missing: bool = False  # True when no Argus config exists
+    config_missing: bool = False  # True when no config exists
 
 
 # =============================================================================
@@ -206,7 +237,7 @@ class ReviewRunResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_model(cls, run: Any) -> "ReviewRunResponse":
+    def from_model(cls, run: ProposalReviewRun) -> "ReviewRunResponse":
         return cls(
             id=run.id,
             proposal_id=run.proposal_id,
@@ -236,7 +267,7 @@ class FindingDecisionResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, decision: Any) -> "FindingDecisionResponse":
+    def from_model(cls, decision: ProposalReviewDecision) -> "FindingDecisionResponse":
         return cls(
             id=decision.id,
             finding_id=decision.finding_id,
@@ -269,7 +300,7 @@ class FindingResponse(BaseModel):
     decision: FindingDecisionResponse | None = None
 
     @classmethod
-    def from_model(cls, finding: Any) -> "FindingResponse":
+    def from_model(cls, finding: ProposalReviewFinding) -> "FindingResponse":
         decision = None
         if finding.decision is not None:
             decision = FindingDecisionResponse.from_model(finding.decision)
@@ -328,7 +359,9 @@ class ProposalDecisionResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_model(cls, decision: Any) -> "ProposalDecisionResponse":
+    def from_model(
+        cls, decision: ProposalReviewProposalDecision
+    ) -> "ProposalDecisionResponse":
         return cls(
             id=decision.id,
             proposal_id=decision.proposal_id,
@@ -369,7 +402,7 @@ class ConfigResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, config: Any) -> "ConfigResponse":
+    def from_model(cls, config: ProposalReviewConfig) -> "ConfigResponse":
         return cls(
             id=config.id,
             tenant_id=config.tenant_id,
@@ -404,7 +437,7 @@ class ImportJobResponse(BaseModel):
     completed_at: datetime | None
 
     @classmethod
-    def from_model(cls, job: Any) -> "ImportJobResponse":
+    def from_model(cls, job: ProposalReviewImportJob) -> "ImportJobResponse":
         return cls(
             id=job.id,
             status=job.status,
@@ -432,7 +465,7 @@ class ProposalDocumentResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_model(cls, doc: Any) -> "ProposalDocumentResponse":
+    def from_model(cls, doc: ProposalReviewDocument) -> "ProposalDocumentResponse":
         return cls(
             id=doc.id,
             proposal_id=doc.proposal_id,
@@ -459,7 +492,7 @@ class AuditLogEntry(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_model(cls, entry: Any) -> "AuditLogEntry":
+    def from_model(cls, entry: ProposalReviewAuditLog) -> "AuditLogEntry":
         return cls(
             id=entry.id,
             proposal_id=entry.proposal_id,

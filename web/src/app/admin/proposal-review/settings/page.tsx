@@ -41,8 +41,8 @@ function ProposalReviewSettingsPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSettings}
-        title="Jira Integration"
-        description="Configure which Jira connector to use and how fields are mapped."
+        title="Proposal Review Configuration"
+        description="Configure the proposal review process."
         separator
         backButton
         onBack={() => router.push("/admin/proposal-review")}

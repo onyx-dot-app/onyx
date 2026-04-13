@@ -1,1 +1,1 @@
-"""Argus Review Engine — AI-powered proposal evaluation."""
+"""Proposal Review Engine — AI-powered proposal evaluation."""

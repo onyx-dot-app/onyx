@@ -5,6 +5,12 @@
 // GET requests are handled by SWR hooks — see hooks/.
 // ---------------------------------------------------------------------------
 
+import type {
+  DecisionAction,
+  ProposalDecisionOutcome,
+  DocumentRole,
+} from "@/app/proposal-review/types";
+
 const BASE = "/api/proposal-review";
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -31,7 +37,7 @@ export async function triggerReview(
 /** Record an officer decision on an individual finding. */
 export async function submitFindingDecision(
   findingId: string,
-  action: string,
+  action: DecisionAction,
   notes?: string
 ): Promise<void> {
   const res = await fetch(`${BASE}/findings/${findingId}/decision`, {
@@ -45,7 +51,7 @@ export async function submitFindingDecision(
 /** Record the final proposal-level decision. */
 export async function submitProposalDecision(
   proposalId: string,
-  decision: string,
+  decision: ProposalDecisionOutcome,
   notes?: string
 ): Promise<void> {
   const res = await fetch(`${BASE}/proposals/${proposalId}/decision`, {
@@ -68,7 +74,7 @@ export async function syncToJira(proposalId: string): Promise<void> {
 export async function uploadDocument(
   proposalId: string,
   file: File,
-  documentRole: string
+  documentRole: DocumentRole
 ): Promise<void> {
   const formData = new FormData();
   formData.append("file", file);

@@ -46,9 +46,11 @@ function MetadataRow({ label, value }: MetadataRowProps) {
       <Text font="secondary-body" color="text-03" nowrap>
         {label}
       </Text>
-      <Text font="main-ui-body" color="text-04" as="span">
-        {display}
-      </Text>
+      <div className="text-end">
+        <Text font="main-ui-body" color="text-04" as="span">
+          {display}
+        </Text>
+      </div>
     </div>
   );
 }
@@ -162,12 +164,14 @@ export default function ProposalInfoPanel({
                   }
                 >
                   <SvgFileText className="h-4 w-4 text-text-03 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <Text font="main-ui-body" color="text-04" nowrap>
+                  <div className="flex-1 min-w-0 truncate">
+                    <Text font="main-ui-body" color="text-04">
                       {doc.file_name}
                     </Text>
                   </div>
-                  <Tag title={doc.document_role} color="gray" size="sm" />
+                  <div className="shrink-0">
+                    <Tag title={doc.document_role} color="gray" size="sm" />
+                  </div>
                 </div>
               ))}
             </div>

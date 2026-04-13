@@ -1,4 +1,4 @@
-"""Main router for Proposal Review (Argus).
+"""Main router for Proposal Review.
 
 Mounts all sub-routers under /proposal-review prefix.
 """

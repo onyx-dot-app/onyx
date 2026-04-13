@@ -79,10 +79,12 @@ def _resolve_document_metadata(
         return raw_metadata
 
     # Filter to only the selected fields, plus always include core fields
+    # that the frontend needs for navigation, display, and filtering.
     resolved: dict[str, Any] = {
         "jira_key": raw_metadata.get("jira_key"),
         "title": raw_metadata.get("title"),
         "link": raw_metadata.get("link"),
+        "status": raw_metadata.get("status"),
     }
     for key in visible_fields:
         if key in raw_metadata:
@@ -113,7 +115,7 @@ def list_proposals(
     # Get config for field mapping and Jira project filtering
     config = config_db.get_config(tenant_id, db_session)
 
-    # When no Argus config exists, return an empty list with a hint for the frontend.
+    # When no config exists, return an empty list with a hint for the frontend.
     # The frontend can show "Configure a Jira connector in Settings to see proposals."
     if config is None:
         return ProposalListResponse(

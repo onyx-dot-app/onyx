@@ -7,14 +7,19 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import InputSearch from "@/refresh-components/inputs/InputSearch";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { toast } from "@/hooks/useToast";
 import { Button, Text, Tag, Card } from "@opal/components";
 import { ContentAction, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
+  SvgAlertCircle,
+  SvgCheckCircle,
   SvgClipboard,
   SvgEdit,
   SvgMoreHorizontal,
+  SvgPauseCircle,
   SvgPlayCircle,
   SvgPlus,
   SvgTrash,
@@ -22,11 +27,13 @@ import {
 } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
 import RuleEditor from "@/app/admin/proposal-review/components/RuleEditor";
 import ImportFlow from "@/app/admin/proposal-review/components/ImportFlow";
 import { useImportStatus } from "@/app/admin/proposal-review/hooks/useImportStatus";
+import RefinementModal from "@/app/admin/proposal-review/components/RefinementModal";
 import RuleTestModal from "@/app/admin/proposal-review/components/RuleTestModal";
 import type {
   RulesetResponse,
@@ -54,7 +61,10 @@ function RulesetDetailPage() {
   const [showImportFlow, setShowImportFlow] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RuleResponse | null>(null);
   const [testTarget, setTestTarget] = useState<RuleResponse | null>(null);
+  const [refineTarget, setRefineTarget] = useState<RuleResponse | null>(null);
   const [ruleSearch, setRuleSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   // Import job tracking — persists across navigation via the hook's SWR polling
   const [importJobId, setImportJobId] = useState<string | null>(null);
@@ -226,9 +236,7 @@ function RulesetDetailPage() {
         const err = await res.json();
         throw new Error(err.detail || "Bulk operation failed");
       }
-      if (action === "delete") {
-        setSelectedRuleIds(new Set());
-      }
+      setSelectedRuleIds(new Set());
       await mutate(apiUrl);
       toast.success(
         `Bulk ${action} completed for ${selectedRuleIds.size} rule${
@@ -242,19 +250,83 @@ function RulesetDetailPage() {
     }
   }
 
-  const allRuleIds = useMemo(
-    () => new Set(ruleset?.rules.map((r) => r.id) || []),
-    [ruleset?.rules]
+  const categories = useMemo(() => {
+    if (!ruleset) return [];
+    const cats = new Set(
+      ruleset.rules.map((r) => r.category).filter(Boolean) as string[]
+    );
+    return Array.from(cats).sort();
+  }, [ruleset]);
+
+  const filteredRules = useMemo(() => {
+    if (!ruleset) return [];
+    let rules = ruleset.rules;
+
+    if (ruleSearch) {
+      const q = ruleSearch.toLowerCase();
+      rules = rules.filter(
+        (rule) =>
+          rule.name.toLowerCase().includes(q) ||
+          (rule.category ?? "").toLowerCase().includes(q) ||
+          (rule.description ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    if (categoryFilter !== "all") {
+      rules = rules.filter((r) => r.category === categoryFilter);
+    }
+
+    if (statusFilter === "active") {
+      rules = rules.filter((r) => r.is_active);
+    } else if (statusFilter === "inactive") {
+      rules = rules.filter((r) => !r.is_active);
+    } else if (statusFilter === "refinement") {
+      rules = rules.filter((r) => r.refinement_needed);
+    }
+
+    // Default sort by category (natural order), then name within each category
+    const natural = { numeric: true, sensitivity: "base" } as const;
+    return [...rules].sort((a, b) => {
+      const catCmp = (a.category ?? "").localeCompare(
+        b.category ?? "",
+        undefined,
+        natural
+      );
+      if (catCmp !== 0) return catCmp;
+      return a.name.localeCompare(b.name, undefined, natural);
+    });
+  }, [ruleset, ruleSearch, categoryFilter, statusFilter]);
+
+  const filteredRuleIds = useMemo(
+    () => new Set(filteredRules.map((r) => r.id)),
+    [filteredRules]
   );
 
+  // "All selected" means every currently visible (filtered) rule is selected
+  const filteredRuleIdArr = Array.from(filteredRuleIds);
+
   const allSelected =
-    allRuleIds.size > 0 && selectedRuleIds.size === allRuleIds.size;
+    filteredRuleIds.size > 0 &&
+    filteredRuleIdArr.every((id) => selectedRuleIds.has(id));
+
+  const someSelected =
+    !allSelected && filteredRuleIdArr.some((id) => selectedRuleIds.has(id));
 
   function toggleSelectAll() {
     if (allSelected) {
-      setSelectedRuleIds(new Set());
+      // Deselect all visible rules (keep any selected but currently hidden rules)
+      setSelectedRuleIds((prev) => {
+        const next = new Set(prev);
+        filteredRuleIdArr.forEach((id) => next.delete(id));
+        return next;
+      });
     } else {
-      setSelectedRuleIds(new Set(allRuleIds));
+      // Select all visible rules
+      setSelectedRuleIds((prev) => {
+        const next = new Set(prev);
+        filteredRuleIdArr.forEach((id) => next.add(id));
+        return next;
+      });
     }
   }
 
@@ -271,78 +343,113 @@ function RulesetDetailPage() {
   }
 
   function RuleCard({ rule }: { rule: RuleResponse }) {
+    const isSelected = selectedRuleIds.has(rule.id);
+
     return (
-      <div
-        className="cursor-pointer"
-        onClick={() => {
-          setEditingRule(rule);
-          setShowRuleEditor(true);
-        }}
-      >
-        <Card padding="md" border="solid" background="light">
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            title={rule.name}
-            description={rule.description || rule.category || undefined}
-            rightChildren={
-              <div
-                className="flex items-center gap-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {rule.category && (
-                  <Tag title={rule.category} color="gray" size="sm" />
-                )}
-                <Tag
-                  title={rule.is_active ? "Active" : "Inactive"}
-                  color={rule.is_active ? "green" : "gray"}
-                  size="sm"
-                />
-                {rule.is_hard_stop && (
-                  <Tag title="Hard Stop" color="amber" size="sm" />
-                )}
-                <Popover>
-                  <Popover.Trigger asChild>
-                    <Button
-                      icon={SvgMoreHorizontal}
-                      prominence="tertiary"
-                      tooltip="More"
-                    />
-                  </Popover.Trigger>
-                  <Popover.Content side="bottom" align="end" width="md">
-                    <PopoverMenu>
-                      <LineItem
-                        icon={SvgEdit}
-                        onClick={() => {
-                          setEditingRule(rule);
-                          setShowRuleEditor(true);
-                        }}
-                      >
-                        Edit Rule
-                      </LineItem>
-                      <LineItem
-                        icon={SvgPlayCircle}
-                        onClick={() => setTestTarget(rule)}
-                      >
-                        Test Rule
-                      </LineItem>
-                      <LineItem onClick={() => handleToggleRuleActive(rule)}>
-                        {rule.is_active ? "Deactivate" : "Activate"}
-                      </LineItem>
-                      <LineItem
-                        icon={SvgTrash}
-                        danger
-                        onClick={() => setDeleteTarget(rule)}
-                      >
-                        Delete Rule
-                      </LineItem>
-                    </PopoverMenu>
-                  </Popover.Content>
-                </Popover>
-              </div>
-            }
+      <div className="flex items-center gap-3">
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => toggleSelectRule(rule.id)}
+            aria-label={`Select ${rule.name}`}
           />
-        </Card>
+        </div>
+        <div
+          className="flex-1 cursor-pointer"
+          onClick={() => {
+            setEditingRule(rule);
+            setShowRuleEditor(true);
+          }}
+        >
+          <Card padding="md" border="solid" background="light">
+            <ContentAction
+              sizePreset="main-ui"
+              variant="section"
+              title={rule.name}
+              description={rule.description || rule.category || undefined}
+              rightChildren={
+                <div
+                  className="flex items-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {rule.category && (
+                    <SimpleTooltip
+                      tooltip={rule.category}
+                      side="top"
+                      delayDuration={0}
+                    >
+                      <div className="max-w-[160px] overflow-hidden [&>.opal-auxiliary-tag]:shrink [&>.opal-auxiliary-tag>span]:truncate">
+                        <Tag title={rule.category} color="gray" size="sm" />
+                      </div>
+                    </SimpleTooltip>
+                  )}
+                  <Tag
+                    title={rule.is_active ? "Active" : "Inactive"}
+                    color={rule.is_active ? "green" : "gray"}
+                    size="sm"
+                  />
+                  {rule.refinement_needed && (
+                    <Tag title="Needs Refinement" color="purple" size="sm" />
+                  )}
+                  {rule.is_hard_stop && (
+                    <Tag title="Hard Stop" color="amber" size="sm" />
+                  )}
+                  <Popover>
+                    <Popover.Trigger asChild>
+                      <Button
+                        icon={SvgMoreHorizontal}
+                        prominence="tertiary"
+                        tooltip="More"
+                      />
+                    </Popover.Trigger>
+                    <Popover.Content side="bottom" align="end" width="md">
+                      <PopoverMenu>
+                        <LineItem
+                          icon={SvgEdit}
+                          onClick={() => {
+                            setEditingRule(rule);
+                            setShowRuleEditor(true);
+                          }}
+                        >
+                          Edit Rule
+                        </LineItem>
+                        <LineItem
+                          icon={SvgPlayCircle}
+                          onClick={() => setTestTarget(rule)}
+                        >
+                          Test Rule
+                        </LineItem>
+                        {rule.refinement_needed && (
+                          <LineItem
+                            icon={SvgAlertCircle}
+                            onClick={() => setRefineTarget(rule)}
+                          >
+                            Answer Refinement Question
+                          </LineItem>
+                        )}
+                        <LineItem
+                          icon={
+                            rule.is_active ? SvgPauseCircle : SvgCheckCircle
+                          }
+                          onClick={() => handleToggleRuleActive(rule)}
+                        >
+                          {rule.is_active ? "Deactivate" : "Activate"}
+                        </LineItem>
+                        <LineItem
+                          icon={SvgTrash}
+                          danger
+                          onClick={() => setDeleteTarget(rule)}
+                        >
+                          Delete Rule
+                        </LineItem>
+                      </PopoverMenu>
+                    </Popover.Content>
+                  </Popover>
+                </div>
+              }
+            />
+          </Card>
+        </div>
       </div>
     );
   }
@@ -413,6 +520,14 @@ function RulesetDetailPage() {
 
         {/* Search + action bar */}
         <div className="flex items-center gap-3">
+          {ruleset.rules.length > 0 && (
+            <Checkbox
+              checked={allSelected}
+              indeterminate={someSelected}
+              onCheckedChange={toggleSelectAll}
+              aria-label="Select all rules"
+            />
+          )}
           <div className="flex-1">
             <InputSearch
               placeholder="Search rules..."
@@ -420,57 +535,91 @@ function RulesetDetailPage() {
               onChange={(e) => setRuleSearch(e.target.value)}
             />
           </div>
-          <Button
-            prominence="secondary"
-            icon={SvgUploadCloud}
-            onClick={() => setShowImportFlow(true)}
-          >
-            Import
-          </Button>
-          <Button
-            icon={SvgPlus}
-            onClick={() => {
-              setEditingRule(null);
-              setShowRuleEditor(true);
-            }}
-          >
-            Add Rule
-          </Button>
-        </div>
-
-        {/* Batch action bar */}
-        {selectedRuleIds.size > 0 && (
-          <div className="flex items-center gap-3 p-3 bg-background-neutral-02 rounded-08">
-            <Text font="main-ui-action" color="text-03">
-              {`${selectedRuleIds.size} selected`}
-            </Text>
-            <Button
-              prominence="secondary"
-              size="sm"
-              onClick={() => handleBulkAction("activate")}
-              disabled={batchSaving}
-            >
-              Activate
-            </Button>
-            <Button
-              prominence="secondary"
-              size="sm"
-              onClick={() => handleBulkAction("deactivate")}
-              disabled={batchSaving}
-            >
-              Deactivate
-            </Button>
-            <Button
-              variant="danger"
-              prominence="secondary"
-              size="sm"
-              onClick={() => handleBulkAction("delete")}
-              disabled={batchSaving}
-            >
-              Delete
-            </Button>
+          {categories.length > 0 && (
+            <div className="shrink-0">
+              <InputSelect
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+              >
+                <InputSelect.Trigger placeholder="Category" />
+                <InputSelect.Content>
+                  <InputSelect.Item value="all">
+                    All Categories
+                  </InputSelect.Item>
+                  {categories.map((cat) => (
+                    <InputSelect.Item key={cat} value={cat}>
+                      {cat}
+                    </InputSelect.Item>
+                  ))}
+                </InputSelect.Content>
+              </InputSelect>
+            </div>
+          )}
+          <div className="shrink-0">
+            <InputSelect value={statusFilter} onValueChange={setStatusFilter}>
+              <InputSelect.Trigger placeholder="Status" />
+              <InputSelect.Content>
+                <InputSelect.Item value="all">All Statuses</InputSelect.Item>
+                <InputSelect.Item value="active">Active</InputSelect.Item>
+                <InputSelect.Item value="inactive">Inactive</InputSelect.Item>
+                <InputSelect.Item value="refinement">
+                  Needs Refinement
+                </InputSelect.Item>
+              </InputSelect.Content>
+            </InputSelect>
           </div>
-        )}
+          {selectedRuleIds.size > 0 ? (
+            <>
+              <Text font="main-ui-action" color="text-03">
+                {`${selectedRuleIds.size} selected`}
+              </Text>
+              <Button
+                prominence="secondary"
+                size="sm"
+                onClick={() => handleBulkAction("activate")}
+                disabled={batchSaving}
+              >
+                Activate
+              </Button>
+              <Button
+                prominence="secondary"
+                size="sm"
+                onClick={() => handleBulkAction("deactivate")}
+                disabled={batchSaving}
+              >
+                Deactivate
+              </Button>
+              <Button
+                variant="danger"
+                prominence="secondary"
+                size="sm"
+                onClick={() => handleBulkAction("delete")}
+                disabled={batchSaving}
+              >
+                Delete
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                prominence="secondary"
+                icon={SvgUploadCloud}
+                onClick={() => setShowImportFlow(true)}
+              >
+                Import
+              </Button>
+              <Button
+                icon={SvgPlus}
+                onClick={() => {
+                  setEditingRule(null);
+                  setShowRuleEditor(true);
+                }}
+              >
+                Add Rule
+              </Button>
+            </>
+          )}
+        </div>
 
         {/* Rules list */}
         {ruleset.rules.length === 0 ? (
@@ -479,21 +628,17 @@ function RulesetDetailPage() {
             title="No rules yet"
             description="Add rules manually or import from a checklist."
           />
+        ) : filteredRules.length === 0 ? (
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title="No matching rules"
+            description="Try a different search term."
+          />
         ) : (
           <div className="flex flex-col gap-2">
-            {ruleset.rules
-              .filter((rule) => {
-                if (!ruleSearch) return true;
-                const q = ruleSearch.toLowerCase();
-                return (
-                  rule.name.toLowerCase().includes(q) ||
-                  (rule.category ?? "").toLowerCase().includes(q) ||
-                  (rule.description ?? "").toLowerCase().includes(q)
-                );
-              })
-              .map((rule) => (
-                <RuleCard key={rule.id} rule={rule} />
-              ))}
+            {filteredRules.map((rule) => (
+              <RuleCard key={rule.id} rule={rule} />
+            ))}
           </div>
         )}
       </SettingsLayouts.Body>
@@ -521,6 +666,14 @@ function RulesetDetailPage() {
         open={!!testTarget}
         onClose={() => setTestTarget(null)}
         rule={testTarget}
+      />
+
+      {/* Rule Refinement Modal */}
+      <RefinementModal
+        open={!!refineTarget}
+        onClose={() => setRefineTarget(null)}
+        rule={refineTarget}
+        onRefined={() => mutate(apiUrl)}
       />
 
       {/* Delete Rule Confirmation */}

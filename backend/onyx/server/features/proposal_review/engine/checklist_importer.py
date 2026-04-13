@@ -20,9 +20,12 @@ import re
 from dataclasses import dataclass
 from dataclasses import field
 
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
+from onyx.llm.utils import get_llm_max_output_tokens
+from onyx.llm.utils import get_model_map
 from onyx.llm.utils import llm_response_to_string
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
@@ -178,9 +181,13 @@ def enumerate_checklist_items(
         UserMessage(content=user_content),
     ]
 
+    max_output_tokens = _get_max_output_tokens(llm)
+
     try:
         with llm_generation_span(llm, "checklist_enumerate", messages) as gen_span:
-            response = llm.invoke(messages, timeout_override=300)
+            response = llm.invoke(
+                messages, timeout_override=300, max_tokens=max_output_tokens
+            )
             record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
     except Exception as e:
@@ -249,11 +256,15 @@ def decompose_checklist_item(
         UserMessage(content=user_content),
     ]
 
+    max_output_tokens = _get_max_output_tokens(llm)
+
     try:
         with llm_generation_span(
             llm, f"checklist_decompose_{item.id}", messages
         ) as gen_span:
-            response = llm.invoke(messages, timeout_override=300)
+            response = llm.invoke(
+                messages, timeout_override=300, max_tokens=max_output_tokens
+            )
             record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
     except Exception as e:
@@ -275,8 +286,144 @@ def decompose_checklist_item(
 
 
 # ---------------------------------------------------------------------------
+# Prompts — Refinement (single rule)
+# ---------------------------------------------------------------------------
+
+_REFINE_SYSTEM = """\
+You are an expert at creating AI review rules for university grant proposal \
+review. You are refining a rule that was previously flagged as needing \
+institution-specific information. The user has now provided that information.
+
+Variable placeholders available for prompt templates:
+  {{{{proposal_text}}}}          — full proposal and supporting documents
+  {{{{budget_text}}}}            — budget / financial sections
+  {{{{foa_text}}}}               — funding opportunity announcement
+  {{{{metadata}}}}               — structured metadata (PI, sponsor, etc.)
+  {{{{metadata.FIELD_NAME}}}}    — a specific metadata field
+
+Rule types:
+  DOCUMENT_CHECK    — verify presence / content in documents
+  METADATA_CHECK    — validate a structured metadata field
+  CROSS_REFERENCE   — compare information across documents
+  CUSTOM_NL         — natural language evaluation
+
+Rule intents:
+  CHECK     — pass / fail criterion
+  HIGHLIGHT — informational flag (no pass / fail)"""
+
+_REFINE_USER = """\
+The following rule was imported from a checklist but flagged as needing \
+additional information before it can be used.
+
+CURRENT RULE:
+  Name: {rule_name}
+  Description: {rule_description}
+  Prompt Template: {rule_prompt_template}
+
+QUESTION THAT WAS ASKED:
+  {refinement_question}
+
+USER'S ANSWER:
+  {user_answer}
+
+Using the user's answer, produce a refined version of this rule. \
+Incorporate the institution-specific information into the prompt_template \
+so the rule is fully self-contained and no longer needs refinement.
+
+Respond with ONLY a single JSON object (not an array):
+{{
+  "name": "Short descriptive name (max 100 chars)",
+  "description": "What this rule checks",
+  "rule_type": "DOCUMENT_CHECK | METADATA_CHECK | CROSS_REFERENCE | CUSTOM_NL",
+  "rule_intent": "CHECK | HIGHLIGHT",
+  "prompt_template": "Refined self-contained prompt with {{{{variable}}}} placeholders.",
+  "refinement_needed": false,
+  "refinement_question": null
+}}"""
+
+
+def refine_rule(
+    rule_name: str,
+    rule_description: str | None,
+    rule_prompt_template: str,
+    refinement_question: str,
+    user_answer: str,
+    llm: LLM,
+) -> dict:
+    """Refine a single rule using the user's answer to the refinement question.
+
+    One LLM call. Returns a validated rule dict with refinement_needed=False.
+
+    Raises:
+        RuntimeError: If the LLM call fails or returns unparseable output.
+    """
+    user_content = _REFINE_USER.format(
+        rule_name=rule_name,
+        rule_description=rule_description or "(none)",
+        rule_prompt_template=rule_prompt_template,
+        refinement_question=refinement_question,
+        user_answer=user_answer,
+    )
+    messages = [
+        SystemMessage(content=_REFINE_SYSTEM),
+        UserMessage(content=user_content),
+    ]
+
+    try:
+        with llm_generation_span(llm, "checklist_refine_rule", messages) as gen_span:
+            response = llm.invoke(messages, timeout_override=120)
+            record_llm_response(gen_span, response)
+        raw_text = llm_response_to_string(response)
+    except Exception as e:
+        raise RuntimeError(f"LLM call failed during rule refinement: {str(e)}") from e
+
+    # Parse the single JSON object (strip code fences)
+    text = raw_text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text)
+        text = text.strip()
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"LLM returned invalid JSON during refinement: {e}") from e
+
+    if isinstance(parsed, list):
+        if not parsed:
+            raise RuntimeError("LLM returned an empty array during refinement")
+        parsed = parsed[0]
+
+    if not isinstance(parsed, dict):
+        raise RuntimeError("LLM returned non-object JSON during refinement")
+
+    rule = _validate_rule(parsed, 0)
+    if not rule:
+        raise RuntimeError("LLM returned an invalid rule during refinement")
+
+    # Force refinement_needed to False
+    rule["refinement_needed"] = False
+    rule["refinement_question"] = None
+    return rule
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_max_output_tokens(llm: LLM) -> int:
+    """Look up the model's max output tokens from litellm's model cost map."""
+    try:
+        model_map = get_model_map()
+        return get_llm_max_output_tokens(
+            model_map=model_map,
+            model_name=llm.config.model_name,
+            model_provider=llm.config.model_provider,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to resolve max output tokens: {e}")
+        return int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
 
 def _parse_json_array(raw_text: str, context: str) -> list:
@@ -342,5 +489,9 @@ def _validate_rule(raw_rule: dict, index: int) -> dict | None:
         "rule_intent": rule_intent,
         "prompt_template": str(prompt_template),
         "refinement_needed": bool(raw_rule.get("refinement_needed", False)),
-        "refinement_question": raw_rule.get("refinement_question"),
+        "refinement_question": (
+            str(raw_rule["refinement_question"])
+            if raw_rule.get("refinement_question")
+            else None
+        ),
     }

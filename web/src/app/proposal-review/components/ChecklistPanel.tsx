@@ -18,6 +18,7 @@ import { useFindings } from "@/app/proposal-review/hooks/useFindings";
 import { useReviewStatus } from "@/app/proposal-review/hooks/useReviewStatus";
 import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
 import { triggerReview } from "@/app/proposal-review/services/apiServices";
+import type { Finding } from "@/app/proposal-review/types";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -37,8 +38,8 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     isReviewRunning,
     setIsReviewRunning,
     setCurrentReviewRunId,
-    findingsLoaded,
-    setFindingsLoaded,
+    focusedFindingId,
+    setFocusedFindingId,
     resetReviewState,
   } = useProposalReviewContext();
 
@@ -54,8 +55,11 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     }
   }, [proposalId, resetReviewState]);
 
-  // Poll review status while running
-  const { reviewStatus } = useReviewStatus(proposalId, isReviewRunning);
+  // Always fetch latest review run; poll while running
+  const { reviewStatus, mutate: mutateReviewStatus } = useReviewStatus(
+    proposalId,
+    isReviewRunning
+  );
 
   // Fetch findings
   const {
@@ -74,18 +78,10 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     ) {
       setIsReviewRunning(false);
       if (reviewStatus.status === "COMPLETED") {
-        setFindingsLoaded(true);
         mutateFindings();
       }
     }
-  }, [reviewStatus, setIsReviewRunning, setFindingsLoaded, mutateFindings]);
-
-  // On mount, if there are existing findings, mark as loaded
-  useEffect(() => {
-    if (findings.length > 0 && !findingsLoaded) {
-      setFindingsLoaded(true);
-    }
-  }, [findings.length, findingsLoaded, setFindingsLoaded]);
+  }, [reviewStatus, setIsReviewRunning, mutateFindings]);
 
   const handleRunReview = useCallback(async () => {
     if (!selectedRulesetId) return;
@@ -96,6 +92,7 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     try {
       const result = await triggerReview(proposalId, selectedRulesetId);
       setCurrentReviewRunId(result.id);
+      mutateReviewStatus();
     } catch (err) {
       setIsReviewRunning(false);
       setTriggerError(
@@ -107,17 +104,23 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     selectedRulesetId,
     setIsReviewRunning,
     setCurrentReviewRunId,
+    mutateReviewStatus,
   ]);
+
+  const handleFocusHandled = useCallback(
+    () => setFocusedFindingId(null),
+    [setFocusedFindingId]
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Top bar: ruleset selector + run button */}
+      {/* Top bar: ruleset selector + run button + progress */}
       <div className="flex items-center gap-3 p-4 border-b border-border-01 shrink-0">
-        <div className="flex-1 max-w-[200px]">
+        <div className="shrink-0 max-w-[200px]">
           <RulesetSelector />
         </div>
         <Button
-          variant="action"
+          variant="default"
           prominence="primary"
           icon={SvgPlayCircle}
           disabled={!selectedRulesetId || isReviewRunning}
@@ -125,6 +128,10 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
         >
           {isReviewRunning ? "Running..." : "Run Review"}
         </Button>
+        {reviewStatus && <ReviewProgress reviewStatus={reviewStatus} />}
+        {isReviewRunning && !reviewStatus && (
+          <SimpleLoader className="h-4 w-4" />
+        )}
       </div>
 
       {triggerError && (
@@ -132,18 +139,6 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
           <Text font="secondary-body" color="text-03">
             {triggerError}
           </Text>
-        </div>
-      )}
-
-      {/* Review progress */}
-      {isReviewRunning && reviewStatus && (
-        <ReviewProgress reviewStatus={reviewStatus} />
-      )}
-
-      {/* Loading spinner while review is starting */}
-      {isReviewRunning && !reviewStatus && (
-        <div className="flex items-center justify-center py-8">
-          <SimpleLoader className="h-6 w-6" />
         </div>
       )}
 
@@ -172,6 +167,8 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
                 key={group.category}
                 category={group.category}
                 findings={group.findings}
+                focusedFindingId={focusedFindingId}
+                onFocusHandled={handleFocusHandled}
                 onDecisionSaved={() => mutateFindings()}
               />
             ))}
@@ -188,23 +185,37 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
 
 interface CategoryGroupProps {
   category: string;
-  findings: import("@/app/proposal-review/types").Finding[];
+  findings: Finding[];
+  focusedFindingId: string | null;
+  onFocusHandled: () => void;
   onDecisionSaved: () => void;
 }
 
 function CategoryGroup({
   category,
   findings,
+  focusedFindingId,
+  onFocusHandled,
   onDecisionSaved,
 }: CategoryGroupProps) {
   const failCount = findings.filter(
     (f) => f.verdict === "FAIL" || f.verdict === "FLAG"
   ).length;
-  const passCount = findings.filter((f) => f.verdict === "PASS").length;
   const decidedCount = findings.filter((f) => f.decision !== null).length;
 
   // Default open if there are failures/flags
   const [isOpen, setIsOpen] = useState(failCount > 0);
+
+  // Auto-open this group when a finding inside it is focused
+  const containsFocused =
+    focusedFindingId !== null &&
+    findings.some((f) => f.id === focusedFindingId);
+
+  useEffect(() => {
+    if (containsFocused) {
+      setIsOpen(true);
+    }
+  }, [containsFocused]);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -248,6 +259,8 @@ function CategoryGroup({
             <FindingCard
               key={finding.id}
               finding={finding}
+              isFocused={finding.id === focusedFindingId}
+              onFocusHandled={onFocusHandled}
               onDecisionSaved={onDecisionSaved}
             />
           ))}

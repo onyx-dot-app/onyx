@@ -9,6 +9,8 @@ from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.db.models import ProposalReviewRule
 from onyx.server.features.proposal_review.db.models import ProposalReviewRuleset
 from onyx.utils.logger import setup_logger
@@ -30,6 +32,8 @@ _RULE_UPDATABLE_FIELDS = frozenset(
         "is_hard_stop",
         "priority",
         "is_active",
+        "refinement_needed",
+        "refinement_question",
     }
 )
 
@@ -112,7 +116,9 @@ def update_ruleset(
 
     for field, value in updates.items():
         if field not in _RULESET_UPDATABLE_FIELDS:
-            raise ValueError(f"Cannot update ruleset field: {field}")
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, f"Cannot update field: {field}"
+            )
         if field == "is_default" and value:
             _clear_default_ruleset(tenant_id, db_session)
         setattr(ruleset, field, value)
@@ -179,6 +185,30 @@ def get_rule(
     )
 
 
+def get_rule_with_tenant_check(
+    rule_id: UUID,
+    tenant_id: str,
+    db_session: Session,
+) -> ProposalReviewRule | None:
+    """Get a single rule by ID, validating it belongs to the given tenant.
+
+    Joins with the ruleset table so the tenant check happens in one query,
+    eliminating the race between separate get_rule + get_ruleset calls.
+    """
+    return (
+        db_session.query(ProposalReviewRule)
+        .join(
+            ProposalReviewRuleset,
+            ProposalReviewRule.ruleset_id == ProposalReviewRuleset.id,
+        )
+        .filter(
+            ProposalReviewRule.id == rule_id,
+            ProposalReviewRuleset.tenant_id == tenant_id,
+        )
+        .one_or_none()
+    )
+
+
 def create_rule(
     ruleset_id: UUID,
     name: str,
@@ -192,6 +222,8 @@ def create_rule(
     authority: str | None = None,
     is_hard_stop: bool = False,
     priority: int = 0,
+    refinement_needed: bool = False,
+    refinement_question: str | None = None,
 ) -> ProposalReviewRule:
     """Create a new rule within a ruleset."""
     rule = ProposalReviewRule(
@@ -206,6 +238,8 @@ def create_rule(
         authority=authority,
         is_hard_stop=is_hard_stop,
         priority=priority,
+        refinement_needed=refinement_needed,
+        refinement_question=refinement_question,
     )
     db_session.add(rule)
     db_session.flush()
@@ -225,7 +259,9 @@ def update_rule(
 
     for field, value in updates.items():
         if field not in _RULE_UPDATABLE_FIELDS:
-            raise ValueError(f"Cannot update rule field: {field}")
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, f"Cannot update field: {field}"
+            )
         setattr(rule, field, value)
 
     rule.updated_at = datetime.now(timezone.utc)
@@ -279,7 +315,7 @@ def bulk_update_rules(
             synchronize_session="fetch",
         )
     else:
-        raise ValueError(f"Unknown bulk action: {action}")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown bulk action: {action}")
 
     db_session.flush()
     logger.info(f"Bulk {action} on {count} rules")

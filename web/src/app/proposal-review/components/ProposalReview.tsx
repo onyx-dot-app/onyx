@@ -86,7 +86,7 @@ export default function ProposalReview({ proposalId }: ProposalReviewProps) {
       {/* Three-panel layout */}
       <div className="flex flex-1 min-h-0">
         {/* Left panel: Proposal info */}
-        <div className="w-[300px] shrink-0 border-r border-border-01 overflow-y-auto">
+        <div className="w-[400px] shrink-0 border-r border-border-01 overflow-y-auto">
           <ProposalInfoPanel proposal={proposal} />
         </div>
 

@@ -26,9 +26,9 @@ interface ProposalReviewContextValue {
   currentReviewRunId: string | null;
   setCurrentReviewRunId: (id: string | null) => void;
 
-  /** Whether findings have been loaded after a completed review. */
-  findingsLoaded: boolean;
-  setFindingsLoaded: (loaded: boolean) => void;
+  /** Finding ID to scroll to and highlight in ChecklistPanel. */
+  focusedFindingId: string | null;
+  setFocusedFindingId: (id: string | null) => void;
 
   /** Reset review state (for starting a new review). */
   resetReviewState: () => void;
@@ -60,12 +60,12 @@ export function ProposalReviewProvider({
   const [currentReviewRunId, setCurrentReviewRunId] = useState<string | null>(
     null
   );
-  const [findingsLoaded, setFindingsLoaded] = useState(false);
+  const [focusedFindingId, setFocusedFindingId] = useState<string | null>(null);
 
   const resetReviewState = useCallback(() => {
     setIsReviewRunning(false);
     setCurrentReviewRunId(null);
-    setFindingsLoaded(false);
+    setFocusedFindingId(null);
   }, []);
 
   const value = useMemo<ProposalReviewContextValue>(
@@ -76,15 +76,15 @@ export function ProposalReviewProvider({
       setIsReviewRunning,
       currentReviewRunId,
       setCurrentReviewRunId,
-      findingsLoaded,
-      setFindingsLoaded,
+      focusedFindingId,
+      setFocusedFindingId,
       resetReviewState,
     }),
     [
       selectedRulesetId,
       isReviewRunning,
       currentReviewRunId,
-      findingsLoaded,
+      focusedFindingId,
       resetReviewState,
     ]
   );

@@ -16,8 +16,8 @@ export function useReviewStatus(
   proposalId: string | null,
   isReviewRunning: boolean
 ) {
-  const { data, error, isLoading } = useSWR<ReviewRun>(
-    proposalId && isReviewRunning
+  const { data, error, isLoading, mutate } = useSWR<ReviewRun>(
+    proposalId
       ? `/api/proposal-review/proposals/${proposalId}/review-status`
       : null,
     errorHandlingFetcher,
@@ -31,5 +31,6 @@ export function useReviewStatus(
     reviewStatus: data ?? null,
     error,
     isLoading,
+    mutate,
   };
 }

@@ -1,14 +1,26 @@
 """Celery tasks that orchestrate proposal review — parallel rule evaluation."""
 
+from __future__ import annotations
+
+import contextvars
+import os
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import timezone
+from typing import TYPE_CHECKING
+from uuid import UUID
 
-from celery import group
 from celery import shared_task
 from sqlalchemy import update
 
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+if TYPE_CHECKING:
+    from onyx.server.features.proposal_review.engine.context_assembler import (
+        ProposalContext,
+    )
 
 logger = setup_logger()
 
@@ -28,7 +40,7 @@ def run_proposal_review(_self: object, review_run_id: str, tenant_id: str) -> No
     3. Try to auto-fetch FOA if opportunity_id in metadata and no FOA doc
     4. Get all active rules for the run's ruleset
     5. Set total_rules on the run
-    6. Evaluate rules in parallel via Celery group of evaluate_single_rule tasks
+    6. Evaluate rules in parallel via ThreadPoolExecutor
     7. After all complete: set status=COMPLETED
     8. On error: set status=FAILED
     """
@@ -53,11 +65,10 @@ def run_proposal_review(_self: object, review_run_id: str, tenant_id: str) -> No
 
 def _execute_review(review_run_id: str) -> None:
     """Core review logic, separated for testability."""
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
     from onyx.server.features.proposal_review.db import rulesets as rulesets_db
+    from onyx.server.features.proposal_review.db.models import ProposalReviewRun
     from onyx.server.features.proposal_review.engine.context_assembler import (
         get_proposal_context,
     )
@@ -134,18 +145,42 @@ def _execute_review(review_run_id: str) -> None:
             run.total_rules = len(rule_data)
             db_session.commit()
 
-    # Step 6: Evaluate rules in parallel via Celery group
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    task_group = group(
-        evaluate_single_rule.s(review_run_id, str(rule_info["id"]), tenant_id)
-        for rule_info in rule_data
-    )
-    result = task_group.apply_async(expires=3600)
+    # Step 6: Evaluate rules in parallel via ThreadPoolExecutor
+    parallel_workers = int(os.environ.get("PROPOSAL_REVIEW_PARALLEL_WORKERS", "4"))
+    workers = min(parallel_workers, len(rule_data))
 
-    # Block until all child tasks finish. We are already inside a Celery task
-    # with a 3600s time limit, so blocking is safe. disable_sync_subtasks=False
-    # is required because Celery disallows .get() inside tasks by default.
-    result.get(disable_sync_subtasks=False, timeout=3500)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_rule = {
+            executor.submit(
+                contextvars.copy_context().run,
+                _evaluate_single_rule,
+                review_run_id,
+                str(rule_info["id"]),
+                proposal_id,
+                context,
+            ): rule_info
+            for rule_info in rule_data
+        }
+
+        for future in as_completed(future_to_rule):
+            rule_info = future_to_rule[future]
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(
+                    f"Rule {rule_info['id']} '{rule_info['name']}' failed: {e}",
+                    exc_info=True,
+                )
+
+            # Increment completed_rules atomically — tracks processed count
+            # (including errors) so the frontend progress bar always reaches 100%.
+            with get_session_with_current_tenant() as db_session:
+                db_session.execute(
+                    update(ProposalReviewRun)
+                    .where(ProposalReviewRun.id == run_uuid)
+                    .values(completed_rules=ProposalReviewRun.completed_rules + 1)
+                )
+                db_session.commit()
 
     # Step 7: Mark run as completed
     with get_session_with_current_tenant() as db_session:
@@ -164,12 +199,10 @@ def _execute_review(review_run_id: str) -> None:
 def _evaluate_and_save(
     review_run_id: str,
     rule_id: str,
-    proposal_id: str,
-    context: object,  # ProposalContext — typed as object to avoid circular import at module level
+    proposal_id: "UUID",
+    context: "ProposalContext",
 ) -> None:
     """Evaluate a single rule and save the finding to DB."""
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
     from onyx.server.features.proposal_review.db import rulesets as rulesets_db
@@ -211,12 +244,10 @@ def _evaluate_and_save(
 def _save_error_finding(
     review_run_id: str,
     rule_id: str,
-    proposal_id: str,
+    proposal_id: "UUID",
     error: str,
 ) -> None:
     """Save an error finding when a rule evaluation fails."""
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
 
@@ -240,8 +271,6 @@ def _save_error_finding(
 
 def _mark_run_failed(review_run_id: str) -> None:
     """Mark a review run as FAILED."""
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
 
@@ -256,71 +285,31 @@ def _mark_run_failed(review_run_id: str) -> None:
         logger.error(f"Failed to mark run {review_run_id} as FAILED: {e}")
 
 
-@shared_task(
-    name="evaluate_single_rule", bind=True, soft_time_limit=300, time_limit=330
-)
-def evaluate_single_rule(
-    _self: object, review_run_id: str, rule_id: str, tenant_id: str
+def _evaluate_single_rule(
+    review_run_id: str,
+    rule_id: str,
+    proposal_id: "UUID",
+    context: "ProposalContext",
 ) -> None:
-    """Child task: evaluates one rule in parallel via Celery group.
+    """Evaluate one rule, save the finding. Called from ThreadPoolExecutor.
 
-    Each child task independently re-assembles proposal context, evaluates
-    the rule, saves the finding, and atomically increments completed_rules.
+    Context is shared in-memory from the parent — no DB re-fetch needed.
     On evaluation failure, an error finding (NEEDS_REVIEW) is saved so the
-    officer sees which rule failed without crashing the group.
+    officer sees which rule failed.
     """
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        from uuid import UUID
-
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.server.features.proposal_review.db import findings as findings_db
-        from onyx.server.features.proposal_review.engine.context_assembler import (
-            get_proposal_context,
+        _evaluate_and_save(review_run_id, rule_id, proposal_id, context)
+    except Exception as e:
+        logger.error(
+            f"Rule {rule_id} evaluation failed: {e}",
+            exc_info=True,
         )
-
-        run_uuid = UUID(review_run_id)
-
-        with get_session_with_current_tenant() as db_session:
-            run = findings_db.get_review_run(run_uuid, db_session)
-            if not run:
-                raise ValueError(f"Review run {review_run_id} not found")
-            proposal_id = run.proposal_id
-
-        # Re-assemble context (each subtask is independent)
-        with get_session_with_current_tenant() as db_session:
-            context = get_proposal_context(proposal_id, db_session)
-
-        try:
-            _evaluate_and_save(review_run_id, rule_id, proposal_id, context)
-        except Exception as e:
-            logger.error(
-                f"Rule {rule_id} evaluation failed: {e}",
-                exc_info=True,
-            )
-            # Save an error finding so the officer sees which rule failed
-            _save_error_finding(
-                review_run_id=review_run_id,
-                rule_id=rule_id,
-                proposal_id=proposal_id,
-                error=str(e),
-            )
-
-        # Increment completed_rules atomically to avoid race conditions
-        with get_session_with_current_tenant() as db_session:
-            from onyx.server.features.proposal_review.db.models import (
-                ProposalReviewRun,
-            )
-
-            db_session.execute(
-                update(ProposalReviewRun)
-                .where(ProposalReviewRun.id == run_uuid)
-                .values(completed_rules=ProposalReviewRun.completed_rules + 1)
-            )
-            db_session.commit()
-
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+        _save_error_finding(
+            review_run_id=review_run_id,
+            rule_id=rule_id,
+            proposal_id=proposal_id,
+            error=str(e),
+        )
 
 
 @shared_task(name="run_checklist_import", bind=True, ignore_result=True)
@@ -346,11 +335,6 @@ def run_checklist_import(_self: object, import_job_id: str, tenant_id: str) -> N
 
 def _execute_checklist_import(import_job_id: str) -> None:
     """Core import logic, separated for traceability."""
-    import os
-    from concurrent.futures import ThreadPoolExecutor
-    from concurrent.futures import as_completed
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.llm.factory import get_default_llm
     from onyx.server.features.proposal_review.db import imports as imports_db
@@ -394,9 +378,9 @@ def _execute_checklist_import(import_job_id: str) -> None:
 
     # Split items with too many sub-checks into smaller pieces so each
     # LLM call produces bounded output.  The threshold is conservative —
-    # 5 sub-checks ≈ 2-4K output tokens, safe for any model.
+    # 3 sub-checks keeps output well within token limits.
     max_sub_checks = int(
-        os.environ.get("PROPOSAL_REVIEW_IMPORT_MAX_SUB_CHECKS_PER_CALL", "5")
+        os.environ.get("PROPOSAL_REVIEW_IMPORT_MAX_SUB_CHECKS_PER_CALL", "3")
     )
     work_items = _split_large_items(items, max_sub_checks)
 
@@ -413,7 +397,13 @@ def _execute_checklist_import(import_job_id: str) -> None:
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_item = {
-            executor.submit(decompose_checklist_item, item, extracted_text, llm): item
+            executor.submit(
+                contextvars.copy_context().run,
+                decompose_checklist_item,
+                item,
+                extracted_text,
+                llm,
+            ): item
             for item in work_items
         }
 
@@ -446,6 +436,8 @@ def _execute_checklist_import(import_job_id: str) -> None:
                         source="IMPORTED",
                         is_hard_stop=False,
                         priority=0,
+                        refinement_needed=rd.get("refinement_needed", False),
+                        refinement_question=rd.get("refinement_question"),
                         db_session=db_session,
                     )
                     rule.is_active = False
@@ -482,8 +474,6 @@ def _execute_checklist_import(import_job_id: str) -> None:
 
 def _mark_import_failed(import_job_id: str, error: str) -> None:
     """Mark an import job as FAILED."""
-    from uuid import UUID
-
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import imports as imports_db
 
@@ -550,8 +540,6 @@ def sync_decision_to_jira(_self: object, proposal_id: str, tenant_id: str) -> No
     """
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        from uuid import UUID
-
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.server.features.proposal_review.engine.jira_sync import sync_to_jira
 

@@ -186,7 +186,7 @@ export default function ProposalQueue() {
   }, [dynamicKeys]);
 
   // Load saved visibility from localStorage, falling back to defaults
-  const STORAGE_KEY = "argus-queue-columns";
+  const STORAGE_KEY = "proposal-review-queue-columns";
 
   const initialColumnVisibility = useMemo(() => {
     try {
@@ -287,7 +287,7 @@ export default function ProposalQueue() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Text font="secondary-action" color="text-03">
-            Ticket:
+            Ticket Status:
           </Text>
           <InputSelect
             value={jiraStatusFilter}
@@ -313,7 +313,7 @@ export default function ProposalQueue() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Text font="secondary-action" color="text-03">
-            Review:
+            Review Status:
           </Text>
           <InputSelect value={reviewFilter} onValueChange={setReviewFilter}>
             <InputSelect.Trigger placeholder="Review Status" />

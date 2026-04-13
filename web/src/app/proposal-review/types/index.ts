@@ -2,8 +2,10 @@
 // Proposal Review Types
 //
 // TypeScript interfaces matching backend response schemas for the
-// proposal-review feature (Argus).
+// proposal-review feature.
 // ---------------------------------------------------------------------------
+
+import type { TagColor } from "@opal/components";
 
 // --- Enums / Literal Unions ---
 
@@ -190,3 +192,16 @@ export interface FindingsByCategory {
   category: string;
   findings: Finding[];
 }
+
+// --- Verdict → Tag color mapping (shared across components) ---
+
+export const VERDICT_CONFIG: Record<
+  FindingVerdict,
+  { color: TagColor; label: string }
+> = {
+  PASS: { color: "green", label: "Pass" },
+  FAIL: { color: "red", label: "Fail" },
+  FLAG: { color: "amber", label: "Flag" },
+  NEEDS_REVIEW: { color: "blue", label: "Needs Review" },
+  NOT_APPLICABLE: { color: "gray", label: "N/A" },
+};

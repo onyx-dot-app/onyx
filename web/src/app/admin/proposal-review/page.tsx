@@ -269,7 +269,7 @@ function RulesetsPage() {
             prominence="secondary"
             onClick={() => router.push("/admin/proposal-review/settings")}
           >
-            Jira Integration
+            Configuration
           </Button>
         }
       />

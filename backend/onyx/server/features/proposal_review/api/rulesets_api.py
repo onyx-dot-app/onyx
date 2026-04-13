@@ -17,10 +17,12 @@ from onyx.server.features.proposal_review.api.models import BulkRuleUpdateReques
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateResponse
 from onyx.server.features.proposal_review.api.models import ImportJobResponse
 from onyx.server.features.proposal_review.api.models import RuleCreate
+from onyx.server.features.proposal_review.api.models import RuleRefinementRequest
 from onyx.server.features.proposal_review.api.models import RuleResponse
 from onyx.server.features.proposal_review.api.models import RulesetCreate
 from onyx.server.features.proposal_review.api.models import RulesetResponse
 from onyx.server.features.proposal_review.api.models import RulesetUpdate
+from onyx.server.features.proposal_review.api.models import RuleTestResponse
 from onyx.server.features.proposal_review.api.models import RuleUpdate
 from onyx.server.features.proposal_review.configs import IMPORT_MAX_FILE_SIZE_BYTES
 from onyx.server.features.proposal_review.db import imports as imports_db
@@ -176,11 +178,8 @@ def update_rule(
     """Update a rule."""
     # Verify the rule belongs to a ruleset owned by the current tenant
     tenant_id = get_current_tenant_id()
-    rule = rulesets_db.get_rule(rule_id, db_session)
+    rule = rulesets_db.get_rule_with_tenant_check(rule_id, tenant_id, db_session)
     if not rule:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
-    ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
-    if not ruleset:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     updated_rule = rulesets_db.update_rule(
@@ -205,11 +204,8 @@ def delete_rule(
     """Delete a rule."""
     # Verify the rule belongs to a ruleset owned by the current tenant
     tenant_id = get_current_tenant_id()
-    rule = rulesets_db.get_rule(rule_id, db_session)
+    rule = rulesets_db.get_rule_with_tenant_check(rule_id, tenant_id, db_session)
     if not rule:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
-    ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
-    if not ruleset:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     deleted = rulesets_db.delete_rule(rule_id, db_session)
@@ -374,7 +370,7 @@ def test_rule(
         require_permission(Permission.MANAGE_CONNECTORS)
     ),
     db_session: Session = Depends(get_session),
-) -> dict:
+) -> RuleTestResponse:
     """Test a rule against sample text.
 
     Evaluates the rule against an empty/minimal proposal context to verify
@@ -382,11 +378,8 @@ def test_rule(
     """
     # Verify the rule belongs to a ruleset owned by the current tenant
     tenant_id = get_current_tenant_id()
-    rule = rulesets_db.get_rule(rule_id, db_session)
+    rule = rulesets_db.get_rule_with_tenant_check(rule_id, tenant_id, db_session)
     if not rule:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
-    ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
-    if not ruleset:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     from onyx.server.features.proposal_review.engine.context_assembler import (
@@ -408,14 +401,87 @@ def test_rule(
     try:
         result = evaluate_rule(rule, test_context, db_session)
     except Exception as e:
-        return {
-            "rule_id": str(rule_id),
-            "success": False,
-            "error": str(e),
-        }
+        return RuleTestResponse(
+            rule_id=str(rule_id),
+            success=False,
+            error=str(e),
+        )
 
-    return {
-        "rule_id": str(rule_id),
-        "success": True,
-        "result": result,
-    }
+    return RuleTestResponse(
+        rule_id=str(rule_id),
+        success=True,
+        result=result,
+    )
+
+
+@router.post("/rules/{rule_id}/refine")
+def refine_rule_endpoint(
+    rule_id: UUID,
+    request: RuleRefinementRequest,
+    user: User = Depends(  # noqa: ARG001
+        require_permission(Permission.MANAGE_CONNECTORS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> RuleResponse:
+    """Submit an answer to a rule's refinement question.
+
+    Re-runs the LLM to produce a refined prompt_template that incorporates
+    the user's institution-specific information, then clears the refinement
+    flag on the rule.
+    """
+    tenant_id = get_current_tenant_id()
+    rule = rulesets_db.get_rule_with_tenant_check(rule_id, tenant_id, db_session)
+    if not rule:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
+
+    if not rule.refinement_needed:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This rule does not need refinement",
+        )
+
+    if not rule.refinement_question:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Rule is marked for refinement but has no refinement question",
+        )
+
+    from onyx.llm.factory import get_default_llm
+    from onyx.server.features.proposal_review.engine.checklist_importer import (
+        refine_rule,
+    )
+
+    llm = get_default_llm(timeout=120)
+
+    try:
+        refined = refine_rule(
+            rule_name=rule.name,
+            rule_description=rule.description,
+            rule_prompt_template=rule.prompt_template,
+            refinement_question=rule.refinement_question,
+            user_answer=request.answer,
+            llm=llm,
+        )
+    except RuntimeError as e:
+        raise OnyxError(
+            OnyxErrorCode.SERVER_ERROR,
+            f"Refinement failed: {str(e)}",
+        )
+
+    updated = rulesets_db.update_rule(
+        rule_id=rule_id,
+        db_session=db_session,
+        updates={
+            "name": refined["name"],
+            "description": refined.get("description"),
+            "prompt_template": refined["prompt_template"],
+            "rule_type": refined.get("rule_type", rule.rule_type),
+            "rule_intent": refined.get("rule_intent", rule.rule_intent),
+            "refinement_needed": False,
+            "refinement_question": None,
+        },
+    )
+    if not updated:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
+    db_session.commit()
+    return RuleResponse.from_model(updated)

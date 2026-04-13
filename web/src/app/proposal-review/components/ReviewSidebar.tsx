@@ -9,15 +9,18 @@ import {
   SvgAlertTriangle,
   SvgShield,
 } from "@opal/icons";
+import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useFindings } from "@/app/proposal-review/hooks/useFindings";
+import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
 import DecisionPanel from "@/app/proposal-review/components/DecisionPanel";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import type {
-  Finding,
-  FindingsByCategory,
-  AuditLogEntry,
+import {
+  VERDICT_CONFIG,
+  type Finding,
+  type FindingsByCategory,
+  type AuditLogEntry,
 } from "@/app/proposal-review/types";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +41,7 @@ export default function ReviewSidebar({
   onDecisionSubmitted,
 }: ReviewSidebarProps) {
   const { findings, findingsByCategory } = useFindings(proposalId);
+  const { setFocusedFindingId } = useProposalReviewContext();
 
   const { data: auditLog, isLoading: auditLoading } = useSWR<AuditLogEntry[]>(
     `/api/proposal-review/proposals/${proposalId}/audit-log`,
@@ -60,8 +64,12 @@ export default function ReviewSidebar({
         f.rule_is_hard_stop && (f.verdict === "FAIL" || f.verdict === "FLAG")
     );
 
-    const unresolvedFindings = findings.filter(
-      (f) => (f.verdict === "FAIL" || f.verdict === "FLAG") && !f.decision
+    // Derive unresolved from findingsByCategory so they appear in the
+    // same category-sorted order as the main checklist panel.
+    const unresolvedFindings = findingsByCategory.flatMap((group) =>
+      group.findings.filter(
+        (f) => (f.verdict === "FAIL" || f.verdict === "FLAG") && !f.decision
+      )
     );
 
     return {
@@ -74,7 +82,7 @@ export default function ReviewSidebar({
       unresolvedFindings,
       total: findings.length,
     };
-  }, [findings]);
+  }, [findings, findingsByCategory]);
 
   if (findings.length === 0) {
     return (
@@ -197,16 +205,29 @@ export default function ReviewSidebar({
             {stats.unresolvedFindings.map((finding) => (
               <div
                 key={finding.id}
+                role="button"
+                tabIndex={0}
                 className="flex items-center gap-2 py-1 px-2 rounded-08 hover:bg-background-neutral-02 cursor-pointer"
+                onClick={() => setFocusedFindingId(finding.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFocusedFindingId(finding.id);
+                  }
+                }}
               >
-                <Tag
-                  title={finding.verdict}
-                  color={finding.verdict === "FAIL" ? "amber" : "blue"}
-                  size="sm"
-                />
-                <Text font="secondary-body" color="text-03" nowrap>
-                  {finding.rule_name ?? "Unnamed Rule"}
-                </Text>
+                <div className="shrink-0">
+                  <Tag
+                    title={VERDICT_CONFIG[finding.verdict].label}
+                    color={VERDICT_CONFIG[finding.verdict].color}
+                    size="sm"
+                  />
+                </div>
+                <div className="min-w-0 truncate">
+                  <Text font="secondary-body" color="text-03">
+                    {finding.rule_name ?? "Unnamed Rule"}
+                  </Text>
+                </div>
               </div>
             ))}
           </Section>
@@ -291,7 +312,7 @@ function SummaryCount({
       alignItems="center"
       justifyContent="center"
     >
-      <Icon className={`h-5 w-5 ${iconClass}`} />
+      <Icon className={cn("h-5 w-5", iconClass)} />
       <Text font="main-ui-action" color="text-04">
         {String(count)}
       </Text>
@@ -316,11 +337,13 @@ function CategoryProgress({ group }: CategoryProgressProps) {
   const allDone = decidedCount === total;
 
   return (
-    <div className="flex items-center justify-between py-1">
-      <Text font="secondary-body" color="text-03" nowrap>
-        {group.category}
-      </Text>
-      <div className="flex items-center gap-1">
+    <div className="flex items-center justify-between gap-2 py-1 w-full overflow-hidden">
+      <div className="min-w-0 truncate">
+        <Text font="secondary-body" color="text-03">
+          {group.category}
+        </Text>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
         <Text font="secondary-body" color={allDone ? "text-01" : "text-03"}>
           {`${decidedCount}/${total}`}
         </Text>

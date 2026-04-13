@@ -1,4 +1,4 @@
-/** Shared types for Proposal Review (Argus) admin pages. */
+/** Shared types for Proposal Review admin pages. */
 
 export interface RulesetResponse {
   id: string;
@@ -27,6 +27,8 @@ export interface RuleResponse {
   is_hard_stop: boolean;
   priority: number;
   is_active: boolean;
+  refinement_needed: boolean;
+  refinement_question: string | null;
   created_at: string;
   updated_at: string;
 }
