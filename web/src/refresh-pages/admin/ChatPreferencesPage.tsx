@@ -1,7 +1,7 @@
 "use client";
 
 import { markdown } from "@opal/utils";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
 import useSWR, { mutate } from "swr";
@@ -356,6 +356,27 @@ function ChatPreferencesForm() {
   );
   const savedCompanyName = useRef(companyName);
   const savedCompanyDescription = useRef(companyDescription);
+
+  // Re-sync local state when settings change externally (e.g. another admin),
+  // but only when there's no in-progress edit (local matches last-saved value).
+  useEffect(() => {
+    const incoming = s.company_name ?? "";
+    if (companyName === savedCompanyName.current && incoming !== companyName) {
+      setCompanyName(incoming);
+      savedCompanyName.current = incoming;
+    }
+  }, [s.company_name]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const incoming = s.company_description ?? "";
+    if (
+      companyDescription === savedCompanyDescription.current &&
+      incoming !== companyDescription
+    ) {
+      setCompanyDescription(incoming);
+      savedCompanyDescription.current = incoming;
+    }
+  }, [s.company_description]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
