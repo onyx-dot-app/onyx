@@ -160,6 +160,37 @@ def test_wait_for_index_attempt_completion_retries_until_terminal(
     assert sleep_calls == [7, 7, 7]
 
 
+def test_wait_for_index_attempt_completion_returns_if_attempt_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    docfetching_tasks_module,
+) -> None:
+    sleep_calls: list[int] = []
+
+    monkeypatch.setattr(
+        docfetching_tasks_module,
+        "get_session_with_current_tenant",
+        lambda: _FakeSessionContext(),
+    )
+    monkeypatch.setattr(
+        docfetching_tasks_module,
+        "get_index_attempt",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        docfetching_tasks_module,
+        "sleep",
+        lambda seconds: sleep_calls.append(seconds),
+    )
+
+    docfetching_tasks_module._wait_for_index_attempt_completion(
+        index_attempt_id=17,
+        log_builder=_FakeLogBuilder(),
+        poll_interval=7,
+    )
+
+    assert sleep_calls == [7]
+
+
 def test_should_wait_for_docprocessing_completion_enabled_on_success(
     monkeypatch: pytest.MonkeyPatch,
     docfetching_tasks_module,

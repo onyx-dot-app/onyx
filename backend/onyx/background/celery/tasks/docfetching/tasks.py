@@ -323,7 +323,12 @@ def _wait_for_index_attempt_completion(
                 )
 
                 if not index_attempt:
-                    continue
+                    task_logger.warning(
+                        log_builder.build(
+                            "Indexing watchdog - index attempt disappeared while waiting for docprocessing completion"
+                        )
+                    )
+                    return
 
                 if not index_attempt.is_finished():
                     continue
