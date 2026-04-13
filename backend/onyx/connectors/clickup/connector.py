@@ -171,9 +171,10 @@ class ClickupConnector(LoadConnector, PollConnector):
                         document.metadata[extra_field] = task[extra_field]
 
                 if self.retrieve_task_comments:
-                    document.sections = list(
-                        document.sections
-                    ) + self._get_task_comments(task["id"])
+                    document.sections = [
+                        *document.sections,
+                        *self._get_task_comments(task["id"]),
+                    ]
 
                 doc_batch.append(document)
 
