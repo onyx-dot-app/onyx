@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton, Divider } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import {
+  Button as OpalButton,
+  Card as OpalCard,
+  Divider,
+} from "@opal/components";
+import { Disabled, Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -536,9 +540,6 @@ export default function AgentEditorPage({
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
   const isImageGenerationAvailable = !!imageGenTool;
-  const imageGenerationDisabledTooltip = isImageGenerationAvailable
-    ? undefined
-    : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
 
   // Group MCP server tools from availableTools by server ID
   const mcpServersWithTools = mcpServers.map((server) => {
@@ -1376,17 +1377,11 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section gap={0.5}>
-                            <SimpleTooltip
-                              tooltip={imageGenerationDisabledTooltip}
-                              side="top"
+                            <Disabled
+                              disabled={!isImageGenerationAvailable}
+                              tooltip="Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin."
                             >
-                              <Card
-                                variant={
-                                  isImageGenerationAvailable
-                                    ? undefined
-                                    : "disabled"
-                                }
-                              >
+                              <OpalCard>
                                 <InputLayouts.Horizontal
                                   name="image_generation"
                                   title="Image Generation"
@@ -1398,58 +1393,56 @@ export default function AgentEditorPage({
                                     disabled={!isImageGenerationAvailable}
                                   />
                                 </InputLayouts.Horizontal>
-                              </Card>
-                            </SimpleTooltip>
+                              </OpalCard>
+                            </Disabled>
 
-                            <Card
-                              variant={!!webSearchTool ? undefined : "disabled"}
-                            >
-                              <InputLayouts.Horizontal
-                                name="web_search"
-                                title="Web Search"
-                                description="Search the web for real-time information and up-to-date results."
-                                disabled={!webSearchTool}
-                              >
-                                <SwitchField
+                            <Disabled disabled={!webSearchTool}>
+                              <OpalCard>
+                                <InputLayouts.Horizontal
                                   name="web_search"
+                                  title="Web Search"
+                                  description="Search the web for real-time information and up-to-date results."
                                   disabled={!webSearchTool}
-                                />
-                              </InputLayouts.Horizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="web_search"
+                                    disabled={!webSearchTool}
+                                  />
+                                </InputLayouts.Horizontal>
+                              </OpalCard>
+                            </Disabled>
 
-                            <Card
-                              variant={!!openURLTool ? undefined : "disabled"}
-                            >
-                              <InputLayouts.Horizontal
-                                name="open_url"
-                                title="Open URL"
-                                description="Fetch and read content from web URLs."
-                                disabled={!openURLTool}
-                              >
-                                <SwitchField
+                            <Disabled disabled={!openURLTool}>
+                              <OpalCard>
+                                <InputLayouts.Horizontal
                                   name="open_url"
+                                  title="Open URL"
+                                  description="Fetch and read content from web URLs."
                                   disabled={!openURLTool}
-                                />
-                              </InputLayouts.Horizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="open_url"
+                                    disabled={!openURLTool}
+                                  />
+                                </InputLayouts.Horizontal>
+                              </OpalCard>
+                            </Disabled>
 
-                            <Card
-                              variant={
-                                !!codeInterpreterTool ? undefined : "disabled"
-                              }
-                            >
-                              <InputLayouts.Horizontal
-                                name="code_interpreter"
-                                title="Code Interpreter"
-                                description="Generate and run code."
-                                disabled={!codeInterpreterTool}
-                              >
-                                <SwitchField
+                            <Disabled disabled={!codeInterpreterTool}>
+                              <OpalCard>
+                                <InputLayouts.Horizontal
                                   name="code_interpreter"
+                                  title="Code Interpreter"
+                                  description="Generate and run code."
                                   disabled={!codeInterpreterTool}
-                                />
-                              </InputLayouts.Horizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="code_interpreter"
+                                    disabled={!codeInterpreterTool}
+                                  />
+                                </InputLayouts.Horizontal>
+                              </OpalCard>
+                            </Disabled>
 
                             {/* Tools */}
                             <>
