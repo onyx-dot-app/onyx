@@ -1,7 +1,6 @@
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
 
 
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
