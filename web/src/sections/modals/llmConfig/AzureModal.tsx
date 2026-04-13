@@ -3,7 +3,7 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -167,9 +167,9 @@ export default function AzureModal({
         });
       }}
     >
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          name="target_uri"
+          label="target_uri"
           title="Target URI"
           subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
         >
@@ -178,23 +178,23 @@ export default function AzureModal({
             placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
           />
         </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
       <APIKeyField providerName="Azure" />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputLayouts.InputDivider />
       <AzureModelSelection />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <ModelAccessField />
         </>
       )}

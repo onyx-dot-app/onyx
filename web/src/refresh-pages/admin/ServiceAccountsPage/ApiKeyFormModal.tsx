@@ -12,7 +12,7 @@ import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { Vertical as VerticalInput } from "@/layouts/input-layouts";
+import { Vertical as VerticalInput } from "@opal/layouts/input/components";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
 
@@ -93,7 +93,7 @@ export default function ApiKeyFormModal({
           {({ isSubmitting, values }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body>
-                <VerticalInput name="name" title="Name" sizePreset="main-ui">
+                <VerticalInput label="name" title="Name" sizePreset="main-ui">
                   <FormikField<string>
                     name="name"
                     render={(field, helper) => (
@@ -108,7 +108,7 @@ export default function ApiKeyFormModal({
                 </VerticalInput>
 
                 <VerticalInput
-                  name="role"
+                  label="role"
                   title="Account Permissions"
                   sizePreset="main-ui"
                 >

@@ -3,7 +3,7 @@
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -74,12 +74,12 @@ function BifrostModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputLayouts.InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -87,7 +87,7 @@ function BifrostModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <ModelAccessField />
         </>
       )}

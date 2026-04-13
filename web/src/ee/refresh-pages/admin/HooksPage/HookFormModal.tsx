@@ -14,7 +14,7 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
@@ -111,7 +111,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
 
   return (
     <InputLayouts.Vertical
-      name="timeout_seconds"
+      label="timeout_seconds"
       title="Timeout"
       suffix="(seconds)"
       subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
@@ -302,7 +302,7 @@ export default function HookFormModal({
                     }
                   />
 
-                  <InputLayouts.Vertical name="name" title="Display Name">
+                  <InputLayouts.Vertical label="name" title="Display Name">
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="name"
@@ -313,7 +313,7 @@ export default function HookFormModal({
                   </InputLayouts.Vertical>
 
                   <InputLayouts.Vertical
-                    name="fail_strategy"
+                    label="fail_strategy"
                     title="Fail Strategy"
                     subDescription={failStrategyDescription}
                   >
@@ -351,7 +351,7 @@ export default function HookFormModal({
                   <TimeoutField spec={spec} />
 
                   <InputLayouts.Vertical
-                    name="endpoint_url"
+                    label="endpoint_url"
                     title="External API Endpoint URL"
                     subDescription="Only connect to servers you trust. You are responsible for actions taken and data shared with this connection."
                   >
@@ -365,7 +365,7 @@ export default function HookFormModal({
                   </InputLayouts.Vertical>
 
                   <InputLayouts.Vertical
-                    name="api_key"
+                    label="api_key"
                     title="API Key"
                     subDescription="Onyx will use this key to authenticate with your API endpoint."
                   >

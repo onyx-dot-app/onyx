@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
@@ -145,7 +145,7 @@ export default function AddMCPServerModal({
               />
 
               <Modal.Body>
-                <InputLayouts.Vertical name="name" title="Server Name">
+                <InputLayouts.Vertical label="name" title="Server Name">
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
@@ -154,7 +154,7 @@ export default function AddMCPServerModal({
                 </InputLayouts.Vertical>
 
                 <InputLayouts.Vertical
-                  name="description"
+                  label="description"
                   title="Description"
                   suffix="optional"
                 >
@@ -168,7 +168,7 @@ export default function AddMCPServerModal({
                 <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                 <InputLayouts.Vertical
-                  name="server_url"
+                  label="server_url"
                   title="MCP Server URL"
                   subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
                 >

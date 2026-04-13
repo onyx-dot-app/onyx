@@ -197,7 +197,7 @@ function InputError({ name }: InputErrorProps) {
 export type InputErrorType = "error" | "warning";
 
 interface InputErrorTextProps {
-  children?: string;
+  children?: React.ReactNode;
   type?: InputErrorType;
 }
 
@@ -213,9 +213,13 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
       <Section flexDirection="row" justifyContent="start" gap={0.25}>
         <Icon size={12} className={strokeClass} />
         <span className={colorClass} role="alert">
-          <Text font="secondary-body" color="inherit">
-            {children}
-          </Text>
+          {typeof children === "string" ? (
+            <Text font="secondary-body" color="inherit">
+              {children}
+            </Text>
+          ) : (
+            children
+          )}
         </span>
       </Section>
     </div>

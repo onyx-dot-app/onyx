@@ -16,7 +16,7 @@ import Message from "@/refresh-components/messages/Message";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
@@ -302,6 +302,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                 <InputLayouts.Horizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."
+                  label
                 >
                   <SwitchField name="isPublic" />
                 </InputLayouts.Horizontal>
@@ -313,6 +314,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                     <InputLayouts.Horizontal
                       title="Feature This Agent"
                       description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                      label
                     >
                       <SwitchField name="isFeatured" />
                     </InputLayouts.Horizontal>

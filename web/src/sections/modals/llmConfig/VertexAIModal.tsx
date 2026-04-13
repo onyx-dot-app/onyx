@@ -3,7 +3,7 @@
 import { useSWRConfig } from "swr";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -119,9 +119,9 @@ export default function VertexAIModal({
         });
       }}
     >
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          name="custom_config.vertex_location"
+          label="custom_config.vertex_location"
           title="Google Cloud Region Name"
           subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
         >
@@ -130,11 +130,11 @@ export default function VertexAIModal({
             placeholder={VERTEXAI_DEFAULT_LOCATION}
           />
         </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          name="custom_config.vertex_credentials"
+          label="custom_config.vertex_credentials"
           title="API Key"
           subDescription="Attach your API key JSON from Google Cloud to access your models."
         >
@@ -143,21 +143,21 @@ export default function VertexAIModal({
             label=""
           />
         </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputLayouts.InputDivider />
       <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <ModelAccessField />
         </>
       )}

@@ -11,7 +11,7 @@ import React, {
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -1148,6 +1148,7 @@ export default function AgentKnowledgePane({
           <InputLayouts.Horizontal
             title="Use Knowledge"
             description="Let this agent reference these documents to inform its responses."
+            label
           >
             <Switch
               name="enable_knowledge"

@@ -9,7 +9,7 @@ import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -450,7 +450,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
-                  withLabel={false}
                 >
                   <Button
                     variant="danger"

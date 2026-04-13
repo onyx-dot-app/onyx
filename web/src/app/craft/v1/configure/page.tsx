@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import {
   useBuildSessionStore,
   useIsPreProvisioning,
@@ -417,6 +417,7 @@ export default function BuildConfigPage() {
                           : "Not set"
                     }
                     center
+                    label
                   >
                     <SimpleTooltip
                       tooltip={
@@ -458,6 +459,7 @@ export default function BuildConfigPage() {
                       title="Default LLM"
                       description="Select the language model to craft with"
                       center
+                      label
                     >
                       <BuildLLMPopover
                         currentSelection={pendingLlmSelection}

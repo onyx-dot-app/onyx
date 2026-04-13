@@ -21,7 +21,7 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { useCustomProviderNames } from "@/hooks/useLLMProviders";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -369,9 +369,9 @@ export default function CustomModal({
         });
       }}
     >
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          name="provider"
+          label="provider"
           title="Provider"
           subDescription={markdown(
             "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers)."
@@ -379,7 +379,7 @@ export default function CustomModal({
         >
           <ProviderNameSelect disabled={!!existingLlmProvider} />
         </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
       <APIKeyField
         optional
@@ -388,17 +388,17 @@ export default function CustomModal({
 
       <APIBaseField optional />
 
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          name="api_version"
+          label="api_version"
           title="API Version"
           suffix="optional"
         >
           <InputTypeInField name="api_version" />
         </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
-      <InputLayouts.FieldPadder>
+      <InputLayouts.InputPadder>
         <Section gap={0.75}>
           <Content
             title="Environment Variables"
@@ -412,18 +412,18 @@ export default function CustomModal({
 
           <CustomConfigKeyValue />
         </Section>
-      </InputLayouts.FieldPadder>
+      </InputLayouts.InputPadder>
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputLayouts.InputDivider />
       <Section gap={0.5}>
-        <InputLayouts.FieldPadder>
+        <InputLayouts.InputPadder>
           <Content
             title="Models"
             description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
@@ -431,7 +431,7 @@ export default function CustomModal({
             sizePreset="main-content"
             widthVariant="full"
           />
-        </InputLayouts.FieldPadder>
+        </InputLayouts.InputPadder>
 
         <Card padding="sm">
           <ModelConfigurationList />
@@ -440,7 +440,7 @@ export default function CustomModal({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <ModelAccessField />
         </>
       )}

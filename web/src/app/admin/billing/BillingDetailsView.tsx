@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
@@ -392,7 +392,7 @@ function SeatsCard({
             padding={1}
             height="auto"
           >
-            <InputLayouts.Vertical title="Seats">
+            <InputLayouts.Vertical title="Seats" label>
               <InputNumber
                 value={newSeatCount}
                 onChange={(v) => setNewSeatCount(v ?? 1)}
@@ -404,7 +404,7 @@ function SeatsCard({
             </InputLayouts.Vertical>
 
             {isBelowMinimum ? (
-              <InputLayouts.ErrorTextLayout type="error">
+              <InputLayouts.InputErrorText type="error">
                 You cannot set seats below current{" "}
                 <span className="font-semibold">{minRequiredSeats}</span> seats
                 in use/pending.{" "}
@@ -415,7 +415,7 @@ function SeatsCard({
                   Remove users
                 </Link>{" "}
                 first before adjusting seats.
-              </InputLayouts.ErrorTextLayout>
+              </InputLayouts.InputErrorText>
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
                 {Math.abs(seatDifference)} seat

@@ -4,7 +4,7 @@ import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -98,7 +98,7 @@ function OllamaModalInternals({
           </Tabs.List>
           <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
             <InputLayouts.Vertical
-              name="api_base"
+              label="api_base"
               title="API Base URL"
               subDescription="The base URL for your Ollama instance."
             >
@@ -111,7 +111,7 @@ function OllamaModalInternals({
 
           <Tabs.Content value={Tab.TAB_CLOUD}>
             <InputLayouts.Vertical
-              name="custom_config.OLLAMA_API_KEY"
+              label="custom_config.OLLAMA_API_KEY"
               title="API Key"
               subDescription="Your Ollama Cloud API key."
             >
@@ -126,12 +126,12 @@ function OllamaModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputLayouts.InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -139,7 +139,7 @@ function OllamaModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputLayouts.InputDivider />
           <ModelAccessField />
         </>
       )}

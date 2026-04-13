@@ -15,7 +15,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Vertical, Horizontal } from "@/layouts/input-layouts";
+import { Vertical, Horizontal } from "@opal/layouts/input/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -441,6 +441,7 @@ export default function VoiceProviderSetupModal({
                 subDescription={markdown(
                   "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: https://westus.api.cognitive.microsoft.com/ or https://westus.tts.speech.microsoft.com/."
                 )}
+                label
               >
                 <InputTypeIn
                   placeholder={
@@ -455,7 +456,7 @@ export default function VoiceProviderSetupModal({
             )}
 
             {providerType === "openai" && mode === "stt" && (
-              <Horizontal title="STT Model" center>
+              <Horizontal title="STT Model" center label>
                 <InputSelect value={sttModel} onValueChange={setSttModel}>
                   <InputSelect.Trigger />
                   <InputSelect.Content>
@@ -473,6 +474,7 @@ export default function VoiceProviderSetupModal({
               <Vertical
                 title="Default Model"
                 subDescription="This model will be used by Onyx by default for text-to-speech."
+                label
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>
                   <InputSelect.Trigger />
@@ -498,6 +500,7 @@ export default function VoiceProviderSetupModal({
                     PROVIDER_DOCS_URLS[providerType]
                   }).`
                 )}
+                label
               >
                 <InputComboBox
                   value={defaultVoice}

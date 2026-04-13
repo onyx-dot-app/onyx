@@ -27,7 +27,7 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-import { Horizontal } from "@/layouts/input-layouts";
+import { Horizontal } from "@opal/layouts/input/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -353,7 +353,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Default Model"
                     description="This model will be used by Onyx by default in your chats."
-                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text>{defaultModel}</Text>
@@ -363,7 +362,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Knowledge Cutoff Date"
                     description="Documents with a last-updated date prior to this will be ignored."
-                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text mainUiMono>
@@ -375,6 +373,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                   sizePreset="main-ui"
+                  label
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </Horizontal>

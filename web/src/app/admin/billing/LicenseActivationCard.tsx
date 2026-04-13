@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import * as InputLayouts from "@opal/layouts/input/components";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
@@ -182,6 +182,7 @@ export default function LicenseActivationCard({
                 ? undefined
                 : "Paste or attach your license key file you received from Onyx."
             }
+            label
           >
             <InputFile
               placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
