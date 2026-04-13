@@ -93,11 +93,7 @@ export default function ApiKeyFormModal({
           {({ isSubmitting, values }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body>
-                <InputVertical
-                  withLabel="name"
-                  title="Name"
-                  sizePreset="main-ui"
-                >
+                <InputVertical withLabel="name" title="Name">
                   <FormikField<string>
                     name="name"
                     render={(field, helper) => (
@@ -111,11 +107,7 @@ export default function ApiKeyFormModal({
                   />
                 </InputVertical>
 
-                <InputVertical
-                  withLabel="role"
-                  title="Account Permissions"
-                  sizePreset="main-ui"
-                >
+                <InputVertical withLabel="role" title="Account Permissions">
                   <FormikField<string>
                     name="role"
                     render={(field, helper) => (

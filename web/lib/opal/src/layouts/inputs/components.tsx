@@ -60,7 +60,6 @@ interface InputLayoutProps {
   tag?: TagProps;
   description?: string | RichStr;
   suffix?: "optional" | (string & {});
-  sizePreset?: "main-content" | "main-ui";
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +79,6 @@ function Vertical({
   tag,
   description,
   suffix,
-  sizePreset = "main-content",
 }: VerticalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -92,7 +90,7 @@ function Vertical({
         description={description}
         suffix={suffix}
         tag={tag}
-        sizePreset={sizePreset}
+        sizePreset="main-ui"
         variant="section"
       />
       {children}
@@ -131,7 +129,6 @@ function Horizontal({
   tag,
   description,
   suffix,
-  sizePreset = "main-content",
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -149,7 +146,7 @@ function Horizontal({
             description={description}
             suffix={suffix}
             tag={tag}
-            sizePreset={sizePreset}
+            sizePreset="main-ui"
             variant="section"
             widthVariant="full"
           />
