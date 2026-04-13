@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -34,8 +35,7 @@ class ConnectorMissingCredentialError(PermissionError):
 
 
 class SectionKind(str, Enum):
-    """Discriminator for Section subclasses.
-    """
+    """Discriminator for Section subclasses."""
 
     TEXT = "text"
     IMAGE = "image"
@@ -53,7 +53,7 @@ class Section(BaseModel):
 class TextSection(Section):
     """Section containing text content"""
 
-    kind: SectionKind = SectionKind.TEXT
+    kind: Literal[SectionKind.TEXT] = SectionKind.TEXT
     text: str
 
     def __sizeof__(self) -> int:
@@ -63,7 +63,7 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
-    kind: SectionKind = SectionKind.IMAGE
+    kind: Literal[SectionKind.IMAGE] = SectionKind.IMAGE
     image_file_id: str
 
     def __sizeof__(self) -> int:
