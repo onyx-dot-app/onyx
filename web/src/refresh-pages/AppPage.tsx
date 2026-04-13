@@ -522,7 +522,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabledForCurrentWorkflow,
+      deepResearch:
+        deepResearchEnabledForCurrentWorkflow && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
   }, [
@@ -530,6 +531,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit,
     currentMessageFiles,
     deepResearchEnabledForCurrentWorkflow,
+    multiModel.isMultiModelActive,
   ]);
 
   const toggleDocumentSidebar = useCallback(() => {
@@ -553,7 +555,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles,
-        deepResearch: deepResearchEnabledForCurrentWorkflow,
+        deepResearch:
+          deepResearchEnabledForCurrentWorkflow &&
+          !multiModel.isMultiModelActive,
         selectedModels: multiModel.isMultiModelActive
           ? multiModel.selectedModels
           : undefined,
@@ -607,7 +611,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         onSubmit({
           message,
           currentMessageFiles,
-          deepResearch: deepResearchEnabledForCurrentWorkflow,
+          deepResearch:
+            deepResearchEnabledForCurrentWorkflow &&
+            !multiModel.isMultiModelActive,
           selectedModels: multiModel.isMultiModelActive
             ? multiModel.selectedModels
             : undefined,
@@ -980,6 +986,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           deepResearchEnabledForCurrentWorkflow
                         }
                         toggleDeepResearch={toggleDeepResearch}
+                        isMultiModelActive={multiModel.isMultiModelActive}
                         filterManager={filterManager}
                         llmManager={llmManager}
                         initialMessage={
