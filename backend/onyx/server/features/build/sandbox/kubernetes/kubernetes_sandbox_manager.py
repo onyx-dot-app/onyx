@@ -618,6 +618,7 @@ done
                     "app.kubernetes.io/managed-by": "onyx",
                     "onyx.app/sandbox-id": sandbox_id,
                     "onyx.app/tenant-id": tenant_id,
+                    "admission.datadoghq.com/enabled": "false",
                 },
             ),
             spec=pod_spec,
