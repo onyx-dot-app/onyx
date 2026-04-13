@@ -2,6 +2,7 @@
 
 .opal-tooltip {
   z-index: var(--z-tooltip, 1300);
+  max-width: 20rem;
   @apply rounded-08 px-3 py-2 text-sm
     bg-background-neutral-dark-03 text-text-light-05
     animate-in fade-in-0 zoom-in-95
