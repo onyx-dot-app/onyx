@@ -353,7 +353,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Default Model"
                     description="This model will be used by Onyx by default in your chats."
-                    nonInteractive
+                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text>{defaultModel}</Text>
@@ -363,7 +363,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Knowledge Cutoff Date"
                     description="Documents with a last-updated date prior to this will be ignored."
-                    nonInteractive
+                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text mainUiMono>

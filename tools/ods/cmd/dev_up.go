@@ -63,7 +63,7 @@ func checkDevcontainerCLI() {
 }
 
 // ensureDockerSock sets the DOCKER_SOCK environment variable if not already set.
-// devcontainer.json references ${localEnv:DOCKER_SOCK} for the socket mount.
+// Used by ensureRemoteUser to detect rootless Docker.
 func ensureDockerSock() {
 	if os.Getenv("DOCKER_SOCK") != "" {
 		return

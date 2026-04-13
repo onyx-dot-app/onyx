@@ -13,7 +13,7 @@ import Label from "@/refresh-components/form/Label";
 interface OrientationLayoutProps {
   name?: string;
   disabled?: boolean;
-  nonInteractive?: boolean;
+  withLabel?: boolean;
   children?: React.ReactNode;
   title: string | RichStr;
   description?: string | RichStr;
@@ -49,7 +49,7 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
 function VerticalInputLayout({
   name,
   disabled,
-  nonInteractive,
+  withLabel = true,
   children,
   subDescription,
   title,
@@ -76,7 +76,7 @@ function VerticalInputLayout({
     </Section>
   );
 
-  if (nonInteractive) return content;
+  if (!withLabel) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}
@@ -124,7 +124,7 @@ export interface HorizontalLayoutProps extends OrientationLayoutProps {
 function HorizontalInputLayout({
   name,
   disabled,
-  nonInteractive,
+  withLabel = true,
   children,
   center,
   title,
@@ -155,7 +155,7 @@ function HorizontalInputLayout({
     </Section>
   );
 
-  if (nonInteractive) return content;
+  if (!withLabel) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}

@@ -1,3 +1,25 @@
+/* Map Tailwind Typography prose variables to the project's color tokens.
+   These auto-switch for dark mode via colors.css — no dark: modifier needed.
+   Note: text-05 = highest contrast, text-01 = lowest. */
+.prose-onyx {
+  --tw-prose-body: var(--text-05);
+  --tw-prose-headings: var(--text-05);
+  --tw-prose-lead: var(--text-04);
+  --tw-prose-links: var(--action-link-05);
+  --tw-prose-bold: var(--text-05);
+  --tw-prose-counters: var(--text-03);
+  --tw-prose-bullets: var(--text-03);
+  --tw-prose-hr: var(--border-02);
+  --tw-prose-quotes: var(--text-04);
+  --tw-prose-quote-borders: var(--border-02);
+  --tw-prose-captions: var(--text-03);
+  --tw-prose-code: var(--text-05);
+  --tw-prose-pre-code: var(--text-04);
+  --tw-prose-pre-bg: var(--background-code-01);
+  --tw-prose-th-borders: var(--border-02);
+  --tw-prose-td-borders: var(--border-01);
+}
+
 /* Light mode syntax highlighting (Atom One Light) */
 .hljs {
   color: #383a42 !important;
