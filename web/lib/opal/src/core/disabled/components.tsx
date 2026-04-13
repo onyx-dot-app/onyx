@@ -95,11 +95,13 @@ function Disabled({
       <TooltipPrimitive.Trigger asChild>{wrapper}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
-          className="opal-tooltip"
+          className="opal-tooltip opal-disabled-tooltip"
           side={tooltipSide}
           sideOffset={4}
         >
-          <Text font="secondary-body">{tooltip}</Text>
+          <Text font="secondary-body" as="p">
+            {tooltip}
+          </Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
