@@ -1,11 +1,3 @@
-"""Unit tests for Chunker._chunk_document_with_sections.
-
-These tests use a fake character-level tokenizer so every char counts as
-exactly one token. This makes token-limit arithmetic deterministic and lets
-us exercise every branch of the method without pulling real embedding
-models into the test.
-"""
-
 import pytest
 
 from onyx.configs.constants import DocumentSource
@@ -720,9 +712,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_image() -> None:
     doc = _make_doc(
         sections=[
             Section(text="Leading text.", link="ltext"),
-            Section(
-                text="img summary", link="limg", image_file_id="img-final"
-            ),
+            Section(text="img summary", link="limg", image_file_id="img-final"),
         ],
     )
 
