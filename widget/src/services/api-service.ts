@@ -192,9 +192,9 @@ export class ApiService {
     try {
       const response = await fetch(url, options);
 
-      // Retry on 5xx or 429 errors
+      // Retry on 5xx errors only (not 4xx — those are permanent)
       if (!response.ok && retries < this.maxRetries) {
-        if (response.status >= 500 || response.status === 429) {
+        if (response.status >= 500) {
           const delay = this.retryDelay * Math.pow(2, retries);
           await new Promise((resolve) => setTimeout(resolve, delay));
           return this.fetchWithRetry(url, options, retries + 1);
