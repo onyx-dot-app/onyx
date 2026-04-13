@@ -255,11 +255,14 @@ def check_usage_and_raise(
                 "Please upgrade your plan or wait for the next billing period."
             )
         elif usage_type == UsageType.API_CALLS:
-            detail = (
-                f"API call limit exceeded for {user_type} account. "
-                f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
-                "Please upgrade your plan or wait for the next billing period."
-            )
+            if is_trial and e.limit == 0:
+                detail = "API access is not available on trial accounts. Please upgrade to a paid plan to use the API and chat widget."
+            else:
+                detail = (
+                    f"API call limit exceeded for {user_type} account. "
+                    f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
+                    "Please upgrade your plan or wait for the next billing period."
+                )
         else:
             detail = (
                 f"Non-streaming API call limit exceeded for {user_type} account. "
