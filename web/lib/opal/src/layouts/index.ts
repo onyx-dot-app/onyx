@@ -15,6 +15,23 @@ export {
 /* Card */
 export { Card, type CardHeaderProps } from "@opal/layouts/cards/components";
 
+/* Input */
+export {
+  Label,
+  type LabelProps,
+  Vertical as InputVertical,
+  type VerticalProps as InputVerticalProps,
+  Horizontal as InputHorizontal,
+  type HorizontalProps as InputHorizontalProps,
+  InputError,
+  type InputErrorProps,
+  InputErrorText,
+  type InputErrorTextProps,
+  InputDivider,
+  InputPadder,
+  type InputPadderProps,
+} from "@opal/layouts/input/components";
+
 /* IllustrationContent */
 export {
   IllustrationContent,
