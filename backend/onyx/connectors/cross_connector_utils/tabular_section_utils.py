@@ -11,9 +11,7 @@ logger = setup_logger()
 
 def is_tabular_file(file_name: str) -> bool:
     lowered = file_name.lower()
-    return any(
-        lowered.endswith(ext) for ext in OnyxFileExtensions.TABULAR_EXTENSIONS
-    )
+    return any(lowered.endswith(ext) for ext in OnyxFileExtensions.TABULAR_EXTENSIONS)
 
 
 def tabular_file_to_sections(
@@ -23,15 +21,11 @@ def tabular_file_to_sections(
 ) -> list[TabularSection]:
     """Convert a tabular file into one or more TabularSections.
 
-    - `.xlsx` → one TabularSection per non-empty sheet, with
-      `link=f"sheet:{title}"`.
+    - `.xlsx` → one TabularSection per non-empty sheet`.
     - `.csv` / `.tsv` → a single TabularSection containing the full
-      decoded file, with `link=link` (falling back to `file_name` when
-      the caller doesn't provide one).
+      decoded file.
 
     Returns an empty list when the file yields no extractable content.
-    Raises `ValueError` if `file_name` isn't a recognized tabular
-    extension — callers should gate on `is_tabular_file` first.
     """
     lowered = file_name.lower()
 

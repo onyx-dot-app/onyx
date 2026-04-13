@@ -75,9 +75,12 @@ class TabularSection(Section):
     """Section containing tabular data (csv/tsv content, or one sheet of
     an xlsx workbook rendered as CSV)."""
 
-    kind: SectionKind = SectionKind.TABULAR
+    type: Literal[SectionType.TABULAR] = SectionType.TABULAR
     text: str  # CSV representation in a string
     link: str
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
@@ -385,20 +388,10 @@ class IndexingDocument(Document):
         title_len = len(self.title or self.semantic_identifier)
 
         # Use processed_sections if available, otherwise fall back to original sections
-        if self.processed_sections:
-            section_len = sum(
-                len(section.text) if section.text is not None else 0
-                for section in self.processed_sections
-            )
-        else:
-            section_len = sum(
-                (
-                    len(section.text)
-                    if isinstance(section, TextSection) and section.text is not None
-                    else 0
-                )
-                for section in self.sections
-            )
+        sections: list[Section] = self.processed_sections or list(self.sections)
+        section_len = sum(
+            len(section.text) if section.text is not None else 0 for section in sections
+        )
 
         return title_len + section_len
 
