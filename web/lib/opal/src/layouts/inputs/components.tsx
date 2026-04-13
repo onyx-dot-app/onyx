@@ -96,7 +96,7 @@ function Vertical({
         variant="section"
       />
       {children}
-      {fieldName && <InputError name={fieldName} />}
+      {fieldName && <FormikInputError name={fieldName} />}
       {subDescription && (
         <Text font="secondary-body" color="text-03">
           {subDescription}
@@ -156,7 +156,7 @@ function Horizontal({
         </div>
         <div className="flex flex-col items-end">{children}</div>
       </Section>
-      {fieldName && <InputError name={fieldName} />}
+      {fieldName && <FormikInputError name={fieldName} />}
     </Section>
   );
 
@@ -169,21 +169,25 @@ function Horizontal({
 }
 
 // ---------------------------------------------------------------------------
-// InputError
+// FormikInputError
 // ---------------------------------------------------------------------------
 
-interface InputErrorProps {
+interface FormikInputErrorProps {
   name: string;
 }
 
-function InputError({ name }: InputErrorProps) {
+/**
+ * Displays Formik field validation errors and warnings.
+ * Safely returns `null` when rendered outside a Formik context.
+ */
+function FormikInputError({ name }: FormikInputErrorProps) {
   const formik = useContext(FormikContext);
   if (!formik) return null;
-  return <FormikInputError name={name} />;
+  return <FormikInputErrorInner name={name} />;
 }
 
-/** Inner component that safely calls Formik hooks (only rendered inside a Formik context). */
-function FormikInputError({ name }: InputErrorProps) {
+/** Inner component that calls Formik hooks (only rendered inside a Formik context). */
+function FormikInputErrorInner({ name }: FormikInputErrorProps) {
   const [, meta] = useField(name);
   const { status } = useContext(FormikContext)!;
   const warning = status?.warnings?.[name];
@@ -264,8 +268,8 @@ export {
   type LabelProps,
   Vertical,
   Horizontal,
-  InputError,
-  type InputErrorProps,
+  FormikInputError,
+  type FormikInputErrorProps,
   InputErrorText,
   type InputErrorTextProps,
   InputDivider,
