@@ -102,7 +102,7 @@ def revoke_tasks_blocking_deletion(
                 f"Revoked permissions sync task {permissions_sync_payload.celery_task_id}."
             )
     except Exception:
-        task_logger.exception("Exception while revoking pruning task")
+        task_logger.exception("Exception while revoking permissions sync task")
 
     try:
         prune_payload = redis_connector.prune.payload
@@ -110,7 +110,7 @@ def revoke_tasks_blocking_deletion(
             app.control.revoke(prune_payload.celery_task_id)
             task_logger.info(f"Revoked pruning task {prune_payload.celery_task_id}.")
     except Exception:
-        task_logger.exception("Exception while revoking permissions sync task")
+        task_logger.exception("Exception while revoking pruning task")
 
     try:
         external_group_sync_payload = redis_connector.external_group_sync.payload
