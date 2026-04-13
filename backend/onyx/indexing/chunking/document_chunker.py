@@ -2,7 +2,7 @@ from chonkie import SentenceChunker
 
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
-from onyx.connectors.models import SectionKind
+from onyx.connectors.models import SectionType
 from onyx.indexing.chunking.image_section_chunker import ImageChunker
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
@@ -32,12 +32,12 @@ class DocumentChunker:
         self.blurb_splitter = blurb_splitter
         self.mini_chunk_splitter = mini_chunk_splitter
 
-        self._dispatch: dict[SectionKind, SectionChunker] = {
-            SectionKind.TEXT: TextChunker(
+        self._dispatch: dict[SectionType, SectionChunker] = {
+            SectionType.TEXT: TextChunker(
                 tokenizer=tokenizer,
                 chunk_splitter=chunk_splitter,
             ),
-            SectionKind.IMAGE: ImageChunker(),
+            SectionType.IMAGE: ImageChunker(),
         }
 
     def chunk(
@@ -104,6 +104,6 @@ class DocumentChunker:
 
     def _select_chunker(self, section: Section) -> SectionChunker:
         try:
-            return self._dispatch[section.kind]
+            return self._dispatch[section.type]
         except KeyError:
-            raise ValueError(f"No SectionChunker registered for kind={section.kind}")
+            raise ValueError(f"No SectionChunker registered for type={section.type}")
