@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  Button as OpalButton,
-  Card as OpalCard,
-  Divider,
-} from "@opal/components";
+import { Button as OpalButton, Card, Divider } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -38,7 +34,6 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -1381,7 +1376,7 @@ export default function AgentEditorPage({
                               disabled={!isImageGenerationAvailable}
                               tooltip="Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin."
                             >
-                              <OpalCard>
+                              <Card border="solid">
                                 <InputLayouts.Horizontal
                                   name="image_generation"
                                   title="Image Generation"
@@ -1393,11 +1388,11 @@ export default function AgentEditorPage({
                                     disabled={!isImageGenerationAvailable}
                                   />
                                 </InputLayouts.Horizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!webSearchTool}>
-                              <OpalCard>
+                              <Card border="solid">
                                 <InputLayouts.Horizontal
                                   name="web_search"
                                   title="Web Search"
@@ -1409,11 +1404,11 @@ export default function AgentEditorPage({
                                     disabled={!webSearchTool}
                                   />
                                 </InputLayouts.Horizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!openURLTool}>
-                              <OpalCard>
+                              <Card border="solid">
                                 <InputLayouts.Horizontal
                                   name="open_url"
                                   title="Open URL"
@@ -1425,11 +1420,11 @@ export default function AgentEditorPage({
                                     disabled={!openURLTool}
                                   />
                                 </InputLayouts.Horizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!codeInterpreterTool}>
-                              <OpalCard>
+                              <Card border="solid">
                                 <InputLayouts.Horizontal
                                   name="code_interpreter"
                                   title="Code Interpreter"
@@ -1441,7 +1436,7 @@ export default function AgentEditorPage({
                                     disabled={!codeInterpreterTool}
                                   />
                                 </InputLayouts.Horizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             {/* Tools */}
@@ -1499,7 +1494,7 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <Card>
+                            <Card border="solid">
                               <InputLayouts.Horizontal
                                 title="Share This Agent"
                                 description="with other users, groups, or everyone in your organization."
@@ -1534,7 +1529,7 @@ export default function AgentEditorPage({
                               )}
                             </Card>
 
-                            <Card>
+                            <Card border="solid">
                               <InputLayouts.Horizontal
                                 name="llm_model"
                                 title="Default Model"
@@ -1603,7 +1598,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular="fit"
                           />
 
-                          <Card>
+                          <Card border="solid">
                             <InputLayouts.Horizontal
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."

@@ -14,7 +14,7 @@
 }
 
 [data-opal-disabled] {
-  @apply cursor-not-allowed select-none;
+  @apply w-full cursor-not-allowed select-none;
   pointer-events: none;
 }
 
