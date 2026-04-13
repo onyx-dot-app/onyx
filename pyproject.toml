@@ -32,7 +32,7 @@ dependencies = [
 # Main backend application dependencies
 backend = [
     "aiohttp==3.13.4",
-    "alembic==1.10.4",
+    "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",
     "azure-cognitiveservices-speech==1.38.0",
