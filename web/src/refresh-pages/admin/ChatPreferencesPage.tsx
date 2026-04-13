@@ -8,7 +8,6 @@ import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import * as InputLayouts from "@opal/layouts/inputs/components";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -27,7 +26,7 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Content } from "@opal/layouts";
+import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
 import {
   useSettingsContext,
   useVectorDbEnabled,
@@ -307,7 +306,7 @@ function FileSizeLimitFields({
   return (
     <div className="flex gap-4 w-full items-start">
       <div className="flex-1">
-        <InputLayouts.Vertical
+        <InputVertical
           title="File Size Limit (MB)"
           subDescription={
             maxAllowedUploadSizeMb
@@ -323,13 +322,10 @@ function FileSizeLimitFields({
             saveSettings={saveSettings}
             maxValue={maxAllowedUploadSizeMb}
           />
-        </InputLayouts.Vertical>
+        </InputVertical>
       </div>
       <div className="flex-1">
-        <InputLayouts.Vertical
-          title="File Token Limit (thousand tokens)"
-          withLabel
-        >
+        <InputVertical title="File Token Limit (thousand tokens)" withLabel>
           <NumericLimitField
             name="file_token_count_threshold_k"
             initialValue={initialTokenThresholdK}
@@ -337,7 +333,7 @@ function FileSizeLimitFields({
             saveSettings={saveSettings}
             allowZero
           />
-        </InputLayouts.Vertical>
+        </InputVertical>
       </div>
     </div>
   );
@@ -528,7 +524,7 @@ function ChatPreferencesForm() {
         <SettingsLayouts.Body>
           {/* Team Context */}
           <Section gap={1}>
-            <InputLayouts.Vertical
+            <InputVertical
               title="Team Name"
               subDescription="This is added to all chat sessions as additional context to provide a richer/customized experience."
               withLabel
@@ -546,9 +542,9 @@ function ChatPreferencesForm() {
                   }
                 }}
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
 
-            <InputLayouts.Vertical
+            <InputVertical
               title="Team Context"
               subDescription="Users can also provide additional individual context in their personal settings."
               withLabel
@@ -569,10 +565,10 @@ function ChatPreferencesForm() {
                   }
                 }}
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Section>
 
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="System Prompt"
             description="Base prompt for all chats, agents, and projects. Modify with caution: Significant changes may degrade response quality."
           >
@@ -583,7 +579,7 @@ function ChatPreferencesForm() {
             >
               Modify Prompt
             </Button>
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
@@ -605,7 +601,7 @@ function ChatPreferencesForm() {
               >
                 <Disabled disabled={uniqueSources.length === 0} allowClick>
                   <div className="w-full">
-                    <InputLayouts.Horizontal
+                    <InputHorizontal
                       title="Search Mode"
                       description="UI mode for quick document search across your organization."
                       disabled={uniqueSources.length === 0}
@@ -618,11 +614,11 @@ function ChatPreferencesForm() {
                         }}
                         disabled={uniqueSources.length === 0}
                       />
-                    </InputLayouts.Horizontal>
+                    </InputHorizontal>
                   </div>
                 </Disabled>
               </SimpleTooltip>
-              <InputLayouts.Horizontal
+              <InputHorizontal
                 title="Multi-Model Generation"
                 tag={{ title: "beta", color: "blue" }}
                 description="Allow multiple models to generate responses in parallel in chat."
@@ -633,8 +629,8 @@ function ChatPreferencesForm() {
                     void saveSettings({ multi_model_chat_enabled: checked });
                   }}
                 />
-              </InputLayouts.Horizontal>
-              <InputLayouts.Horizontal
+              </InputHorizontal>
+              <InputHorizontal
                 title="Deep Research"
                 description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
                 withLabel
@@ -645,8 +641,8 @@ function ChatPreferencesForm() {
                     void saveSettings({ deep_research_enabled: checked });
                   }}
                 />
-              </InputLayouts.Horizontal>
-              <InputLayouts.Horizontal
+              </InputHorizontal>
+              <InputHorizontal
                 title="Chat Auto-Scroll"
                 description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
                 withLabel
@@ -657,7 +653,7 @@ function ChatPreferencesForm() {
                     void saveSettings({ auto_scroll: checked });
                   }}
                 />
-              </InputLayouts.Horizontal>
+              </InputHorizontal>
             </Card>
           </Section>
 
@@ -730,7 +726,7 @@ function ChatPreferencesForm() {
                     <Section gap={0.5}>
                       {vectorDbEnabled && searchTool && (
                         <Card>
-                          <InputLayouts.Horizontal
+                          <InputHorizontal
                             title="Internal Search"
                             description="Search through your organization's connected knowledge base and documents."
                             withLabel
@@ -741,7 +737,7 @@ function ChatPreferencesForm() {
                                 void toggleTool(searchTool.id, checked)
                               }
                             />
-                          </InputLayouts.Horizontal>
+                          </InputHorizontal>
                         </Card>
                       )}
 
@@ -754,7 +750,7 @@ function ChatPreferencesForm() {
                         side="top"
                       >
                         <Card variant={imageGenTool ? undefined : "disabled"}>
-                          <InputLayouts.Horizontal
+                          <InputHorizontal
                             title="Image Generation"
                             description="Generate and manipulate images using AI-powered tools."
                             disabled={!imageGenTool}
@@ -772,12 +768,12 @@ function ChatPreferencesForm() {
                               }
                               disabled={!imageGenTool}
                             />
-                          </InputLayouts.Horizontal>
+                          </InputHorizontal>
                         </Card>
                       </SimpleTooltip>
 
                       <Card variant={webSearchTool ? undefined : "disabled"}>
-                        <InputLayouts.Horizontal
+                        <InputHorizontal
                           title="Web Search"
                           description="Search the web for real-time information and up-to-date results."
                           disabled={!webSearchTool}
@@ -795,11 +791,11 @@ function ChatPreferencesForm() {
                             }
                             disabled={!webSearchTool}
                           />
-                        </InputLayouts.Horizontal>
+                        </InputHorizontal>
                       </Card>
 
                       <Card variant={openURLTool ? undefined : "disabled"}>
-                        <InputLayouts.Horizontal
+                        <InputHorizontal
                           title="Open URL"
                           description="Fetch and read content from web URLs."
                           disabled={!openURLTool}
@@ -817,13 +813,13 @@ function ChatPreferencesForm() {
                             }
                             disabled={!openURLTool}
                           />
-                        </InputLayouts.Horizontal>
+                        </InputHorizontal>
                       </Card>
 
                       <Card
                         variant={codeInterpreterTool ? undefined : "disabled"}
                       >
-                        <InputLayouts.Horizontal
+                        <InputHorizontal
                           title="Code Interpreter"
                           description="Generate and run code."
                           disabled={!codeInterpreterTool}
@@ -841,7 +837,7 @@ function ChatPreferencesForm() {
                             }
                             disabled={!codeInterpreterTool}
                           />
-                        </InputLayouts.Horizontal>
+                        </InputHorizontal>
                       </Card>
                     </Section>
 
@@ -898,7 +894,7 @@ function ChatPreferencesForm() {
             <SimpleCollapsible.Content>
               <Section gap={1}>
                 <Card>
-                  <InputLayouts.Horizontal
+                  <InputHorizontal
                     title="Keep Chat History"
                     description="Specify how long Onyx should retain chats in your organization."
                     withLabel
@@ -927,11 +923,11 @@ function ChatPreferencesForm() {
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
-                  </InputLayouts.Horizontal>
+                  </InputHorizontal>
                 </Card>
 
                 <Card>
-                  <InputLayouts.Vertical
+                  <InputVertical
                     title="File Attachment Size Limit"
                     description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
                     withLabel
@@ -962,11 +958,11 @@ function ChatPreferencesForm() {
                       }
                       maxAllowedUploadSizeMb={s.max_allowed_upload_size_mb}
                     />
-                  </InputLayouts.Vertical>
+                  </InputVertical>
                 </Card>
 
                 <Card>
-                  <InputLayouts.Horizontal
+                  <InputHorizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
                     withLabel
@@ -977,9 +973,9 @@ function ChatPreferencesForm() {
                         void saveSettings({ anonymous_user_enabled: checked });
                       }}
                     />
-                  </InputLayouts.Horizontal>
+                  </InputHorizontal>
 
-                  <InputLayouts.Horizontal
+                  <InputHorizontal
                     title="Always Start with an Agent"
                     description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
                     withLabel
@@ -993,7 +989,7 @@ function ChatPreferencesForm() {
                         });
                       }}
                     />
-                  </InputLayouts.Horizontal>
+                  </InputHorizontal>
                 </Card>
               </Section>
             </SimpleCollapsible.Content>

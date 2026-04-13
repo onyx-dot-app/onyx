@@ -59,7 +59,7 @@ import { WithoutStyles } from "@/types";
 import { ContentAction } from "@opal/layouts";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { Card } from "@/refresh-components/cards";
-import { Label } from "@opal/layouts/inputs/components";
+import { Label } from "@opal/layouts";
 
 /**
  * Actions Header Component

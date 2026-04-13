@@ -15,7 +15,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import * as InputLayouts from "@opal/layouts/inputs/components";
+import { InputDivider } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { toast } from "@/hooks/useToast";
 
@@ -80,17 +80,17 @@ export default function AnthropicModal({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.InputDivider />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.InputDivider />
+      <InputDivider />
       <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.InputDivider />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

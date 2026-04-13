@@ -27,6 +27,7 @@ export {
   type InputErrorProps,
   InputErrorText,
   type InputErrorTextProps,
+  type InputErrorType,
   InputDivider,
   InputPadder,
   type InputPadderProps,

@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import * as InputLayouts from "@opal/layouts/inputs/components";
+import { InputDivider } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -71,12 +71,12 @@ function LiteLLMProxyModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.InputDivider />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.InputDivider />
+      <InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -84,7 +84,7 @@ function LiteLLMProxyModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.InputDivider />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

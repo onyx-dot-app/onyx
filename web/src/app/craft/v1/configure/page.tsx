@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@opal/layouts/inputs/components";
+import { InputHorizontal } from "@opal/layouts";
 import {
   useBuildSessionStore,
   useIsPreProvisioning,
@@ -407,7 +407,7 @@ export default function BuildConfigPage() {
                 height="fit"
               >
                 <Card>
-                  <InputLayouts.Horizontal
+                  <InputHorizontal
                     title="Your Demo Persona"
                     description={
                       firstName && lastName && positionText
@@ -436,7 +436,7 @@ export default function BuildConfigPage() {
                         <SvgSettings className="w-5 h-5" />
                       </button>
                     </SimpleTooltip>
-                  </InputLayouts.Horizontal>
+                  </InputHorizontal>
                 </Card>
                 <Card
                   className={
@@ -455,7 +455,7 @@ export default function BuildConfigPage() {
                         : ""
                     }`}
                   >
-                    <InputLayouts.Horizontal
+                    <InputHorizontal
                       title="Default LLM"
                       description="Select the language model to craft with"
                       center
@@ -485,7 +485,7 @@ export default function BuildConfigPage() {
                           <SvgChevronDown className="w-4 h-4 text-text-03" />
                         </button>
                       </BuildLLMPopover>
-                    </InputLayouts.Horizontal>
+                    </InputHorizontal>
                   </div>
                 </Card>
                 <Divider />

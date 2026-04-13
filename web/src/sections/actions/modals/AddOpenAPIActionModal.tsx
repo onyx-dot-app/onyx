@@ -4,7 +4,7 @@ import { markdown } from "@opal/utils";
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import * as InputLayouts from "@opal/layouts/inputs/components";
+import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -235,7 +235,7 @@ function FormContent({
       />
 
       <Modal.Body>
-        <InputLayouts.Vertical
+        <InputVertical
           withLabel="definition"
           title="OpenAPI Schema Definition"
           subDescription={markdown(
@@ -276,7 +276,7 @@ function FormContent({
               />
             </div>
           </Hoverable.Root>
-        </InputLayouts.Vertical>
+        </InputVertical>
 
         <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 

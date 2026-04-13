@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@opal/layouts/inputs/components";
+import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
@@ -175,7 +175,7 @@ export default function LicenseActivationCard({
             </div>
           )}
 
-          <InputLayouts.Vertical
+          <InputVertical
             title="License Key"
             subDescription={
               error
@@ -217,7 +217,7 @@ export default function LicenseActivationCard({
                 </Text>
               </Section>
             )}
-          </InputLayouts.Vertical>
+          </InputVertical>
         </Section>
       </div>
 
