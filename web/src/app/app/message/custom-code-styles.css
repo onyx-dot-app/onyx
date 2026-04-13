@@ -258,23 +258,102 @@ pre[class*="language-"] {
   scrollbar-color: #4b5563 #1f2937;
 }
 
+/* Card wrapper — holds the background, border-radius, padding, and fade overlay.
+   Does NOT scroll — the inner .markdown-table-breakout handles that. */
+.markdown-table-card {
+  position: relative;
+  background: var(--background-neutral-01);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0;
+}
+
 /*
- * Table breakout container - allows tables to extend beyond their parent's
- * constrained width to use the full container query width (100cqw).
- *
- * Requires an ancestor element with `container-type: inline-size` (@container in Tailwind).
- *
- * How the math works:
- * - width: 100cqw → expand to full container query width
- * - marginLeft: calc((100% - 100cqw) / 2) → negative margin pulls element left
- *   (100% is parent width, 100cqw is larger, so result is negative)
- * - paddingLeft/Right: calc((100cqw - 100%) / 2) → padding keeps content aligned
- *   with original position while allowing scroll area to extend
+ * Scrollable table container — sits inside the card.
  */
 .markdown-table-breakout {
   overflow-x: auto;
-  width: 100cqw;
-  margin-left: calc((100% - 100cqw) / 2);
-  padding-left: calc((100cqw - 100%) / 2);
-  padding-right: calc((100cqw - 100%) / 2);
+
+  /* Always reserve scrollbar height so hover doesn't shift content.
+     Thumb is transparent by default, revealed on hover. */
+  scrollbar-width: thin; /* Firefox — always shows track */
+  scrollbar-color: transparent transparent; /* invisible thumb + track */
+}
+.markdown-table-breakout::-webkit-scrollbar {
+  height: 6px;
+}
+.markdown-table-breakout::-webkit-scrollbar-track {
+  background: transparent;
+}
+.markdown-table-breakout::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.markdown-table-breakout:hover {
+  scrollbar-color: var(--border-03) transparent; /* Firefox — reveal thumb */
+}
+.markdown-table-breakout:hover::-webkit-scrollbar-thumb {
+  background: var(--border-03);
+}
+
+/* Fade the right edge via an ::after overlay on the non-scrolling card.
+   Stays pinned while table scrolls; doesn't affect the sticky column. */
+.markdown-table-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2rem;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--background-neutral-01)
+  );
+  border-radius: 0 0.5rem 0.5rem 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.markdown-table-card[data-overflows="true"]::after {
+  opacity: 1;
+}
+
+/* Sticky first column — inherits the container's background so it
+   matches regardless of theme or custom wallpaper. */
+.markdown-table-breakout th:first-child,
+.markdown-table-breakout td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-left: 0.75rem;
+  background: var(--background-neutral-01);
+}
+.markdown-table-breakout th:last-child,
+.markdown-table-breakout td:last-child {
+  padding-right: 0.75rem;
+}
+
+/* Shadow on sticky column when scrolled. Uses an ::after pseudo-element
+   so it isn't clipped by the overflow container or the mask-image fade. */
+.markdown-table-breakout th:first-child::after,
+.markdown-table-breakout td:first-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  box-shadow: inset 6px 0 8px -4px var(--alpha-grey-100-25);
+}
+.dark .markdown-table-breakout th:first-child::after,
+.dark .markdown-table-breakout td:first-child::after {
+  box-shadow: inset 6px 0 8px -4px var(--alpha-grey-100-60);
+}
+.markdown-table-breakout[data-scrolled="true"] th:first-child::after,
+.markdown-table-breakout[data-scrolled="true"] td:first-child::after {
+  opacity: 1;
 }

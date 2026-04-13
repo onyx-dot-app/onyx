@@ -102,7 +102,7 @@ def revoke_tasks_blocking_deletion(
                 f"Revoked permissions sync task {permissions_sync_payload.celery_task_id}."
             )
     except Exception:
-        task_logger.exception("Exception while revoking pruning task")
+        task_logger.exception("Exception while revoking permissions sync task")
 
     try:
         prune_payload = redis_connector.prune.payload
@@ -110,7 +110,7 @@ def revoke_tasks_blocking_deletion(
             app.control.revoke(prune_payload.celery_task_id)
             task_logger.info(f"Revoked pruning task {prune_payload.celery_task_id}.")
     except Exception:
-        task_logger.exception("Exception while revoking permissions sync task")
+        task_logger.exception("Exception while revoking pruning task")
 
     try:
         external_group_sync_payload = redis_connector.external_group_sync.payload
@@ -508,7 +508,11 @@ def monitor_connector_deletion_taskset(
                 db_session=db_session,
                 connector_id=connector_id_to_delete,
             )
-            if not connector or not len(connector.credentials):
+            if not connector:
+                task_logger.info(
+                    "Connector deletion - Connector already deleted, skipping connector cleanup"
+                )
+            elif not len(connector.credentials):
                 task_logger.info(
                     "Connector deletion - Found no credentials left for connector, deleting connector"
                 )
