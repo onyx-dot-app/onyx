@@ -34,7 +34,7 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
-class SectionKind(str, Enum):
+class SectionType(str, Enum):
     """Discriminator for Section subclasses."""
 
     TEXT = "text"
@@ -44,7 +44,7 @@ class SectionKind(str, Enum):
 class Section(BaseModel):
     """Base section class with common attributes"""
 
-    kind: SectionKind
+    type: SectionType
     link: str | None = None
     text: str | None = None
     image_file_id: str | None = None
@@ -53,7 +53,7 @@ class Section(BaseModel):
 class TextSection(Section):
     """Section containing text content"""
 
-    kind: Literal[SectionKind.TEXT] = SectionKind.TEXT
+    type: Literal[SectionType.TEXT] = SectionType.TEXT
     text: str
 
     def __sizeof__(self) -> int:
@@ -63,7 +63,7 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
-    kind: Literal[SectionKind.IMAGE] = SectionKind.IMAGE
+    type: Literal[SectionType.IMAGE] = SectionType.IMAGE
     image_file_id: str
 
     def __sizeof__(self) -> int:

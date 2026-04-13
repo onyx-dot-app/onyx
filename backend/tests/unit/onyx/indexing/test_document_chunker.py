@@ -4,7 +4,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
-from onyx.connectors.models import SectionKind
+from onyx.connectors.models import SectionType
 from onyx.indexing import chunker as chunker_module
 from onyx.indexing.chunker import Chunker
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -90,7 +90,7 @@ def test_empty_section_on_first_position_without_title_is_skipped() -> None:
     `(not document.title or section_idx > 0)` means it IS skipped."""
     chunker = _make_chunker()
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text="", link="l0")],
+        sections=[Section(type=SectionType.TEXT, text="", link="l0")],
         title=None,
     )
 
@@ -113,9 +113,9 @@ def test_empty_section_on_later_position_is_skipped_even_with_title() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="Alpha.", link="l0"),
-            Section(kind=SectionKind.TEXT, text="", link="l1"),  # should be skipped
-            Section(kind=SectionKind.TEXT, text="Beta.", link="l2"),
+            Section(type=SectionType.TEXT, text="Alpha.", link="l0"),
+            Section(type=SectionType.TEXT, text="", link="l1"),  # should be skipped
+            Section(type=SectionType.TEXT, text="Beta.", link="l2"),
         ],
     )
 
@@ -141,7 +141,7 @@ def test_empty_section_on_later_position_is_skipped_even_with_title() -> None:
 def test_single_small_text_section_becomes_one_chunk() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text="Hello world.", link="https://a")]
+        sections=[Section(type=SectionType.TEXT, text="Hello world.", link="https://a")]
     )
 
     chunks = chunker._chunk_document_with_sections(
@@ -170,9 +170,9 @@ def test_single_small_text_section_becomes_one_chunk() -> None:
 def test_multiple_small_sections_combine_into_one_chunk() -> None:
     chunker = _make_chunker()
     sections = [
-        Section(kind=SectionKind.TEXT, text="Part one.", link="l1"),
-        Section(kind=SectionKind.TEXT, text="Part two.", link="l2"),
-        Section(kind=SectionKind.TEXT, text="Part three.", link="l3"),
+        Section(type=SectionType.TEXT, text="Part one.", link="l1"),
+        Section(type=SectionType.TEXT, text="Part two.", link="l2"),
+        Section(type=SectionType.TEXT, text="Part three.", link="l3"),
     ]
     doc = _make_doc(sections=sections)
 
@@ -207,8 +207,8 @@ def test_sections_overflow_into_second_chunk() -> None:
     b = "B" * 120
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text=a, link="la"),
-            Section(kind=SectionKind.TEXT, text=b, link="lb"),
+            Section(type=SectionType.TEXT, text=a, link="la"),
+            Section(type=SectionType.TEXT, text=b, link="lb"),
         ],
     )
 
@@ -243,7 +243,7 @@ def test_image_only_section_produces_single_chunk_with_image_id() -> None:
     doc = _make_doc(
         sections=[
             Section(
-                kind=SectionKind.IMAGE,
+                type=SectionType.IMAGE,
                 text="summary of image",
                 link="https://img",
                 image_file_id="img-abc",
@@ -272,14 +272,14 @@ def test_image_section_flushes_pending_text_and_creates_its_own_chunk() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="Pending text.", link="ltext"),
+            Section(type=SectionType.TEXT, text="Pending text.", link="ltext"),
             Section(
-                kind=SectionKind.IMAGE,
+                type=SectionType.IMAGE,
                 text="image summary",
                 link="limage",
                 image_file_id="img-1",
             ),
-            Section(kind=SectionKind.TEXT, text="Trailing text.", link="ltail"),
+            Section(type=SectionType.TEXT, text="Trailing text.", link="ltail"),
         ],
     )
 
@@ -316,7 +316,7 @@ def test_image_section_without_link_gets_empty_links_dict() -> None:
     doc = _make_doc(
         sections=[
             Section(
-                kind=SectionKind.IMAGE,
+                type=SectionType.IMAGE,
                 text="img",
                 link=None,
                 image_file_id="img-xyz",
@@ -359,7 +359,7 @@ def test_oversized_section_is_split_across_multiple_chunks() -> None:
     assert len(section_text) > CHUNK_LIMIT
 
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text=section_text, link="big-link")],
+        sections=[Section(type=SectionType.TEXT, text=section_text, link="big-link")],
     )
 
     chunks = chunker._chunk_document_with_sections(
@@ -401,8 +401,8 @@ def test_oversized_section_flushes_pending_text_first() -> None:
 
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text=pending, link="l-pending"),
-            Section(kind=SectionKind.TEXT, text=big, link="l-big"),
+            Section(type=SectionType.TEXT, text=pending, link="l-pending"),
+            Section(type=SectionType.TEXT, text=big, link="l-big"),
         ],
     )
 
@@ -438,8 +438,8 @@ def test_title_prefix_and_metadata_propagate_to_all_chunks() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="A" * 120, link="la"),
-            Section(kind=SectionKind.TEXT, text="B" * 120, link="lb"),
+            Section(type=SectionType.TEXT, text="A" * 120, link="la"),
+            Section(type=SectionType.TEXT, text="B" * 120, link="lb"),
         ],
     )
 
@@ -466,9 +466,9 @@ def test_chunk_ids_are_sequential_starting_at_zero() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="A" * 120, link="la"),
-            Section(kind=SectionKind.TEXT, text="B" * 120, link="lb"),
-            Section(kind=SectionKind.TEXT, text="C" * 120, link="lc"),
+            Section(type=SectionType.TEXT, text="A" * 120, link="la"),
+            Section(type=SectionType.TEXT, text="B" * 120, link="lb"),
+            Section(type=SectionType.TEXT, text="C" * 120, link="lc"),
         ],
     )
 
@@ -495,9 +495,9 @@ def test_overflow_flush_then_subsequent_section_joins_new_chunk() -> None:
     # Third section is small (20 chars) → should fit with second.
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="A" * 120, link="la"),
-            Section(kind=SectionKind.TEXT, text="B" * 120, link="lb"),
-            Section(kind=SectionKind.TEXT, text="C" * 20, link="lc"),
+            Section(type=SectionType.TEXT, text="A" * 120, link="la"),
+            Section(type=SectionType.TEXT, text="B" * 120, link="lb"),
+            Section(type=SectionType.TEXT, text="C" * 20, link="lc"),
         ],
     )
 
@@ -531,8 +531,8 @@ def test_small_section_after_oversized_starts_a_fresh_chunk() -> None:
     assert len(big) > CHUNK_LIMIT
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text=big, link="l-big"),
-            Section(kind=SectionKind.TEXT, text="Tail text.", link="l-tail"),
+            Section(type=SectionType.TEXT, text=big, link="l-big"),
+            Section(type=SectionType.TEXT, text="Tail text.", link="l-tail"),
         ],
     )
 
@@ -571,7 +571,7 @@ def test_strict_chunk_token_limit_subdivides_oversized_split(
     # return it as one oversized piece (>200) which triggers the fallback.
     run = "a" * 500
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text=run, link="l-run")]
+        sections=[Section(type=SectionType.TEXT, text=run, link="l-run")]
     )
 
     chunks = chunker._chunk_document_with_sections(
@@ -608,7 +608,7 @@ def test_strict_chunk_token_limit_disabled_allows_oversized_split(
     chunker = _make_chunker()
     run = "a" * 500
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text=run, link="l-run")]
+        sections=[Section(type=SectionType.TEXT, text=run, link="l-run")]
     )
 
     chunks = chunker._chunk_document_with_sections(
@@ -636,8 +636,8 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="", link="l0"),  # empty first section, kept
-            Section(kind=SectionKind.TEXT, text="Real content.", link="l1"),
+            Section(type=SectionType.TEXT, text="", link="l0"),  # empty first section, kept
+            Section(type=SectionType.TEXT, text="Real content.", link="l1"),
         ],
         title="Has A Title",
     )
@@ -670,7 +670,7 @@ def test_clean_text_strips_control_chars_from_section_content() -> None:
     # stripped by clean_text.
     dirty = "Hello\x00 World\x07!"
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text=dirty, link="l1")]
+        sections=[Section(type=SectionType.TEXT, text=dirty, link="l1")]
     )
 
     chunks = chunker._chunk_document_with_sections(
@@ -696,9 +696,9 @@ def test_section_with_none_text_behaves_like_empty_string() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="Alpha.", link="la"),
-            Section(kind=SectionKind.TEXT, text=None, link="lnone"),  # idx 1 → skipped
-            Section(kind=SectionKind.TEXT, text="Beta.", link="lb"),
+            Section(type=SectionType.TEXT, text="Alpha.", link="la"),
+            Section(type=SectionType.TEXT, text=None, link="lnone"),  # idx 1 → skipped
+            Section(type=SectionType.TEXT, text="Beta.", link="lb"),
         ],
     )
 
@@ -727,9 +727,9 @@ def test_no_trailing_empty_chunk_when_last_section_was_image() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(kind=SectionKind.TEXT, text="Leading text.", link="ltext"),
+            Section(type=SectionType.TEXT, text="Leading text.", link="ltext"),
             Section(
-                kind=SectionKind.IMAGE,
+                type=SectionType.IMAGE,
                 text="img summary",
                 link="limg",
                 image_file_id="img-final",
@@ -766,7 +766,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_oversized() -> None:
     )
     assert len(big) > CHUNK_LIMIT
     doc = _make_doc(
-        sections=[Section(kind=SectionKind.TEXT, text=big, link="l-big")]
+        sections=[Section(type=SectionType.TEXT, text=big, link="l-big")]
     )
 
     chunks = chunker._chunk_document_with_sections(
