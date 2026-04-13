@@ -31,7 +31,6 @@ from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
@@ -315,7 +314,7 @@ def list_all_users(
     slack_users_page: int | None = None,
     invited_page: int | None = None,
     include_api_keys: bool = False,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_USERS)),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     users = [
