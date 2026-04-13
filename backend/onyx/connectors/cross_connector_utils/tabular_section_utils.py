@@ -21,8 +21,8 @@ def tabular_file_to_sections(
 ) -> list[TabularSection]:
     """Convert a tabular file into one or more TabularSections.
 
-    - `.xlsx` → one TabularSection per non-empty sheet`.
-    - `.csv` / `.tsv` → a single TabularSection containing the full
+    - .xlsx → one TabularSection per non-empty sheet.
+    - .csv / .tsv → a single TabularSection containing the full
       decoded file.
 
     Returns an empty list when the file yields no extractable content.
