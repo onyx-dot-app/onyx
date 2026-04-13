@@ -1,7 +1,7 @@
 """add proposal review tables
 
 Revision ID: 61ea78857c97
-Revises: c7bf5721733e
+Revises: d129f37b3d87
 Create Date: 2026-04-09 10:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import fastapi_users_db_sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "61ea78857c97"
-down_revision = "503883791c39"
+down_revision = "d129f37b3d87"
 branch_labels: str | None = None
 depends_on: str | None = None
 
