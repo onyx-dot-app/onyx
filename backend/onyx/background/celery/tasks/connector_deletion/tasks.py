@@ -316,6 +316,11 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 f"Connector deletion - Delayed (permissions in progress): cc_pair={cc_pair_id}"
             )
 
+        if redis_connector.external_group_sync.fenced:
+            raise TaskDependencyError(
+                f"Connector deletion - Delayed (external group sync in progress): cc_pair={cc_pair_id}"
+            )
+
         # add tasks to celery and build up the task set to monitor in redis
         redis_connector.delete.taskset_clear()
 
