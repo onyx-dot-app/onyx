@@ -12,7 +12,7 @@ Low-level `<label>` wrapper with cursor styling. Most consumers should use `Vert
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `name` | `string` | — | Sets `htmlFor` for form association |
+| `label` | `string` | — | Sets `htmlFor` to associate with a form element by id |
 | `disabled` | `boolean` | `false` | Switches cursor to `not-allowed` |
 
 ### Vertical
@@ -44,14 +44,6 @@ Places title/description on the left, input control on the right.
 | `description` | `string \| RichStr` | — | Section description |
 | `suffix` | `"optional" \| string` | — | Suffix after the title |
 | `sizePreset` | `"main-content" \| "main-ui"` | `"main-content"` | Size preset for Content |
-
-### InputError
-
-Displays Formik field validation errors and warnings. Requires Formik context.
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `name` | `string` | — | Formik field name |
 
 ### InputErrorText
 

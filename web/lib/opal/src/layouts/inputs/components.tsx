@@ -18,19 +18,19 @@ interface LabelProps
   extends WithoutStyles<
     Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
   > {
-  /** The name/id of the form element this label is associated with. */
-  name?: string;
-  /** Whether the associated input is disabled. */
+  /** Sets `htmlFor` on the `<label>` to associate it with a form element by id. */
+  label?: string;
+  /** Switches cursor from `pointer` to `not-allowed`. */
   disabled?: boolean;
   ref?: React.Ref<HTMLLabelElement>;
 }
 
-function Label({ name, disabled, ref, ...props }: LabelProps) {
+function Label({ label, disabled, ref, ...props }: LabelProps) {
   return (
     <label
       ref={ref}
       className="opal-input-label"
-      htmlFor={name}
+      htmlFor={label}
       data-disabled={disabled || undefined}
       {...props}
     />
@@ -107,7 +107,7 @@ function Vertical({
 
   if (!withLabelProp) return content;
   return (
-    <Label name={fieldName} disabled={disabled}>
+    <Label label={fieldName} disabled={disabled}>
       {content}
     </Label>
   );
@@ -162,7 +162,7 @@ function Horizontal({
 
   if (!withLabelProp) return content;
   return (
-    <Label name={fieldName} disabled={disabled}>
+    <Label label={fieldName} disabled={disabled}>
       {content}
     </Label>
   );

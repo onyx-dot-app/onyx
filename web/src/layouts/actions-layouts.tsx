@@ -118,7 +118,7 @@ function ActionsHeader({
     <ExpandableCard.Header>
       <div className="flex flex-col gap-2 pt-4 pb-2">
         <div className="px-4">
-          <Label name={name}>
+          <Label label={name}>
             <ContentAction
               icon={Icon}
               title={title}
@@ -239,7 +239,7 @@ function ActionsTool({
 }: ActionsToolProps) {
   return (
     <Card padding={0.75} variant={disabled ? "disabled" : undefined}>
-      <Label name={name} disabled={disabled}>
+      <Label label={name} disabled={disabled}>
         <ContentAction
           icon={icon}
           title={title}
