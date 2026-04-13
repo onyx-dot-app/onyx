@@ -4,7 +4,7 @@ import React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { TooltipSide } from "@opal/components";
 import type { RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,7 +95,7 @@ function Disabled({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolveStr(tooltip)}
+          <Text font="secondary-body">{tooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
