@@ -9,6 +9,7 @@ import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import Label from "@/refresh-components/form/Label";
+import type { TagProps } from "@opal/components/tag/components";
 
 interface OrientationLayoutProps {
   name?: string;
@@ -16,6 +17,8 @@ interface OrientationLayoutProps {
   nonInteractive?: boolean;
   children?: React.ReactNode;
   title: string | RichStr;
+  /** Tag rendered inline beside the title (passed through to Content). */
+  tag?: TagProps;
   description?: string | RichStr;
   suffix?: "optional" | (string & {});
   sizePreset?: "main-content" | "main-ui";
@@ -128,6 +131,7 @@ function HorizontalInputLayout({
   children,
   center,
   title,
+  tag,
   description,
   suffix,
   sizePreset = "main-content",
@@ -144,6 +148,7 @@ function HorizontalInputLayout({
             title={title}
             description={description}
             suffix={suffix}
+            tag={tag}
             sizePreset={sizePreset}
             variant="section"
             widthVariant="full"
