@@ -595,33 +595,26 @@ function ChatPreferencesForm() {
               variant="section"
             />
             <Card>
-              <SimpleTooltip
-                tooltip={
-                  uniqueSources.length === 0
-                    ? "Set up connectors to use Search Mode"
-                    : undefined
-                }
-                side="top"
+              <Disabled
+                disabled={uniqueSources.length === 0}
+                tooltip="Set up connectors to use Search Mode"
+                tooltipSide="top"
               >
-                <Disabled disabled={uniqueSources.length === 0} allowClick>
-                  <div className="w-full">
-                    <InputLayouts.Horizontal
-                      title="Search Mode"
-                      description="UI mode for quick document search across your organization."
-                      disabled={uniqueSources.length === 0}
-                      nonInteractive
-                    >
-                      <Switch
-                        checked={s.search_ui_enabled ?? false}
-                        onCheckedChange={(checked) => {
-                          void saveSettings({ search_ui_enabled: checked });
-                        }}
-                        disabled={uniqueSources.length === 0}
-                      />
-                    </InputLayouts.Horizontal>
-                  </div>
-                </Disabled>
-              </SimpleTooltip>
+                <InputLayouts.Horizontal
+                  title="Search Mode"
+                  description="UI mode for quick document search across your organization."
+                  disabled={uniqueSources.length === 0}
+                  nonInteractive
+                >
+                  <Switch
+                    checked={s.search_ui_enabled ?? false}
+                    onCheckedChange={(checked) => {
+                      void saveSettings({ search_ui_enabled: checked });
+                    }}
+                    disabled={uniqueSources.length === 0}
+                  />
+                </InputLayouts.Horizontal>
+              </Disabled>
               <InputLayouts.Horizontal
                 title="Deep Research"
                 description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
