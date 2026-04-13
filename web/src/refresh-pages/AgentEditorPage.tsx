@@ -571,8 +571,13 @@ export default function AgentEditorPage({
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
-    // Knowledge - enabled if agent has any knowledge sources attached
+    // Knowledge - enabled if the agent has the internal search tool attached
+    // or any knowledge sources attached.
     enable_knowledge:
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+      ) ??
+        false) ||
       (existingAgent?.document_sets?.length ?? 0) > 0 ||
       (existingAgent?.hierarchy_nodes?.length ?? 0) > 0 ||
       (existingAgent?.attached_documents?.length ?? 0) > 0 ||
