@@ -623,6 +623,19 @@ function ChatPreferencesForm() {
                 </Disabled>
               </SimpleTooltip>
               <InputLayouts.Horizontal
+                title="Multi-Model Generation"
+                tag={{ title: "beta", color: "blue" }}
+                description="Allow multiple models to generate responses in parallel in chat."
+                nonInteractive
+              >
+                <Switch
+                  checked={s.multi_model_chat_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ multi_model_chat_enabled: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+              <InputLayouts.Horizontal
                 title="Deep Research"
                 description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
                 nonInteractive
