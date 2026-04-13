@@ -13,9 +13,9 @@ from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
+from onyx.connectors.models import IndexingDocument
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import extract_blurb
-from onyx.connectors.models import IndexingDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
