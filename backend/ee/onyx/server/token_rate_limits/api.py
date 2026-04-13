@@ -8,7 +8,6 @@ from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_gro
 from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -48,7 +47,7 @@ def get_all_group_token_limit_settings(
 @router.get("/user-group/{group_id}")
 def get_group_token_limit_settings(
     group_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> list[TokenRateLimitDisplay]:
     return [
@@ -65,7 +64,7 @@ def get_group_token_limit_settings(
 def create_group_token_limit_settings(
     group_id: int,
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     rate_limit_display = TokenRateLimitDisplay.from_db(

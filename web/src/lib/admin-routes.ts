@@ -315,7 +315,7 @@ export const ADMIN_ROUTES = {
     icon: SvgUsers,
     title: "Manage User Groups",
     sidebarLabel: "Groups",
-    requiredPermission: "admin",
+    requiredPermission: "manage:user_groups",
     section: "Permissions",
     requiresEnterprise: true,
     visibleWhen: null,
