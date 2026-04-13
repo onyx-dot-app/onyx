@@ -111,7 +111,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
 
   return (
     <InputLayouts.Vertical
-      label="timeout_seconds"
+      withLabel="timeout_seconds"
       title="Timeout"
       suffix="(seconds)"
       subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
@@ -302,7 +302,7 @@ export default function HookFormModal({
                     }
                   />
 
-                  <InputLayouts.Vertical label="name" title="Display Name">
+                  <InputLayouts.Vertical withLabel="name" title="Display Name">
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="name"
@@ -313,7 +313,7 @@ export default function HookFormModal({
                   </InputLayouts.Vertical>
 
                   <InputLayouts.Vertical
-                    label="fail_strategy"
+                    withLabel="fail_strategy"
                     title="Fail Strategy"
                     subDescription={failStrategyDescription}
                   >
@@ -351,7 +351,7 @@ export default function HookFormModal({
                   <TimeoutField spec={spec} />
 
                   <InputLayouts.Vertical
-                    label="endpoint_url"
+                    withLabel="endpoint_url"
                     title="External API Endpoint URL"
                     subDescription="Only connect to servers you trust. You are responsible for actions taken and data shared with this connection."
                   >
@@ -365,7 +365,7 @@ export default function HookFormModal({
                   </InputLayouts.Vertical>
 
                   <InputLayouts.Vertical
-                    label="api_key"
+                    withLabel="api_key"
                     title="API Key"
                     subDescription="Onyx will use this key to authenticate with your API endpoint."
                   >

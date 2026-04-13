@@ -169,7 +169,7 @@ export default function AzureModal({
     >
       <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          label="target_uri"
+          withLabel="target_uri"
           title="Target URI"
           subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
         >

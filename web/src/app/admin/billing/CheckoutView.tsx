@@ -193,7 +193,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           <InputLayouts.Horizontal
             title="Billing Cycle"
             description="after your 1-month free trial"
-            label
+            withLabel
           >
             <Section
               flexDirection="row"
@@ -226,7 +226,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
             description={`Minimum ${minRequiredSeats} seat${
               minRequiredSeats !== 1 ? "s" : ""
             } required for your current users and Slack accounts.`}
-            label
+            withLabel
           >
             <InputNumber
               value={seats}

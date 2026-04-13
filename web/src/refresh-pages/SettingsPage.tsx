@@ -123,12 +123,12 @@ function PATModal({
       <Section gap={1}>
         {/* Token Creation*/}
         {!!createdToken?.token ? (
-          <InputLayouts.Vertical title="Token Value" label>
+          <InputLayouts.Vertical title="Token Value" withLabel>
             <Code>{createdToken.token}</Code>
           </InputLayouts.Vertical>
         ) : (
           <>
-            <InputLayouts.Vertical title="Token Name" label>
+            <InputLayouts.Vertical title="Token Name" withLabel>
               <InputTypeIn
                 placeholder="Name your token"
                 value={newTokenName}
@@ -154,7 +154,7 @@ function PATModal({
                         .replace(".999Z", " UTC")}`;
                     })()
               }
-              label
+              withLabel
             >
               <InputSelect
                 value={expirationDays}
@@ -272,7 +272,7 @@ function GeneralSettings() {
               title="Full Name"
               description="We'll display this name in the app."
               center
-              label
+              withLabel
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -298,7 +298,7 @@ function GeneralSettings() {
               title="Work Role"
               description="Share your role to better tailor responses."
               center
-              label
+              withLabel
             >
               <InputTypeIn
                 placeholder="Your role"
@@ -335,7 +335,7 @@ function GeneralSettings() {
               title="Color Mode"
               description="Select your preferred color mode for the UI."
               center
-              label
+              withLabel
             >
               <InputSelect
                 value={theme}
@@ -379,7 +379,7 @@ function GeneralSettings() {
                 </InputSelect.Content>
               </InputSelect>
             </InputLayouts.Horizontal>
-            <InputLayouts.Vertical title="Chat Background" label>
+            <InputLayouts.Vertical title="Chat Background">
               <div className="flex flex-wrap gap-2">
                 {CHAT_BACKGROUND_OPTIONS.map((bg) => {
                   const currentBackgroundId =
@@ -397,7 +397,7 @@ function GeneralSettings() {
                       }
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
-                      aria-label={`${bg.label} background${
+                      aria-withLabel={`${bg.label} background${
                         isSelected ? " (selected)" : ""
                       }`}
                     >
@@ -446,7 +446,6 @@ function GeneralSettings() {
               title="Delete All Chats"
               description="Permanently delete all your chat sessions."
               center
-              label
             >
               <Button
                 variant="danger"
@@ -708,7 +707,7 @@ function PromptShortcuts() {
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
-                    aria-label="Remove shortcut"
+                    aria-withLabel="Remove shortcut"
                     tooltip={
                       shortcut.is_public
                         ? "Cannot delete public prompt-shortcuts."
@@ -834,7 +833,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Default Model"
             description="This model will be used by Onyx by default in your chats."
-            label
+            withLabel
           >
             <LLMPopover
               llmManager={llmManager}
@@ -847,7 +846,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Chat Auto-scroll"
             description="Automatically scroll to new content as chat generates response."
-            label
+            withLabel
           >
             <Switch
               checked={user?.preferences.auto_scroll}
@@ -871,7 +870,7 @@ function ChatPreferencesSettings() {
                 description="Choose whether new sessions start in Search or Chat mode."
                 center
                 disabled={!searchUiEnabled}
-                label
+                withLabel
               >
                 <InputSelect
                   value={user?.preferences.default_app_mode ?? "CHAT"}
@@ -896,7 +895,7 @@ function ChatPreferencesSettings() {
         <InputLayouts.Vertical
           title="Personal Preferences"
           description="Provide your custom preferences in natural language."
-          label
+          withLabel
         >
           <InputTextArea
             placeholder="Describe how you want the system to behave and the tone it should use."
@@ -923,7 +922,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
             description="Let Onyx reference stored memories in chats."
-            label
+            withLabel
           >
             <Switch
               checked={personalizationValues.use_memories}
@@ -936,7 +935,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Update Memories"
             description="Let Onyx generate and update stored memories."
-            label
+            withLabel
           >
             <Switch
               checked={personalizationValues.enable_memory_tool}
@@ -971,7 +970,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Use Prompt Shortcuts"
             description="Enable shortcuts to quickly insert common prompts."
-            label
+            withLabel
           >
             <Switch
               checked={user?.preferences?.shortcut_enabled}
@@ -996,7 +995,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Auto-Send on Pause"
             description="Automatically send voice input when you stop speaking."
-            label
+            withLabel
           >
             <Switch
               checked={user?.preferences.voice_auto_send ?? false}
@@ -1009,7 +1008,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Auto-Playback"
             description="Automatically play voice responses."
-            label
+            withLabel
           >
             <Switch
               checked={user?.preferences.voice_auto_playback ?? false}
@@ -1022,7 +1021,7 @@ function ChatPreferencesSettings() {
           <InputLayouts.Horizontal
             title="Playback Speed"
             description="Adjust the speed of voice playback."
-            label
+            withLabel
           >
             <div className="flex items-center gap-3">
               <input
@@ -1308,7 +1307,7 @@ function AccountsAccessSettings() {
                 <Section gap={1}>
                   <Section gap={0.25} alignItems="start">
                     <InputLayouts.Vertical
-                      label="currentPassword"
+                      withLabel="currentPassword"
                       title="Current Password"
                     >
                       <PasswordInputTypeIn
@@ -1324,7 +1323,7 @@ function AccountsAccessSettings() {
                   </Section>
                   <Section gap={0.25} alignItems="start">
                     <InputLayouts.Vertical
-                      label="newPassword"
+                      withLabel="newPassword"
                       title="New Password"
                     >
                       <PasswordInputTypeIn
@@ -1338,7 +1337,7 @@ function AccountsAccessSettings() {
                   </Section>
                   <Section gap={0.25} alignItems="start">
                     <InputLayouts.Vertical
-                      label="confirmPassword"
+                      withLabel="confirmPassword"
                       title="Confirm New Password"
                     >
                       <PasswordInputTypeIn
@@ -1381,7 +1380,6 @@ function AccountsAccessSettings() {
                 title="Password"
                 description="Update your account password."
                 center
-                label
               >
                 <Button
                   prominence="secondary"
@@ -1479,7 +1477,7 @@ function AccountsAccessSettings() {
                                   onClick={() => setTokenToDelete(pat)}
                                   prominence="tertiary"
                                   size="sm"
-                                  aria-label={`Delete token ${pat.name}`}
+                                  aria-withLabel={`Delete token ${pat.name}`}
                                 />
                               }
                             />

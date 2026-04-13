@@ -182,7 +182,7 @@ export default function LicenseActivationCard({
                 ? undefined
                 : "Paste or attach your license key file you received from Onyx."
             }
-            label
+            withLabel
           >
             <InputFile
               placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."

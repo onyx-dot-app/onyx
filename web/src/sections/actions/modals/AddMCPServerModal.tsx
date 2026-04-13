@@ -145,7 +145,7 @@ export default function AddMCPServerModal({
               />
 
               <Modal.Body>
-                <InputLayouts.Vertical label="name" title="Server Name">
+                <InputLayouts.Vertical withLabel="name" title="Server Name">
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
@@ -154,7 +154,7 @@ export default function AddMCPServerModal({
                 </InputLayouts.Vertical>
 
                 <InputLayouts.Vertical
-                  label="description"
+                  withLabel="description"
                   title="Description"
                   suffix="optional"
                 >
@@ -168,7 +168,7 @@ export default function AddMCPServerModal({
                 <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                 <InputLayouts.Vertical
-                  label="server_url"
+                  withLabel="server_url"
                   title="MCP Server URL"
                   subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
                 >

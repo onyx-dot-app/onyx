@@ -98,7 +98,7 @@ function OllamaModalInternals({
           </Tabs.List>
           <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
             <InputLayouts.Vertical
-              label="api_base"
+              withLabel="api_base"
               title="API Base URL"
               subDescription="The base URL for your Ollama instance."
             >
@@ -111,7 +111,7 @@ function OllamaModalInternals({
 
           <Tabs.Content value={Tab.TAB_CLOUD}>
             <InputLayouts.Vertical
-              label="custom_config.OLLAMA_API_KEY"
+              withLabel="custom_config.OLLAMA_API_KEY"
               title="API Key"
               subDescription="Your Ollama Cloud API key."
             >

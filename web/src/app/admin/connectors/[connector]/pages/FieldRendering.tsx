@@ -226,7 +226,7 @@ export const RenderField: FC<RenderFieldProps> = ({
       ) : field.type === "text" ? (
         field.isTextArea ? (
           <InputLayouts.Vertical
-            label={field.name}
+            withLabel={field.name}
             title={label}
             description={description}
             suffix={field.optional ? "optional" : undefined}

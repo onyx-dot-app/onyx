@@ -371,7 +371,7 @@ export default function CustomModal({
     >
       <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          label="provider"
+          withLabel="provider"
           title="Provider"
           subDescription={markdown(
             "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers)."
@@ -390,7 +390,7 @@ export default function CustomModal({
 
       <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          label="api_version"
+          withLabel="api_version"
           title="API Version"
           suffix="optional"
         >

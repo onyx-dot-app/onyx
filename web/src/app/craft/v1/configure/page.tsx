@@ -417,7 +417,7 @@ export default function BuildConfigPage() {
                           : "Not set"
                     }
                     center
-                    label
+                    withLabel
                   >
                     <SimpleTooltip
                       tooltip={
@@ -459,7 +459,7 @@ export default function BuildConfigPage() {
                       title="Default LLM"
                       description="Select the language model to craft with"
                       center
-                      label
+                      withLabel
                     >
                       <BuildLLMPopover
                         currentSelection={pendingLlmSelection}

@@ -967,7 +967,7 @@ export default function AgentEditorPage({
     <>
       <div
         data-testid="AgentsEditorPage/container"
-        aria-label="Agents Editor Page"
+        aria-withLabel="Agents Editor Page"
         className="h-full w-full"
       >
         <Formik
@@ -1259,7 +1259,7 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputLayouts.Vertical label="name" title="Name">
+                          <InputLayouts.Vertical withLabel="name" title="Name">
                             <InputTypeInField
                               name="name"
                               placeholder="Name your agent"
@@ -1267,7 +1267,7 @@ export default function AgentEditorPage({
                           </InputLayouts.Vertical>
 
                           <InputLayouts.Vertical
-                            label="description"
+                            withLabel="description"
                             title="Description"
                             suffix="optional"
                           >
@@ -1280,7 +1280,7 @@ export default function AgentEditorPage({
 
                         <GeneralLayouts.Section width="fit">
                           <InputLayouts.Vertical
-                            label="agent_avatar"
+                            withLabel="agent_avatar"
                             title="Agent Avatar"
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
@@ -1295,7 +1295,7 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical
-                          label="instructions"
+                          withLabel="instructions"
                           title="Instructions"
                           suffix="optional"
                           description="Add instructions to tailor the response for this agent."
@@ -1307,7 +1307,7 @@ export default function AgentEditorPage({
                         </InputLayouts.Vertical>
 
                         <InputLayouts.Vertical
-                          label="starter_messages"
+                          withLabel="starter_messages"
                           title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
@@ -1388,7 +1388,7 @@ export default function AgentEditorPage({
                                 }
                               >
                                 <InputLayouts.Horizontal
-                                  label="image_generation"
+                                  withLabel="image_generation"
                                   title="Image Generation"
                                   description="Generate and manipulate images using AI-powered tools."
                                   disabled={!isImageGenerationAvailable}
@@ -1405,7 +1405,7 @@ export default function AgentEditorPage({
                               variant={!!webSearchTool ? undefined : "disabled"}
                             >
                               <InputLayouts.Horizontal
-                                label="web_search"
+                                withLabel="web_search"
                                 title="Web Search"
                                 description="Search the web for real-time information and up-to-date results."
                                 disabled={!webSearchTool}
@@ -1421,7 +1421,7 @@ export default function AgentEditorPage({
                               variant={!!openURLTool ? undefined : "disabled"}
                             >
                               <InputLayouts.Horizontal
-                                label="open_url"
+                                withLabel="open_url"
                                 title="Open URL"
                                 description="Fetch and read content from web URLs."
                                 disabled={!openURLTool}
@@ -1439,7 +1439,7 @@ export default function AgentEditorPage({
                               }
                             >
                               <InputLayouts.Horizontal
-                                label="code_interpreter"
+                                withLabel="code_interpreter"
                                 title="Code Interpreter"
                                 description="Generate and run code."
                                 disabled={!codeInterpreterTool}
@@ -1511,7 +1511,6 @@ export default function AgentEditorPage({
                                 title="Share This Agent"
                                 description="with other users, groups, or everyone in your organization."
                                 center
-                                label
                               >
                                 <OpalButton
                                   prominence="secondary"
@@ -1524,7 +1523,7 @@ export default function AgentEditorPage({
                               {canUpdateFeaturedStatus && (
                                 <>
                                   <InputLayouts.Horizontal
-                                    label="is_featured"
+                                    withLabel="is_featured"
                                     title="Feature This Agent"
                                     description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                                   >
@@ -1544,7 +1543,7 @@ export default function AgentEditorPage({
 
                             <Card>
                               <InputLayouts.Horizontal
-                                label="llm_model"
+                                withLabel="llm_model"
                                 title="Default Model"
                                 description="This model will be used by Onyx by default in your chats."
                               >
@@ -1561,7 +1560,7 @@ export default function AgentEditorPage({
                                 />
                               </InputLayouts.Horizontal>
                               <InputLayouts.Horizontal
-                                label="knowledge_cutoff_date"
+                                withLabel="knowledge_cutoff_date"
                                 title="Knowledge Cutoff Date"
                                 suffix="optional"
                                 description="Documents with a last-updated date prior to this will be ignored."
@@ -1572,7 +1571,7 @@ export default function AgentEditorPage({
                                 />
                               </InputLayouts.Horizontal>
                               <InputLayouts.Horizontal
-                                label="replace_base_system_prompt"
+                                withLabel="replace_base_system_prompt"
                                 title="Overwrite System Prompt"
                                 suffix="(Not Recommended)"
                                 description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
@@ -1583,7 +1582,7 @@ export default function AgentEditorPage({
 
                             <GeneralLayouts.Section gap={0.25}>
                               <InputLayouts.Vertical
-                                label="reminders"
+                                withLabel="reminders"
                                 title="Reminders"
                                 suffix="optional"
                               >
@@ -1616,7 +1615,6 @@ export default function AgentEditorPage({
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."
                               center
-                              label
                             >
                               <OpalButton
                                 variant="danger"

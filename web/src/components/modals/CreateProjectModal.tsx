@@ -55,7 +55,7 @@ export default function CreateProjectModal({
             onClose={() => modal.toggle(false)}
           />
           <Modal.Body>
-            <InputLayouts.Vertical title="Project Name" label>
+            <InputLayouts.Vertical title="Project Name" withLabel>
               <InputTypeIn
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}

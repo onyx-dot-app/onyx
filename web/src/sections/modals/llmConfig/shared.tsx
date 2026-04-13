@@ -56,7 +56,7 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
     <InputLayouts.InputPadder>
       <InputLayouts.Vertical
-        label="name"
+        withLabel="name"
         title="Display Name"
         subDescription="Used to identify this provider in the app."
       >
@@ -88,7 +88,7 @@ export function APIKeyField({
   return (
     <InputLayouts.InputPadder>
       <InputLayouts.Vertical
-        label={name}
+        withLabel={name}
         title="API Key"
         subDescription={
           subDescription
@@ -120,7 +120,7 @@ export function APIBaseField({
   return (
     <InputLayouts.InputPadder>
       <InputLayouts.Vertical
-        label="api_base"
+        withLabel="api_base"
         title="API Base URL"
         subDescription={subDescription}
         suffix={optional ? "optional" : undefined}
@@ -223,7 +223,7 @@ export function ModelAccessField() {
     <div className="flex flex-col w-full">
       <InputLayouts.InputPadder>
         <InputLayouts.Horizontal
-          label="is_public"
+          withLabel="is_public"
           title="Models Access"
           description="Who can access this provider."
         >
@@ -612,7 +612,7 @@ export function ModelSelectionField({
           <InputLayouts.Horizontal
             title="Auto Update"
             description="Update the available models when new models are released."
-            label
+            withLabel
           >
             <Switch
               checked={isAutoMode}

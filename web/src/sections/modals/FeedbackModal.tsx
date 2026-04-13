@@ -77,7 +77,7 @@ export default function FeedbackModal({
               <>
                 <Modal.Body>
                   <InputLayouts.Vertical
-                    label="additional_feedback"
+                    withLabel="additional_feedback"
                     title="Provide Additional Details"
                     suffix={feedbackType === "like" ? "optional" : undefined}
                   >

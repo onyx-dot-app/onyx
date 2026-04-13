@@ -302,7 +302,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                 <InputLayouts.Horizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."
-                  label
+                  withLabel
                 >
                   <SwitchField name="isPublic" />
                 </InputLayouts.Horizontal>
@@ -314,7 +314,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                     <InputLayouts.Horizontal
                       title="Feature This Agent"
                       description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
-                      label
+                      withLabel
                     >
                       <SwitchField name="isFeatured" />
                     </InputLayouts.Horizontal>

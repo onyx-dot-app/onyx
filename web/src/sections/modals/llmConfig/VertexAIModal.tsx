@@ -121,7 +121,7 @@ export default function VertexAIModal({
     >
       <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          label="custom_config.vertex_location"
+          withLabel="custom_config.vertex_location"
           title="Google Cloud Region Name"
           subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
         >
@@ -134,7 +134,7 @@ export default function VertexAIModal({
 
       <InputLayouts.InputPadder>
         <InputLayouts.Vertical
-          label="custom_config.vertex_credentials"
+          withLabel="custom_config.vertex_credentials"
           title="API Key"
           subDescription="Attach your API key JSON from Google Cloud to access your models."
         >

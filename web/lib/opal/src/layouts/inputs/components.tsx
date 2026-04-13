@@ -50,7 +50,7 @@ interface InputLayoutProps {
    * - `string` — `<label htmlFor={string}>`, plus Formik error display
    *   for the named field.
    */
-  label?: boolean | string;
+  withLabel?: boolean | string;
 
   disabled?: boolean;
   children?: React.ReactNode;
@@ -71,7 +71,7 @@ export interface VerticalProps extends InputLayoutProps {
 }
 
 function Vertical({
-  label: labelProp = false,
+  withLabel: withLabelProp = false,
   disabled,
   children,
   subDescription,
@@ -81,7 +81,8 @@ function Vertical({
   suffix,
   sizePreset = "main-content",
 }: VerticalProps) {
-  const fieldName = typeof labelProp === "string" ? labelProp : undefined;
+  const fieldName =
+    typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
     <Section gap={0.25} alignItems="start">
@@ -103,7 +104,7 @@ function Vertical({
     </Section>
   );
 
-  if (!labelProp) return content;
+  if (!withLabelProp) return content;
   return (
     <Label name={fieldName} disabled={disabled}>
       {content}
@@ -121,7 +122,7 @@ export interface HorizontalProps extends InputLayoutProps {
 }
 
 function Horizontal({
-  label: labelProp = false,
+  withLabel: withLabelProp = false,
   disabled,
   children,
   center,
@@ -131,7 +132,8 @@ function Horizontal({
   suffix,
   sizePreset = "main-content",
 }: HorizontalProps) {
-  const fieldName = typeof labelProp === "string" ? labelProp : undefined;
+  const fieldName =
+    typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
     <Section gap={0.25} alignItems="start">
@@ -157,7 +159,7 @@ function Horizontal({
     </Section>
   );
 
-  if (!labelProp) return content;
+  if (!withLabelProp) return content;
   return (
     <Label name={fieldName} disabled={disabled}>
       {content}

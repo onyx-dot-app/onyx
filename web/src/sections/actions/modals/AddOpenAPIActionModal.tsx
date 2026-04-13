@@ -236,7 +236,7 @@ function FormContent({
 
       <Modal.Body>
         <InputLayouts.Vertical
-          label="definition"
+          withLabel="definition"
           title="OpenAPI Schema Definition"
           subDescription={markdown(
             `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`

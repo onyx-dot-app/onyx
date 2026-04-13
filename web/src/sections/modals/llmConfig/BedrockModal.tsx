@@ -127,7 +127,7 @@ function BedrockModalInternals({
       <InputLayouts.InputPadder>
         <Section gap={1}>
           <InputLayouts.Vertical
-            label={FIELD_AWS_REGION_NAME}
+            withLabel={FIELD_AWS_REGION_NAME}
             title="AWS Region"
             subDescription="Region where your Amazon Bedrock models are hosted."
           >
@@ -144,7 +144,7 @@ function BedrockModalInternals({
           </InputLayouts.Vertical>
 
           <InputLayouts.Vertical
-            label={FIELD_BEDROCK_AUTH_METHOD}
+            withLabel={FIELD_BEDROCK_AUTH_METHOD}
             title="Authentication Method"
             subDescription="Choose how Onyx should authenticate with Bedrock."
           >
@@ -184,7 +184,7 @@ function BedrockModalInternals({
         <Card background="light" border="none" padding="sm">
           <Section gap={1}>
             <InputLayouts.Vertical
-              label={FIELD_AWS_ACCESS_KEY_ID}
+              withLabel={FIELD_AWS_ACCESS_KEY_ID}
               title="AWS Access Key ID"
             >
               <InputTypeInField
@@ -193,7 +193,7 @@ function BedrockModalInternals({
               />
             </InputLayouts.Vertical>
             <InputLayouts.Vertical
-              label={FIELD_AWS_SECRET_ACCESS_KEY}
+              withLabel={FIELD_AWS_SECRET_ACCESS_KEY}
               title="AWS Secret Access Key"
             >
               <PasswordInputTypeInField
@@ -222,7 +222,7 @@ function BedrockModalInternals({
         <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
             <InputLayouts.Vertical
-              label={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+              withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
               title="Long-term API Key"
             >
               <PasswordInputTypeInField
