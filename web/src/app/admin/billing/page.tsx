@@ -314,11 +314,6 @@ export default function BillingPage() {
   const handleLicenseActivated = () => {
     refreshLicense();
     refreshBilling();
-    // Refresh the page to update settings (including ee_features_enabled).
-    // router.refresh() updates Next.js server-rendered data, but the
-    // SettingsProvider reads /api/settings via SWR on the client, so we also
-    // need to invalidate the SWR cache so the admin sidebar's EE buttons
-    // un-grey immediately without a full page reload.
     router.refresh();
     mutate(SWR_KEYS.settings);
     mutate(SWR_KEYS.enterpriseSettings);
