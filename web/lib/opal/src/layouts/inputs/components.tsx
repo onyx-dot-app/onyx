@@ -5,7 +5,8 @@ import type { RichStr, WithoutStyles } from "@opal/types";
 import type { TagProps } from "@opal/components/tag/components";
 import { Text, Divider } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
-import { useField, useFormikContext } from "formik";
+import { useContext } from "react";
+import { useField, FormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 
@@ -176,8 +177,15 @@ interface InputErrorProps {
 }
 
 function InputError({ name }: InputErrorProps) {
+  const formik = useContext(FormikContext);
+  if (!formik) return null;
+  return <FormikInputError name={name} />;
+}
+
+/** Inner component that safely calls Formik hooks (only rendered inside a Formik context). */
+function FormikInputError({ name }: InputErrorProps) {
   const [, meta] = useField(name);
-  const { status } = useFormikContext();
+  const { status } = useContext(FormikContext)!;
   const warning = status?.warnings?.[name];
   if (warning && typeof warning !== "string")
     throw new Error("The warning that is set must ALWAYS be a string");
