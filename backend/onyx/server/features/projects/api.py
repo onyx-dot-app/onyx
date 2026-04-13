@@ -28,9 +28,9 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
-from onyx.error_handling.exceptions import OnyxError
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse

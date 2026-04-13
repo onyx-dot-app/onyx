@@ -3,6 +3,7 @@ import uuid
 from typing import List
 from uuid import UUID
 
+from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -23,6 +24,8 @@ from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
+from onyx.db.persona import _mark_files_need_persona_sync
+from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
@@ -68,16 +71,12 @@ def create_user_files(
 ) -> CategorizedFilesResult:
     # Validate persona access before creating any file associations
     if persona_id is not None:
-        from fastapi import HTTPException
-
-        from onyx.db.persona import fetch_persona_by_id_for_user
-
         try:
             fetch_persona_by_id_for_user(
                 db_session=db_session,
                 persona_id=persona_id,
                 user=user,
-                get_editable=True,
+                get_editable=False,
             )
         except HTTPException:
             raise OnyxError(
@@ -136,11 +135,7 @@ def create_user_files(
         user_files.append(new_file)
     # Mark files for persona sync before committing, so everything is in one transaction
     if persona_id is not None and user_files:
-        from onyx.db.persona import _mark_files_need_persona_sync
-
-        _mark_files_need_persona_sync(
-            db_session, [uf.id for uf in user_files]
-        )
+        _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
     db_session.commit()
     return CategorizedFilesResult(
         user_files=user_files,
