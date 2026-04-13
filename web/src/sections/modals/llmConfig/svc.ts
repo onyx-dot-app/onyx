@@ -107,7 +107,6 @@ export interface SubmitProviderParams<
   initialValues: T;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
-  isCustomProvider?: boolean;
   setStatus: (status: Record<string, unknown>) => void;
   setSubmitting: (submitting: boolean) => void;
   onClose: () => void;
@@ -123,7 +122,6 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   initialValues,
   existingLlmProvider,
   shouldMarkAsDefault,
-  isCustomProvider,
   setStatus,
   setSubmitting,
   onClose,
@@ -157,8 +155,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     custom_config_changed: customConfigChanged,
   };
 
-  // Only test if we have both changed values AND a valid model to test with
-  if (!isEqual(finalValues, initialValues) && testModelName) {
+  if (!isEqual(finalValues, initialValues)) {
     setStatus({ isTesting: true });
 
     const testResult = await submitLlmTestRequest(

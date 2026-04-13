@@ -62,3 +62,9 @@ plans/
 
 # Added context for LLMs
 onyx-llm-context/
+
+# Local development/testing scripts
+backend/scripts/nuclear_reset_improved.sh
+backend/scripts/NUCLEAR_RESET_IMPROVEMENTS.md
+backend/scripts/reset_rds_to_fresh.sh
+backend/scripts/RESET_RDS_README.md
