@@ -2422,7 +2422,6 @@ class IndexAttemptError(Base):
     failure_message: Mapped[str] = mapped_column(Text)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # ENG-3979: structured error type for observability
     error_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     time_created: Mapped[datetime.datetime] = mapped_column(
