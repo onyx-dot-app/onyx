@@ -1,4 +1,3 @@
-from onyx.natural_language_processing.utils import count_tokens
 from typing import cast
 
 from chonkie import SentenceChunker
@@ -10,6 +9,7 @@ from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.natural_language_processing.utils import count_tokens
 from onyx.utils.text_processing import clean_text
 from onyx.utils.text_processing import shared_precompare_cleanup
 from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
@@ -84,9 +84,7 @@ class TextChunker(SectionChunker):
     ) -> SectionChunkerOutput:
         payloads = accumulator.flush_to_list()
 
-        split_texts = cast(
-            list[str], self.chunk_splitter.chunk(section_text)
-        )
+        split_texts = cast(list[str], self.chunk_splitter.chunk(section_text))
         for i, split_text in enumerate(split_texts):
             if (
                 STRICT_CHUNK_TOKEN_LIMIT
@@ -117,9 +115,7 @@ class TextChunker(SectionChunker):
             accumulator=AccumulatorState(),
         )
 
-    def _split_oversized_chunk(
-        self, text: str, content_token_limit: int
-    ) -> list[str]:
+    def _split_oversized_chunk(self, text: str, content_token_limit: int) -> list[str]:
         tokens = self.tokenizer.tokenize(text)
         chunks: list[str] = []
         start = 0

@@ -83,9 +83,7 @@ class DocumentChunker:
         for section_idx, section in enumerate(sections):
             section_text = clean_text(str(section.text or ""))
 
-            if not section_text and (
-                not document.title or section_idx > 0
-            ):
+            if not section_text and (not document.title or section_idx > 0):
                 logger.warning(
                     f"Skipping empty or irrelevant section in doc "
                     f"{document.semantic_identifier}, link={section.link}"
@@ -108,6 +106,4 @@ class DocumentChunker:
         try:
             return self._dispatch[section.kind]
         except KeyError:
-            raise ValueError(
-                f"No SectionChunker registered for kind={section.kind}"
-            )
+            raise ValueError(f"No SectionChunker registered for kind={section.kind}")

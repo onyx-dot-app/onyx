@@ -61,9 +61,7 @@ class ChunkPayload(BaseModel):
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
             metadata_suffix_keyword=metadata_suffix_keyword,
-            mini_chunk_texts=get_mini_chunk_texts(
-                self.text, mini_chunk_splitter
-            ),
+            mini_chunk_texts=get_mini_chunk_texts(self.text, mini_chunk_splitter),
             large_chunk_id=None,
             doc_summary="",
             chunk_context="",
@@ -98,5 +96,4 @@ class SectionChunker(ABC):
         section: Section,
         accumulator: AccumulatorState,
         content_token_limit: int,
-    ) -> SectionChunkerOutput:
-        ...
+    ) -> SectionChunkerOutput: ...
