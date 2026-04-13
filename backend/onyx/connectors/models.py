@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -185,7 +186,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection | TabularSection]
+    sections: Sequence[TextSection | ImageSection | TabularSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a

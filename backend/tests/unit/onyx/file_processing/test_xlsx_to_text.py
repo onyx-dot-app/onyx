@@ -311,7 +311,7 @@ class TestXlsxSheetExtraction:
         sheets = xlsx_sheet_extraction(xlsx)
         assert len(sheets) == 1
         csv_text, _ = sheets[0]
-        lines = [line for line in csv_text.strip().split("\n") if line.strip()]
+        lines = csv_text.strip().split("\n")
         # header + 2 empty (capped) + data = 4 lines
         assert len(lines) == 4
         assert "header" in lines[0]
