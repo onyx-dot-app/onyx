@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";

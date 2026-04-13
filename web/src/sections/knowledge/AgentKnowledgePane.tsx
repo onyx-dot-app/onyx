@@ -11,7 +11,7 @@ import React, {
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

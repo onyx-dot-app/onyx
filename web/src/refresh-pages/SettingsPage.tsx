@@ -2,7 +2,7 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
 import { markdown } from "@opal/utils";

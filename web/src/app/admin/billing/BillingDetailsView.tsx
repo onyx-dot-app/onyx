@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";

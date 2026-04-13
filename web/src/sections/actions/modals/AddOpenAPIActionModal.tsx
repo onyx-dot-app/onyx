@@ -4,7 +4,7 @@ import { markdown } from "@opal/utils";
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";

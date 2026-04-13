@@ -21,7 +21,7 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { useCustomProviderNames } from "@/hooks/useLLMProviders";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";

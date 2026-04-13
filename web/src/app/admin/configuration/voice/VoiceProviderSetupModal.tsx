@@ -15,7 +15,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Vertical, Horizontal } from "@opal/layouts/input/components";
+import { Vertical, Horizontal } from "@opal/layouts/inputs/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";

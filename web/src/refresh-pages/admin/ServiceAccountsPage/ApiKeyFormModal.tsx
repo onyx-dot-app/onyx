@@ -12,7 +12,7 @@ import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { Vertical as VerticalInput } from "@opal/layouts/input/components";
+import { Vertical as VerticalInput } from "@opal/layouts/inputs/components";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
 

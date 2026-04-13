@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
-import { Label } from "@opal/layouts/input/components";
+import { Label } from "@opal/layouts/inputs/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 interface MCPAuthTemplate {

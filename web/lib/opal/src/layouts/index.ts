@@ -30,7 +30,7 @@ export {
   InputDivider,
   InputPadder,
   type InputPadderProps,
-} from "@opal/layouts/input/components";
+} from "@opal/layouts/inputs/components";
 
 /* IllustrationContent */
 export {

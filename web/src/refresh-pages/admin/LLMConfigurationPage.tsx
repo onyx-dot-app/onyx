@@ -18,7 +18,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/llmConfig";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import { Horizontal as HorizontalInput } from "@opal/layouts/input/components";
+import { Horizontal as HorizontalInput } from "@opal/layouts/inputs/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";

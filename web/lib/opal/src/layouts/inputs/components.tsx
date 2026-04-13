@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/layouts/input/styles.css";
+import "@opal/layouts/inputs/styles.css";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import type { TagProps } from "@opal/components/tag/components";
 import { Text, Divider } from "@opal/components";

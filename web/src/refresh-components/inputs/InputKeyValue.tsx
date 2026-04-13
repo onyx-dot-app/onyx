@@ -74,7 +74,7 @@ import InputTypeIn from "./InputTypeIn";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import { InputErrorText } from "@opal/layouts/input/components";
+import { InputErrorText } from "@opal/layouts/inputs/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };

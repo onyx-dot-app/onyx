@@ -8,7 +8,7 @@ import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Formik } from "formik";
 import * as Yup from "yup";
-import * as InputLayouts from "@opal/layouts/input/components";
+import * as InputLayouts from "@opal/layouts/inputs/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 
 export interface FeedbackModalProps {
