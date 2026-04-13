@@ -49,16 +49,17 @@ def tabular_file_to_sections(
             )
         ]
 
-    if lowered.endswith((".csv", ".tsv")):
-        try:
-            text = file_io_to_text(file).strip()
-        except Exception as e:
-            logger.warning(f"Failed to decode {file_name}: {e}")
-            return []
-        if not text:
-            return []
-        if lowered.endswith(".tsv"):
-            text = _tsv_to_csv(text)
-        return [TabularSection(link=link or file_name, text=text)]
+    if not lowered.endswith((".csv", ".tsv")):
+        raise ValueError(f"{file_name!r} is not a tabular file")
 
-    raise ValueError(f"{file_name!r} is not a tabular file")
+    try:
+        text = file_io_to_text(file).strip()
+    except Exception as e:
+        logger.error(f"Failure decoding {file_name}: {e}")
+        raise e
+
+    if not text:
+        return []
+    if lowered.endswith(".tsv"):
+        text = _tsv_to_csv(text)
+    return [TabularSection(link=link or file_name, text=text)]
