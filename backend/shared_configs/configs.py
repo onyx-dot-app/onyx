@@ -65,6 +65,12 @@ MIN_THREADS_ML_MODELS = int(os.environ.get("MIN_THREADS_ML_MODELS") or 1)
 # or intent classification
 INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
+# When enabled, docfetching workers hold their slot until the same connector's
+# docprocessing phase finishes, which adds backpressure between the two stages.
+CONSERVATIVE_INDEXING = (
+    os.environ.get("CONSERVATIVE_INDEXING", "true").lower() == "true"
+)
+
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
 # This should just be the filename base without extension or path.

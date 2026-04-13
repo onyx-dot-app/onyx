@@ -36,6 +36,7 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import CONSERVATIVE_INDEXING
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
@@ -283,7 +284,8 @@ def process_job_result(
         result.status = IndexingWatchdogTerminalStatus.SUCCEEDED
         task_logger.warning(
             log_builder.build(
-                "Indexing watchdog - spawned task has non-zero exit code but completion signal is OK. Continuing...",
+                "Indexing watchdog - spawned task has non-zero exit code "
+                "but completion signal is OK. Continuing...",
                 exit_code=str(result.exit_code),
             )
         )
@@ -292,9 +294,61 @@ def process_job_result(
             result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
 
         job_level_exception = job.exception()
-        result.exception_str = f"Docfetching returned exit code {result.exit_code} with exception: {job_level_exception}"
+        result.exception_str = (
+            f"Docfetching returned exit code {result.exit_code} "
+            f"with exception: {job_level_exception}"
+        )
 
     return result
+
+
+def _wait_for_index_attempt_completion(
+    index_attempt_id: int,
+    log_builder: ConnectorIndexingLogBuilder,
+    poll_interval: int = 5,
+) -> None:
+    task_logger.info(
+        log_builder.build(
+            "Indexing watchdog - fetch complete, waiting for docprocessing completion"
+        )
+    )
+
+    while True:
+        sleep(poll_interval)
+
+        try:
+            with get_session_with_current_tenant() as db_session:
+                index_attempt = get_index_attempt(
+                    db_session=db_session, index_attempt_id=index_attempt_id
+                )
+
+                if not index_attempt:
+                    continue
+
+                if not index_attempt.is_finished():
+                    continue
+
+                task_logger.info(
+                    log_builder.build(
+                        "Indexing watchdog - index attempt reached terminal state",
+                        final_status=str(index_attempt.status.value),
+                    )
+                )
+                return
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception waiting for index attempt completion"
+                )
+            )
+
+
+def _should_wait_for_docprocessing_completion(result: SimpleJobResult) -> bool:
+    return (
+        CONSERVATIVE_INDEXING
+        and result.status == IndexingWatchdogTerminalStatus.SUCCEEDED
+        and result.exception_str is None
+    )
 
 
 @shared_task(
@@ -486,7 +540,11 @@ def docfetching_proxy_task(
                     )
                 finally:
                     job.release()
-                    break
+
+                if _should_wait_for_docprocessing_completion(result):
+                    _wait_for_index_attempt_completion(index_attempt_id, log_builder)
+
+                break
 
             # log the memory usage for tracking down memory leaks / connector-specific memory issues
             pid = job.process.pid
