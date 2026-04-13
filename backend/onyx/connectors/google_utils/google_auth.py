@@ -103,8 +103,12 @@ def get_google_creds(
             GoogleOAuthAuthenticationMethod.UPLOADED.value,
         )
 
-        credentials_dict_str = credentials[DB_CREDENTIALS_DICT_TOKEN_KEY]
-        credentials_dict = json.loads(credentials_dict_str)
+        credentials_payload = credentials[DB_CREDENTIALS_DICT_TOKEN_KEY]
+        credentials_dict = (
+            json.loads(credentials_payload)
+            if isinstance(credentials_payload, str)
+            else credentials_payload
+        )
 
         # only send what get_google_oauth_creds needs
         authorized_user_info = {}
@@ -151,10 +155,14 @@ def get_google_creds(
                 }
     elif DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY in credentials:
         # SERVICE ACCOUNT
-        service_account_key_json_str = credentials[
+        service_account_key_payload = credentials[
             DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
         ]
-        service_account_key = json.loads(service_account_key_json_str)
+        service_account_key = (
+            json.loads(service_account_key_payload)
+            if isinstance(service_account_key_payload, str)
+            else service_account_key_payload
+        )
 
         service_creds = ServiceAccountCredentials.from_service_account_info(
             service_account_key, scopes=GOOGLE_SCOPES[source]
