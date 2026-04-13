@@ -32,7 +32,7 @@ def _build_attempt(status: IndexingStatus) -> SimpleNamespace:
 
 
 @pytest.fixture
-def docfetching_tasks_module(monkeypatch: pytest.MonkeyPatch):
+def docfetching_tasks_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     app_base = types.ModuleType("onyx.background.celery.apps.app_base")
     app_base.task_logger = logging.getLogger("docfetching-test")
     monkeypatch.setitem(sys.modules, "onyx.background.celery.apps.app_base", app_base)
