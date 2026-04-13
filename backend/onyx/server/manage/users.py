@@ -155,13 +155,6 @@ def set_user_role(
             detail="An admin cannot demote themselves from admin role!",
         )
 
-    if requested_role == UserRole.CURATOR:
-        # Remove all curator db relationships before changing role
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group",
-            "remove_curator_status__no_commit",
-        )(db_session, user_to_update)
-
     update_user_role(user_to_update, requested_role, db_session)
 
 
