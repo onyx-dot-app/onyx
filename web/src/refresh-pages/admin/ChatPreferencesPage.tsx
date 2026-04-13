@@ -331,7 +331,6 @@ function FileSizeLimitFields({
               ? `Max: ${maxAllowedUploadSizeMb} MB`
               : undefined
           }
-          withLabel={false}
         >
           <NumericLimitField
             name="user_file_max_upload_size_mb"
@@ -342,10 +341,7 @@ function FileSizeLimitFields({
         </InputLayouts.Vertical>
       </div>
       <div className="flex-1">
-        <InputLayouts.Vertical
-          title="File Token Limit (thousand tokens)"
-          withLabel={false}
-        >
+        <InputLayouts.Vertical title="File Token Limit (thousand tokens)">
           <NumericLimitField
             name="file_token_count_threshold_k"
             defaultValue={defaultTokenThresholdK}
