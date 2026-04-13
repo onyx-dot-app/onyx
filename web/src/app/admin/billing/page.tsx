@@ -314,6 +314,7 @@ export default function BillingPage() {
   const handleLicenseActivated = () => {
     refreshLicense();
     refreshBilling();
+    // Refresh the page and invalidate SWR cache to update settings (including ee_features_enabled)
     router.refresh();
     mutate(SWR_KEYS.settings);
     mutate(SWR_KEYS.enterpriseSettings);
