@@ -1,6 +1,79 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, switchModel } from "@tests/e2e/utils/chatActions";
+
+function buildMockErrorStreamResponse(
+  userMessageId: number,
+  agentMessageId: number,
+  error: string
+): string {
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      error,
+      error_code: "mock_regeneration_failure",
+      is_retryable: true,
+      details: null,
+    },
+  ];
+
+  return `${packets.map((packet) => JSON.stringify(packet)).join("\n")}\n`;
+}
+
+async function uploadTextAttachment(
+  page: Page,
+  fileName: string,
+  fileContent: string
+): Promise<void> {
+  const fileInput = page.locator('input[type="file"]').first();
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await fileInput.dispatchEvent("click");
+  const fileChooser = await fileChooserPromise;
+
+  const uploadResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/user/projects/file/upload") &&
+      response.request().method() === "POST"
+  );
+
+  await fileChooser.setFiles({
+    name: fileName,
+    mimeType: "text/plain",
+    buffer: Buffer.from(fileContent, "utf-8"),
+  });
+
+  const uploadResponse = await uploadResponsePromise;
+  expect(uploadResponse.ok()).toBeTruthy();
+
+  await page.waitForLoadState("networkidle", { timeout: 10000 });
+  await expect(page.getByText(fileName).first()).toBeVisible({
+    timeout: 10000,
+  });
+}
+
+async function selectModelFromRegenerateDialog(page: Page): Promise<void> {
+  await page.waitForSelector('[role="dialog"]', {
+    state: "visible",
+    timeout: 10000,
+  });
+
+  const dialog = page.locator('[role="dialog"]');
+  const alternateOptions = dialog.locator('[data-selected="false"]');
+
+  if ((await alternateOptions.count()) > 0) {
+    await alternateOptions.first().click();
+  } else {
+    await dialog.locator("[data-selected]").first().click();
+  }
+
+  await page.waitForSelector('[role="dialog"]', {
+    state: "hidden",
+    timeout: 10000,
+  });
+}
 
 test.describe("Message Edit and Regenerate Tests", () => {
   test.beforeEach(async ({ page }) => {
@@ -213,6 +286,100 @@ test.describe("Message Edit and Regenerate Tests", () => {
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/2");
+  });
+
+  test("Message regeneration with files preserves attachments", async ({
+    page,
+  }) => {
+    const testFileName = `test-regen-${Date.now()}.txt`;
+    const testFileContent =
+      "This is a test file for regeneration attachment persistence.";
+
+    await uploadTextAttachment(page, testFileName, testFileContent);
+    await sendMessage(page, "Summarize this file");
+    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
+      state: "visible",
+      timeout: 30000,
+    });
+
+    const humanMessage = page.locator("#onyx-human-message").first();
+    const fileDisplay = humanMessage.locator("#onyx-file").first();
+    await expect(fileDisplay).toBeVisible();
+    await expect(fileDisplay.getByText(testFileName)).toBeVisible();
+
+    const aiMessage = page.locator('[data-testid="onyx-ai-message"]').first();
+    await aiMessage.hover();
+    await aiMessage.getByTestId("AgentMessage/regenerate").click();
+    await selectModelFromRegenerateDialog(page);
+
+    const messageSwitcher = page
+      .getByTestId("MessageSwitcher/container")
+      .first();
+    await expect(messageSwitcher).toBeVisible({ timeout: 15000 });
+    await expect(messageSwitcher).toContainText("2/2");
+
+    const regeneratedHumanMessage = page.locator("#onyx-human-message").first();
+    const regeneratedFileDisplay =
+      regeneratedHumanMessage.locator("#onyx-file").first();
+    await expect(regeneratedFileDisplay).toBeVisible();
+    await expect(regeneratedFileDisplay.getByText(testFileName)).toBeVisible();
+  });
+
+  test("Failed regeneration with files preserves attachments", async ({
+    page,
+  }) => {
+    const testFileName = `test-regen-error-${Date.now()}.txt`;
+    const testFileContent =
+      "This is a test file for failed regeneration attachment persistence.";
+    const regenerationError = "Forced regeneration failure";
+
+    await uploadTextAttachment(page, testFileName, testFileContent);
+    await sendMessage(page, "Summarize this file");
+    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
+      state: "visible",
+      timeout: 30000,
+    });
+
+    const humanMessage = page.locator("#onyx-human-message").first();
+    const fileDisplay = humanMessage.locator("#onyx-file").first();
+    await expect(fileDisplay).toBeVisible();
+    await expect(fileDisplay.getByText(testFileName)).toBeVisible();
+
+    await page.route("**/api/chat/send-chat-message", async (route) => {
+      const payload = route.request().postDataJSON() as {
+        parent_message_id: number | null;
+      };
+
+      if (!payload.parent_message_id) {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "text/plain",
+        body: buildMockErrorStreamResponse(
+          payload.parent_message_id,
+          payload.parent_message_id + 1000,
+          regenerationError
+        ),
+      });
+    });
+
+    const aiMessage = page.locator('[data-testid="onyx-ai-message"]').first();
+    await aiMessage.hover();
+    await aiMessage.getByTestId("AgentMessage/regenerate").click();
+    await selectModelFromRegenerateDialog(page);
+
+    await expect(page.getByText(regenerationError)).toBeVisible({
+      timeout: 15000,
+    });
+
+    const regeneratedHumanMessage = page.locator("#onyx-human-message").first();
+    const regeneratedFileDisplay =
+      regeneratedHumanMessage.locator("#onyx-file").first();
+    await expect(regeneratedFileDisplay).toBeVisible();
+    await expect(regeneratedFileDisplay.getByText(testFileName)).toBeVisible();
   });
 
   test("Message editing with files", async ({ page }) => {

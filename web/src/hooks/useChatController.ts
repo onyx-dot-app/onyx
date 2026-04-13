@@ -1099,11 +1099,17 @@ export default function useChatController({
               ];
             } else {
               messagesToUpsertInLoop = [
-                {
-                  ...initialUserNode,
-                  messageId: newUserMessageId ?? undefined,
-                  files: files,
-                },
+                // Regeneration reuses the existing user node. Re-upserting a
+                // stale copy here can wipe attachments from the latest tree snapshot.
+                ...(!regenerationRequest
+                  ? [
+                      {
+                        ...initialUserNode,
+                        messageId: newUserMessageId ?? undefined,
+                        files: files,
+                      },
+                    ]
+                  : []),
                 {
                   ...initialAgentNode,
                   messageId: newAgentMessageId ?? undefined,
@@ -1150,16 +1156,20 @@ export default function useChatController({
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
-        const userErrorNode: Message = {
-          nodeId: initialUserNode.nodeId,
-          message: currMessage,
-          type: "user",
-          files: effectiveFileDescriptors,
-          toolCall: null,
-          parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
-          packets: [],
-          packetCount: 0,
-        };
+        const userErrorNodes: Message[] = !regenerationRequest
+          ? [
+              {
+                nodeId: initialUserNode.nodeId,
+                message: currMessage,
+                type: "user",
+                files: effectiveFileDescriptors,
+                toolCall: null,
+                parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
+                packets: [],
+                packetCount: 0,
+              },
+            ]
+          : [];
 
         // In multi-model mode, mark non-errored assistant nodes as errors.
         // Skip models that already have their own per-model error state.
@@ -1193,7 +1203,7 @@ export default function useChatController({
             ];
 
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: [userErrorNode, ...errorAssistantNodes],
+          messages: [...userErrorNodes, ...errorAssistantNodes],
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId,
         });
