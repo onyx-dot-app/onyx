@@ -80,7 +80,7 @@ class AccumulatorState(BaseModel):
     def is_empty(self) -> bool:
         return not self.text.strip()
 
-    def flush_to_list(self) -> list["ChunkPayload"]:
+    def flush_to_list(self) -> list[ChunkPayload]:
         if self.is_empty():
             return []
         return [ChunkPayload(text=self.text, links=self.link_offsets)]
