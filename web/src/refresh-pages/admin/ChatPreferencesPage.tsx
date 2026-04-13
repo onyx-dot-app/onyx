@@ -965,6 +965,7 @@ function ChatPreferencesForm() {
                     nonInteractive
                   >
                     <Switch
+                      id="disable_default_assistant"
                       checked={s.disable_default_assistant ?? false}
                       onCheckedChange={(checked) => {
                         void saveSettings({
