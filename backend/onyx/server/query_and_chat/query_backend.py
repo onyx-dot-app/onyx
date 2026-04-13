@@ -3,7 +3,6 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
@@ -34,7 +33,7 @@ basic_router = APIRouter(prefix="/query")
 @admin_router.post("/search", dependencies=[Depends(require_vector_db)])
 def admin_search(
     question: AdminSearchRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> AdminSearchResponse:
     tenant_id = get_current_tenant_id()
