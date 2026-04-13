@@ -598,7 +598,6 @@ function ChatPreferencesForm() {
               <Disabled
                 disabled={uniqueSources.length === 0}
                 tooltip="Set up connectors to use Search Mode"
-                tooltipSide="top"
               >
                 <InputLayouts.Horizontal
                   title="Search Mode"
