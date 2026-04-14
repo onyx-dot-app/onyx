@@ -50,7 +50,7 @@ Interactive.Stateful           <- variant, state, interaction, disabled, onClick
 | `size` | `SizeVariant` | `"lg"` | Size preset |
 | `width` | `WidthVariant` | — | Width preset |
 | `tooltip` | `string` | — | Tooltip text |
-| `side` | `TooltipSide` | `"top"` | Tooltip placement |
+| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
 | `disabled` | `boolean` | `false` | Disables the button |
 
 ## Usage

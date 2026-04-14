@@ -69,7 +69,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltip?: string;
 
     /** Which side the tooltip appears on. */
-    side?: TooltipSide;
+    tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
     roundingVariant?: InteractiveContainerRoundingVariant;
@@ -90,7 +90,7 @@ function OpenButton({
   width,
   justifyContent,
   tooltip,
-  side = "top",
+  tooltipSide = "top",
   roundingVariant: roundingVariantOverride,
   interaction,
   variant = "select-heavy",
@@ -173,7 +173,7 @@ function OpenButton({
     tooltip ?? (foldable && disabled && children ? children : undefined);
 
   return (
-    <Tooltip tooltip={resolvedTooltip} side={side}>
+    <Tooltip tooltip={resolvedTooltip} side={tooltipSide}>
       {button}
     </Tooltip>
   );

@@ -42,7 +42,7 @@ type ButtonProps = InteractiveStatelessProps &
     width?: ExtremaSizeVariants;
 
     /** Which side the tooltip appears on. */
-    side?: TooltipSide;
+    tooltipSide?: TooltipSide;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -60,7 +60,7 @@ function Button({
   type = "button",
   width,
   tooltip,
-  side = "top",
+  tooltipSide = "top",
   responsiveHideText = false,
   disabled,
   ...interactiveProps
@@ -118,7 +118,7 @@ function Button({
   );
 
   return (
-    <Tooltip tooltip={tooltip} side={side}>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
       {button}
     </Tooltip>
   );

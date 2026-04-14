@@ -34,7 +34,7 @@ interface FilterButtonProps
   tooltip?: string;
 
   /** Which side the tooltip appears on. */
-  side?: TooltipSide;
+  tooltipSide?: TooltipSide;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ function FilterButton({
   children,
   onClear,
   tooltip,
-  side = "top",
+  tooltipSide = "top",
   active = false,
   interaction,
   ...statefulProps
@@ -101,7 +101,7 @@ function FilterButton({
   );
 
   return (
-    <Tooltip tooltip={tooltip} side={side}>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
       {button}
     </Tooltip>
   );

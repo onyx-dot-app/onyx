@@ -52,7 +52,7 @@ Interactive.Stateful           <- variant="select-heavy", interaction, state, di
 | `size` | `SizeVariant` | `"lg"` | Size preset controlling height, rounding, and padding |
 | `width` | `WidthVariant` | — | Width preset |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
-| `side` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
+| `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
 | `disabled` | `boolean` | `false` | Disables the button |
 
 ## Usage

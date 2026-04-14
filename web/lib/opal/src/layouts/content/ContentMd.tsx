@@ -266,7 +266,7 @@ function ContentMd({
                 prominence="internal"
                 size={config.editButtonSize}
                 tooltip="Edit"
-                side="right"
+                tooltipSide="right"
                 onClick={startEditing}
               />
             </div>

@@ -313,7 +313,7 @@ export default function PasswordInputTypeIn({
               variant={isRevealed ? "action" : undefined}
               prominence="tertiary"
               size="sm"
-              side="left"
+              tooltipSide="left"
               tooltip={toggleLabel}
               aria-label={toggleLabel}
             />
