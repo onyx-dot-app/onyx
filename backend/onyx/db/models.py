@@ -302,9 +302,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
     )
-    # Legacy column: role is no longer written or read by application code.
-    # Kept as a nullable tombstone column so existing rows are preserved until
-    # a follow-up migration drops the column entirely.
+    # Legacy tombstone column: no longer read or written by application code.
+    # Kept nullable so a pure-code rollback keeps working.
     role: Mapped[UserRole | None] = mapped_column(
         Enum(UserRole, native_enum=False),
         nullable=True,
@@ -4005,6 +4004,8 @@ class User__UserGroup(Base):
     __tablename__ = "user__user_group"
 
     __table_args__ = (Index("ix_user__user_group_user_id", "user_id"),)
+
+    is_curator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
