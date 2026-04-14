@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import false as sa_false
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
@@ -42,10 +43,10 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     # READ → return all when reading, nothing when editing
     if has_permission(user, Permission.READ_DOCUMENT_SETS):
         if get_editable:
-            return stmt.where(False)
+            return stmt.where(sa_false())
         return stmt
     # No permission → return nothing
-    return stmt.where(False)
+    return stmt.where(sa_false())
 
 
 def _delete_document_set_cc_pairs__no_commit(
