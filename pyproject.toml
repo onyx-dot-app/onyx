@@ -227,11 +227,6 @@ module = "generated.*"
 follow_imports = "silent"
 ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = "transformers.*"
-follow_imports = "skip"
-ignore_errors = true
-
 [tool.uv.workspace]
 members = ["tools/ods"]
 
