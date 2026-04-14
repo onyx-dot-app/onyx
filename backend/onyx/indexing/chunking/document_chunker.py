@@ -7,10 +7,7 @@ from onyx.indexing.chunking.image_section_chunker import ImageChunker
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
-<<<<<<< HEAD
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
-=======
->>>>>>> 828c2ded5 (Rework)
 from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk
 from onyx.natural_language_processing.utils import BaseTokenizer
