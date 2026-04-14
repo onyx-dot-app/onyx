@@ -11,6 +11,8 @@ import { isRichStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
+type TooltipAlign = "start" | "center" | "end";
+
 interface TooltipProps {
   /**
    * Tooltip content shown on hover. When `undefined`, the tooltip is not
@@ -22,7 +24,10 @@ interface TooltipProps {
   tooltip?: React.ReactNode | RichStr;
 
   /** Which side the tooltip appears on. @default "right" */
-  tooltipSide?: TooltipSide;
+  side?: TooltipSide;
+
+  /** Alignment along the tooltip's side axis. @default "center" */
+  align?: TooltipAlign;
 
   /**
    * When `true`, suppresses the tooltip even if `tooltip` is defined.
@@ -67,14 +72,15 @@ interface TooltipProps {
  *   <Button icon={SvgTrash} />
  * </Tooltip>
  *
- * <Tooltip tooltip="Quick tooltip" delayDuration={0}>
+ * <Tooltip tooltip="Quick tooltip" delayDuration={0} side="top">
  *   <span>Instant</span>
  * </Tooltip>
  * ```
  */
 function Tooltip({
   tooltip,
-  tooltipSide = "right",
+  side = "right",
+  align = "center",
   disabled = false,
   delayDuration,
   children,
@@ -96,7 +102,8 @@ function Tooltip({
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           className="opal-tooltip"
-          side={tooltipSide}
+          side={side}
+          align={align}
           sideOffset={4}
         >
           {content}
@@ -106,4 +113,4 @@ function Tooltip({
   );
 }
 
-export { Tooltip, type TooltipProps };
+export { Tooltip, type TooltipProps, type TooltipAlign };

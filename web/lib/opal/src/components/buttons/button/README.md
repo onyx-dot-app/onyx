@@ -34,7 +34,7 @@ Interactive.Stateless          <- variant, prominence, interaction, disabled, hr
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `width` | `WidthVariant` | — | Width preset |
 | `tooltip` | `string` | — | Tooltip text |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
+| `side` | `TooltipSide` | `"top"` | Tooltip placement |
 | `disabled` | `boolean` | `false` | Disables the button |
 | `href` | `string` | — | URL; renders as a link |
 

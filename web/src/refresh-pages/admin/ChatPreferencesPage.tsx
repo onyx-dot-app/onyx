@@ -110,7 +110,7 @@ function MCPServerCard({
         description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
-          <Tooltip tooltip={authTooltip} tooltipSide="top">
+          <Tooltip tooltip={authTooltip} side="top">
             <Switch
               checked={serverEnabled}
               onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
@@ -149,7 +149,7 @@ function MCPServerCard({
                 description={tool.description}
                 icon={tool.icon}
                 rightChildren={
-                  <Tooltip tooltip={authTooltip} tooltipSide="top">
+                  <Tooltip tooltip={authTooltip} side="top">
                     <Switch
                       checked={isToolEnabled(tool.id)}
                       onCheckedChange={(checked) =>
@@ -530,7 +530,7 @@ function ChatPreferencesForm() {
                   ? "Set up connectors to use Search Mode"
                   : undefined
               }
-              tooltipSide="top"
+              side="top"
             >
               <Disabled disabled={uniqueSources.length === 0} allowClick>
                 <div className="w-full">
@@ -742,7 +742,7 @@ function ChatPreferencesForm() {
                             ? undefined
                             : "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
                         }
-                        tooltipSide="top"
+                        side="top"
                       >
                         <Card variant={imageGenTool ? undefined : "disabled"}>
                           <InputHorizontal

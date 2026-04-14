@@ -5,6 +5,7 @@ export type TooltipSide = "top" | "bottom" | "left" | "right";
 export {
   Tooltip,
   type TooltipProps,
+  type TooltipAlign,
 } from "@opal/components/tooltip/components";
 
 /* Button */

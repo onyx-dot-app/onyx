@@ -49,7 +49,7 @@ div.relative                               <- bounding wrapper
 | `onClear` | `() => void` | **required** | Called when the clear (X) button is clicked |
 | `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"`. |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
-| `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
+| `side` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
 
 ## Usage
 

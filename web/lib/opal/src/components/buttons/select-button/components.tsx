@@ -59,7 +59,7 @@ type SelectButtonProps = InteractiveStatefulProps &
     width?: ExtremaSizeVariants;
 
     /** Which side the tooltip appears on. */
-    tooltipSide?: TooltipSide;
+    side?: TooltipSide;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -78,7 +78,7 @@ function SelectButton({
   foldable,
   width,
   tooltip,
-  tooltipSide = "top",
+  side = "top",
   disabled,
   ...statefulProps
 }: SelectButtonProps) {
@@ -130,7 +130,7 @@ function SelectButton({
     tooltip ?? (foldable && disabled && children ? children : undefined);
 
   return (
-    <Tooltip tooltip={resolvedTooltip} tooltipSide={tooltipSide}>
+    <Tooltip tooltip={resolvedTooltip} side={side}>
       {button}
     </Tooltip>
   );

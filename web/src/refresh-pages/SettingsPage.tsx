@@ -867,7 +867,7 @@ function ChatPreferencesSettings() {
                   ? undefined
                   : "Search UI is disabled and can only be enabled by an admin."
               }
-              tooltipSide="top"
+              side="top"
             >
               <InputHorizontal
                 title="Default App Mode"

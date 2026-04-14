@@ -39,7 +39,7 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
+| `side` | `TooltipSide` | `"top"` | Tooltip side |
 
 ### Content (pass-through to ContentAction)
 

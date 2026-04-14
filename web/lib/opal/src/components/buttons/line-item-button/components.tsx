@@ -43,7 +43,7 @@ type LineItemButtonOwnProps = Pick<
   tooltip?: string;
 
   /** Which side the tooltip appears on. @default "top" */
-  tooltipSide?: TooltipSide;
+  side?: TooltipSide;
 };
 
 type LineItemButtonProps = ContentPassthroughProps & LineItemButtonOwnProps;
@@ -68,7 +68,7 @@ function LineItemButton({
   roundingVariant = "md",
   width = "full",
   tooltip,
-  tooltipSide = "top",
+  side = "top",
 
   // ContentAction pass-through
   ...contentActionProps
@@ -99,7 +99,7 @@ function LineItemButton({
   );
 
   return (
-    <Tooltip tooltip={tooltip} tooltipSide={tooltipSide}>
+    <Tooltip tooltip={tooltip} side={side}>
       {item}
     </Tooltip>
   );

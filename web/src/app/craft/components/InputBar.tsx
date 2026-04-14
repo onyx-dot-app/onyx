@@ -118,7 +118,7 @@ function BuildFileCard({
   // Wrap in tooltip for error or pending status
   if (isFailed && file.error) {
     return (
-      <Tooltip tooltip={file.error} tooltipSide="top">
+      <Tooltip tooltip={file.error} side="top">
         {cardContent}
       </Tooltip>
     );
@@ -126,7 +126,7 @@ function BuildFileCard({
 
   if (isPending) {
     return (
-      <Tooltip tooltip="Waiting for session to be ready..." tooltipSide="top">
+      <Tooltip tooltip="Waiting for session to be ready..." side="top">
         {cardContent}
       </Tooltip>
     );
@@ -374,7 +374,7 @@ const InputBar = memo(
                 {demoDataEnabled && isWelcomePage && (
                   <Tooltip
                     tooltip="Switch to your data in the Configure panel!"
-                    tooltipSide="top"
+                    side="top"
                   >
                     <span>
                       <SelectButton

@@ -1236,7 +1236,7 @@ export default function AgentEditorPage({
                                       ? "Please wait for files to finish uploading."
                                       : undefined
                             }
-                            tooltipSide="bottom"
+                            side="bottom"
                           >
                             <OpalButton
                               disabled={
@@ -1383,7 +1383,7 @@ export default function AgentEditorPage({
                           <GeneralLayouts.Section gap={0.5}>
                             <Tooltip
                               tooltip={imageGenerationDisabledTooltip}
-                              tooltipSide="top"
+                              side="top"
                             >
                               <Card
                                 variant={

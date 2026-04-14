@@ -234,7 +234,7 @@ export default function InputImage({
                   )}
                 >
                   <div className="pointer-events-auto">
-                    <Tooltip tooltip="Edit" tooltipSide="top">
+                    <Tooltip tooltip="Edit" side="top">
                       <div
                         className={cn(
                           "flex items-center justify-center",

@@ -33,7 +33,7 @@ interface DisabledProps
   tooltip?: string | RichStr;
 
   /** Which side the tooltip appears on. @default "right" */
-  tooltipSide?: TooltipSide;
+  side?: TooltipSide;
 
   children?: React.ReactNode;
 }
@@ -66,7 +66,7 @@ function Disabled({
   disabled,
   allowClick,
   tooltip,
-  tooltipSide = "right",
+  side = "right",
   ref,
   ...rest
 }: DisabledProps) {
@@ -87,7 +87,7 @@ function Disabled({
   if (!showTooltip) return wrapper;
 
   return (
-    <Tooltip tooltip={tooltip} tooltipSide={tooltipSide}>
+    <Tooltip tooltip={tooltip} side={side}>
       {wrapper}
     </Tooltip>
   );

@@ -510,7 +510,7 @@ export default function AddConnector({
                         </Link>
                       </div>
                     }
-                    tooltipSide="bottom"
+                    side="bottom"
                     delayDuration={0}
                   >
                     <SvgAlertCircle size={20} />

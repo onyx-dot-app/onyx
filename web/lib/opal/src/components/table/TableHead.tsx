@@ -114,7 +114,7 @@ export default function TableHead({
               icon={iconFn(sorted ?? "none")}
               onClick={onSort}
               tooltip="Sort"
-              tooltipSide="top"
+              side="top"
               prominence="internal"
               size="sm"
             />

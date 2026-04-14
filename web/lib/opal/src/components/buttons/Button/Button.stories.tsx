@@ -150,7 +150,7 @@ export const WithTooltip: Story = {
   args: {
     icon: SvgSettings,
     tooltip: "Open settings",
-    tooltipSide: "bottom",
+    side: "bottom",
   },
 };
 

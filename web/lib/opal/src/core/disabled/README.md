@@ -13,7 +13,7 @@ descendants. Works with any children — DOM elements, React components, or frag
 | `disabled` | `boolean` | `false` | Applies disabled styling when truthy |
 | `allowClick` | `boolean` | `false` | Re-enables pointer events while keeping disabled visuals |
 | `tooltip` | `string \| RichStr` | — | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
+| `side` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
 
 ## CSS behavior
 

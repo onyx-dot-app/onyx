@@ -33,7 +33,7 @@ export const Sides: Story = {
   render: () => (
     <div className="flex gap-8 items-center py-16 px-32">
       {(["top", "right", "bottom", "left"] as const).map((side) => (
-        <Tooltip key={side} tooltip={`Tooltip on ${side}`} tooltipSide={side}>
+        <Tooltip key={side} tooltip={`Tooltip on ${side}`} side={side}>
           <Button prominence="secondary" size="sm">
             {side}
           </Button>

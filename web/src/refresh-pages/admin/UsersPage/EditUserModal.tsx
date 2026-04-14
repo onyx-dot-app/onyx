@@ -271,10 +271,7 @@ export default function EditUserModal({
                           group.users.length === 1 ? "user" : "users"
                         }`}
                         rightChildren={
-                          <Tooltip
-                            tooltip="Remove from group"
-                            tooltipSide="left"
-                          >
+                          <Tooltip tooltip="Remove from group" side="left">
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>
                         }

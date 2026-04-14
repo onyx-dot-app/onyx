@@ -104,7 +104,7 @@ export function PermissionSyncStatus({
     );
     if (errorMsg) {
       badge = (
-        <Tooltip tooltip={errorMsg} tooltipSide="bottom">
+        <Tooltip tooltip={errorMsg} side="bottom">
           <div className="cursor-pointer">{icon}</div>
         </Tooltip>
       );

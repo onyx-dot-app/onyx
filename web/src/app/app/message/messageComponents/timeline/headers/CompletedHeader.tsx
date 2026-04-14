@@ -2,10 +2,9 @@
 
 import React from "react";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@/lib/time";
@@ -51,10 +50,9 @@ function MemoryTagWithTooltip({
       {memoriesModal.isOpen ? (
         <span>{tag}</span>
       ) : (
-        <SimpleTooltip
+        <Tooltip
           delayDuration={0}
           side="bottom"
-          className="bg-background-neutral-00 text-text-01 shadow-md max-w-[17.5rem] p-1"
           tooltip={
             <Section
               flexDirection="column"
@@ -91,7 +89,7 @@ function MemoryTagWithTooltip({
           }
         >
           <span>{tag}</span>
-        </SimpleTooltip>
+        </Tooltip>
       )}
     </>
   );

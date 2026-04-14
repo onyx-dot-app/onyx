@@ -144,7 +144,7 @@ function SidebarTab({
   if (typeof children !== "string") return content;
   if (folded) {
     return (
-      <Tooltip tooltip={children} tooltipSide="right">
+      <Tooltip tooltip={children} side="right">
         {content}
       </Tooltip>
     );

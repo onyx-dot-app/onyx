@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Button } from "@opal/components";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Button, Tooltip } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -91,11 +90,7 @@ export default function SwitchList({
             ? item.disabledTooltip
             : item.description;
           return (
-            <SimpleTooltip
-              key={item.id}
-              tooltip={tooltip}
-              className="max-w-[30rem]"
-            >
+            <Tooltip key={item.id} tooltip={tooltip}>
               <LineItem
                 icon={
                   item.leading
@@ -114,7 +109,7 @@ export default function SwitchList({
               >
                 {item.label}
               </LineItem>
-            </SimpleTooltip>
+            </Tooltip>
           );
         }),
       ]}

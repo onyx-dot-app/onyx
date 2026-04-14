@@ -73,7 +73,7 @@ export function IndexAttemptsTable({
             <TableHead>
               <Tooltip
                 tooltip="Total number of documents replaced in the index during this indexing attempt"
-                tooltipSide="top"
+                side="top"
               >
                 <span className="flex items-center">
                   Total Docs
@@ -143,7 +143,7 @@ export function IndexAttemptsTable({
                   <div className="flex items-center">
                     {indexAttempt.total_docs_indexed}
                     {indexAttempt.from_beginning && (
-                      <Tooltip tooltipSide="top" tooltip={reindexTooltip}>
+                      <Tooltip side="top" tooltip={reindexTooltip}>
                         <span className="cursor-help flex items-center">
                           <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
                         </span>

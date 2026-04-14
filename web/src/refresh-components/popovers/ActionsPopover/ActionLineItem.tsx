@@ -6,9 +6,8 @@ import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
@@ -91,7 +90,7 @@ export default function ActionLineItem({
   const tooltipText = tooltip || tool?.description;
 
   return (
-    <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">
+    <Tooltip tooltip={tooltipText}>
       <LineItem
         data-testid={`tool-option-${toolName}`}
         onClick={() => {
@@ -208,6 +207,6 @@ export default function ActionLineItem({
       >
         {label}
       </LineItem>
-    </SimpleTooltip>
+    </Tooltip>
   );
 }
