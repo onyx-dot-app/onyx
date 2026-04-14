@@ -408,7 +408,7 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-langchain-core==1.2.22
+langchain-core==1.2.28
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
