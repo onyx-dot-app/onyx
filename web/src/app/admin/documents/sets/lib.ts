@@ -38,6 +38,7 @@ export const createDocumentSet = async ({
 
 interface DocumentSetUpdateRequest {
   id: number;
+  name: string;
   description: string;
   cc_pair_ids: number[];
   is_public: boolean;
@@ -48,6 +49,7 @@ interface DocumentSetUpdateRequest {
 
 export const updateDocumentSet = async ({
   id,
+  name,
   description,
   cc_pair_ids,
   is_public,
@@ -62,6 +64,7 @@ export const updateDocumentSet = async ({
     },
     body: JSON.stringify({
       id,
+      name,
       description,
       cc_pair_ids,
       is_public,
