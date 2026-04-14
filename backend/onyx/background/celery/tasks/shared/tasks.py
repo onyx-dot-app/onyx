@@ -248,6 +248,7 @@ def document_by_cc_pair_cleanup_task(
                         ),
                     )
                     mark_document_as_modified(document_id, db_session)
+                    db_session.commit()
                 completion_status = (
                     OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
                 )
