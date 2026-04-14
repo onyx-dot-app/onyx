@@ -2,6 +2,7 @@ FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0a
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   curl \
+  default-jre \
   fd-find \
   fzf \
   git \
