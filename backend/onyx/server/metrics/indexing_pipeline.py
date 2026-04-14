@@ -229,10 +229,9 @@ class QueueDepthCollector(_CachedCollector):
 def _iter_tenant_sessions() -> "Generator[tuple[str, Session], None, None]":
     """Yield (tenant_id, session) pairs using a single DB connection.
 
-    In multi-tenant mode with NullPool + PgBouncer, the previous approach of
-    calling ``get_session_with_current_tenant()`` per tenant opened a new TCP
-    connection for each of ~23k tenants, overwhelming PgBouncer. This helper
-    reuses one connection and switches schemas via ``SET search_path``.
+    In multi-tenant mode with NullPool + PgBouncer, opening a new connection
+    per tenant overwhelms PgBouncer's limited server connection pool. This
+    helper reuses one connection and switches schemas via ``SET search_path``.
 
     In single-tenant mode (MULTI_TENANT=false), ``get_all_tenant_ids()``
     returns a single entry and no schema switching is needed.
