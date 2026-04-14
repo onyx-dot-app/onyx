@@ -49,7 +49,7 @@ def test_persona_with_user_files_includes_user_file_source(
     )
     assert not error, f"File upload failed: {error}"
 
-    user_file_id = file_descriptors[0]["user_file_id"]
+    user_file_id = file_descriptors[0]["user_file_id"] or ""
 
     persona = PersonaManager.create(
         user_performing_action=admin_user,
