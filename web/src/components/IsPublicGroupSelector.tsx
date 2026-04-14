@@ -5,6 +5,7 @@ import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { GroupsMultiSelect } from "./GroupsMultiSelect";
 
 export type IsPublicGroupSelectorFormType = {
@@ -120,7 +121,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         }
         disabled={
           formikProps.values.is_public &&
-          !(!isAdmin && hasPermission(permissions, "manage:connectors"))
+          !(
+            !isAdmin && hasPermission(permissions, Permission.MANAGE_CONNECTORS)
+          )
         }
         disabledMessage={`This ${objectName} is public and available to all users.`}
       />

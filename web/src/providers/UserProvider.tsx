@@ -9,7 +9,12 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { User, UserPersonalization, ThemePreference } from "@/lib/types";
+import {
+  User,
+  UserPersonalization,
+  ThemePreference,
+  Permission,
+} from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions";
 import { usePostHog } from "posthog-js/react";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -519,7 +524,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         toggleAgentPinnedStatus,
         isAdmin: (
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
-        ).includes("admin"),
+        ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
         hasAdminAccess: hasAnyAdminPermission(
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ),

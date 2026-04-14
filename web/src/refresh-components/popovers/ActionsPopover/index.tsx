@@ -25,7 +25,7 @@ import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -477,7 +477,7 @@ export default function ActionsPopover({
     // even if it's not available or has no connectors
     if (
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
-      hasPermission(permissions, "manage:connectors")
+      hasPermission(permissions, Permission.MANAGE_CONNECTORS)
     ) {
       return true;
     }
@@ -486,7 +486,7 @@ export default function ActionsPopover({
     if (
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
       hasNoConnectors &&
-      !hasPermission(permissions, "manage:connectors")
+      !hasPermission(permissions, Permission.MANAGE_CONNECTORS)
     ) {
       return false;
     }
@@ -913,7 +913,7 @@ export default function ActionsPopover({
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
             const canAdminConfigure = hasPermission(
               permissions,
-              "manage:agents"
+              Permission.MANAGE_AGENTS
             );
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
@@ -995,7 +995,7 @@ export default function ActionsPopover({
 
         null,
 
-        hasPermission(permissions, "manage:agents") && (
+        hasPermission(permissions, Permission.MANAGE_AGENTS) && (
           <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
             More Actions
           </LineItem>

@@ -18,6 +18,7 @@ import {
 } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -51,7 +52,10 @@ export default function AgentCard({ agent }: AgentCardProps) {
   );
   const { user, isAdmin, permissions } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const canUpdateFeaturedStatus = hasPermission(permissions, "manage:agents");
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();

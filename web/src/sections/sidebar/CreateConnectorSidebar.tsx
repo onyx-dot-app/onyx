@@ -4,6 +4,7 @@ import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { SvgSettings } from "@opal/icons";
 
 export default function Sidebar() {
@@ -12,7 +13,10 @@ export default function Sidebar() {
   const noCredential = credentialTemplates[connector] == null;
 
   const { permissions } = useUser();
-  const buttonName = hasPermission(permissions, "admin")
+  const buttonName = hasPermission(
+    permissions,
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  )
     ? "Admin Page"
     : "Curator Page";
 

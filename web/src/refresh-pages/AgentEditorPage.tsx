@@ -92,7 +92,7 @@ import {
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
@@ -461,7 +461,10 @@ export default function AgentEditorPage({
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
   const { isAdmin, permissions } = useUser();
-  const canUpdateFeaturedStatus = hasPermission(permissions, "manage:agents");
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const vectorDbEnabled = useVectorDbEnabled();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 

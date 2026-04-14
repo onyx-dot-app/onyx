@@ -15,6 +15,7 @@ import {
   DocumentSetSummary,
   UserGroup,
   FederatedConnectorConfig,
+  Permission,
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -139,8 +140,8 @@ export const DocumentSetCreationForm = ({
         {(props) => {
           // Filter visible cc pairs for curator (non-admin with manage:document_sets)
           const isCuratorOnly =
-            hasPermission(permissions, "manage:document_sets") &&
-            !hasPermission(permissions, "admin");
+            hasPermission(permissions, Permission.MANAGE_DOCUMENT_SETS) &&
+            !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS);
           const visibleCcPairs = isCuratorOnly
             ? localCcPairs.filter(
                 (ccPair) =>

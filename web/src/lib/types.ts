@@ -60,6 +60,28 @@ export enum AccountType {
   ANONYMOUS = "ANONYMOUS",
 }
 
+export enum Permission {
+  BASIC_ACCESS = "basic",
+  READ_CONNECTORS = "read:connectors",
+  READ_DOCUMENT_SETS = "read:document_sets",
+  READ_AGENTS = "read:agents",
+  READ_USERS = "read:users",
+  READ_USER_GROUPS = "read:user_groups",
+  ADD_AGENTS = "add:agents",
+  MANAGE_AGENTS = "manage:agents",
+  MANAGE_DOCUMENT_SETS = "manage:document_sets",
+  MANAGE_CONNECTORS = "manage:connectors",
+  MANAGE_LLMS = "manage:llms",
+  READ_AGENT_ANALYTICS = "read:agent_analytics",
+  MANAGE_ACTIONS = "manage:actions",
+  READ_QUERY_HISTORY = "read:query_history",
+  MANAGE_USER_GROUPS = "manage:user_groups",
+  CREATE_USER_API_KEYS = "create:user_api_keys",
+  MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
+  MANAGE_BOTS = "manage:bots",
+  FULL_ADMIN_PANEL_ACCESS = "admin",
+}
+
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.STANDARD]: "Standard",
   [AccountType.BOT]: "Slack Bot",

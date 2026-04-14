@@ -26,6 +26,7 @@ import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import { Button } from "@opal/components";
@@ -68,7 +69,10 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
-  const canUpdateFeaturedStatus = hasPermission(permissions, "manage:agents");
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {

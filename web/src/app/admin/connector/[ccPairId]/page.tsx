@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot } from "@/lib/types";
+import { IndexAttemptSnapshot, Permission } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -179,8 +179,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const canManageInlineFileConnectorFiles =
     ccPair?.connector.source === "file" &&
     (ccPair.is_editable_for_current_user ||
-      (hasPermission(permissions, "manage:connectors") &&
-        !hasPermission(permissions, "admin") &&
+      (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
+        !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS) &&
         ccPair.access_type === "public"));
 
   const isResolvingErrors =
