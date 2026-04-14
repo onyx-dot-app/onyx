@@ -135,10 +135,13 @@ def _docfetching_task(
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
+        from onyx.configs.sentry import _add_instance_tags
+
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             traces_sample_rate=0.1,
             release=__version__,
+            before_send=_add_instance_tags,
         )
         logger.info("Sentry initialized")
     else:
