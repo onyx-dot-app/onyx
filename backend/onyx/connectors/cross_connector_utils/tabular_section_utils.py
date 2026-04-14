@@ -54,9 +54,9 @@ def tabular_file_to_sections(
 
     try:
         text = file_io_to_text(file).strip()
-    except Exception as e:
-        logger.error(f"Failure decoding {file_name}: {e}")
-        raise e
+    except Exception:
+        logger.exception(f"Failure decoding {file_name}")
+        raise
 
     if not text:
         return []
