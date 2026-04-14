@@ -136,13 +136,17 @@ const AgentMessage = React.memo(function AgentMessage({
       finalAnswerComing
     );
 
-  // Memoize merged citations separately to avoid creating new object when neither source changed
+  // Merge streaming citation/document data with chatState props.
+  // NOTE: citationMap and documentMap from usePacketProcessor are mutated in
+  // place (same object reference), so we use citations.length / documentMap.size
+  // as change-detection proxies to bust the memo cache when new data arrives.
   const mergedCitations = useMemo(
     () => ({
       ...chatState.citations,
       ...citationMap,
     }),
-    [chatState.citations, citationMap]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatState.citations, citationMap, citations.length]
   );
 
   // Merge streaming documentMap into chatState.docs so inline citation chips
@@ -155,10 +159,10 @@ const AgentMessage = React.memo(function AgentMessage({
       (d) => !seen.has(d.document_id)
     );
     return extras.length > 0 ? [...propDocs, ...extras] : propDocs;
-  }, [chatState.docs, documentMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatState.docs, documentMap, documentMap.size]);
 
   // Create a chatState that uses streaming citations and documents for immediate rendering.
-  // This merges the prop citations/docs with streaming data, preferring streaming ones.
   // Memoized with granular dependencies to prevent cascading re-renders.
   // Note: chatState object is recreated upstream on every render, so we depend on
   // individual fields instead of the whole object for proper memoization.
