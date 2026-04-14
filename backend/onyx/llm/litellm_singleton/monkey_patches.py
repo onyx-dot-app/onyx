@@ -678,7 +678,9 @@ def _patch_logging_assembled_streaming_response() -> None:
     This patch creates a copy of the response before modification, preserving the
     original object with its proper ResponseAPIUsage type.
     """
-    from litellm import LiteLLMLoggingObj
+    from litellm.litellm_core_utils.litellm_logging import (
+        Logging as LiteLLMLoggingObj,
+    )
     from litellm.responses.utils import ResponseAPILoggingUtils
     from litellm.types.llms.openai import ResponseAPIUsage
     from litellm.types.llms.openai import ResponseCompletedEvent
