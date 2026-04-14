@@ -24,7 +24,7 @@ module.exports = {
       keyframes: {
         shimmer: {
           "0%": { backgroundPosition: "100% 0" },
-          "100%": { backgroundPosition: "-100% 0" },
+          "100%": { backgroundPosition: "0% 0" },
         },
         "subtle-pulse": {
           "0%, 100%": { opacity: 0.9 },
@@ -52,7 +52,7 @@ module.exports = {
         },
       },
       animation: {
-        shimmer: "shimmer 1.8s ease-out infinite",
+        shimmer: "shimmer 1s ease-out infinite",
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
