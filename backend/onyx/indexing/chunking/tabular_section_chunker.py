@@ -82,14 +82,14 @@ def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
     blank rows are skipped."""
     section_text = section.text or ""
     if not section_text.strip():
-        return
+        return None
 
     reader = csv.reader(io.StringIO(section_text))
     non_empty_rows = (row for row in reader if any(cell.strip() for cell in row))
 
     header = next(non_empty_rows, None)
     if header is None:
-        return
+        return None
 
     for row in non_empty_rows:
         yield _ParsedRow(header=header, row=row)
