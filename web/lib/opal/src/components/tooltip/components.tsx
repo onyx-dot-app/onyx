@@ -3,7 +3,7 @@
 import "@opal/components/tooltip/styles.css";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { RichStr } from "@opal/types";
-import type { TooltipSide } from "@opal/components";
+type TooltipSide = "top" | "bottom" | "left" | "right";
 import { Text } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 
@@ -113,4 +113,4 @@ function Tooltip({
   );
 }
 
-export { Tooltip, type TooltipProps, type TooltipAlign };
+export { Tooltip, type TooltipProps, type TooltipSide, type TooltipAlign };
