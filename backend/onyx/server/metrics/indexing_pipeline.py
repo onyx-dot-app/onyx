@@ -1,12 +1,15 @@
-"""Prometheus collectors for Celery queue depths and indexing pipeline state.
+"""Prometheus collectors for Celery queue depths and infrastructure health.
 
-These collectors query Redis and Postgres at scrape time (the Collector pattern),
+These collectors query Redis at scrape time (the Collector pattern),
 so metrics are always fresh when Prometheus scrapes /metrics. They run inside the
-monitoring celery worker which already has Redis and DB access.
+monitoring celery worker which already has Redis access.
 
-To avoid hammering Redis/Postgres on every 15s scrape, results are cached with
+To avoid hammering Redis on every 15s scrape, results are cached with
 a configurable TTL (default 30s). This means metrics may be up to TTL seconds
 stale, which is fine for monitoring dashboards.
+
+Note: connector health and index attempt metrics are push-based (emitted by
+workers at state-change time) and live in connector_health_metrics.py.
 """
 
 from __future__ import annotations
@@ -15,32 +18,17 @@ import concurrent.futures
 import json
 import threading
 import time
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from redis import Redis
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.configs.constants import OnyxCeleryQueues
-from onyx.db.connector_credential_pair import get_connector_health_for_metrics
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.db.engine.sql_engine import is_valid_schema_name
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
-from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import get_active_index_attempts_for_metrics
-from onyx.db.index_attempt import get_docs_indexed_by_cc_pair
-from onyx.db.index_attempt import get_failed_attempt_counts_by_cc_pair
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 logger = setup_logger()
 
@@ -244,211 +232,6 @@ class QueueDepthCollector(_CachedCollector):
         return None
 
 
-def _iter_tenant_sessions() -> Generator[tuple[str, Session], None, None]:
-    """Yield (tenant_id, session) pairs using a single DB connection.
-
-    In multi-tenant mode with NullPool + PgBouncer, opening a new connection
-    per tenant overwhelms PgBouncer's limited server connection pool. This
-    helper reuses one connection and switches schemas via ``SET search_path``.
-
-    In single-tenant mode (MULTI_TENANT=false), ``get_all_tenant_ids()``
-    returns a single entry and no schema switching is needed.
-    """
-    tenant_ids = get_all_tenant_ids()
-
-    if not MULTI_TENANT:
-        # Single-tenant: one session bound directly to the engine, no
-        # schema_translate_map needed.
-        engine = get_sqlalchemy_engine()
-        with Session(bind=engine, expire_on_commit=False) as session:
-            for tid in tenant_ids:
-                if tid is None:
-                    continue
-                yield tid, session
-        return
-
-    # Multi-tenant: open ONE connection and reuse it across all tenants.
-    # SET search_path switches the active schema without requiring a new
-    # connection — compatible with PgBouncer transaction pooling since the
-    # SET happens within the same client connection.
-    engine = get_sqlalchemy_engine()
-    with engine.connect() as connection:
-        for tid in tenant_ids:
-            if tid is None or not is_valid_schema_name(tid):
-                continue
-            # Switch schema for this tenant. Include "public" so shared
-            # tables (e.g. enums, extensions) remain accessible.
-            connection.execute(
-                text(
-                    f'SET search_path TO "{tid}", {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}'
-                )
-            )
-            with Session(bind=connection, expire_on_commit=False) as session:
-                yield tid, session
-
-
-class IndexAttemptCollector(_CachedCollector):
-    """Queries Postgres for index attempt state on each scrape."""
-
-    def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
-        super().__init__(cache_ttl)
-        self._configured: bool = False
-        self._terminal_statuses: list = []
-
-    def configure(self) -> None:
-        """Call once DB engine is initialized."""
-        self._terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
-        self._configured = True
-
-    def _collect_fresh(self) -> list[GaugeMetricFamily]:
-        if not self._configured:
-            return []
-
-        attempts_gauge = GaugeMetricFamily(
-            "onyx_index_attempts_active",
-            "Number of non-terminal index attempts",
-            labels=[
-                "status",
-                "source",
-                "tenant_id",
-                "connector_name",
-                "cc_pair_id",
-            ],
-        )
-
-        for tid, session in _iter_tenant_sessions():
-            rows = get_active_index_attempts_for_metrics(session)
-
-            for status, source, cc_id, cc_name, count in rows:
-                name_val = cc_name or f"cc_pair_{cc_id}"
-                attempts_gauge.add_metric(
-                    [
-                        status.value,
-                        source.value,
-                        tid,
-                        name_val,
-                        str(cc_id),
-                    ],
-                    count,
-                )
-
-        return [attempts_gauge]
-
-
-class ConnectorHealthCollector(_CachedCollector):
-    """Queries Postgres for connector health state on each scrape."""
-
-    def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
-        super().__init__(cache_ttl)
-        self._configured: bool = False
-
-    def configure(self) -> None:
-        """Call once DB engine is initialized."""
-        self._configured = True
-
-    def _collect_fresh(self) -> list[GaugeMetricFamily]:
-        if not self._configured:
-            return []
-
-        staleness_gauge = GaugeMetricFamily(
-            "onyx_connector_last_success_age_seconds",
-            "Seconds since last successful index for this connector",
-            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
-        )
-        error_state_gauge = GaugeMetricFamily(
-            "onyx_connector_in_error_state",
-            "Whether the connector is in a repeated error state (1=yes, 0=no)",
-            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
-        )
-        by_status_gauge = GaugeMetricFamily(
-            "onyx_connectors_by_status",
-            "Number of connectors grouped by status",
-            labels=["tenant_id", "status"],
-        )
-        error_total_gauge = GaugeMetricFamily(
-            "onyx_connectors_in_error_total",
-            "Total number of connectors in repeated error state",
-            labels=["tenant_id"],
-        )
-        per_connector_labels = [
-            "tenant_id",
-            "source",
-            "cc_pair_id",
-            "connector_name",
-        ]
-        docs_success_gauge = GaugeMetricFamily(
-            "onyx_connector_docs_indexed",
-            "Total new documents indexed (90-day rolling sum) per connector",
-            labels=per_connector_labels,
-        )
-        docs_error_gauge = GaugeMetricFamily(
-            "onyx_connector_error_count",
-            "Total number of failed index attempts per connector",
-            labels=per_connector_labels,
-        )
-
-        now = datetime.now(tz=timezone.utc)
-
-        for tid, session in _iter_tenant_sessions():
-            pairs = get_connector_health_for_metrics(session)
-            error_counts_by_cc = get_failed_attempt_counts_by_cc_pair(session)
-            docs_by_cc = get_docs_indexed_by_cc_pair(session)
-
-            status_counts: dict[str, int] = {}
-            error_count = 0
-
-            for (
-                cc_id,
-                status,
-                in_error,
-                last_success,
-                cc_name,
-                source,
-            ) in pairs:
-                cc_id_str = str(cc_id)
-                source_val = source.value
-                name_val = cc_name or f"cc_pair_{cc_id}"
-                label_vals = [tid, source_val, cc_id_str, name_val]
-
-                if last_success is not None:
-                    age = (now - last_success).total_seconds()
-                    staleness_gauge.add_metric(label_vals, age)
-
-                error_state_gauge.add_metric(
-                    label_vals,
-                    1.0 if in_error else 0.0,
-                )
-                if in_error:
-                    error_count += 1
-
-                docs_success_gauge.add_metric(
-                    label_vals,
-                    docs_by_cc.get(cc_id, 0),
-                )
-
-                docs_error_gauge.add_metric(
-                    label_vals,
-                    error_counts_by_cc.get(cc_id, 0),
-                )
-
-                status_val = status.value
-                status_counts[status_val] = status_counts.get(status_val, 0) + 1
-
-            for status_val, count in status_counts.items():
-                by_status_gauge.add_metric([tid, status_val], count)
-
-            error_total_gauge.add_metric([tid], error_count)
-
-        return [
-            staleness_gauge,
-            error_state_gauge,
-            by_status_gauge,
-            error_total_gauge,
-            docs_success_gauge,
-            docs_error_gauge,
-        ]
-
-
 class RedisHealthCollector(_CachedCollector):
     """Collects Redis server health metrics (memory, clients, etc.)."""
 
@@ -546,7 +329,9 @@ class WorkerHeartbeatMonitor:
                         },
                     )
                     recv.capture(
-                        limit=None, timeout=self._HEARTBEAT_TIMEOUT_SECONDS, wakeup=True
+                        limit=None,
+                        timeout=self._HEARTBEAT_TIMEOUT_SECONDS,
+                        wakeup=True,
                     )
             except Exception:
                 if self._running:
