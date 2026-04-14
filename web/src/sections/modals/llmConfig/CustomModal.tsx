@@ -354,6 +354,7 @@ export default function CustomModal({
           },
           existingLlmProvider,
           shouldMarkAsDefault,
+          isCustomProvider: true,
           setStatus,
           setSubmitting,
           onClose,
