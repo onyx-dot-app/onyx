@@ -13,6 +13,7 @@ def test_apply_monkey_patches_does_not_raise() -> None:
     # Call twice to also verify idempotency guards work
     apply_monkey_patches()
 
+
 _UNSET = object()
 
 

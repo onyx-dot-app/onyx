@@ -77,15 +77,15 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
+from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
+from litellm.llms.ollama.common_utils import OllamaError
+from litellm.types.utils import ChatCompletionUsageBlock
+from litellm.types.utils import ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser
 )
-from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
-from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.utils import ChatCompletionUsageBlock
-from litellm.types.utils import ModelResponseStream
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -277,7 +277,9 @@ def _patch_responses_reasoning_summary_newlines() -> None:
         if isinstance(parsed_chunk, BaseModel):
             parsed_chunk = parsed_chunk.model_dump()
 
-        event_type = parsed_chunk.get("type") if isinstance(parsed_chunk, dict) else None
+        event_type = (
+            parsed_chunk.get("type") if isinstance(parsed_chunk, dict) else None
+        )
         if isinstance(event_type, ResponsesAPIStreamEvents):
             event_type = event_type.value
 
