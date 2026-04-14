@@ -27,7 +27,6 @@ jest.mock("@/hooks/useCurrentUser", () => ({
 
 jest.mock("@/lib/user", () => ({
   logout: (...args: unknown[]) => mockLogout(...args),
-  refreshToken: jest.fn(),
 }));
 
 describe("AppHealthBanner logout handling", () => {

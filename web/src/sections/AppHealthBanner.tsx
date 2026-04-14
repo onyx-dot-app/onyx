@@ -20,59 +20,37 @@ export default function AppHealthBanner() {
   const router = useRouter();
   const { error } = useSWR(SWR_KEYS.health, errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
-  const [showLoggedOutModal, setShowLoggedOutModal] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
   const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
-  const pathnameRef = useRef<string | null>(pathname);
+  // Latches true once we see an authed user — separates mid-session logout
+  // from a fresh unauth load.
   const hasSeenAuthenticatedUserRef = useRef(false);
-  const isAuthPage = pathname?.startsWith("/auth") ?? false;
 
   const { user, mutateUser, userError } = useCurrentUser();
-  pathnameRef.current = pathname;
   if (user) {
     hasSeenAuthenticatedUserRef.current = true;
   }
 
-  const maybeShowLoggedOutModal = useCallback(() => {
-    const currentPath = pathnameRef.current;
-    if (
-      !hasSeenAuthenticatedUserRef.current ||
-      !currentPath ||
-      currentPath.startsWith("/auth")
-    ) {
-      return;
-    }
-    setShowLoggedOutModal(true);
-  }, []);
+  const isAuthPage = pathname?.startsWith("/auth") ?? false;
+  const sessionEnded =
+    userError?.status === 403 || error instanceof RedirectError || expired;
+  const showLoggedOutModal =
+    !dismissed &&
+    sessionEnded &&
+    hasSeenAuthenticatedUserRef.current &&
+    !isAuthPage;
 
-  // Handle 403 errors from the /api/me endpoint.
-  // Skip entirely on auth pages — the user isn't logged in yet, so there's
-  // nothing to "log out" of and hitting /auth/logout just creates noise.
+  // Clear the server session on 403 for a previously-authed user.
   useEffect(() => {
-    if (
-      userError &&
-      userError.status === 403 &&
-      hasSeenAuthenticatedUserRef.current &&
-      pathname &&
-      !isAuthPage
-    ) {
-      let cancelled = false;
-      logout().finally(() => {
-        if (!cancelled) {
-          maybeShowLoggedOutModal();
-        }
-      });
-
-      return () => {
-        cancelled = true;
-      };
+    if (userError?.status === 403 && hasSeenAuthenticatedUserRef.current) {
+      logout();
     }
-  }, [userError, pathname, isAuthPage, maybeShowLoggedOutModal]);
+  }, [userError]);
 
-  // Function to handle the "Log in" button click
   function handleLogin() {
-    setShowLoggedOutModal(false);
+    setDismissed(true);
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       // In the Chrome extension, open login in a new tab so OAuth popups
@@ -87,22 +65,18 @@ export default function AppHealthBanner() {
     }
   }
 
-  // Function to set up expiration timeout
   const setupExpirationTimeout = useCallback(
     (secondsUntilExpiration: number) => {
-      // Clear any existing timeout
       if (expirationTimeoutRef.current) {
         clearTimeout(expirationTimeoutRef.current);
       }
 
-      // Set timeout to show logout modal when session expires
       const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
-        maybeShowLoggedOutModal();
       }, timeUntilExpire);
     },
-    [maybeShowLoggedOutModal]
+    []
   );
 
   // Clean up any timeouts/intervals when component unmounts
@@ -216,13 +190,6 @@ export default function AppHealthBanner() {
     }
   }, [user, setupExpirationTimeout, mutateUser]);
 
-  useEffect(() => {
-    if (error instanceof RedirectError || expired) {
-      maybeShowLoggedOutModal();
-    }
-  }, [error, expired, maybeShowLoggedOutModal]);
-
-  // Logged out modal
   if (showLoggedOutModal) {
     return (
       <Modal open>
