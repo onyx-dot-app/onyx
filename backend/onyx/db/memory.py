@@ -85,11 +85,13 @@ def add_memory(
     user_id: UUID,
     memory_text: str,
     db_session: Session | None = None,
-) -> Memory:
+) -> int:
     """Insert a new Memory row for the given user.
 
     If the user already has MAX_MEMORIES_PER_USER memories, the oldest
     one (lowest id) is deleted before inserting the new one.
+
+    Returns the id of the newly created Memory row.
     """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         existing = db_session.scalars(
@@ -105,7 +107,7 @@ def add_memory(
         )
         db_session.add(memory)
         db_session.commit()
-        return memory
+        return memory.id
 
 
 def update_memory_at_index(
@@ -113,10 +115,10 @@ def update_memory_at_index(
     index: int,
     new_text: str,
     db_session: Session | None = None,
-) -> Memory | None:
+) -> int | None:
     """Update the memory at the given 0-based index (ordered by id ASC, matching get_memories()).
 
-    Returns the updated Memory row, or None if the index is out of range.
+    Returns the id of the updated Memory row, or None if the index is out of range.
     """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         memory_rows = db_session.scalars(
@@ -129,4 +131,4 @@ def update_memory_at_index(
         memory = memory_rows[index]
         memory.memory_text = new_text
         db_session.commit()
-        return memory
+        return memory.id

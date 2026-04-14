@@ -1017,18 +1017,16 @@ def run_llm_loop(
                     persisted_memory_id: int | None = None
                     if user_memory_context and user_memory_context.user_id:
                         if tool_response.rich_response.index_to_replace is not None:
-                            memory = update_memory_at_index(
+                            persisted_memory_id = update_memory_at_index(
                                 user_id=user_memory_context.user_id,
                                 index=tool_response.rich_response.index_to_replace,
                                 new_text=tool_response.rich_response.memory_text,
                             )
-                            persisted_memory_id = memory.id if memory else None
                         else:
-                            memory = add_memory(
+                            persisted_memory_id = add_memory(
                                 user_id=user_memory_context.user_id,
                                 memory_text=tool_response.rich_response.memory_text,
                             )
-                            persisted_memory_id = memory.id
                     operation: Literal["add", "update"] = (
                         "update"
                         if tool_response.rich_response.index_to_replace is not None
