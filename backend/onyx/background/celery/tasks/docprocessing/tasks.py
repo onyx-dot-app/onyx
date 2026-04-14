@@ -3,6 +3,7 @@ import os
 import time
 import traceback
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -607,23 +608,15 @@ def active_indexing_attempt(
     return bool(active_indexing_attempt)
 
 
+@dataclass
 class _KickoffResult:
     """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
 
-    __slots__ = (
-        "created",
-        "skipped_active",
-        "skipped_not_found",
-        "skipped_should_not",
-        "failed_to_create",
-    )
-
-    def __init__(self) -> None:
-        self.created = 0
-        self.skipped_active = 0
-        self.skipped_not_found = 0
-        self.skipped_should_not = 0
-        self.failed_to_create = 0
+    created: int = 0
+    skipped_active: int = 0
+    skipped_not_found: int = 0
+    skipped_should_not: int = 0
+    failed_to_create: int = 0
 
     @property
     def evaluated(self) -> int:
