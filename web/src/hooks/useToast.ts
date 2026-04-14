@@ -67,11 +67,13 @@ function addToast(options: ToastOptions): string {
     createdAt: Date.now(),
   };
 
-  const method = TOAST_CONSOLE_METHOD[level];
-  if (entry.description) {
-    console[method](`[Toast] ${entry.message}`, entry.description);
-  } else {
-    console[method](`[Toast] ${entry.message}`);
+  if (process.env.NODE_ENV === "development") {
+    const method = TOAST_CONSOLE_METHOD[level];
+    if (entry.description) {
+      console[method](`[Toast] ${entry.message}`, entry.description);
+    } else {
+      console[method](`[Toast] ${entry.message}`);
+    }
   }
 
   toasts = [...toasts, entry];
