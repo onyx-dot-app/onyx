@@ -208,7 +208,7 @@ def do_run_migrations(
 
     context.configure(
         connection=connection,
-        target_metadata=target_metadata,  # type: ignore
+        target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
         compare_type=True,
@@ -380,7 +380,7 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -421,7 +421,7 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -464,7 +464,7 @@ def run_migrations_online() -> None:
 
             context.configure(
                 connection=connection,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 version_table_schema=schema_name,
                 include_schemas=True,
                 compare_type=True,
