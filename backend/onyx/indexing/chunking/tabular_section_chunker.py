@@ -77,6 +77,24 @@ def parse_section(section: Section) -> list[_ParsedRow]:
     return [_ParsedRow(header=header, row=row) for row in data_rows]
 
 
+def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
+    """Parse CSV into headers + rows. First non-empty row is the header;
+    blank rows are skipped."""
+    section_text = section.text or ""
+    if not section_text.strip():
+        return
+
+    reader = csv.reader(io.StringIO(section_text))
+    non_empty_rows = (row for row in reader if any(cell.strip() for cell in row))
+
+    header = next(non_empty_rows, None)
+    if header is None:
+        return
+
+    for row in non_empty_rows:
+        yield _ParsedRow(header=header, row=row)
+
+
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
     return [(h, v) for h, v in zip(headers, row) if v.strip()]
 
@@ -262,12 +280,6 @@ class TabularChunker(SectionChunker):
         )
 
         for i, text in enumerate(chunk_texts):
-            n = _count_tokens(self.tokenizer, text)
-            if n > content_token_limit:
-                logger.warning(
-                    f"TabularChunker: emitted chunk of {n} tokens exceeds "
-                    f"max_tokens={content_token_limit} (link={section.link})"
-                )
             payloads.append(
                 ChunkPayload(
                     text=text,
