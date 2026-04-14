@@ -53,6 +53,7 @@ backend = [
     "google-api-python-client==2.86.0",
     "google-auth-httplib2==0.1.0",
     "google-auth-oauthlib==1.0.0",
+    "google-cloud-storage>=2.18.0,<3.0.0",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",

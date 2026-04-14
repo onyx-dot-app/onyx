@@ -21,6 +21,7 @@ from sqlalchemy.sql import func
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.file_store import S3BackedFileStore
+from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 
 class DBBaseTest(DeclarativeBase):
@@ -34,9 +35,7 @@ class FileRecord(DBBaseTest):
     file_id: Mapped[str] = mapped_column(String, primary_key=True)
 
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_origin: Mapped[FileOrigin] = mapped_column(
-        Enum(FileOrigin, native_enum=False), nullable=False
-    )
+    file_origin: Mapped[FileOrigin] = mapped_column(Enum(FileOrigin, native_enum=False), nullable=False)
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
 
     # External storage support (S3, MinIO, Azure Blob, etc.)
@@ -44,12 +43,8 @@ class FileRecord(DBBaseTest):
     object_key: Mapped[str] = mapped_column(String, nullable=False)
 
     # Timestamps for external storage
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 @pytest.fixture
@@ -132,9 +127,7 @@ class TestExternalStorageFileStore:
 
     def test_s3_bucket_name_configuration(self) -> None:
         """Test S3 bucket name configuration"""
-        with patch(
-            "onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "my-test-bucket"
-        ):
+        with patch("onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "my-test-bucket"):
             file_store = S3BackedFileStore(bucket_name="my-test-bucket")
             bucket_name: str = file_store._get_bucket_name()
             assert bucket_name == "my-test-bucket"
@@ -161,9 +154,7 @@ class TestExternalStorageFileStore:
                 return_value="test-tenant",
             ),
         ):
-            file_store = S3BackedFileStore(
-                bucket_name="test-bucket", s3_prefix="custom-prefix"
-            )
+            file_store = S3BackedFileStore(bucket_name="test-bucket", s3_prefix="custom-prefix")
             s3_key: str = file_store._get_s3_key("test-file.txt")
             assert s3_key == "custom-prefix/test-tenant/test-file.txt"
 
@@ -214,9 +205,7 @@ class TestExternalStorageFileStore:
         mock_db_session.rollback = Mock()
 
         with (
-            patch(
-                "onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "test-bucket"
-            ),
+            patch("onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "test-bucket"),
             patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"),
             patch("onyx.file_store.file_store.S3_AWS_ACCESS_KEY_ID", "test-key"),
             patch("onyx.file_store.file_store.S3_AWS_SECRET_ACCESS_KEY", "test-secret"),
@@ -336,3 +325,151 @@ class TestFileStoreInterface:
         """Test that the default backend is s3"""
         file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)
+
+    def test_file_store_gcs_when_configured(self) -> None:
+        """Test that GCS file store is returned when configured"""
+        with (
+            patch("onyx.configs.app_configs.FILE_STORE_BACKEND", "gcs"),
+            patch(
+                "onyx.configs.app_configs.GCS_FILE_STORE_BUCKET_NAME",
+                "test-gcs-bucket",
+            ),
+        ):
+            file_store = get_default_file_store()
+            assert isinstance(file_store, GCSBackedFileStore)
+
+
+class TestGCSFileStore:
+    """Test GCS file store functionality"""
+
+    def test_gcs_client_initialization_with_adc(self) -> None:
+        """Test GCS client initialization with Application Default Credentials"""
+        mock_client_instance = Mock()
+
+        with patch(
+            "google.cloud.storage.Client",
+            return_value=mock_client_instance,
+        ) as mock_client_cls:
+            file_store = GCSBackedFileStore(bucket_name="test-bucket")
+            client = file_store._get_gcs_client()
+
+            # ADC path: no credentials, no project
+            mock_client_cls.assert_called_once_with()
+            assert client == mock_client_instance
+
+    def test_gcs_client_initialization_with_key_path(self) -> None:
+        """Test GCS client initialization with service account key file"""
+        mock_credentials = Mock()
+        mock_client_instance = Mock()
+
+        with (
+            patch(
+                "google.oauth2.service_account.Credentials.from_service_account_file",
+                return_value=mock_credentials,
+            ) as mock_from_file,
+            patch(
+                "google.cloud.storage.Client",
+                return_value=mock_client_instance,
+            ) as mock_client_cls,
+        ):
+            file_store = GCSBackedFileStore(
+                bucket_name="test-bucket",
+                service_account_key_path="/path/to/key.json",
+                project_id="my-project",
+            )
+            client = file_store._get_gcs_client()
+
+            mock_from_file.assert_called_once_with("/path/to/key.json")
+            mock_client_cls.assert_called_once_with(credentials=mock_credentials, project="my-project")
+            assert client == mock_client_instance
+
+    def test_gcs_client_initialization_with_key_json(self) -> None:
+        """Test GCS client initialization with inline service account JSON"""
+        mock_credentials = Mock()
+        mock_client_instance = Mock()
+        sa_json = '{"type":"service_account","project_id":"json-project"}'
+
+        with (
+            patch(
+                "google.oauth2.service_account.Credentials.from_service_account_info",
+                return_value=mock_credentials,
+            ) as mock_from_info,
+            patch(
+                "google.cloud.storage.Client",
+                return_value=mock_client_instance,
+            ) as mock_client_cls,
+        ):
+            file_store = GCSBackedFileStore(
+                bucket_name="test-bucket",
+                service_account_key_json=sa_json,
+            )
+            client = file_store._get_gcs_client()
+
+            mock_from_info.assert_called_once()
+            # project_id should be extracted from the JSON when not explicitly set
+            mock_client_cls.assert_called_once_with(credentials=mock_credentials, project="json-project")
+            assert client == mock_client_instance
+
+    def test_gcs_object_key_generation(self) -> None:
+        """Test GCS object key generation reuses S3 key utilities"""
+        with patch(
+            "onyx.file_store.gcs_file_store.get_current_tenant_id",
+            return_value="test-tenant",
+        ):
+            file_store = GCSBackedFileStore(bucket_name="test-bucket")
+            key: str = file_store._get_object_key("test-file.txt")
+            assert key == "onyx-files/test-tenant/test-file.txt"
+
+    def test_gcs_object_key_generation_custom_prefix(self) -> None:
+        """Test GCS object key generation with custom prefix"""
+        with patch(
+            "onyx.file_store.gcs_file_store.get_current_tenant_id",
+            return_value="test-tenant",
+        ):
+            file_store = GCSBackedFileStore(bucket_name="test-bucket", gcs_prefix="custom-prefix")
+            key: str = file_store._get_object_key("test-file.txt")
+            assert key == "custom-prefix/test-tenant/test-file.txt"
+
+    def test_gcs_save_file_mock(
+        self,
+        db_session: Session,  # noqa: ARG002
+        sample_file_io: BytesIO,
+    ) -> None:
+        """Test GCS file saving with mocked GCS client"""
+        mock_client = Mock()
+        mock_bucket = Mock()
+        mock_blob = Mock()
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+
+        mock_db_session: Mock = Mock()
+        mock_db_session.commit = Mock()
+        mock_db_session.rollback = Mock()
+
+        with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
+            mock_upsert.return_value = Mock()
+
+            file_store = GCSBackedFileStore(bucket_name="test-gcs-bucket")
+            file_store._gcs_client = mock_client
+
+            file_store.save_file(
+                file_id="test-file.txt",
+                content=sample_file_io,
+                display_name="Test File",
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                db_session=mock_db_session,
+            )
+
+            mock_client.bucket.assert_called_once_with("test-gcs-bucket")
+            mock_blob.upload_from_string.assert_called_once()
+            call_args = mock_blob.upload_from_string.call_args
+            assert call_args[1]["content_type"] == "text/plain"
+
+    def test_gcs_bucket_name_required(self) -> None:
+        """Test that get_gcs_file_store raises when no bucket name is configured"""
+        from onyx.file_store.file_store import get_gcs_file_store
+
+        with patch("onyx.configs.app_configs.GCS_FILE_STORE_BUCKET_NAME", ""):
+            with pytest.raises(RuntimeError, match="GCS_FILE_STORE_BUCKET_NAME"):
+                get_gcs_file_store()
