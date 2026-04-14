@@ -29,15 +29,15 @@ const route = ADMIN_ROUTES.LLM_MODELS;
 // Provider form mapping (keyed by provider name from the API)
 // ============================================================================
 
-// Client-side ordering for the "Add Provider" cards. The backend may return
-// wellKnownLLMProviders in an arbitrary order, so we sort explicitly here.
+// Static list of well-known providers rendered in the "Add Provider" grid.
+// Must match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
+// dedicated modal). Order here controls display order.
 const PROVIDER_DISPLAY_ORDER: string[] = [
   LLMProviderName.OPENAI,
   LLMProviderName.ANTHROPIC,
   LLMProviderName.VERTEX_AI,
   LLMProviderName.BEDROCK,
   LLMProviderName.AZURE,
-  LLMProviderName.LITELLM,
   LLMProviderName.LITELLM_PROXY,
   LLMProviderName.OLLAMA_CHAT,
   LLMProviderName.OPENROUTER,

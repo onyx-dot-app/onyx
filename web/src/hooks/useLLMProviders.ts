@@ -114,26 +114,6 @@ export function useAdminLLMProviders() {
 }
 
 /**
- * Fetches the catalog of well-known (built-in) LLM providers.
- *
- * Hits `GET /api/admin/llm/built-in/options` which returns the static
- * list of provider descriptors that Onyx ships with out of the box
- * (OpenAI, Anthropic, Vertex AI, Bedrock, Azure, Ollama, OpenRouter,
- * etc.). Each descriptor includes the provider's known models and the
- * recommended default model.
- *
- * Used primarily on the LLM Configuration page and onboarding flows
- * to show which providers are available to set up, and to pre-populate
- * model lists before the user has entered credentials.
- *
- * @returns
- * - `wellKnownLLMProviders` — The array of built-in provider descriptors,
- *    or `null` while loading.
- * - `isLoading` — `true` until the first successful response or error.
- * - `error` — The SWR error object, if any.
- * - `mutate` — SWR `mutate` function to trigger a revalidation.
- */
-/**
  * Fetches the descriptor for a single well-known (built-in) LLM provider.
  *
  * Hits `GET /api/admin/llm/built-in/options/{providerEndpoint}` which returns
@@ -192,29 +172,5 @@ export function useCustomProviderNames() {
     customProviderNames: data ?? null,
     isLoading,
     error,
-  };
-}
-
-export function useWellKnownLLMProviders() {
-  const {
-    data: wellKnownLLMProviders,
-    error,
-    isLoading,
-    mutate,
-  } = useSWR<WellKnownLLMProviderDescriptor[]>(
-    SWR_KEYS.wellKnownLlmProviders,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60000,
-    }
-  );
-
-  return {
-    wellKnownLLMProviders: wellKnownLLMProviders ?? null,
-    isLoading,
-    error,
-    mutate,
   };
 }
