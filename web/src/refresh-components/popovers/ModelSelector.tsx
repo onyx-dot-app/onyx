@@ -109,7 +109,10 @@ export default function ModelSelector({
       onRemove(existingIndex);
     } else if (!atMax) {
       onAdd(model);
-      setOpen(false);
+      // Close the popover only when we've reached the max model count
+      if (selectedModels.length + 1 >= MAX_MODELS) {
+        setOpen(false);
+      }
     }
   };
 
