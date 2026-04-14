@@ -38,38 +38,41 @@ class TestAddMemory:
     def test_add_memory_creates_row(self, db_session: Session, test_user: User) -> None:
         """Verify that add_memory inserts a new Memory row."""
         user_id = test_user.id
-        memory = add_memory(
+        memory_id = add_memory(
             user_id=user_id,
             memory_text="User prefers dark mode",
             db_session=db_session,
         )
 
-        assert memory.id is not None
-        assert memory.user_id == user_id
-        assert memory.memory_text == "User prefers dark mode"
+        assert memory_id is not None
 
         # Verify it persists
-        fetched = db_session.get(Memory, memory.id)
+        fetched = db_session.get(Memory, memory_id)
         assert fetched is not None
+        assert fetched.user_id == user_id
         assert fetched.memory_text == "User prefers dark mode"
 
     def test_add_multiple_memories(self, db_session: Session, test_user: User) -> None:
         """Verify that multiple memories can be added for the same user."""
         user_id = test_user.id
-        m1 = add_memory(
+        m1_id = add_memory(
             user_id=user_id,
             memory_text="Favorite color is blue",
             db_session=db_session,
         )
-        m2 = add_memory(
+        m2_id = add_memory(
             user_id=user_id,
             memory_text="Works in engineering",
             db_session=db_session,
         )
 
-        assert m1.id != m2.id
-        assert m1.memory_text == "Favorite color is blue"
-        assert m2.memory_text == "Works in engineering"
+        assert m1_id != m2_id
+        fetched_m1 = db_session.get(Memory, m1_id)
+        fetched_m2 = db_session.get(Memory, m2_id)
+        assert fetched_m1 is not None
+        assert fetched_m2 is not None
+        assert fetched_m1.memory_text == "Favorite color is blue"
+        assert fetched_m2.memory_text == "Works in engineering"
 
 
 class TestUpdateMemoryAtIndex:
@@ -82,15 +85,17 @@ class TestUpdateMemoryAtIndex:
         add_memory(user_id=user_id, memory_text="Memory 1", db_session=db_session)
         add_memory(user_id=user_id, memory_text="Memory 2", db_session=db_session)
 
-        updated = update_memory_at_index(
+        updated_id = update_memory_at_index(
             user_id=user_id,
             index=1,
             new_text="Updated Memory 1",
             db_session=db_session,
         )
 
-        assert updated is not None
-        assert updated.memory_text == "Updated Memory 1"
+        assert updated_id is not None
+        fetched = db_session.get(Memory, updated_id)
+        assert fetched is not None
+        assert fetched.memory_text == "Updated Memory 1"
 
     def test_update_memory_at_out_of_range_index(
         self, db_session: Session, test_user: User
@@ -167,7 +172,7 @@ class TestMemoryCap:
         assert len(rows_before) == MAX_MEMORIES_PER_USER
 
         # Add one more — should evict the oldest
-        new_memory = add_memory(
+        new_memory_id = add_memory(
             user_id=user_id,
             memory_text="New memory after cap",
             db_session=db_session,
@@ -181,7 +186,7 @@ class TestMemoryCap:
         # Oldest ("Memory 0") should be gone; "Memory 1" is now the oldest
         assert rows_after[0].memory_text == "Memory 1"
         # Newest should be the one we just added
-        assert rows_after[-1].id == new_memory.id
+        assert rows_after[-1].id == new_memory_id
         assert rows_after[-1].memory_text == "New memory after cap"
 
 
@@ -221,22 +226,26 @@ class TestGetMemoriesWithUserId:
         user_id = test_user_no_memories.id
 
         # Add a memory
-        memory = add_memory(
+        memory_id = add_memory(
             user_id=user_id,
             memory_text="Memory with use_memories off",
             db_session=db_session,
         )
-        assert memory.memory_text == "Memory with use_memories off"
+        fetched = db_session.get(Memory, memory_id)
+        assert fetched is not None
+        assert fetched.memory_text == "Memory with use_memories off"
 
         # Update that memory
-        updated = update_memory_at_index(
+        updated_id = update_memory_at_index(
             user_id=user_id,
             index=0,
             new_text="Updated memory with use_memories off",
             db_session=db_session,
         )
-        assert updated is not None
-        assert updated.memory_text == "Updated memory with use_memories off"
+        assert updated_id is not None
+        fetched_updated = db_session.get(Memory, updated_id)
+        assert fetched_updated is not None
+        assert fetched_updated.memory_text == "Updated memory with use_memories off"
 
         # Verify get_memories returns the updated memory
         context = get_memories(test_user_no_memories, db_session)
