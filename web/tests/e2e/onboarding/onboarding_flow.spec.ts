@@ -104,7 +104,8 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).toHaveAttribute("aria-disabled", "true");
 
       await expectElementScreenshot(chatInput, {
         name: "onboarding-chat-disabled",
@@ -187,7 +188,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
   });
 
@@ -239,7 +244,8 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).toHaveAttribute("aria-disabled", "true");
     });
 
     test("can save name and see confirmation", async ({ page }) => {
@@ -284,7 +290,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
 
     test("after setting name, shows confirmation then no onboarding UI", async ({
