@@ -56,7 +56,7 @@ class TestGoogleDriveSlimConnectorInterface:
 
 
 class TestRetrieveAllSlimDocs:
-    def test_calls_extract_with_include_permissions_false(self) -> None:
+    def test_does_not_call_extract_when_checkpoint_is_done(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
             spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
@@ -81,8 +81,6 @@ class TestRetrieveAllSlimDocs:
         slim_doc = MagicMock(
             spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
         )
-        _make_done_checkpoint()
-
         # Checkpoint starts at START, _extract advances it to DONE
         with patch.object(connector, "build_dummy_checkpoint") as mock_build:
             start_checkpoint = GoogleDriveCheckpoint(
@@ -172,7 +170,10 @@ class TestRetrieveAllSlimDocsPermSync:
 
         mock_extract.assert_called_once()
         _, kwargs = mock_extract.call_args
-        assert kwargs.get("include_permissions", True) is True
+        assert (
+            kwargs.get("include_permissions") is None
+            or kwargs.get("include_permissions") is True
+        )
 
 
 class TestCeleryUtilsRouting:

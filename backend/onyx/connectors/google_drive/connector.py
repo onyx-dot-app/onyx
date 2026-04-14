@@ -1826,6 +1826,7 @@ class GoogleDriveConnector(
         if files_batch:
             yield _yield_slim_batch()
 
+    @override
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
