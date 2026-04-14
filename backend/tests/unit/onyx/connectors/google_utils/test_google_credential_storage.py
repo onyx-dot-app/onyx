@@ -11,21 +11,22 @@ from onyx.connectors.google_utils.google_kv import get_service_account_key
 from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
 from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.server.documents.models import GoogleAppCredentials
+from onyx.server.documents.models import GoogleAppWebCredentials
 from onyx.server.documents.models import GoogleServiceAccountKey
 
 
 def _make_app_creds() -> GoogleAppCredentials:
     return GoogleAppCredentials(
-        web={
-            "client_id": "client-id.apps.googleusercontent.com",
-            "project_id": "test-project",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_secret": "secret",
-            "redirect_uris": ["https://example.com/callback"],
-            "javascript_origins": ["https://example.com"],
-        }
+        web=GoogleAppWebCredentials(
+            client_id="client-id.apps.googleusercontent.com",
+            project_id="test-project",
+            auth_uri="https://accounts.google.com/o/oauth2/auth",
+            token_uri="https://oauth2.googleapis.com/token",
+            auth_provider_x509_cert_url="https://www.googleapis.com/oauth2/v1/certs",
+            client_secret="secret",
+            redirect_uris=["https://example.com/callback"],
+            javascript_origins=["https://example.com"],
+        )
     )
 
 
