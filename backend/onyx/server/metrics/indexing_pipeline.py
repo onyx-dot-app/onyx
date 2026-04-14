@@ -109,6 +109,7 @@ class _CachedCollector(Collector):
             max_workers=1,
             thread_name_prefix=type(self).__name__,
         )
+        self._inflight: concurrent.futures.Future | None = None
 
     def collect(self) -> list[GaugeMetricFamily]:
         with self._lock:
@@ -119,9 +120,18 @@ class _CachedCollector(Collector):
             ):
                 return self._cached_result
 
-            try:
+            # If a previous _collect_fresh() is still running, wait on it
+            # rather than queuing another. This prevents unbounded task
+            # accumulation in the executor during extended DB outages.
+            if self._inflight is not None and not self._inflight.done():
+                future = self._inflight
+            else:
                 future = self._executor.submit(self._collect_fresh)
+                self._inflight = future
+
+            try:
                 result = future.result(timeout=self._collect_timeout)
+                self._inflight = None
                 self._cached_result = result
                 self._last_collect_time = now
                 return result
@@ -131,6 +141,7 @@ class _CachedCollector(Collector):
                 )
                 return self._cached_result if self._cached_result is not None else []
             except Exception:
+                self._inflight = None
                 logger.exception(f"Error in {type(self).__name__}.collect()")
                 # Return stale cache on error rather than nothing — avoids
                 # metrics disappearing during transient failures.
@@ -269,7 +280,7 @@ def _iter_tenant_sessions() -> Generator[tuple[str, Session], None, None]:
             # tables (e.g. enums, extensions) remain accessible.
             connection.execute(
                 text(
-                    f"SET search_path TO {tid}, {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}"
+                    f'SET search_path TO "{tid}", {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}'
                 )
             )
             with Session(bind=connection, expire_on_commit=False) as session:
