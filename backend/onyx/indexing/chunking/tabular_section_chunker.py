@@ -82,17 +82,16 @@ def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
     blank rows are skipped."""
     section_text = section.text or ""
     if not section_text.strip():
-        return None
+        return []
 
     reader = csv.reader(io.StringIO(section_text))
-    non_empty_rows = (row for row in reader if any(cell.strip() for cell in row))
+    non_empty_rows = [row for row in reader if any(cell.strip() for cell in row)]
 
-    header = next(non_empty_rows, None)
-    if header is None:
-        return None
+    if not non_empty_rows:
+        return []
 
-    for row in non_empty_rows:
-        yield _ParsedRow(header=header, row=row)
+    header, *data_rows = non_empty_rows
+    return [_ParsedRow(header=header, row=row) for row in data_rows]
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
