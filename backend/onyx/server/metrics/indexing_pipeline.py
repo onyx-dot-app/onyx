@@ -9,12 +9,20 @@ a configurable TTL (default 30s). This means metrics may be up to TTL seconds
 stale, which is fine for monitoring dashboards.
 """
 
+from __future__ import annotations
+
+import concurrent.futures
 import json
 import threading
 import time
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
@@ -30,6 +38,11 @@ logger = setup_logger()
 # Default cache TTL in seconds. Scrapes hitting within this window return
 # the previous result without re-querying Redis/Postgres.
 _DEFAULT_CACHE_TTL = 30.0
+
+# Maximum time (seconds) a single _collect_fresh() call may take before
+# the collector gives up and returns stale/empty results. Prevents the
+# /metrics endpoint from hanging indefinitely when a DB or Redis query stalls.
+_DEFAULT_COLLECT_TIMEOUT = 120.0
 
 _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.PRIMARY: "primary",
@@ -62,18 +75,31 @@ _UNACKED_QUEUES: list[str] = [
 
 
 class _CachedCollector(Collector):
-    """Base collector with TTL-based caching.
+    """Base collector with TTL-based caching and timeout protection.
 
     Subclasses implement ``_collect_fresh()`` to query the actual data source.
     The base ``collect()`` returns cached results if the TTL hasn't expired,
     avoiding repeated queries when Prometheus scrapes frequently.
+
+    A per-collection timeout prevents a slow DB or Redis query from blocking
+    the /metrics endpoint indefinitely. If _collect_fresh() exceeds the
+    timeout, stale cached results are returned instead.
     """
 
-    def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
+    def __init__(
+        self,
+        cache_ttl: float = _DEFAULT_CACHE_TTL,
+        collect_timeout: float = _DEFAULT_COLLECT_TIMEOUT,
+    ) -> None:
         self._cache_ttl = cache_ttl
+        self._collect_timeout = collect_timeout
         self._cached_result: list[GaugeMetricFamily] | None = None
         self._last_collect_time: float = 0.0
         self._lock = threading.Lock()
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix=type(self).__name__,
+        )
 
     def collect(self) -> list[GaugeMetricFamily]:
         with self._lock:
@@ -85,10 +111,16 @@ class _CachedCollector(Collector):
                 return self._cached_result
 
             try:
-                result = self._collect_fresh()
+                future = self._executor.submit(self._collect_fresh)
+                result = future.result(timeout=self._collect_timeout)
                 self._cached_result = result
                 self._last_collect_time = now
                 return result
+            except concurrent.futures.TimeoutError:
+                logger.warning(
+                    f"{type(self).__name__}._collect_fresh() timed out after {self._collect_timeout}s, returning stale cache"
+                )
+                return self._cached_result if self._cached_result is not None else []
             except Exception:
                 logger.exception(f"Error in {type(self).__name__}.collect()")
                 # Return stale cache on error rather than nothing — avoids
@@ -194,6 +226,59 @@ class QueueDepthCollector(_CachedCollector):
         return None
 
 
+def _iter_tenant_sessions() -> "Generator[tuple[str, Session], None, None]":
+    """Yield (tenant_id, session) pairs using a single DB connection.
+
+    In multi-tenant mode with NullPool + PgBouncer, the previous approach of
+    calling ``get_session_with_current_tenant()`` per tenant opened a new TCP
+    connection for each of ~23k tenants, overwhelming PgBouncer. This helper
+    reuses one connection and switches schemas via ``SET search_path``.
+
+    In single-tenant mode (MULTI_TENANT=false), ``get_all_tenant_ids()``
+    returns a single entry and no schema switching is needed.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+    from onyx.db.engine.sql_engine import is_valid_schema_name
+    from onyx.db.engine.tenant_utils import get_all_tenant_ids
+    from shared_configs.configs import MULTI_TENANT
+    from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+
+    tenant_ids = get_all_tenant_ids()
+
+    if not MULTI_TENANT:
+        # Single-tenant: one session bound directly to the engine, no
+        # schema_translate_map needed.
+        engine = get_sqlalchemy_engine()
+        with Session(bind=engine, expire_on_commit=False) as session:
+            for tid in tenant_ids:
+                if tid is None:
+                    continue
+                yield tid, session
+        return
+
+    # Multi-tenant: open ONE connection and reuse it across all tenants.
+    # SET search_path switches the active schema without requiring a new
+    # connection — compatible with PgBouncer transaction pooling since the
+    # SET happens within the same client connection.
+    engine = get_sqlalchemy_engine()
+    with engine.connect() as connection:
+        for tid in tenant_ids:
+            if tid is None or not is_valid_schema_name(tid):
+                continue
+            # Switch schema for this tenant. Include "public" so shared
+            # tables (e.g. enums, extensions) remain accessible.
+            connection.execute(
+                text(
+                    f"SET search_path TO {tid}, {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}"
+                )
+            )
+            with Session(bind=connection, expire_on_commit=False) as session:
+                yield tid, session
+
+
 class IndexAttemptCollector(_CachedCollector):
     """Queries Postgres for index attempt state on each scrape."""
 
@@ -213,10 +298,7 @@ class IndexAttemptCollector(_CachedCollector):
         if not self._configured:
             return []
 
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.engine.tenant_utils import get_all_tenant_ids
         from onyx.db.index_attempt import get_active_index_attempts_for_metrics
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
         attempts_gauge = GaugeMetricFamily(
             "onyx_index_attempts_active",
@@ -230,32 +312,21 @@ class IndexAttemptCollector(_CachedCollector):
             ],
         )
 
-        tenant_ids = get_all_tenant_ids()
+        for tid, session in _iter_tenant_sessions():
+            rows = get_active_index_attempts_for_metrics(session)
 
-        for tid in tenant_ids:
-            # Defensive guard — get_all_tenant_ids() should never yield None,
-            # but we guard here for API stability in case the contract changes.
-            if tid is None:
-                continue
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
-            try:
-                with get_session_with_current_tenant() as session:
-                    rows = get_active_index_attempts_for_metrics(session)
-
-                    for status, source, cc_id, cc_name, count in rows:
-                        name_val = cc_name or f"cc_pair_{cc_id}"
-                        attempts_gauge.add_metric(
-                            [
-                                status.value,
-                                source.value,
-                                tid,
-                                name_val,
-                                str(cc_id),
-                            ],
-                            count,
-                        )
-            finally:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            for status, source, cc_id, cc_name, count in rows:
+                name_val = cc_name or f"cc_pair_{cc_id}"
+                attempts_gauge.add_metric(
+                    [
+                        status.value,
+                        source.value,
+                        tid,
+                        name_val,
+                        str(cc_id),
+                    ],
+                    count,
+                )
 
         return [attempts_gauge]
 
@@ -278,11 +349,8 @@ class ConnectorHealthCollector(_CachedCollector):
         from onyx.db.connector_credential_pair import (
             get_connector_health_for_metrics,
         )
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.engine.tenant_utils import get_all_tenant_ids
         from onyx.db.index_attempt import get_docs_indexed_by_cc_pair
         from onyx.db.index_attempt import get_failed_attempt_counts_by_cc_pair
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
         staleness_gauge = GaugeMetricFamily(
             "onyx_connector_last_success_age_seconds",
@@ -322,69 +390,56 @@ class ConnectorHealthCollector(_CachedCollector):
         )
 
         now = datetime.now(tz=timezone.utc)
-        tenant_ids = get_all_tenant_ids()
 
-        for tid in tenant_ids:
-            # Defensive guard — get_all_tenant_ids() should never yield None,
-            # but we guard here for API stability in case the contract changes.
-            if tid is None:
-                continue
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
-            try:
-                with get_session_with_current_tenant() as session:
-                    pairs = get_connector_health_for_metrics(session)
-                    error_counts_by_cc = get_failed_attempt_counts_by_cc_pair(session)
-                    docs_by_cc = get_docs_indexed_by_cc_pair(session)
+        for tid, session in _iter_tenant_sessions():
+            pairs = get_connector_health_for_metrics(session)
+            error_counts_by_cc = get_failed_attempt_counts_by_cc_pair(session)
+            docs_by_cc = get_docs_indexed_by_cc_pair(session)
 
-                    status_counts: dict[str, int] = {}
-                    error_count = 0
+            status_counts: dict[str, int] = {}
+            error_count = 0
 
-                    for (
-                        cc_id,
-                        status,
-                        in_error,
-                        last_success,
-                        cc_name,
-                        source,
-                    ) in pairs:
-                        cc_id_str = str(cc_id)
-                        source_val = source.value
-                        name_val = cc_name or f"cc_pair_{cc_id}"
-                        label_vals = [tid, source_val, cc_id_str, name_val]
+            for (
+                cc_id,
+                status,
+                in_error,
+                last_success,
+                cc_name,
+                source,
+            ) in pairs:
+                cc_id_str = str(cc_id)
+                source_val = source.value
+                name_val = cc_name or f"cc_pair_{cc_id}"
+                label_vals = [tid, source_val, cc_id_str, name_val]
 
-                        if last_success is not None:
-                            # Both `now` and `last_success` are timezone-aware
-                            # (the DB column uses DateTime(timezone=True)),
-                            # so subtraction is safe.
-                            age = (now - last_success).total_seconds()
-                            staleness_gauge.add_metric(label_vals, age)
+                if last_success is not None:
+                    age = (now - last_success).total_seconds()
+                    staleness_gauge.add_metric(label_vals, age)
 
-                        error_state_gauge.add_metric(
-                            label_vals,
-                            1.0 if in_error else 0.0,
-                        )
-                        if in_error:
-                            error_count += 1
+                error_state_gauge.add_metric(
+                    label_vals,
+                    1.0 if in_error else 0.0,
+                )
+                if in_error:
+                    error_count += 1
 
-                        docs_success_gauge.add_metric(
-                            label_vals,
-                            docs_by_cc.get(cc_id, 0),
-                        )
+                docs_success_gauge.add_metric(
+                    label_vals,
+                    docs_by_cc.get(cc_id, 0),
+                )
 
-                        docs_error_gauge.add_metric(
-                            label_vals,
-                            error_counts_by_cc.get(cc_id, 0),
-                        )
+                docs_error_gauge.add_metric(
+                    label_vals,
+                    error_counts_by_cc.get(cc_id, 0),
+                )
 
-                        status_val = status.value
-                        status_counts[status_val] = status_counts.get(status_val, 0) + 1
+                status_val = status.value
+                status_counts[status_val] = status_counts.get(status_val, 0) + 1
 
-                    for status_val, count in status_counts.items():
-                        by_status_gauge.add_metric([tid, status_val], count)
+            for status_val, count in status_counts.items():
+                by_status_gauge.add_metric([tid, status_val], count)
 
-                    error_total_gauge.add_metric([tid], error_count)
-            finally:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            error_total_gauge.add_metric([tid], error_count)
 
         return [
             staleness_gauge,
