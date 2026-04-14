@@ -1,7 +1,7 @@
 import csv
 import io
 from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Iterable
 
 from pydantic import BaseModel
 
@@ -55,22 +55,21 @@ def format_columns_header(headers: list[str]) -> str:
     return f"{COLUMNS_MARKER} " + FIELD_VALUE_SEPARATOR.join(parts)
 
 
-def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
+def parse_section(section: Section) -> list[_ParsedRow]:
     """Parse CSV into headers + rows. First non-empty row is the header;
     blank rows are skipped."""
     section_text = section.text or ""
     if not section_text.strip():
-        return None
+        return []
 
     reader = csv.reader(io.StringIO(section_text))
-    non_empty_rows = (row for row in reader if any(cell.strip() for cell in row))
+    non_empty_rows = [row for row in reader if any(cell.strip() for cell in row)]
 
-    header = next(non_empty_rows, None)
-    if header is None:
-        return None
+    if not non_empty_rows:
+        return []
 
-    for row in non_empty_rows:
-        yield _ParsedRow(header=header, row=row)
+    header, *data_rows = non_empty_rows
+    return [_ParsedRow(header=header, row=row) for row in data_rows]
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
@@ -145,19 +144,18 @@ def _split_row_by_pairs(
         yield FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in current)
 
 
-def build_chunk_from_scratch(
+def _build_chunk_from_scratch(
     header: list[str],
     pairs: list[tuple[str, str]],
     sheet_header: str,
     tokenizer: BaseTokenizer,
     max_tokens: int,
-) -> Generator[str, None, None]:
+) -> list[str]:
     formatted_row = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in pairs)
 
     # 1. Row alone is too large — split by pairs, no headers.
     if count_tokens(formatted_row, tokenizer) > max_tokens:
-        yield from _split_row_by_pairs(pairs, tokenizer, max_tokens)
-        return
+        return list(_split_row_by_pairs(pairs, tokenizer, max_tokens))
 
     chunk = formatted_row
 
@@ -175,15 +173,16 @@ def build_chunk_from_scratch(
         if count_tokens(candidate, tokenizer) <= max_tokens:
             chunk = candidate
 
-    yield chunk
+    return [chunk]
 
 
 def parse_to_chunks(
-    rows: Iterator[_ParsedRow],
+    rows: Iterable[_ParsedRow],
     sheet_header: str,
     tokenizer: BaseTokenizer,
     max_tokens: int,
-) -> Generator[str, None, None]:
+) -> list[str]:
+    chunks: list[str] = []
     current_chunk = ""
 
     for row in rows:
@@ -197,11 +196,11 @@ def parse_to_chunks(
                 continue
             else:
                 # We need to start a new chunk
-                yield current_chunk
+                chunks.append(current_chunk)
                 current_chunk = ""
 
         # Build chunk from scratch
-        for chunk in build_chunk_from_scratch(
+        for chunk in _build_chunk_from_scratch(
             header=row.header,
             pairs=pairs,
             sheet_header=sheet_header,
@@ -209,12 +208,14 @@ def parse_to_chunks(
             max_tokens=max_tokens,
         ):
             if current_chunk:
-                yield current_chunk
+                chunks.append(current_chunk)
             current_chunk = chunk
 
     # Flush remaining
     if current_chunk:
-        yield current_chunk
+        chunks.append(current_chunk)
+
+    return chunks
 
 
 class TabularChunker(SectionChunker):
@@ -230,7 +231,7 @@ class TabularChunker(SectionChunker):
         payloads = accumulator.flush_to_list()
 
         parsed_rows = parse_section(section)
-        if parsed_rows is None:
+        if not parsed_rows:
             logger.warning(
                 f"TabularChunker: skipping unparseable section (link={section.link})"
             )
