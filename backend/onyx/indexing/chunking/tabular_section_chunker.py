@@ -53,11 +53,10 @@ def format_columns_header(headers: list[str]) -> str:
     """
     parts: list[str] = []
     for header in headers:
-        friendly = header.replace("_", " ")
-        if friendly != header:
-            parts.append(f"{header} ({friendly})")
-        else:
-            parts.append(header)
+        friendly = header
+        if "_" in header:
+            friendly = f'{header} ({header.replace("_", " ")})'
+        parts.append(friendly)
     return f"{COLUMNS_MARKER} " + FIELD_VALUE_SEPARATOR.join(parts)
 
 
@@ -79,13 +78,7 @@ def parse_section(section: Section) -> list[_ParsedRow]:
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
-    pairs: list[tuple[str, str]] = []
-    for i, header in enumerate(headers):
-        value = row[i] if i < len(row) else ""
-        if not value.strip():
-            continue
-        pairs.append((header, value))
-    return pairs
+    return [(h, v) for h, v in zip(headers, row) if v.strip()]
 
 
 def pack_chunk(chunk: str, new_row: str) -> str:
