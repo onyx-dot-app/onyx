@@ -43,7 +43,7 @@ def tabular_file_to_sections(
 
     if lowered.endswith(".xlsx"):
         return [
-            TabularSection(link=f"sheet:{sheet_title}", text=csv_text)
+            TabularSection(link=f"{file_name} :: {sheet_title}", text=csv_text)
             for csv_text, sheet_title in xlsx_sheet_extraction(
                 file, file_name=file_name
             )
