@@ -20,11 +20,17 @@ logger = setup_logger()
 COLUMNS_MARKER = "Columns:"
 FIELD_VALUE_SEPARATOR = ", "
 ROW_JOIN = "\n"
+NEWLINE_TOKENS = 1
 
 
 class _ParsedRow(BaseModel):
     header: list[str]
     row: list[str]
+
+
+class _TokenizedText(BaseModel):
+    text: str
+    token_count: int
 
 
 def format_row(header: list[str], row: list[str]) -> str:
@@ -82,19 +88,6 @@ def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
-def can_pack(
-    chunk_content: str, new_row: str, tokenizer: BaseTokenizer, max_tokens: int
-) -> bool:
-    """
-    Check that adding this row will not exceed the chunk content
-    """
-    chunk_token_count = count_tokens(chunk_content, tokenizer)
-    new_row_count = count_tokens(new_row, tokenizer)
-
-    # Add the additional 1 token for the \n for packing
-    return chunk_token_count + new_row_count + 1 <= max_tokens
-
-
 def pack_chunk(chunk: str, new_row: str) -> str:
     return chunk + "\n" + new_row
 
@@ -117,63 +110,89 @@ def _split_row_by_pairs(
     pairs: list[tuple[str, str]],
     tokenizer: BaseTokenizer,
     max_tokens: int,
-) -> Generator[str, None, None]:
+) -> list[_TokenizedText]:
     """Greedily pack pairs into max-sized pieces. Any single pair that
     itself exceeds ``max_tokens`` is token-split at id boundaries.
     No headers."""
-    current: list[tuple[str, str]] = []
+    separator_tokens = count_tokens(FIELD_VALUE_SEPARATOR, tokenizer)
+    pieces: list[_TokenizedText] = []
+    current_parts: list[str] = []
+    current_tokens = 0
+
     for pair in pairs:
-        candidate = current + [pair]
-        candidate_str = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in candidate)
-        if count_tokens(candidate_str, tokenizer) <= max_tokens:
-            current = candidate
+        pair_str = f"{pair[0]}={pair[1]}"
+        pair_tokens = count_tokens(pair_str, tokenizer)
+        increment = pair_tokens if not current_parts else separator_tokens + pair_tokens
+
+        if current_tokens + increment <= max_tokens:
+            current_parts.append(pair_str)
+            current_tokens += increment
             continue
 
-        # Candidate busts the budget — flush what we have.
-        if current:
-            yield FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in current)
-            current = []
+        if current_parts:
+            pieces.append(
+                _TokenizedText(
+                    text=FIELD_VALUE_SEPARATOR.join(current_parts),
+                    token_count=current_tokens,
+                )
+            )
+            current_parts = []
+            current_tokens = 0
 
-        # Single pair itself too large — fall back to token-level split.
-        pair_str = f"{pair[0]}={pair[1]}"
-        if count_tokens(pair_str, tokenizer) > max_tokens:
-            yield from _token_split(pair_str, tokenizer, max_tokens)
+        if pair_tokens > max_tokens:
+            for split_text in _token_split(pair_str, tokenizer, max_tokens):
+                pieces.append(
+                    _TokenizedText(
+                        text=split_text,
+                        token_count=count_tokens(split_text, tokenizer),
+                    )
+                )
         else:
-            current = [pair]
-    if current:
-        yield FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in current)
+            current_parts = [pair_str]
+            current_tokens = pair_tokens
+
+    if current_parts:
+        pieces.append(
+            _TokenizedText(
+                text=FIELD_VALUE_SEPARATOR.join(current_parts),
+                token_count=current_tokens,
+            )
+        )
+    return pieces
 
 
 def _build_chunk_from_scratch(
-    header: list[str],
     pairs: list[tuple[str, str]],
+    formatted_row: str,
+    row_tokens: int,
+    column_header: str,
+    column_header_tokens: int,
     sheet_header: str,
+    sheet_header_tokens: int,
     tokenizer: BaseTokenizer,
     max_tokens: int,
-) -> list[str]:
-    formatted_row = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in pairs)
-
+) -> list[_TokenizedText]:
     # 1. Row alone is too large — split by pairs, no headers.
-    if count_tokens(formatted_row, tokenizer) > max_tokens:
-        return list(_split_row_by_pairs(pairs, tokenizer, max_tokens))
+    if row_tokens > max_tokens:
+        return _split_row_by_pairs(pairs, tokenizer, max_tokens)
 
     chunk = formatted_row
+    chunk_tokens = row_tokens
 
     # 2. Attempt to add column header
-    column_header = format_columns_header(header)
-    candidate = column_header + ROW_JOIN + chunk
-
-    if count_tokens(candidate, tokenizer) <= max_tokens:
-        chunk = candidate
+    candidate_tokens = column_header_tokens + NEWLINE_TOKENS + chunk_tokens
+    if candidate_tokens <= max_tokens:
+        chunk = column_header + ROW_JOIN + chunk
+        chunk_tokens = candidate_tokens
 
     # 3. Attempt to add sheet header
     if sheet_header:
-        candidate = sheet_header + ROW_JOIN + chunk
+        candidate_tokens = sheet_header_tokens + NEWLINE_TOKENS + chunk_tokens
+        if candidate_tokens <= max_tokens:
+            chunk = sheet_header + ROW_JOIN + chunk
+            chunk_tokens = candidate_tokens
 
-        if count_tokens(candidate, tokenizer) <= max_tokens:
-            chunk = candidate
-
-    return [chunk]
+    return [_TokenizedText(text=chunk, token_count=chunk_tokens)]
 
 
 def parse_to_chunks(
@@ -182,34 +201,50 @@ def parse_to_chunks(
     tokenizer: BaseTokenizer,
     max_tokens: int,
 ) -> list[str]:
+    rows_list = list(rows)
+    if not rows_list:
+        return []
+
+    column_header = format_columns_header(rows_list[0].header)
+    column_header_tokens = count_tokens(column_header, tokenizer)
+    sheet_header_tokens = count_tokens(sheet_header, tokenizer) if sheet_header else 0
+
     chunks: list[str] = []
     current_chunk = ""
+    current_chunk_tokens = 0
 
-    for row in rows:
+    for row in rows_list:
         pairs: list[tuple[str, str]] = _row_to_pairs(row.header, row.row)
         formatted = format_row(row.header, row.row)
+        row_tokens = count_tokens(formatted, tokenizer)
 
         if current_chunk:
-            # Attempt to pack it in
-            if can_pack(current_chunk, formatted, tokenizer, max_tokens):
+            # Attempt to pack it in (additive approximation)
+            if current_chunk_tokens + NEWLINE_TOKENS + row_tokens <= max_tokens:
                 current_chunk = pack_chunk(current_chunk, formatted)
+                current_chunk_tokens += NEWLINE_TOKENS + row_tokens
                 continue
-            else:
-                # We need to start a new chunk
-                chunks.append(current_chunk)
-                current_chunk = ""
+            # Doesn't fit — flush and start new
+            chunks.append(current_chunk)
+            current_chunk = ""
+            current_chunk_tokens = 0
 
         # Build chunk from scratch
-        for chunk in _build_chunk_from_scratch(
-            header=row.header,
+        for piece in _build_chunk_from_scratch(
             pairs=pairs,
+            formatted_row=formatted,
+            row_tokens=row_tokens,
+            column_header=column_header,
+            column_header_tokens=column_header_tokens,
             sheet_header=sheet_header,
+            sheet_header_tokens=sheet_header_tokens,
             tokenizer=tokenizer,
             max_tokens=max_tokens,
         ):
             if current_chunk:
                 chunks.append(current_chunk)
-            current_chunk = chunk
+            current_chunk = piece.text
+            current_chunk_tokens = piece.token_count
 
     # Flush remaining
     if current_chunk:
