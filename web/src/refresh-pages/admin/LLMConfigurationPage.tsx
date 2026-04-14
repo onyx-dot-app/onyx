@@ -3,10 +3,7 @@
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import {
-  useAdminLLMProviders,
-  useWellKnownLLMProviders,
-} from "@/hooks/useLLMProviders";
+import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, Card as CardLayout, InputHorizontal } from "@opal/layouts";
 import { Button, Divider, SelectCard, Text, Card } from "@opal/components";
@@ -22,11 +19,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import {
-  LLMProviderName,
-  LLMProviderView,
-  WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
@@ -187,13 +180,16 @@ function ExistingProviderCard({
 // ============================================================================
 
 interface NewProviderCardProps {
-  provider: WellKnownLLMProviderDescriptor;
+  providerName: string;
   isFirstProvider: boolean;
 }
 
-function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
+function NewProviderCard({
+  providerName,
+  isFirstProvider,
+}: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getProvider(provider.name);
+  const { icon, productName, companyName, Modal } = getProvider(providerName);
 
   return (
     <SelectCard
@@ -283,7 +279,6 @@ export default function LLMConfigurationPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
-  const { wellKnownLLMProviders } = useWellKnownLLMProviders();
 
   if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
@@ -424,22 +419,13 @@ export default function LLMConfigurationPage() {
           />
 
           <div className="grid grid-cols-2 gap-2">
-            {[...(wellKnownLLMProviders ?? [])]
-              .sort((a, b) => {
-                const aIndex = PROVIDER_DISPLAY_ORDER.indexOf(a.name);
-                const bIndex = PROVIDER_DISPLAY_ORDER.indexOf(b.name);
-                return (
-                  (aIndex === -1 ? Infinity : aIndex) -
-                  (bIndex === -1 ? Infinity : bIndex)
-                );
-              })
-              .map((provider) => (
-                <NewProviderCard
-                  key={provider.name}
-                  provider={provider}
-                  isFirstProvider={isFirstProvider}
-                />
-              ))}
+            {PROVIDER_DISPLAY_ORDER.map((name) => (
+              <NewProviderCard
+                key={name}
+                providerName={name}
+                isFirstProvider={isFirstProvider}
+              />
+            ))}
             <NewCustomProviderCard isFirstProvider={isFirstProvider} />
           </div>
         </GeneralLayouts.Section>
