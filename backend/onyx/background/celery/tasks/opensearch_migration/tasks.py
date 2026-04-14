@@ -325,6 +325,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
     finally:
         if lock.owned():
             lock.release()
+            task_logger.debug("Released the OpenSearch migration lock.")
         else:
             task_logger.warning(
                 "The OpenSearch migration lock was not owned on completion of the migration task."
