@@ -42,6 +42,9 @@ interface TooltipProps {
    */
   delayDuration?: number;
 
+  /** Distance in pixels between the trigger and the tooltip. @default 4 */
+  sideOffset?: number;
+
   /**
    * Children to wrap. Must be a single element compatible with Radix
    * `asChild` (i.e. a DOM element or a component that forwards refs).
@@ -83,6 +86,7 @@ function Tooltip({
   align = "center",
   disabled = false,
   delayDuration,
+  sideOffset = 4,
   children,
 }: TooltipProps) {
   if (!tooltip || disabled) return children;
@@ -104,7 +108,8 @@ function Tooltip({
           className="opal-tooltip"
           side={side}
           align={align}
-          sideOffset={4}
+          sideOffset={sideOffset}
+          asChild
         >
           {content}
         </TooltipPrimitive.Content>

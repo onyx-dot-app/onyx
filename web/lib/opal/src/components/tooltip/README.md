@@ -14,6 +14,7 @@ is `true`, children are returned as-is with no wrapping. Uses Radix Tooltip prim
 | `align` | `"start" \| "center" \| "end"` | `"center"` | Alignment along the tooltip's side axis |
 | `disabled` | `boolean` | `false` | Suppresses the tooltip even if `tooltip` is defined |
 | `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
+| `sideOffset` | `number` | `4` | Distance in pixels between the trigger and the tooltip |
 
 ## Usage
 
