@@ -16,6 +16,9 @@
 
 [data-opal-disabled] {
   @apply cursor-not-allowed select-none;
+}
+
+[data-opal-disabled] > * {
   pointer-events: none;
 }
 
