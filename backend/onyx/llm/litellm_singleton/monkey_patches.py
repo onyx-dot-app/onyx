@@ -3,7 +3,7 @@ LiteLLM Monkey Patches
 
 This module addresses the following issues in LiteLLM:
 
-Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
+Status checked against LiteLLM v1.83.0 (2026-03-31):
 
 1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
@@ -11,28 +11,23 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
    - Processes native "thinking" field from Ollama responses
    - Also handles <think>...</think> tags in content for models that use that format
    - Tracks reasoning state to properly separate thinking from regular content
-   STATUS: STILL NEEDED - LiteLLM has a bug where it only yields thinking content on
-           the first two chunks, then stops (lines 504-510). Our patch correctly yields
-           ALL thinking chunks. The upstream logic sets finished_reasoning_content=True
-           on the second chunk instead of when regular content starts.
+   STATUS: STILL NEEDED - Upstream uses `is not None` for thinking field checks, but
+           Ollama sends thinking="" (empty string) as a transition signal. Our truthy
+           check correctly treats empty string as end-of-reasoning.
 
-2. OpenAI Responses API Parallel Tool Calls (_patch_openai_responses_parallel_tool_calls):
-   - LiteLLM's translate_responses_chunk_to_openai_stream hardcodes index=0 for all tool calls
-   - This breaks parallel tool calls where multiple functions are called simultaneously
-   - The OpenAI Responses API provides output_index in streaming events to track which
-     tool call each event belongs to
-   STATUS: STILL NEEDED - LiteLLM hardcodes index=0 in translate_responses_chunk_to_openai_stream
-           for response.output_item.added (line 962), response.function_call_arguments.delta
-           (line 989), and response.output_item.done (line 1033). Our patch uses output_index
-           from the event to properly track parallel tool calls.
+2. Reasoning Summary Newlines (_patch_responses_reasoning_summary_newlines):
+   - LiteLLM passes through reasoning_summary_text.delta content as-is without
+     separating different summary_index sections
+   - Our patch inserts "\\n\\n" when the summary_index changes
+   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections.
+   NOTE: The original Patch 2 also fixed parallel tool calls (hardcoded index=0) and
+         premature finish_reason="tool_calls". Both are FIXED UPSTREAM in v1.83.0.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
-   - LiteLLM's transform_response doesn't properly concatenate multiple reasoning
-     summary parts in non-streaming responses
-   - Multiple ReasoningSummaryItem objects should be joined with newlines
-   STATUS: STILL NEEDED - LiteLLM's _convert_response_output_to_choices (lines 366-370)
-           only keeps the LAST summary item text, discarding earlier parts. Our patch
-           concatenates all summary texts with double newlines.
+   - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
+   - We prefer double newlines for readability
+   STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
+           parts, but we override to use "\\n\\n".join() for readable section breaks.
 
 4. Azure Responses API Fake Streaming (_patch_azure_responses_should_fake_stream):
    - LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
@@ -44,7 +39,7 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
            in litellm.utils.supports_native_streaming(). Custom Azure deployments will
            still use fake streaming without this patch.
 
-# Note: 5 and 6 are to supress a warning and may fix usage info but is not strictly required for the app to run
+# Note: 5 and 6 suppress a warning and may fix usage info but are not strictly required
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
    - LiteLLM uses model_construct as a fallback in multiple places when
      ResponsesAPIResponse validation fails
@@ -52,33 +47,23 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
      (completion_tokens, prompt_tokens) to be stored instead of Responses API format
      (input_tokens, output_tokens)
    - When model_dump() is later called, Pydantic emits a serialization warning
-   STATUS: STILL NEEDED - Multiple files use model_construct which bypasses validation:
-           openai/responses/transformation.py, chatgpt/responses/transformation.py,
-           manus/responses/transformation.py, volcengine/responses/transformation.py,
-           and handler.py. Our patch wraps ResponsesAPIResponse.model_construct itself
-           to transform usage in all code paths.
+   STATUS: STILL NEEDED - Multiple files use model_construct which bypasses validation.
 
 6. Logging Usage Transformation Warning (_patch_logging_assembled_streaming_response):
-   - LiteLLM's _get_assembled_streaming_response in litellm_logging.py transforms
-     ResponseAPIUsage to chat completion format and sets it as a dict on the
-     ResponsesAPIResponse.usage field
+   - LiteLLM's _get_assembled_streaming_response transforms ResponseAPIUsage to chat
+     completion format and sets it as a dict on ResponsesAPIResponse.usage
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
-     to emit a serialization warning when model_dump() is called later
-   STATUS: STILL NEEDED - litellm_core_utils/litellm_logging.py lines 3185-3199 set
-           usage as a dict with chat completion format instead of keeping it as
-           ResponseAPIUsage. Our patch creates a deep copy before modification.
+     serialization warnings
+   STATUS: STILL NEEDED - Our patch creates a deep copy before modification.
+   NOTE: In v1.83.0, this method also handles ResponseIncompleteEvent and
+         ResponseFailedEvent. Our patch only handles ResponseCompletedEvent and
+         returns None for the new types, which is acceptable.
 
 7. Responses API metadata=None TypeError (_patch_responses_metadata_none):
-   - LiteLLM's @client decorator wrapper in utils.py uses kwargs.get("metadata", {})
-     to check for router calls, but when metadata is explicitly None (key exists with
-     value None), the default {} is not used
-   - This causes "argument of type 'NoneType' is not iterable" TypeError which swallows
-     the real exception (e.g. AuthenticationError for wrong API key)
-   - Surfaces as: APIConnectionError: OpenAIException - argument of type 'NoneType' is
-     not iterable
-   STATUS: STILL NEEDED - litellm/utils.py wrapper function (line 1721) does not guard
-           against metadata being explicitly None. Triggered when Responses API bridge
-           passes **litellm_params containing metadata=None.
+   - When metadata is explicitly None in kwargs, the @client decorator's
+     kwargs.get("metadata", {}) returns None, causing TypeError
+   STATUS: FIXED UPSTREAM in v1.83.0 — all occurrences now use
+           `kwargs.get("metadata") or {}`. Patch kept as a safety net but is redundant.
 """
 
 import time
