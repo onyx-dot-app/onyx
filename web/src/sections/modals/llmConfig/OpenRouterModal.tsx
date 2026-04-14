@@ -13,6 +13,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
@@ -49,7 +50,7 @@ function OpenRouterModalInternals({
     !formikProps.values.api_base || !formikProps.values.api_key;
 
   const handleFetchModels = async () => {
-    const { models, error } = await fetchOpenRouterModels({
+    const { models: fetched, error } = await fetchOpenRouterModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
       provider_name: existingLlmProvider?.name,
@@ -57,7 +58,13 @@ function OpenRouterModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue("model_configurations", models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        fetched,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
   return (
