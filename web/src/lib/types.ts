@@ -90,31 +90,6 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.ANONYMOUS]: "Anonymous",
 };
 
-/**
- * @deprecated Use AccountType + effective_permissions instead.
- * Kept only for write-path compatibility (e.g. setUserRole API).
- */
-export enum UserRole {
-  LIMITED = "limited",
-  BASIC = "basic",
-  ADMIN = "admin",
-  CURATOR = "curator",
-  GLOBAL_CURATOR = "global_curator",
-  EXT_PERM_USER = "ext_perm_user",
-  SLACK_USER = "slack_user",
-}
-
-/** @deprecated Use ACCOUNT_TYPE_LABELS instead for display. Kept for write-path only. */
-export const USER_ROLE_LABELS: Record<UserRole, string> = {
-  [UserRole.BASIC]: "Basic",
-  [UserRole.ADMIN]: "Admin",
-  [UserRole.GLOBAL_CURATOR]: "Global Curator",
-  [UserRole.CURATOR]: "Curator",
-  [UserRole.LIMITED]: "Limited",
-  [UserRole.EXT_PERM_USER]: "External Permissioned User",
-  [UserRole.SLACK_USER]: "Slack User",
-};
-
 export enum UserStatus {
   ACTIVE = "active",
   INACTIVE = "inactive",
@@ -177,7 +152,6 @@ export interface AllUsersResponse {
 export interface AcceptedUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   is_active: boolean;
 }
 

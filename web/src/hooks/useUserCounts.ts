@@ -8,7 +8,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { StatusCountMap } from "@/refresh-pages/admin/UsersPage/interfaces";
 
 type UserCountsResponse = {
-  role_counts: Record<string, number>;
+  account_type_counts: Record<string, number>;
   status_counts: Record<string, number>;
 };
 
@@ -16,7 +16,7 @@ type UserCounts = {
   activeCount: number | null;
   invitedCount: number | null;
   pendingCount: number | null;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
   refreshCounts: () => void;
 };
@@ -42,7 +42,7 @@ export default function useUserCounts(): UserCounts {
     activeCount,
     invitedCount: invitedUsers?.length ?? null,
     pendingCount: pendingUsers?.length ?? null,
-    roleCounts: countsData?.role_counts ?? {},
+    accountTypeCounts: countsData?.account_type_counts ?? {},
     statusCounts: {
       ...(activeCount !== null ? { active: activeCount } : {}),
       ...(inactiveCount !== null ? { inactive: inactiveCount } : {}),

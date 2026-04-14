@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
-from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.db.enums import AccountType
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -127,7 +127,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 .select_from(User)
                 .where(
                     User.is_active == True,  # type: ignore  # noqa: E712
-                    User.role != UserRole.EXT_PERM_USER,
+                    User.account_type != AccountType.EXT_PERM_USER,
                     User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
                 )
             )

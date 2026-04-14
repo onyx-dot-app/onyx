@@ -10,7 +10,6 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
@@ -204,16 +203,6 @@ class UserInfo(BaseModel):
 
 class UserByEmail(BaseModel):
     user_email: str
-
-
-class UserRoleUpdateRequest(BaseModel):
-    user_email: str
-    new_role: UserRole
-    explicit_override: bool = False
-
-
-class UserRoleResponse(BaseModel):
-    role: str
 
 
 class BoostDoc(BaseModel):

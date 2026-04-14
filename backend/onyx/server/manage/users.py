@@ -29,7 +29,6 @@ from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
@@ -67,7 +66,6 @@ from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
-from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
@@ -78,8 +76,7 @@ from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
 from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
-from onyx.db.users import get_user_counts_by_role_and_status
-from onyx.db.users import validate_user_role_update
+from onyx.db.users import get_user_counts_by_account_type_and_status
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
@@ -98,8 +95,6 @@ from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
-from onyx.server.manage.models import UserRoleResponse
-from onyx.server.manage.models import UserRoleUpdateRequest
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
@@ -120,41 +115,6 @@ logger = setup_logger()
 router = APIRouter()
 
 USERS_PAGE_SIZE = 10
-
-
-@router.patch("/manage/set-user-role", tags=PUBLIC_API_TAGS)
-def set_user_role(
-    user_role_update_request: UserRoleUpdateRequest,
-    current_user: User = Depends(
-        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
-    ),
-    db_session: Session = Depends(get_session),
-) -> None:
-    user_to_update = get_user_by_email(
-        email=user_role_update_request.user_email, db_session=db_session
-    )
-    if not user_to_update:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    current_role = user_to_update.role
-    requested_role = user_role_update_request.new_role
-    if requested_role == current_role:
-        return
-
-    # This will raise an exception if the role update is invalid
-    validate_user_role_update(
-        requested_role=requested_role,
-        current_account_type=user_to_update.account_type,
-        explicit_override=user_role_update_request.explicit_override,
-    )
-
-    if user_to_update.id == current_user.id:
-        raise HTTPException(
-            status_code=400,
-            detail="An admin cannot demote themselves from admin role!",
-        )
-
-    update_user_role(user_to_update, requested_role, db_session)
 
 
 class TestUpsertRequest(BaseModel):
@@ -188,7 +148,6 @@ def list_accepted_users(
     q: str | None = Query(default=None),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -199,14 +158,12 @@ def list_accepted_users(
         page_num=page_num,
         email_filter_string=q,
         is_active_filter=is_active,
-        roles_filter=roles,
     )
 
     total_accepted_users_count = get_total_filtered_users_count(
         db_session=db_session,
         email_filter_string=q,
         is_active_filter=is_active,
-        roles_filter=roles,
     )
 
     if not filtered_accepted_users:
@@ -306,7 +263,7 @@ def get_user_counts(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, dict[str, int]]:
-    return get_user_counts_by_role_and_status(db_session)
+    return get_user_counts_by_account_type_and_status(db_session)
 
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
@@ -722,13 +679,6 @@ def list_all_users_basic_info(
         if user.account_type != AccountType.BOT
         and (include_api_keys or not is_api_key_email_address(user.email))
     ]
-
-
-@router.get("/get-user-role", tags=PUBLIC_API_TAGS)
-async def get_user_role(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> UserRoleResponse:
-    return UserRoleResponse(role=user.role)
 
 
 def get_current_auth_token_creation_redis(

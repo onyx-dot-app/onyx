@@ -645,23 +645,40 @@ export class OnyxApiClient {
     return response.json();
   }
 
-  async setUserRole(
-    email: string,
-    role: "admin" | "curator" | "global_curator" | "basic",
-    explicitOverride = false
-  ): Promise<void> {
-    const response = await this.request.patch(
-      `${this.baseUrl}/manage/set-user-role`,
-      {
-        data: {
-          user_email: email,
-          new_role: role,
-          explicit_override: explicitOverride,
-        },
-      }
+  async addUserToAdminGroup(email: string): Promise<void> {
+    const groups = await this.getUserGroups();
+    const adminGroup = groups.find(
+      (g) => g.is_default === true && g.name === "Admin"
     );
-    await this.handleResponse(response, `Failed to set user role for ${email}`);
-    this.log(`Updated role for ${email} to ${role}`);
+    if (!adminGroup) {
+      throw new Error(
+        `Admin default group not found (saw: ${JSON.stringify(
+          groups.map((g) => ({ name: g.name, is_default: g.is_default }))
+        )})`
+      );
+    }
+
+    const usersRes = await this.get("/manage/users/accepted/all");
+    const users = (await usersRes.json()) as Array<{
+      id: string;
+      email: string;
+    }>;
+    const target = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    if (!target) {
+      throw new Error(`User ${email} not found — cannot add to Admin group`);
+    }
+
+    const response = await this.request.post(
+      `${this.baseUrl}/manage/admin/user-group/${adminGroup.id}/add-users`,
+      { data: { user_ids: [target.id] } }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to add ${email} to Admin group`
+    );
+    this.log(`Added ${email} to Admin group`);
   }
 
   async deleteMcpServer(serverId: number): Promise<boolean> {
