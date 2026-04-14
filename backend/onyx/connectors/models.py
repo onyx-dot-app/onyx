@@ -145,7 +145,6 @@ class BasicExpertInfo(BaseModel):
 
     @classmethod
     def from_dict(cls, model_dict: dict[str, Any]) -> "BasicExpertInfo":
-
         first_name = cast(str, model_dict.get("FirstName"))
         last_name = cast(str, model_dict.get("LastName"))
         email = cast(str, model_dict.get("Email"))

@@ -28,14 +28,14 @@ PRUNING_ENUMERATION_DURATION = Histogram(
     "onyx_pruning_enumeration_duration_seconds",
     "Duration of document ID enumeration from the source connector during pruning",
     ["connector_type"],
-    buckets=[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600],
+    buckets=[5, 60, 600, 1800, 3600, 10800, 21600],
 )
 
 PRUNING_DIFF_DURATION = Histogram(
     "onyx_pruning_diff_duration_seconds",
     "Duration of diff computation and subtask dispatch during pruning",
     ["connector_type"],
-    buckets=[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600],
+    buckets=[0.1, 0.25, 0.5, 1, 2, 5, 15, 30, 60],
 )
 
 PRUNING_RATE_LIMIT_ERRORS = Counter(

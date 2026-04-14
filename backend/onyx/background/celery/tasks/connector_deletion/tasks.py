@@ -59,6 +59,11 @@ from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.metrics.deletion_metrics import inc_deletion_blocked
+from onyx.server.metrics.deletion_metrics import inc_deletion_completed
+from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
+from onyx.server.metrics.deletion_metrics import inc_deletion_started
+from onyx.server.metrics.deletion_metrics import observe_deletion_taskset_duration
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -300,6 +305,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 recent_index_attempts
                 and recent_index_attempts[0].status == IndexingStatus.IN_PROGRESS
             ):
+                inc_deletion_blocked(tenant_id, "indexing")
                 raise TaskDependencyError(
                     "Connector deletion - Delayed (indexing in progress): "
                     f"cc_pair={cc_pair_id} "
@@ -307,11 +313,13 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 )
 
         if redis_connector.prune.fenced:
+            inc_deletion_blocked(tenant_id, "pruning")
             raise TaskDependencyError(
                 f"Connector deletion - Delayed (pruning in progress): cc_pair={cc_pair_id}"
             )
 
         if redis_connector.permissions.fenced:
+            inc_deletion_blocked(tenant_id, "permissions")
             raise TaskDependencyError(
                 f"Connector deletion - Delayed (permissions in progress): cc_pair={cc_pair_id}"
             )
@@ -359,6 +367,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
         # set this only after all tasks have been added
         fence_payload.num_tasks = tasks_generated
         redis_connector.delete.set_fence(fence_payload)
+        inc_deletion_started(tenant_id)
 
     return tasks_generated
 
@@ -527,6 +536,12 @@ def monitor_connector_deletion_taskset(
                 num_docs_synced=fence_data.num_tasks,
             )
 
+            duration = (
+                datetime.now(timezone.utc) - fence_data.submitted
+            ).total_seconds()
+            observe_deletion_taskset_duration(tenant_id, "success", duration)
+            inc_deletion_completed(tenant_id, "success")
+
         except Exception as e:
             db_session.rollback()
             stack_trace = traceback.format_exc()
@@ -545,6 +560,11 @@ def monitor_connector_deletion_taskset(
                 f"Connector deletion exceptioned: "
                 f"cc_pair={cc_pair_id} connector={connector_id_to_delete} credential={credential_id_to_delete}"
             )
+            duration = (
+                datetime.now(timezone.utc) - fence_data.submitted
+            ).total_seconds()
+            observe_deletion_taskset_duration(tenant_id, "failure", duration)
+            inc_deletion_completed(tenant_id, "failure")
             raise e
 
     task_logger.info(
@@ -721,5 +741,6 @@ def validate_connector_deletion_fence(
         f"fence={fence_key}"
     )
 
+    inc_deletion_fence_reset(tenant_id)
     redis_connector.delete.reset()
     return
