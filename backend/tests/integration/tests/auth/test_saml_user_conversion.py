@@ -73,7 +73,7 @@ def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
     user_data = _simulate_saml_login(test_user_email, admin_user)
 
     # Verify the response indicates the role changed to BASIC
-    assert user_data["role"] == UserRole.BASIC.value
+    assert user_data["account_type"] == AccountType.STANDARD.value
 
     # Verify user role was changed in the database
     assert UserManager.is_role(test_user, UserRole.BASIC)
@@ -100,7 +100,7 @@ def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
     user_data = _simulate_saml_login(slack_user_email, admin_user)
 
     # Verify the response indicates the role changed to BASIC
-    assert user_data["role"] == UserRole.BASIC.value
+    assert user_data["account_type"] == AccountType.STANDARD.value
 
     # Verify the user's role was changed in the database
     assert UserManager.is_role(slack_user, UserRole.BASIC)
@@ -144,9 +144,6 @@ def test_saml_user_conversion_sets_account_type_and_group(
         user_data["account_type"] == AccountType.STANDARD.value
     ), f"Expected account_type='{AccountType.STANDARD.value}', got '{user_data['account_type']}'"
 
-    # Verify role is BASIC after conversion
-    assert user_data["role"] == UserRole.BASIC.value
-
     # Verify the user was assigned to the Basic default group
     assert test_email in _get_basic_group_member_emails(
         admin_user
@@ -176,8 +173,7 @@ def test_saml_normal_signin_assigns_group(
     new_email = "new_saml_user@example.com"
     user_data = _simulate_saml_login(new_email, admin_user)
 
-    # Verify role and account_type
-    assert user_data["role"] == UserRole.BASIC.value
+    # Verify account_type
     assert user_data["account_type"] == AccountType.STANDARD.value
 
     # Verify user is in the Basic default group
@@ -216,7 +212,7 @@ def test_saml_user_conversion_restores_group_membership(
     assert ext_email not in _get_basic_group_member_emails(admin_user)
 
     user_data = _simulate_saml_login(ext_email, admin_user)
-    assert user_data["role"] == UserRole.BASIC.value
+    assert user_data["account_type"] == AccountType.STANDARD.value
     assert ext_email in _get_basic_group_member_emails(
         admin_user
     ), "EXT_PERM_USER should be back in Basic group after SAML conversion"
@@ -234,7 +230,7 @@ def test_saml_user_conversion_restores_group_membership(
     assert slack_email not in _get_basic_group_member_emails(admin_user)
 
     user_data = _simulate_saml_login(slack_email, admin_user)
-    assert user_data["role"] == UserRole.BASIC.value
+    assert user_data["account_type"] == AccountType.STANDARD.value
     assert slack_email in _get_basic_group_member_emails(
         admin_user
     ), "SLACK_USER should be back in Basic group after SAML conversion"
@@ -321,11 +317,10 @@ def test_saml_slack_user_conversion_sets_account_type_and_group(
     # SAML login
     user_data = _simulate_saml_login(test_email, admin_user)
 
-    # Verify account_type and role
+    # Verify account_type
     assert (
         user_data["account_type"] == AccountType.STANDARD.value
     ), f"Expected STANDARD, got {user_data['account_type']}"
-    assert user_data["role"] == UserRole.BASIC.value
 
     # Verify Basic group membership (implies 'basic' permission)
     assert test_email in _get_basic_group_member_emails(

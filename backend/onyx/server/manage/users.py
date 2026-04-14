@@ -170,7 +170,13 @@ async def test_upsert_user(
     user = await fetch_ee_implementation_or_noop(
         "onyx.server.saml", "upsert_saml_user", None
     )(email=request.email)
-    return FullUserSnapshot.from_user_model(user) if user else None
+    return (
+        FullUserSnapshot.from_user_model(
+            user, effective_permissions=user.effective_permissions or []
+        )
+        if user
+        else None
+    )
 
 
 @router.get("/manage/users/accepted", tags=PUBLIC_API_TAGS)
@@ -233,6 +239,7 @@ def list_accepted_users(
                     for gid, gname in groups_by_user.get(user.id, [])
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
+                effective_permissions=user.effective_permissions or [],
             )
             for user in filtered_accepted_users
         ],
@@ -278,6 +285,7 @@ def list_all_accepted_users(
                 for gid, gname in groups_by_user.get(user.id, [])
             ],
             is_scim_synced=user.id in scim_synced_ids,
+            effective_permissions=user.effective_permissions or [],
         )
         for user in users
     ]
@@ -349,10 +357,16 @@ def list_all_users(
     if accepted_page is None or invited_page is None or slack_users_page is None:
         return AllUsersResponse(
             accepted=[
-                FullUserSnapshot.from_user_model(user) for user in accepted_users
+                FullUserSnapshot.from_user_model(
+                    user, effective_permissions=user.effective_permissions or []
+                )
+                for user in accepted_users
             ],
             slack_users=[
-                FullUserSnapshot.from_user_model(user) for user in slack_users
+                FullUserSnapshot.from_user_model(
+                    user, effective_permissions=user.effective_permissions or []
+                )
+                for user in slack_users
             ],
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
@@ -362,10 +376,18 @@ def list_all_users(
 
     # Otherwise, return paginated results
     return AllUsersResponse(
-        accepted=[FullUserSnapshot.from_user_model(user) for user in accepted_users][
-            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
-        ],
-        slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
+        accepted=[
+            FullUserSnapshot.from_user_model(
+                user, effective_permissions=user.effective_permissions or []
+            )
+            for user in accepted_users
+        ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
+        slack_users=[
+            FullUserSnapshot.from_user_model(
+                user, effective_permissions=user.effective_permissions or []
+            )
+            for user in slack_users
+        ][
             slack_users_page
             * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
@@ -400,7 +422,7 @@ def download_users_csv(
         writer.writerow(
             [
                 user.email,
-                user.role.value if user.role else "",
+                user.account_type.value if user.account_type else "",
                 "Active" if user.is_active else "Inactive",
             ]
         )

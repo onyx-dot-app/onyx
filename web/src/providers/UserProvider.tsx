@@ -9,12 +9,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import {
-  User,
-  UserPersonalization,
-  UserRole,
-  ThemePreference,
-} from "@/lib/types";
+import { User, UserPersonalization, ThemePreference } from "@/lib/types";
 import { hasAnyAdminPermission } from "@/lib/permissions";
 import { usePostHog } from "posthog-js/react";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -32,7 +27,6 @@ const EMPTY_PERMISSIONS: string[] = [];
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
-  isCurator: boolean;
   hasAdminAccess: boolean;
   permissions: string[];
   refreshUser: () => Promise<void>;
@@ -523,11 +517,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserDefaultAppMode,
         updateUserVoiceSettings,
         toggleAgentPinnedStatus,
-        isAdmin: upToDateUser?.role === UserRole.ADMIN,
-        // Curator status applies for either global or basic curator
-        isCurator:
-          upToDateUser?.role === UserRole.CURATOR ||
-          upToDateUser?.role === UserRole.GLOBAL_CURATOR,
+        isAdmin: (
+          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+        ).includes("admin"),
         hasAdminAccess: hasAnyAdminPermission(
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ),

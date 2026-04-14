@@ -1,10 +1,10 @@
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FormikProps } from "formik";
-import { UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import { GroupsMultiSelect } from "./GroupsMultiSelect";
 
 export type IsPublicGroupSelectorFormType = {
@@ -30,13 +30,13 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   smallLabels?: boolean;
 }) => {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user, isCurator } = useUser();
+  const { isAdmin, user, permissions } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const [shouldHideContent, setShouldHideContent] = useState(false);
 
   useEffect(() => {
     if (user && userGroups && isPaidEnterpriseFeaturesEnabled) {
-      const isUserAdmin = user.role === UserRole.ADMIN;
+      const isUserAdmin = isAdmin;
       if (!isUserAdmin && userGroups.length > 0) {
         formikProps.setFieldValue("is_public", false);
       }
@@ -118,7 +118,10 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             ? `This ${objectName} will be visible/accessible by the groups selected below`
             : `Curators must select one or more groups to give access to this ${objectName}`
         }
-        disabled={formikProps.values.is_public && !isCurator}
+        disabled={
+          formikProps.values.is_public &&
+          !(!isAdmin && hasPermission(permissions, "manage:connectors"))
+        }
         disabledMessage={`This ${objectName} is public and available to all users.`}
       />
     </div>

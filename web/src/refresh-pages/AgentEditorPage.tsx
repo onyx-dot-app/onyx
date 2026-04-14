@@ -95,6 +95,7 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
@@ -459,8 +460,8 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin, isCurator } = useUser();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const { isAdmin, permissions } = useUser();
+  const canUpdateFeaturedStatus = hasPermission(permissions, "manage:agents");
   const vectorDbEnabled = useVectorDbEnabled();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 

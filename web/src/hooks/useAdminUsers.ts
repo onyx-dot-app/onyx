@@ -6,7 +6,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { AccountType, UserStatus } from "@/lib/types";
-import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
+import type { InvitedUserSnapshot } from "@/lib/types";
 import type {
   UserRow,
   UserGroupInfo,
@@ -19,8 +19,8 @@ import type {
 interface FullUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   account_type: AccountType;
+  effective_permissions: string[];
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
@@ -38,7 +38,7 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
@@ -56,7 +56,7 @@ function emailToUserRow(
   return {
     id: null,
     email,
-    role: null,
+    account_type: null,
     status,
     is_active: false,
     is_scim_synced: false,

@@ -21,6 +21,7 @@ import {
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
@@ -302,7 +303,7 @@ export default function ActionsPopover({
     setForcedToolIds([]);
   }, [selectedAgent.id, setForcedToolIds]);
 
-  const { isAdmin, isCurator } = useUser();
+  const { isAdmin, permissions } = useUser();
   const vectorDbEnabled = useVectorDbEnabled();
 
   const { tools: availableTools } = useAvailableTools();
@@ -474,16 +475,18 @@ export default function ActionsPopover({
 
     // Advertise to admin/curator users that they can connect an internal search tool
     // even if it's not available or has no connectors
-    if (tool.in_code_tool_id === SEARCH_TOOL_ID && (isAdmin || isCurator)) {
+    if (
+      tool.in_code_tool_id === SEARCH_TOOL_ID &&
+      hasPermission(permissions, "manage:connectors")
+    ) {
       return true;
     }
 
-    // Filter out internal search tool for non-admin/curator users when there are no connectors
+    // Filter out internal search tool for users without connector management when there are no connectors
     if (
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
       hasNoConnectors &&
-      !isAdmin &&
-      !isCurator
+      !hasPermission(permissions, "manage:connectors")
     ) {
       return false;
     }
@@ -908,7 +911,10 @@ export default function ActionsPopover({
             const isToolAvailable = availableToolIdSet.has(tool.id);
             const isUnavailable =
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
-            const canAdminConfigure = isAdmin || isCurator;
+            const canAdminConfigure = hasPermission(
+              permissions,
+              "manage:agents"
+            );
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
                 ? getAdminConfigureInfo(tool)
@@ -989,7 +995,7 @@ export default function ActionsPopover({
 
         null,
 
-        (isAdmin || isCurator) && (
+        hasPermission(permissions, "manage:agents") && (
           <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
             More Actions
           </LineItem>

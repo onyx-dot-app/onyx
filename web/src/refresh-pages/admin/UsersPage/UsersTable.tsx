@@ -8,7 +8,7 @@ import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
+import { AccountType, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -101,7 +101,7 @@ function buildColumns(onMutate: () => void) {
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
     }),
-    tc.column("role", {
+    tc.column("account_type", {
       header: "Account Type",
       weight: 16,
       cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
@@ -142,7 +142,9 @@ export default function UsersTable({
   statusCounts,
 }: UsersTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [selectedAccountTypes, setSelectedAccountTypes] = useState<
+    AccountType[]
+  >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
   const { data: allGroups } = useGroups();
@@ -165,9 +167,11 @@ export default function UsersTable({
   const filteredUsers = useMemo(() => {
     let result = users;
 
-    if (selectedRoles.length > 0) {
+    if (selectedAccountTypes.length > 0) {
       result = result.filter(
-        (u) => u.role !== null && selectedRoles.includes(u.role)
+        (u) =>
+          u.account_type !== null &&
+          selectedAccountTypes.includes(u.account_type)
       );
     }
 
@@ -182,7 +186,7 @@ export default function UsersTable({
     }
 
     return result;
-  }, [users, selectedRoles, selectedStatuses, selectedGroups]);
+  }, [users, selectedAccountTypes, selectedStatuses, selectedGroups]);
 
   if (isLoading) {
     return (
@@ -209,14 +213,14 @@ export default function UsersTable({
         leftSearchIcon
       />
       <UserFilters
-        selectedRoles={selectedRoles}
-        onRolesChange={setSelectedRoles}
+        selectedAccountTypes={selectedAccountTypes}
+        onAccountTypesChange={setSelectedAccountTypes}
         selectedGroups={selectedGroups}
         onGroupsChange={setSelectedGroups}
         groups={groupOptions}
         selectedStatuses={selectedStatuses}
         onStatusesChange={onStatusesChange}
-        roleCounts={roleCounts}
+        accountTypeCounts={roleCounts}
         statusCounts={statusCounts}
       />
       <Table

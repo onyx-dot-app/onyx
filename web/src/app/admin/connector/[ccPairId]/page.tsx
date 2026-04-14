@@ -64,8 +64,8 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -91,7 +91,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, permissions } = useUser();
 
   const {
     data: ccPair,
@@ -179,7 +179,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const canManageInlineFileConnectorFiles =
     ccPair?.connector.source === "file" &&
     (ccPair.is_editable_for_current_user ||
-      (user?.role === UserRole.GLOBAL_CURATOR &&
+      (hasPermission(permissions, "manage:connectors") &&
+        !hasPermission(permissions, "admin") &&
         ccPair.access_type === "public"));
 
   const isResolvingErrors =

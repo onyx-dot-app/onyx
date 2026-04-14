@@ -13,10 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
 from onyx.db.enums import AccessType
+from onyx.db.enums import Permission
 from onyx.db.models import ChatMessageFeedback
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
@@ -43,7 +45,7 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    if has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return stmt
 
     stmt = stmt.distinct()

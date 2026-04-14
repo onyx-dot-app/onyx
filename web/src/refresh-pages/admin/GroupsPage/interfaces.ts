@@ -1,11 +1,11 @@
-import type { UserRole } from "@/lib/types";
+import type { AccountType } from "@/lib/types";
 import type { UserRow } from "@/refresh-pages/admin/UsersPage/interfaces";
 
 export interface ApiKeyDescriptor {
   api_key_id: number;
   api_key_display: string;
   api_key_name: string | null;
-  api_key_role: UserRole;
+  api_key_account_type: AccountType;
   user_id: string;
 }
 

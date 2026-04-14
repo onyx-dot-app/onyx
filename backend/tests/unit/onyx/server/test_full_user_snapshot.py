@@ -2,7 +2,6 @@ import datetime
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import UserGroupInfo
@@ -16,7 +15,6 @@ def _mock_user(
     user = MagicMock()
     user.id = uuid4()
     user.email = "test@example.com"
-    user.role = UserRole.BASIC
     user.is_active = True
     user.password_configured = True
     user.personal_name = personal_name
@@ -54,3 +52,19 @@ def test_from_user_model_personal_name_none() -> None:
     snapshot = FullUserSnapshot.from_user_model(user)
 
     assert snapshot.personal_name is None
+
+
+def test_from_user_model_effective_permissions() -> None:
+    user = _mock_user()
+    permissions = ["basic", "manage:connectors"]
+    snapshot = FullUserSnapshot.from_user_model(user, effective_permissions=permissions)
+
+    assert snapshot.effective_permissions == permissions
+    assert snapshot.account_type == AccountType.STANDARD
+
+
+def test_from_user_model_defaults_effective_permissions_to_empty() -> None:
+    user = _mock_user()
+    snapshot = FullUserSnapshot.from_user_model(user)
+
+    assert snapshot.effective_permissions == []

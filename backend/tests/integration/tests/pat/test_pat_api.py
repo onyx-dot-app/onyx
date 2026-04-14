@@ -445,30 +445,34 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
         f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) to /manage/admin/connector"
     )
 
-    # Verify PATs authenticate with correct identity and role
-    print("\n[Test] Verifying PATs authenticate as correct users with correct roles...")
+    # Verify PATs authenticate with correct identity and account_type/permissions
+    print(
+        "\n[Test] Verifying PATs authenticate as correct users with correct account info..."
+    )
 
     admin_me = PATManager.authenticate(admin_pat.token)
     assert admin_me.status_code == 200
     assert admin_me.json()["email"] == admin_user.email
-    assert admin_me.json()["role"] == UserRole.ADMIN.value
+    assert "FULL_ADMIN_PANEL_ACCESS" in admin_me.json()["effective_permissions"]
 
     basic_me = PATManager.authenticate(basic_pat.token)
     assert basic_me.status_code == 200
     assert basic_me.json()["email"] == basic_user.email
-    assert basic_me.json()["role"] == UserRole.BASIC.value
+    assert "FULL_ADMIN_PANEL_ACCESS" not in basic_me.json().get(
+        "effective_permissions", []
+    )
 
     curator_me = PATManager.authenticate(curator_pat.token)
     assert curator_me.status_code == 200
     assert curator_me.json()["email"] == curator_user.email
-    assert curator_me.json()["role"] == UserRole.CURATOR.value
+    assert "manage:connectors" in curator_me.json()["effective_permissions"]
 
     global_curator_me = PATManager.authenticate(global_curator_pat.token)
     assert global_curator_me.status_code == 200
     assert global_curator_me.json()["email"] == global_curator_user.email
-    assert global_curator_me.json()["role"] == UserRole.GLOBAL_CURATOR.value
+    assert "manage:user_groups" in global_curator_me.json()["effective_permissions"]
 
-    print("[✓] All PATs authenticate with correct user identity and role")
+    print("[✓] All PATs authenticate with correct user identity and permissions")
 
     # Verify all PATs can access basic endpoints
     print("\n[Test] All PATs can access basic endpoints...")
@@ -500,4 +504,4 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     )
     print("  - Basic PAT: Denied access to admin and management endpoints")
     print("  - All PATs: Can access basic endpoints (/persona, /me, etc.)")
-    print("  - All PATs: Authenticate with correct user identity and role")
+    print("  - All PATs: Authenticate with correct user identity and permissions")

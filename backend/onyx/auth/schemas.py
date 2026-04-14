@@ -38,7 +38,7 @@ class UserRole(str, Enum):
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
-    role: UserRole
+    account_type: AccountType
 
 
 class UserCreate(schemas.BaseUserCreate):

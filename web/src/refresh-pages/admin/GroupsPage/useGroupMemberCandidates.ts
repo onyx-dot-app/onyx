@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { AccountType, UserStatus, type UserRole } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import type {
   UserGroupInfo,
   UserRow,
@@ -19,8 +19,8 @@ import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 interface FullUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   account_type: AccountType;
+  effective_permissions: string[];
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
@@ -43,7 +43,7 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
@@ -61,7 +61,7 @@ function serviceAccountToMemberRow(
   return {
     id: snapshot.id,
     email: "Service Account",
-    role: apiKey?.api_key_role ?? snapshot.role,
+    account_type: AccountType.SERVICE_ACCOUNT,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,

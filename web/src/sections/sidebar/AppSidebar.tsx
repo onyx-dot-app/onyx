@@ -480,7 +480,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     ]
   );
 
-  const { isAdmin, isCurator, hasAdminAccess, permissions, user } = useUser();
+  const { isAdmin, hasAdminAccess, permissions, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const defaultAppMode =

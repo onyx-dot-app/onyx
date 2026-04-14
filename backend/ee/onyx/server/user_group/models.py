@@ -36,7 +36,7 @@ class UserGroup(BaseModel):
                     is_active=user.is_active,
                     is_superuser=user.is_superuser,
                     is_verified=user.is_verified,
-                    role=user.role,
+                    account_type=user.account_type,
                     preferences=UserPreferences(
                         default_model=user.default_model,
                         chosen_assistants=user.chosen_assistants,

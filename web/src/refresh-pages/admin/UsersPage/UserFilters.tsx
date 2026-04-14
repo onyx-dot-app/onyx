@@ -5,7 +5,8 @@ import {
   SvgCheck,
   SvgSlack,
   SvgUser,
-  SvgUserManage,
+  SvgGlobe,
+  SvgKey,
   SvgUsers,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -16,9 +17,9 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import {
-  UserRole,
+  AccountType,
+  ACCOUNT_TYPE_LABELS,
   UserStatus,
-  USER_ROLE_LABELS,
   USER_STATUS_LABELS,
 } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -28,16 +29,15 @@ import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 // Constants
 // ---------------------------------------------------------------------------
 
-const VISIBLE_FILTER_ROLES: UserRole[] = [
-  UserRole.ADMIN,
-  UserRole.GLOBAL_CURATOR,
-  UserRole.BASIC,
-  UserRole.SLACK_USER,
+const FILTERABLE_ACCOUNT_TYPES: [AccountType, string][] = [
+  [AccountType.STANDARD, ACCOUNT_TYPE_LABELS[AccountType.STANDARD]],
+  [AccountType.BOT, ACCOUNT_TYPE_LABELS[AccountType.BOT]],
+  [AccountType.EXT_PERM_USER, ACCOUNT_TYPE_LABELS[AccountType.EXT_PERM_USER]],
+  [
+    AccountType.SERVICE_ACCOUNT,
+    ACCOUNT_TYPE_LABELS[AccountType.SERVICE_ACCOUNT],
+  ],
 ];
-
-const FILTERABLE_ROLES = VISIBLE_FILTER_ROLES.map(
-  (role) => [role, USER_ROLE_LABELS[role]] as [UserRole, string]
-);
 
 const FILTERABLE_STATUSES = (
   Object.entries(USER_STATUS_LABELS) as [UserStatus, string][]
@@ -45,10 +45,12 @@ const FILTERABLE_STATUSES = (
   ([value]) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
 );
 
-const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
-  [UserRole.ADMIN]: SvgUserManage,
-  [UserRole.SLACK_USER]: SvgSlack,
-};
+const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
+  {
+    [AccountType.BOT]: SvgSlack,
+    [AccountType.EXT_PERM_USER]: SvgGlobe,
+    [AccountType.SERVICE_ACCOUNT]: SvgKey,
+  };
 
 /** Map UserStatus enum values to the keys returned by the counts endpoint. */
 const STATUS_COUNT_KEY: Record<UserStatus, keyof StatusCountMap> = {
@@ -75,39 +77,39 @@ function CountBadge({ count }: { count: number | undefined }) {
 // ---------------------------------------------------------------------------
 
 interface UserFiltersProps {
-  selectedRoles: UserRole[];
-  onRolesChange: (roles: UserRole[]) => void;
+  selectedAccountTypes: AccountType[];
+  onAccountTypesChange: (types: AccountType[]) => void;
   selectedGroups: number[];
   onGroupsChange: (groupIds: number[]) => void;
   groups: GroupOption[];
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
 }
 
 export default function UserFilters({
-  selectedRoles,
-  onRolesChange,
+  selectedAccountTypes,
+  onAccountTypesChange,
   selectedGroups,
   onGroupsChange,
   groups,
   selectedStatuses,
   onStatusesChange,
-  roleCounts,
+  accountTypeCounts,
   statusCounts,
 }: UserFiltersProps) {
-  const hasRoleFilter = selectedRoles.length > 0;
+  const hasTypeFilter = selectedAccountTypes.length > 0;
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
   const [groupSearch, setGroupSearch] = useState("");
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
 
-  const toggleRole = (role: UserRole) => {
-    if (selectedRoles.includes(role)) {
-      onRolesChange(selectedRoles.filter((r) => r !== role));
+  const toggleAccountType = (type: AccountType) => {
+    if (selectedAccountTypes.includes(type)) {
+      onAccountTypesChange(selectedAccountTypes.filter((t) => t !== type));
     } else {
-      onRolesChange([...selectedRoles, role]);
+      onAccountTypesChange([...selectedAccountTypes, type]);
     }
   };
 
@@ -127,12 +129,16 @@ export default function UserFilters({
     }
   };
 
-  const roleLabel = hasRoleFilter
-    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
+  const typeLabel = hasTypeFilter
+    ? FILTERABLE_ACCOUNT_TYPES.filter(([type]) =>
+        selectedAccountTypes.includes(type)
+      )
         .map(([, label]) => label)
         .slice(0, 2)
         .join(", ") +
-      (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
+      (selectedAccountTypes.length > 2
+        ? `, +${selectedAccountTypes.length - 2}`
+        : "")
     : "All Account Types";
 
   const groupLabel = hasGroupFilter
@@ -162,39 +168,39 @@ export default function UserFilters({
 
   return (
     <div className="flex gap-2">
-      {/* Role filter */}
+      {/* Account type filter */}
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by role"
+            aria-label="Filter by account type"
             icon={SvgUsers}
-            active={hasRoleFilter}
-            onClear={() => onRolesChange([])}
+            active={hasTypeFilter}
+            onClear={() => onAccountTypesChange([])}
           >
-            {roleLabel}
+            {typeLabel}
           </FilterButton>
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
             <LineItem
-              icon={!hasRoleFilter ? SvgCheck : SvgUsers}
-              selected={!hasRoleFilter}
-              emphasized={!hasRoleFilter}
-              onClick={() => onRolesChange([])}
+              icon={!hasTypeFilter ? SvgCheck : SvgUsers}
+              selected={!hasTypeFilter}
+              emphasized={!hasTypeFilter}
+              onClick={() => onAccountTypesChange([])}
             >
               All Account Types
             </LineItem>
-            {FILTERABLE_ROLES.map(([role, label]) => {
-              const isSelected = selectedRoles.includes(role);
-              const roleIcon = ROLE_ICONS[role] ?? SvgUser;
+            {FILTERABLE_ACCOUNT_TYPES.map(([type, label]) => {
+              const isSelected = selectedAccountTypes.includes(type);
+              const typeIcon = ACCOUNT_TYPE_ICONS[type] ?? SvgUser;
               return (
                 <LineItem
-                  key={role}
-                  icon={isSelected ? SvgCheck : roleIcon}
+                  key={type}
+                  icon={isSelected ? SvgCheck : typeIcon}
                   selected={isSelected}
                   emphasized={isSelected}
-                  onClick={() => toggleRole(role)}
-                  rightChildren={<CountBadge count={roleCounts[role]} />}
+                  onClick={() => toggleAccountType(type)}
+                  rightChildren={<CountBadge count={accountTypeCounts[type]} />}
                 >
                   {label}
                 </LineItem>

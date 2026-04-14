@@ -6,7 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 
@@ -41,8 +40,8 @@ class UserGroupInfo(BaseModel):
 class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
-    role: UserRole
     account_type: AccountType
+    effective_permissions: list[str] = []
     is_active: bool
     password_configured: bool
     personal_name: str | None
@@ -57,12 +56,13 @@ class FullUserSnapshot(BaseModel):
         user: User,
         groups: list[UserGroupInfo] | None = None,
         is_scim_synced: bool = False,
+        effective_permissions: list[str] | None = None,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
             email=user.email,
-            role=user.role,
             account_type=user.account_type,
+            effective_permissions=effective_permissions or [],
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,

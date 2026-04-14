@@ -46,7 +46,7 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
-            api_key_role=api_key.user.role,
+            api_key_account_type=api_key.user.account_type,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
@@ -122,7 +122,7 @@ def insert_api_key(
 
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_user_row.role,
+        api_key_account_type=api_key_user_row.account_type,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
@@ -179,7 +179,7 @@ def update_api_key(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
-        api_key_role=api_key_user.role,
+        api_key_account_type=api_key_user.account_type,
         user_id=existing_api_key.user_id,
     )
 
@@ -209,7 +209,7 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
-        api_key_role=api_key_user.role,
+        api_key_account_type=api_key_user.account_type,
         user_id=existing_api_key.user_id,
     )
 

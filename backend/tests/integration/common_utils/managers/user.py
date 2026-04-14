@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Any
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -24,6 +25,34 @@ DEFAULT_PASSWORD = "TestPassword123!"
 
 def build_email(name: str) -> str:
     return f"{name}@example.com"
+
+
+def _infer_role_from_me_response(me_json: dict[str, Any]) -> UserRole:
+    """Infer the UserRole from the /me endpoint response.
+
+    The /me endpoint returns account_type and effective_permissions instead of
+    role. We map these back to UserRole for test state tracking.
+    """
+    account_type = me_json.get("account_type", "STANDARD")
+    permissions: list[str] = me_json.get("effective_permissions", [])
+
+    # Non-standard account types map directly to roles
+    if account_type == "BOT":
+        return UserRole.SLACK_USER
+    if account_type == "EXT_PERM_USER":
+        return UserRole.EXT_PERM_USER
+    if account_type == "ANONYMOUS":
+        return UserRole.LIMITED
+
+    # For STANDARD/SERVICE_ACCOUNT, infer from permissions
+    if "FULL_ADMIN_PANEL_ACCESS" in permissions:
+        return UserRole.ADMIN
+    if "manage:user_groups" in permissions:
+        # Global curators have manage:user_groups but not FULL_ADMIN_PANEL_ACCESS
+        return UserRole.GLOBAL_CURATOR
+    if "manage:connectors" in permissions:
+        return UserRole.CURATOR
+    return UserRole.BASIC
 
 
 class UserManager:
@@ -112,7 +141,7 @@ class UserManager:
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}
 
-        # Get user role from /me endpoint
+        # Get user info from /me endpoint
         me_response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=test_user.headers,
@@ -121,7 +150,7 @@ class UserManager:
         me_response.raise_for_status()
         me_response_json = me_response.json()
         test_user.id = me_response_json["id"]
-        role = UserRole(me_response_json["role"])
+        role = _infer_role_from_me_response(me_response_json)
         test_user.role = role
 
         return test_user
@@ -153,12 +182,8 @@ class UserManager:
         else:
             response.raise_for_status()
 
-        role_from_response = response.json().get("role", None)
-
-        if role_from_response is None:
-            return user_to_verify.role == target_role
-
-        return target_role == UserRole(role_from_response)
+        inferred_role = _infer_role_from_me_response(response.json())
+        return target_role == inferred_role
 
     @staticmethod
     def set_role(

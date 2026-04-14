@@ -60,6 +60,18 @@ export enum AccountType {
   ANONYMOUS = "ANONYMOUS",
 }
 
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  [AccountType.STANDARD]: "Standard",
+  [AccountType.BOT]: "Slack Bot",
+  [AccountType.EXT_PERM_USER]: "External User",
+  [AccountType.SERVICE_ACCOUNT]: "Service Account",
+  [AccountType.ANONYMOUS]: "Anonymous",
+};
+
+/**
+ * @deprecated Use AccountType + effective_permissions instead.
+ * Kept only for write-path compatibility (e.g. setUserRole API).
+ */
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -70,6 +82,7 @@ export enum UserRole {
   SLACK_USER = "slack_user",
 }
 
+/** @deprecated Use ACCOUNT_TYPE_LABELS instead for display. Kept for write-path only. */
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.BASIC]: "Basic",
   [UserRole.ADMIN]: "Admin",
@@ -94,23 +107,13 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.REQUESTED]: "Request to Join",
 };
 
-export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
-  [UserRole.BASIC]: "Basic users can't perform any admin actions",
-  [UserRole.ADMIN]: "Admin users can perform all admin actions",
-  [UserRole.GLOBAL_CURATOR]:
-    "Global Curator users can perform admin actions for all groups they are a member of",
-  [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
-  [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
-};
-
 export interface User {
   id: string;
   email: string;
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
-  role: UserRole;
+  account_type: AccountType;
   preferences: UserPreferences;
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
