@@ -7,10 +7,10 @@ import pytest
 import requests
 from requests import HTTPError
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.db.enums import Permission
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import UserInfo
 from onyx.server.models import FullUserSnapshot
@@ -27,32 +27,14 @@ def build_email(name: str) -> str:
     return f"{name}@example.com"
 
 
-def _infer_role_from_me_response(me_json: dict[str, Any]) -> UserRole:
-    """Infer the UserRole from the /me endpoint response.
+def _is_admin_from_me_response(me_json: dict[str, Any]) -> bool:
+    """Determine admin-ness from the /me endpoint response.
 
-    The /me endpoint returns account_type and effective_permissions instead of
-    role. We map these back to UserRole for test state tracking.
+    Admin is now driven by membership in the Admin default group, which
+    surfaces as `FULL_ADMIN_PANEL_ACCESS` in `effective_permissions`.
     """
-    account_type = me_json.get("account_type", "STANDARD")
     permissions: list[str] = me_json.get("effective_permissions", [])
-
-    # Non-standard account types map directly to roles
-    if account_type == "BOT":
-        return UserRole.SLACK_USER
-    if account_type == "EXT_PERM_USER":
-        return UserRole.EXT_PERM_USER
-    if account_type == "ANONYMOUS":
-        return UserRole.LIMITED
-
-    # For STANDARD/SERVICE_ACCOUNT, infer from permissions
-    if "FULL_ADMIN_PANEL_ACCESS" in permissions:
-        return UserRole.ADMIN
-    if "manage:user_groups" in permissions:
-        # Global curators have manage:user_groups but not FULL_ADMIN_PANEL_ACCESS
-        return UserRole.GLOBAL_CURATOR
-    if "manage:connectors" in permissions:
-        return UserRole.CURATOR
-    return UserRole.BASIC
+    return Permission.FULL_ADMIN_PANEL_ACCESS.value in permissions
 
 
 class UserManager:
@@ -60,8 +42,8 @@ class UserManager:
     def get_anonymous_user() -> DATestUser:
         """Get a DATestUser representing the anonymous user.
 
-        Anonymous users are real users in the database with LIMITED role.
-        They don't have login cookies - requests are made with GENERAL_HEADERS.
+        Anonymous users are real users in the database with account_type=ANONYMOUS.
+        They don't have login cookies — requests are made with GENERAL_HEADERS.
         The anonymous_user_enabled setting must be True for these requests to work.
         """
         return DATestUser(
@@ -69,7 +51,7 @@ class UserManager:
             email=ANONYMOUS_USER_EMAIL,
             password="",
             headers=GENERAL_HEADERS,
-            role=UserRole.LIMITED,
+            is_admin=False,
             is_active=True,
         )
 
@@ -103,9 +85,8 @@ class UserManager:
             email=email,
             password=password,
             headers=deepcopy(GENERAL_HEADERS),
-            # fill as basic for now, the `login_as_user` call will
-            # fill it in correctly
-            role=UserRole.BASIC,
+            # `login_as_user` will refresh this from /me after login
+            is_admin=False,
             is_active=True,
         )
         print(f"Created user {test_user.email}")
@@ -150,8 +131,7 @@ class UserManager:
         me_response.raise_for_status()
         me_response_json = me_response.json()
         test_user.id = me_response_json["id"]
-        role = _infer_role_from_me_response(me_response_json)
-        test_user.role = role
+        test_user.is_admin = _is_admin_from_me_response(me_response_json)
 
         return test_user
 
@@ -165,10 +145,8 @@ class UserManager:
         return response.json()
 
     @staticmethod
-    def is_role(
-        user_to_verify: DATestUser,
-        target_role: UserRole,
-    ) -> bool:
+    def is_admin(user_to_verify: DATestUser) -> bool:
+        """Check whether the user currently holds admin privileges."""
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
@@ -178,40 +156,50 @@ class UserManager:
         if user_to_verify.is_active is False:
             with pytest.raises(HTTPError):
                 response.raise_for_status()
-            return user_to_verify.role == target_role
+            return user_to_verify.is_admin
         else:
             response.raise_for_status()
 
-        inferred_role = _infer_role_from_me_response(response.json())
-        return target_role == inferred_role
+        return _is_admin_from_me_response(response.json())
 
     @staticmethod
-    def set_role(
-        user_to_set: DATestUser,
-        target_role: UserRole,
+    def promote_to_admin(
+        user_to_promote: DATestUser,
         user_performing_action: DATestUser,
-        explicit_override: bool = False,
     ) -> DATestUser:
-        response = requests.patch(
-            url=f"{API_SERVER_URL}/manage/set-user-role",
-            json={
-                "user_email": user_to_set.email,
-                "new_role": target_role.value,
-                "explicit_override": explicit_override,
-            },
+        """Promote a user to admin by adding them to the Admin default group."""
+        groups_response = requests.get(
+            url=f"{API_SERVER_URL}/manage/admin/user-group?include_default=true",
+            headers=user_performing_action.headers,
+        )
+        groups_response.raise_for_status()
+        admin_group = next(
+            (
+                g
+                for g in groups_response.json()
+                if g.get("is_default") is True and g.get("name") == "Admin"
+            ),
+            None,
+        )
+        if admin_group is None:
+            raise RuntimeError("Admin default group not found")
+
+        response = requests.post(
+            url=f"{API_SERVER_URL}/manage/admin/user-group/{admin_group['id']}/add-users",
+            json={"user_ids": [user_to_promote.id]},
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
-        new_user_updated_role = DATestUser(
-            id=user_to_set.id,
-            email=user_to_set.email,
-            password=user_to_set.password,
-            headers=user_to_set.headers,
-            role=target_role,
-            is_active=user_to_set.is_active,
+        return DATestUser(
+            id=user_to_promote.id,
+            email=user_to_promote.email,
+            password=user_to_promote.password,
+            headers=user_to_promote.headers,
+            is_admin=True,
+            is_active=user_to_promote.is_active,
+            cookies=user_to_promote.cookies,
         )
-        return new_user_updated_role
 
     # TODO: Add a way to check invited status
     @staticmethod
@@ -250,29 +238,29 @@ class UserManager:
         )
         response.raise_for_status()
 
-        new_user_updated_status = DATestUser(
+        return DATestUser(
             id=user_to_set.id,
             email=user_to_set.email,
             password=user_to_set.password,
             headers=user_to_set.headers,
-            role=user_to_set.role,
+            is_admin=user_to_set.is_admin,
             is_active=target_status,
+            cookies=user_to_set.cookies,
         )
-        return new_user_updated_status
 
     @staticmethod
     def create_test_users(
         user_performing_action: DATestUser,
         user_name_prefix: str,
         count: int,
-        role: UserRole = UserRole.BASIC,
+        as_admin: bool = False,
         is_active: bool | None = None,
     ) -> list[DATestUser]:
         users_list = []
         for i in range(1, count + 1):
             user = UserManager.create(name=f"{user_name_prefix}_{i}")
-            if role != UserRole.BASIC:
-                user = UserManager.set_role(user, role, user_performing_action)
+            if as_admin:
+                user = UserManager.promote_to_admin(user, user_performing_action)
             if is_active is not None:
                 user = UserManager.set_status(user, is_active, user_performing_action)
             users_list.append(user)
@@ -284,7 +272,6 @@ class UserManager:
         page_num: int = 0,
         page_size: int = 10,
         search_query: str | None = None,
-        role_filter: list[UserRole] | None = None,
         is_active_filter: bool | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
         query_params: dict[str, str | list[str] | int] = {
@@ -293,8 +280,6 @@ class UserManager:
         }
         if search_query:
             query_params["q"] = search_query
-        if role_filter:
-            query_params["roles"] = [role.value for role in role_filter]
         if is_active_filter is not None:
             query_params["is_active"] = is_active_filter
 

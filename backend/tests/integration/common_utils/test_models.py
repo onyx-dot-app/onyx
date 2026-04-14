@@ -7,7 +7,6 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.models import SavedSearchDoc
@@ -69,7 +68,7 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
-    role: UserRole
+    is_admin: bool
     is_active: bool
     cookies: dict = {}
 
