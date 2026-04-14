@@ -146,3 +146,39 @@ def test_anonymous_denied(
         401,
         403,
     ), f"Anonymous should be denied on {method} {path}, got {resp.status_code}"
+
+
+def test_basic_user_cannot_add_users_to_admin_group(
+    permission_admin_user: DATestUser,
+    permission_basic_user: DATestUser,
+) -> None:
+    """A basic user calling the MANAGE_USER_GROUPS-protected add-users
+    endpoint on the Admin default group is rejected — the closest-still-alive
+    replacement for the removed "basic cannot promote to GLOBAL_CURATOR"
+    check from the deleted ``test_user_role_permissions.py``."""
+    groups_response = requests.get(
+        f"{API_SERVER_URL}/manage/admin/user-group?include_default=true",
+        headers=permission_admin_user.headers,
+        timeout=30,
+    )
+    groups_response.raise_for_status()
+    admin_group = next(
+        (
+            g
+            for g in groups_response.json()
+            if g.get("is_default") is True and g.get("name") == "Admin"
+        ),
+        None,
+    )
+    assert admin_group is not None, "Admin default group not found"
+
+    resp = requests.post(
+        f"{API_SERVER_URL}/manage/admin/user-group/{admin_group['id']}/add-users",
+        json={"user_ids": [permission_basic_user.id]},
+        headers=permission_basic_user.headers,
+        timeout=30,
+    )
+    assert resp.status_code == 403, (
+        "Basic user should not be able to add users to the Admin group, "
+        f"got {resp.status_code}"
+    )

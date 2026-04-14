@@ -4,15 +4,32 @@ Verifies that when a BOT or EXT_PERM_USER user signs up via email/password:
 - Their account_type is upgraded to STANDARD
 - They are assigned to the Basic default group
 - They gain the correct effective permissions
+
+Non-web users are seeded directly via the internal DB helpers
+(``add_slack_user_if_not_exists`` / ``batch_add_ext_perm_user_if_not_exists``)
+since no admin-facing downgrade API exists any more.
 """
 
 import pytest
 
-from onyx.auth.schemas import UserRole
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
+from onyx.db.users import add_slack_user_if_not_exists
+from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+
+
+def _seed_non_web_user(account_type: AccountType, email: str) -> None:
+    """Seed a BOT or EXT_PERM_USER account directly via the db helpers."""
+    with get_session_with_current_tenant() as db_session:
+        if account_type == AccountType.BOT:
+            add_slack_user_if_not_exists(db_session, email=email)
+        elif account_type == AccountType.EXT_PERM_USER:
+            batch_add_ext_perm_user_if_not_exists(db_session, emails=[email])
+        else:
+            raise ValueError(f"Unsupported seed account_type: {account_type}")
 
 
 def _get_default_group_member_emails(
@@ -27,38 +44,29 @@ def _get_default_group_member_emails(
 
 
 @pytest.mark.parametrize(
-    "target_role",
-    [UserRole.EXT_PERM_USER, UserRole.SLACK_USER],
+    "seeded_account_type",
+    [AccountType.EXT_PERM_USER, AccountType.BOT],
     ids=["ext_perm_user", "slack_user"],
 )
 def test_password_signup_upgrade(
     reset: None,  # noqa: ARG001
-    target_role: UserRole,
+    seeded_account_type: AccountType,
 ) -> None:
-    """When a non-web user signs up via email/password, they should be
-    upgraded to STANDARD account_type and assigned to the Basic default group."""
+    """A non-web user who signs up via password is upgraded to STANDARD and
+    assigned to the Basic default group."""
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
-    test_email = f"{target_role.value}_upgrade@example.com"
-    test_user = UserManager.create(email=test_email)
+    test_email = f"{seeded_account_type.value}_upgrade@example.com"
+    _seed_non_web_user(seeded_account_type, test_email)
 
-    test_user = UserManager.set_role(
-        user_to_set=test_user,
-        target_role=target_role,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
-
-    # Verify user was removed from Basic group after downgrade
+    # Non-web users should not be in the Basic default group before upgrade
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
-    assert (
-        test_email not in basic_emails
-    ), f"{target_role.value} should not be in Basic default group"
+    assert test_email not in basic_emails
 
-    # Re-register with the same email — triggers the password signup upgrade
+    # Register with the same email — triggers the password signup upgrade
     upgraded_user = UserManager.create(email=test_email)
 
-    assert upgraded_user.role == UserRole.BASIC
+    assert not upgraded_user.is_admin
 
     paginated = UserManager.get_user_page(
         user_performing_action=admin_user,
@@ -73,7 +81,6 @@ def test_password_signup_upgrade(
         user_snapshot.account_type == AccountType.STANDARD
     ), f"Expected STANDARD, got {user_snapshot.account_type}"
 
-    # Verify user is now in the Basic default group
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
     assert (
         test_email in basic_emails
@@ -83,51 +90,34 @@ def test_password_signup_upgrade(
 def test_password_signup_upgrade_propagates_permissions(
     reset: None,  # noqa: ARG001
 ) -> None:
-    """When an EXT_PERM_USER or SLACK_USER signs up via password, they should
-    gain the 'basic' permission through the Basic default group assignment."""
+    """A non-web user who signs up via password gains the 'basic' permission
+    through the Basic default group assignment."""
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     # --- EXT_PERM_USER path ---
     ext_email = "ext_perms_check@example.com"
-    ext_user = UserManager.create(email=ext_email)
-
-    initial_perms = UserManager.get_permissions(ext_user)
-    assert "basic" in initial_perms
-
-    ext_user = UserManager.set_role(
-        user_to_set=ext_user,
-        target_role=UserRole.EXT_PERM_USER,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
+    _seed_non_web_user(AccountType.EXT_PERM_USER, ext_email)
 
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
     assert ext_email not in basic_emails
 
     upgraded = UserManager.create(email=ext_email)
-    assert upgraded.role == UserRole.BASIC
+    assert not upgraded.is_admin
 
     perms = UserManager.get_permissions(upgraded)
     assert (
         "basic" in perms
     ), f"Upgraded EXT_PERM_USER should have 'basic' permission, got: {perms}"
 
-    # --- SLACK_USER path ---
+    # --- BOT (Slack) path ---
     slack_email = "slack_perms_check@example.com"
-    slack_user = UserManager.create(email=slack_email)
-
-    slack_user = UserManager.set_role(
-        user_to_set=slack_user,
-        target_role=UserRole.SLACK_USER,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
+    _seed_non_web_user(AccountType.BOT, slack_email)
 
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
     assert slack_email not in basic_emails
 
     upgraded = UserManager.create(email=slack_email)
-    assert upgraded.role == UserRole.BASIC
+    assert not upgraded.is_admin
 
     perms = UserManager.get_permissions(upgraded)
     assert (

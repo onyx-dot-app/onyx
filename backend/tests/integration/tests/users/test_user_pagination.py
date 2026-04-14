@@ -1,167 +1,183 @@
-from onyx.auth.schemas import UserRole
 from onyx.server.models import FullUserSnapshot
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-# Gets a page of users from the db that match the given parameters and then
-# compares that returned page to the list of users passed into the function
-# to verify that the pagination and filtering works as expected.
 def _verify_user_pagination(
     users: list[DATestUser],
     user_performing_action: DATestUser,
     page_size: int = 5,
     search_query: str | None = None,
-    role_filter: list[UserRole] | None = None,
     is_active_filter: bool | None = None,
 ) -> None:
-    retrieved_users: list[FullUserSnapshot] = []
+    """Walk every page and verify:
 
-    for i in range(0, len(users), page_size):
-        paginated_result = UserManager.get_user_page(
-            page_num=i // page_size,
+    - ``total_items`` matches the expected cohort on every page.
+    - Each page has exactly the right length (accounting for a partial
+      last page — the previous implementation asserted ``page_size`` on
+      every page, which hid this bug behind cohort sizes that happened to
+      be multiples of ``page_size``).
+    - No user is returned on more than one page (set-based comparison
+      would have masked cross-page duplicates).
+    - Union across pages matches the expected cohort exactly.
+    """
+    total = len(users)
+    assert total > 0, "helper requires at least one expected user"
+    num_pages = (total + page_size - 1) // page_size
+
+    retrieved_items: list[FullUserSnapshot] = []
+    for page_num in range(num_pages):
+        page = UserManager.get_user_page(
+            page_num=page_num,
             page_size=page_size,
             search_query=search_query,
-            role_filter=role_filter,
             is_active_filter=is_active_filter,
             user_performing_action=user_performing_action,
         )
+        expected_on_page = min(page_size, total - page_num * page_size)
+        assert page.total_items == total
+        assert len(page.items) == expected_on_page, (
+            f"page {page_num} returned {len(page.items)} items, "
+            f"expected {expected_on_page} (total={total}, page_size={page_size})"
+        )
+        retrieved_items.extend(page.items)
 
-        # Verify that the total items is equal to the length of the users list
-        assert paginated_result.total_items == len(users)
-        # Verify that the number of items in the page is equal to the page size
-        assert len(paginated_result.items) == page_size
-        # Add the retrieved users to the list of retrieved users
-        retrieved_users.extend(paginated_result.items)
-
-    # Create a set of all the expected emails
-    all_expected_emails = set([user.email for user in users])
-    # Create a set of all the retrieved emails
-    all_retrieved_emails = set([user.email for user in retrieved_users])
-
-    # Verify that the set of retrieved emails is equal to the set of expected emails
-    assert all_expected_emails == all_retrieved_emails
+    retrieved_emails = [u.email for u in retrieved_items]
+    assert len(retrieved_emails) == len(
+        set(retrieved_emails)
+    ), f"pagination returned duplicate emails across pages: {retrieved_emails}"
+    assert set(retrieved_emails) == {u.email for u in users}
 
 
 def test_user_pagination(reset: None) -> None:  # noqa: ARG001
-    # Create an admin user to perform actions
+    """Verify pagination and search/active filters on the accepted-users
+    endpoint. Cohort sizes are deliberately non-multiples of ``page_size``
+    so the partial-last-page branch is exercised."""
     user_performing_action: DATestUser = UserManager.create(
         name="admin_performing_action"
     )
 
-    # Create 9 admin users
+    # 9 more admins → 10 admin users total (including the performing user).
     admin_users: list[DATestUser] = UserManager.create_test_users(
         user_name_prefix="admin",
         count=9,
-        role=UserRole.ADMIN,
+        as_admin=True,
         user_performing_action=user_performing_action,
     )
-
-    # Add the user_performing_action to the list of admins
     admin_users.append(user_performing_action)
 
-    # Create 20 basic users
     basic_users: list[DATestUser] = UserManager.create_test_users(
         user_name_prefix="basic",
-        count=10,
-        role=UserRole.BASIC,
+        count=7,
         user_performing_action=user_performing_action,
     )
 
-    # Create 10 global curators
-    global_curators: list[DATestUser] = UserManager.create_test_users(
-        user_name_prefix="global_curator",
-        count=10,
-        role=UserRole.GLOBAL_CURATOR,
-        user_performing_action=user_performing_action,
-    )
-
-    # Create 10 inactive admins
-    inactive_admins: list[DATestUser] = UserManager.create_test_users(
-        user_name_prefix="inactive_admin",
-        count=10,
-        role=UserRole.ADMIN,
+    inactive_users: list[DATestUser] = UserManager.create_test_users(
+        user_name_prefix="inactive",
+        count=13,
         is_active=False,
         user_performing_action=user_performing_action,
     )
 
-    # Create 10 global curator users with an email containing "search"
-    searchable_curators: list[DATestUser] = UserManager.create_test_users(
-        user_name_prefix="search_curator",
+    searchable_users: list[DATestUser] = UserManager.create_test_users(
+        user_name_prefix="search_user",
         count=10,
-        role=UserRole.GLOBAL_CURATOR,
         user_performing_action=user_performing_action,
     )
 
-    # Combine all the users lists into the all_users list
     all_users: list[DATestUser] = (
-        admin_users
-        + basic_users
-        + global_curators
-        + inactive_admins
-        + searchable_curators
+        admin_users + basic_users + inactive_users + searchable_users
     )
+    active_users: list[DATestUser] = admin_users + basic_users + searchable_users
     for user in all_users:
-        # Verify that the user's role in the db matches
-        # the role in the user object
-        assert UserManager.is_role(user, user.role)
-        # Verify that the user's status in the db matches
-        # the status in the user object
         assert UserManager.is_status(user, user.is_active)
 
-    # Verify pagination
+    # Full pagination — 40 users, page_size 5 → 8 full pages.
     _verify_user_pagination(
         users=all_users,
         user_performing_action=user_performing_action,
     )
 
-    # Verify filtering by role
+    # Active filter — 27 users, page_size 5 → partial last page of 2.
     _verify_user_pagination(
-        users=admin_users + inactive_admins,
-        role_filter=[UserRole.ADMIN],
-        user_performing_action=user_performing_action,
-    )
-    # Verify filtering by status
-    _verify_user_pagination(
-        users=inactive_admins,
-        is_active_filter=False,
-        user_performing_action=user_performing_action,
-    )
-    # Verify filtering by search query
-    _verify_user_pagination(
-        users=searchable_curators,
-        search_query="search",
+        users=active_users,
+        is_active_filter=True,
         user_performing_action=user_performing_action,
     )
 
-    # Verify filtering by role and status
+    # Inactive filter — 13 users, page_size 5 → partial last page of 3.
     _verify_user_pagination(
-        users=inactive_admins,
-        role_filter=[UserRole.ADMIN],
+        users=inactive_users,
         is_active_filter=False,
         user_performing_action=user_performing_action,
     )
 
-    # Verify filtering by role and search query
+    # Search query (substring match on email).
     _verify_user_pagination(
-        users=searchable_curators,
-        role_filter=[UserRole.GLOBAL_CURATOR],
-        search_query="search",
+        users=searchable_users,
+        search_query="search_user",
         user_performing_action=user_performing_action,
     )
 
-    # Verify filtering by role and status and search query
+    # Combining status and search filters.
     _verify_user_pagination(
-        users=inactive_admins,
-        role_filter=[UserRole.ADMIN],
+        users=inactive_users,
         is_active_filter=False,
-        search_query="inactive_ad",
+        search_query="inactive",
         user_performing_action=user_performing_action,
     )
 
-    # Verify filtering by multiple roles (admin and global curator)
-    _verify_user_pagination(
-        users=admin_users + global_curators + inactive_admins + searchable_curators,
-        role_filter=[UserRole.ADMIN, UserRole.GLOBAL_CURATOR],
-        user_performing_action=user_performing_action,
+
+def test_user_pagination_edge_cases(reset: None) -> None:  # noqa: ARG001
+    """Boundary behaviour of /manage/users/accepted: oversized page, out-of-range
+    page_num, empty search result, and case-insensitive substring search."""
+    admin: DATestUser = UserManager.create(name="admin_edge")
+
+    # 3 deterministic-prefix users to exercise search; admin itself also counts.
+    UserManager.create_test_users(
+        user_name_prefix="uniq_search",
+        count=3,
+        user_performing_action=admin,
     )
+    # accepted users now: admin + 3 search users = 4 total.
+
+    # page_size greater than total → single page returns everything.
+    oversized = UserManager.get_user_page(
+        page_num=0,
+        page_size=100,
+        user_performing_action=admin,
+    )
+    assert oversized.total_items == 4
+    assert len(oversized.items) == 4
+
+    # page_num past the last page → empty items, total_items stays accurate.
+    out_of_range = UserManager.get_user_page(
+        page_num=50,
+        page_size=5,
+        user_performing_action=admin,
+    )
+    assert out_of_range.total_items == 4
+    assert out_of_range.items == []
+
+    # Search with no matches → zero total, zero items.
+    no_match = UserManager.get_user_page(
+        page_num=0,
+        page_size=10,
+        search_query="zzz_no_such_user_exists",
+        user_performing_action=admin,
+    )
+    assert no_match.total_items == 0
+    assert no_match.items == []
+
+    # Case-insensitive substring match — users were created with lowercase prefix;
+    # uppercase query should still match via the backend's ilike('%q%') filter
+    # (onyx/db/users.py:_get_accepted_user_where_clause).
+    case_insensitive = UserManager.get_user_page(
+        page_num=0,
+        page_size=10,
+        search_query="UNIQ_SEARCH",
+        user_performing_action=admin,
+    )
+    assert case_insensitive.total_items == 3
+    assert len(case_insensitive.items) == 3
+    assert all("uniq_search" in u.email for u in case_insensitive.items)

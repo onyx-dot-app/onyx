@@ -87,24 +87,6 @@ class UserGroupManager:
         return user_group
 
     @staticmethod
-    def set_curator_status(
-        test_user_group: DATestUserGroup,
-        user_to_set_as_curator: DATestUser,
-        user_performing_action: DATestUser,
-        is_curator: bool = True,
-    ) -> None:
-        set_curator_request = {
-            "user_id": user_to_set_as_curator.id,
-            "is_curator": is_curator,
-        }
-        response = requests.post(
-            f"{API_SERVER_URL}/manage/admin/user-group/{test_user_group.id}/set-curator",
-            json=set_curator_request,
-            headers=user_performing_action.headers,
-        )
-        response.raise_for_status()
-
-    @staticmethod
     def get_permissions(
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,

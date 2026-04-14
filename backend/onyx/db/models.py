@@ -4006,8 +4006,6 @@ class User__UserGroup(Base):
 
     __table_args__ = (Index("ix_user__user_group_user_id", "user_id"),)
 
-    is_curator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
     )

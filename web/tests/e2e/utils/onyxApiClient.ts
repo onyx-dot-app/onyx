@@ -863,26 +863,6 @@ export class OnyxApiClient {
       : null;
   }
 
-  async setCuratorStatus(
-    userGroupId: string,
-    userId: string,
-    isCurator: boolean = true
-  ): Promise<void> {
-    const response = await this.request.post(
-      `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
-      {
-        data: {
-          user_id: userId,
-          is_curator: isCurator,
-        },
-      }
-    );
-    await this.handleResponse(
-      response,
-      `Failed to update curator status for ${userId}`
-    );
-  }
-
   /**
    * Create and activate a web search provider for testing.
    * Uses env-backed keys when available and falls back to a placeholder key.
