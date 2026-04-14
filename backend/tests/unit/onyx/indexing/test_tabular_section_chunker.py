@@ -370,3 +370,182 @@ class TestTabularChunkerChunkSection:
         # --- ASSERT ----------------------------------------------------
         assert [p.text for p in out.payloads] == expected_texts
         assert out.accumulator.is_empty()
+
+    def test_single_oversized_field_token_splits_at_id_boundaries(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # A single `field=value` pair that itself exceeds max_tokens can't
+        # be split at field boundaries — there's only one field. The
+        # chunker falls back to encoding the pair to token ids and
+        # slicing at max-token-sized windows.
+        #
+        # CSV has one column "x" with a 50-char value. Formatted pair =
+        # "x=" + 50 a's = 52 tokens. Budget = 10.
+        csv_text = "x\n" + ("a" * 50) + "\n"
+        link = "S"
+        content_token_limit = 10
+
+        # --- EXPECTED --------------------------------------------------
+        # 52-char pair at 10 tokens per window = 6 pieces:
+        #   [0:10)  "x=aaaaaaaa"   (10)
+        #   [10:20) "aaaaaaaaaa"   (10)
+        #   [20:30) "aaaaaaaaaa"   (10)
+        #   [30:40) "aaaaaaaaaa"   (10)
+        #   [40:50) "aaaaaaaaaa"   (10)
+        #   [50:52) "aa"           (2)
+        # Split pieces carry no prelude (they already consume the budget).
+        expected_texts = [
+            "x=aaaaaaaa",
+            "aaaaaaaaaa",
+            "aaaaaaaaaa",
+            "aaaaaaaaaa",
+            "aaaaaaaaaa",
+            "aa",
+        ]
+
+        # --- ACT -------------------------------------------------------
+        out = _make_chunker().chunk_section(
+            _tabular_section(csv_text, link=link),
+            AccumulatorState(),
+            content_token_limit=content_token_limit,
+        )
+
+        # --- ASSERT ----------------------------------------------------
+        assert [p.text for p in out.payloads] == expected_texts
+        # Every piece is ≤ max_tokens — the invariant the token-level
+        # fallback exists to enforce.
+        assert all(len(p.text) <= content_token_limit for p in out.payloads)
+
+    def test_underscored_column_gets_friendly_alias_in_parens(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Column headers with underscores get a space-substituted friendly
+        # alias appended in parens on the `Columns:` line. Plain headers
+        # pass through untouched.
+        csv_text = "MTTR_hours,id,owner_name\n" "3,42,Alice\n"
+        link = "sheet:M"
+
+        # --- EXPECTED --------------------------------------------------
+        expected_texts = [
+            (
+                "sheet:M\n"
+                "Columns: MTTR_hours (MTTR hours), id, owner_name (owner name)\n"
+                "MTTR_hours=3, id=42, owner_name=Alice"
+            ),
+        ]
+
+        # --- ACT -------------------------------------------------------
+        out = _make_chunker().chunk_section(
+            _tabular_section(csv_text, link=link),
+            AccumulatorState(),
+            content_token_limit=500,
+        )
+
+        # --- ASSERT ----------------------------------------------------
+        assert [p.text for p in out.payloads] == expected_texts
+
+    def test_oversized_row_between_small_rows_preserves_flanking_chunks(
+        self,
+    ) -> None:
+        # --- INPUT -----------------------------------------------------
+        # State-machine check: small row, oversized row, small row. The
+        # first small row should become a preluded chunk; the oversized
+        # row flushes it and emits split fragments without prelude; then
+        # the last small row picks up from wherever the split left off.
+        #
+        # Headers a,b,c,d. Row 1 and row 3 each have only column `a`
+        # populated (tiny). Row 2 is a "fat" row with all four columns
+        # populated.
+        csv_text = "a,b,c,d\n" "1,,,\n" "xxx,yyy,zzz,www\n" "2,,,\n"
+        link = "S"
+        content_token_limit = 20
+
+        # --- EXPECTED --------------------------------------------------
+        # Prelude = 'S\nColumns: a, b, c, d\n' = 1+1+19+1 = 22 > 20, so
+        #   sheet fits with the row but full Columns header does not.
+        # Row 1 formatted = "a=1" (3). build_chunk_from_scratch:
+        #   cols+row = 20+3 = 23 > 20 → skip cols. sheet+row = 1+1+3 = 5
+        #   ≤ 20 → chunk = "S\na=1".
+        # Row 2 formatted = "a=xxx, b=yyy, c=zzz, d=www" (26 > 20) →
+        #   flush "S\na=1" and split at pair boundaries:
+        #     "a=xxx, b=yyy, c=zzz" (19 ≤ 20 ✓)
+        #     "d=www"                (5)
+        # Row 3 formatted = "a=2" (3). can_pack onto "d=www" (5):
+        #   5 + 3 + 1 = 9 ≤ 20 ✓ → packs. Trailing fragment from the
+        #   split absorbs the next small row, which is the current v2
+        #   behavior (the fragment becomes `current_chunk` and the next
+        #   small row is appended with the standard packing rules).
+        expected_texts = [
+            "S\na=1",
+            "a=xxx, b=yyy, c=zzz",
+            "d=www\na=2",
+        ]
+
+        # --- ACT -------------------------------------------------------
+        out = _make_chunker().chunk_section(
+            _tabular_section(csv_text, link=link),
+            AccumulatorState(),
+            content_token_limit=content_token_limit,
+        )
+
+        # --- ASSERT ----------------------------------------------------
+        assert [p.text for p in out.payloads] == expected_texts
+        assert all(len(p.text) <= content_token_limit for p in out.payloads)
+
+    def test_prelude_layering_column_header_fits_but_sheet_header_does_not(
+        self,
+    ) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Budget lets `Columns: x\nx=y` fit but not the additional sheet
+        # header on top. The chunker should add the column header and
+        # drop the sheet header.
+        #
+        # sheet = "LongSheetName" (13), cols = "Columns: x" (10),
+        # row = "x=y" (3). Budget = 15.
+        #   cols + row:        10+1+3          = 14 ≤ 15 ✓
+        #   sheet + cols + row: 13+1+10+1+3    = 28 > 15 ✗
+        csv_text = "x\n" "y\n"
+        link = "LongSheetName"
+        content_token_limit = 15
+
+        # --- EXPECTED --------------------------------------------------
+        expected_texts = ["Columns: x\nx=y"]
+
+        # --- ACT -------------------------------------------------------
+        out = _make_chunker().chunk_section(
+            _tabular_section(csv_text, link=link),
+            AccumulatorState(),
+            content_token_limit=content_token_limit,
+        )
+
+        # --- ASSERT ----------------------------------------------------
+        assert [p.text for p in out.payloads] == expected_texts
+
+    def test_prelude_layering_sheet_header_fits_but_column_header_does_not(
+        self,
+    ) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Budget is too small for the column header but leaves room for
+        # the short sheet header. The chunker should fall back to just
+        # sheet + row (its layered "try cols, then try sheet on top of
+        # whatever we have" logic means sheet is attempted on the bare
+        # row when cols didn't fit).
+        #
+        # sheet = "S" (1), cols = "Columns: ABC, DEF" (17),
+        # row = "ABC=1, DEF=2" (12). Budget = 20.
+        #   cols + row:        17+1+12        = 30 > 20 ✗
+        #   sheet + row:        1+1+12        = 14 ≤ 20 ✓
+        csv_text = "ABC,DEF\n" "1,2\n"
+        link = "S"
+        content_token_limit = 20
+
+        # --- EXPECTED --------------------------------------------------
+        expected_texts = ["S\nABC=1, DEF=2"]
+
+        # --- ACT -------------------------------------------------------
+        out = _make_chunker().chunk_section(
+            _tabular_section(csv_text, link=link),
+            AccumulatorState(),
+            content_token_limit=content_token_limit,
+        )
+
+        # --- ASSERT ----------------------------------------------------
+        assert [p.text for p in out.payloads] == expected_texts
