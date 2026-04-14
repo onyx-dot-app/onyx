@@ -201,6 +201,29 @@ def count_tokens(
     return total
 
 
+def split_text_by_tokens(
+    text: str,
+    tokenizer: BaseTokenizer,
+    max_tokens: int,
+) -> list[str]:
+    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens each, via
+    encode/decode at token-id boundaries.
+
+    Note: the returned pieces are not strictly guaranteed to re-tokenize to
+    ≤ max_tokens. BPE merges at window boundaries may drift by a few tokens,
+    and cuts landing mid-multi-byte-UTF-8-character produce replacement
+    characters on decode. Good enough for "best-effort" splitting of
+    oversized content, not for hard limit enforcement.
+    """
+    if not text:
+        return []
+    token_ids = tokenizer.encode(text)
+    return [
+        tokenizer.decode(token_ids[start : start + max_tokens])
+        for start in range(0, len(token_ids), max_tokens)
+    ]
+
+
 def tokenizer_trim_content(
     content: str, desired_length: int, tokenizer: BaseTokenizer
 ) -> str:

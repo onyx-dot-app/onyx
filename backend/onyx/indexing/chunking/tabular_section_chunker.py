@@ -1,6 +1,5 @@
 import csv
 import io
-from collections.abc import Generator
 from collections.abc import Iterable
 
 from pydantic import BaseModel
@@ -12,6 +11,7 @@ from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
+from onyx.natural_language_processing.utils import split_text_by_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -85,20 +85,6 @@ def pack_chunk(chunk: str, new_row: str) -> str:
     return chunk + "\n" + new_row
 
 
-def _token_split(
-    text: str,
-    tokenizer: BaseTokenizer,
-    max_tokens: int,
-) -> Generator[str, None, None]:
-    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens via
-    encode/decode at token-id boundaries."""
-    if not text:
-        return
-    token_ids = tokenizer.encode(text)
-    for start in range(0, len(token_ids), max_tokens):
-        yield tokenizer.decode(token_ids[start : start + max_tokens])
-
-
 def _split_row_by_pairs(
     pairs: list[tuple[str, str]],
     tokenizer: BaseTokenizer,
@@ -133,7 +119,7 @@ def _split_row_by_pairs(
             current_tokens = 0
 
         if pair_tokens > max_tokens:
-            for split_text in _token_split(pair_str, tokenizer, max_tokens):
+            for split_text in split_text_by_tokens(pair_str, tokenizer, max_tokens):
                 pieces.append(
                     _TokenizedText(
                         text=split_text,
