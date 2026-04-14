@@ -2,8 +2,8 @@
 
 **Import:** `import { Tooltip } from "@opal/components";`
 
-A minimal tooltip wrapper that shows content on hover. When `tooltip` is `undefined`, children
-are returned as-is with no wrapping. Uses Radix Tooltip primitives internally.
+A minimal tooltip wrapper that shows content on hover. When `tooltip` is `undefined` or `disabled`
+is `true`, children are returned as-is with no wrapping. Uses Radix Tooltip primitives internally.
 
 ## Props
 
@@ -11,6 +11,8 @@ are returned as-is with no wrapping. Uses Radix Tooltip primitives internally.
 |------|------|---------|-------------|
 | `tooltip` | `ReactNode \| RichStr` | — | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
 | `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
+| `disabled` | `boolean` | `false` | Suppresses the tooltip even if `tooltip` is defined |
+| `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
 
 ## Usage
 

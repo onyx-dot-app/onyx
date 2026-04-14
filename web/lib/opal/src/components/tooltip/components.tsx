@@ -25,6 +25,19 @@ interface TooltipProps {
   tooltipSide?: TooltipSide;
 
   /**
+   * When `true`, suppresses the tooltip even if `tooltip` is defined.
+   * Children are still rendered normally.
+   * @default false
+   */
+  disabled?: boolean;
+
+  /**
+   * Delay in milliseconds before the tooltip appears on hover.
+   * Passed to `TooltipPrimitive.Root`.
+   */
+  delayDuration?: number;
+
+  /**
    * Children to wrap. Must be a single element compatible with Radix
    * `asChild` (i.e. a DOM element or a component that forwards refs).
    */
@@ -38,8 +51,9 @@ interface TooltipProps {
 /**
  * A minimal tooltip wrapper that shows content on hover.
  *
- * Renders nothing extra when `tooltip` is `undefined` — just passes children
- * through. When `tooltip` is provided, wraps children with a Radix tooltip.
+ * Renders nothing extra when `tooltip` is `undefined` or `disabled` is
+ * `true` — just passes children through. When `tooltip` is provided,
+ * wraps children with a Radix tooltip.
  *
  * @example
  * ```tsx
@@ -49,13 +63,23 @@ interface TooltipProps {
  *   <Button icon={SvgTrash} />
  * </Tooltip>
  *
- * <Tooltip tooltip={markdown("Supports **bold** text")}>
- *   <Button icon={SvgInfo} />
+ * <Tooltip tooltip="Not available" disabled={isAvailable}>
+ *   <Button icon={SvgTrash} />
+ * </Tooltip>
+ *
+ * <Tooltip tooltip="Quick tooltip" delayDuration={0}>
+ *   <span>Instant</span>
  * </Tooltip>
  * ```
  */
-function Tooltip({ tooltip, tooltipSide = "right", children }: TooltipProps) {
-  if (!tooltip) return children;
+function Tooltip({
+  tooltip,
+  tooltipSide = "right",
+  disabled = false,
+  delayDuration,
+  children,
+}: TooltipProps) {
+  if (!tooltip || disabled) return children;
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
@@ -67,7 +91,7 @@ function Tooltip({ tooltip, tooltipSide = "right", children }: TooltipProps) {
     );
 
   return (
-    <TooltipPrimitive.Root>
+    <TooltipPrimitive.Root delayDuration={delayDuration}>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
