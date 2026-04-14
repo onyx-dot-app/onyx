@@ -1826,6 +1826,29 @@ class GoogleDriveConnector(
         if files_batch:
             yield _yield_slim_batch()
 
+    def _retrieve_all_slim_docs_impl(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
+    ) -> GenerateSlimDocumentOutput:
+        try:
+            checkpoint = self.build_dummy_checkpoint()
+            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
+                yield from self._extract_slim_docs_from_google_drive(
+                    checkpoint=checkpoint,
+                    start=start,
+                    end=end,
+                    callback=callback,
+                    include_permissions=include_permissions,
+                )
+            logger.info("Drive slim doc retrieval complete")
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
+            raise
+
     @override
     def retrieve_all_slim_docs(
         self,
@@ -1833,21 +1856,9 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        try:
-            checkpoint = self.build_dummy_checkpoint()
-            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
-                yield from self._extract_slim_docs_from_google_drive(
-                    checkpoint=checkpoint,
-                    start=start,
-                    end=end,
-                    callback=callback,
-                    include_permissions=False,
-                )
-            logger.info("Drive pruning: Slim doc retrieval complete")
-        except Exception as e:
-            if MISSING_SCOPES_ERROR_STR in str(e):
-                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=False
+        )
 
     def retrieve_all_slim_docs_perm_sync(
         self,
@@ -1855,21 +1866,9 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        try:
-            checkpoint = self.build_dummy_checkpoint()
-            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
-                yield from self._extract_slim_docs_from_google_drive(
-                    checkpoint=checkpoint,
-                    start=start,
-                    end=end,
-                    callback=callback,
-                )
-            logger.info("Drive perm sync: Slim doc retrieval complete")
-
-        except Exception as e:
-            if MISSING_SCOPES_ERROR_STR in str(e):
-                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise e
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=True
+        )
 
     def validate_connector_settings(self) -> None:
         if self._creds is None:
