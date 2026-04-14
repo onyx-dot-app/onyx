@@ -67,8 +67,12 @@ class TestAddMemory:
         )
 
         assert m1_id != m2_id
-        assert db_session.get(Memory, m1_id).memory_text == "Favorite color is blue"
-        assert db_session.get(Memory, m2_id).memory_text == "Works in engineering"
+        fetched_m1 = db_session.get(Memory, m1_id)
+        fetched_m2 = db_session.get(Memory, m2_id)
+        assert fetched_m1 is not None
+        assert fetched_m2 is not None
+        assert fetched_m1.memory_text == "Favorite color is blue"
+        assert fetched_m2.memory_text == "Works in engineering"
 
 
 class TestUpdateMemoryAtIndex:
@@ -89,7 +93,9 @@ class TestUpdateMemoryAtIndex:
         )
 
         assert updated_id is not None
-        assert db_session.get(Memory, updated_id).memory_text == "Updated Memory 1"
+        fetched = db_session.get(Memory, updated_id)
+        assert fetched is not None
+        assert fetched.memory_text == "Updated Memory 1"
 
     def test_update_memory_at_out_of_range_index(
         self, db_session: Session, test_user: User
@@ -225,10 +231,9 @@ class TestGetMemoriesWithUserId:
             memory_text="Memory with use_memories off",
             db_session=db_session,
         )
-        assert (
-            db_session.get(Memory, memory_id).memory_text
-            == "Memory with use_memories off"
-        )
+        fetched = db_session.get(Memory, memory_id)
+        assert fetched is not None
+        assert fetched.memory_text == "Memory with use_memories off"
 
         # Update that memory
         updated_id = update_memory_at_index(
@@ -238,10 +243,9 @@ class TestGetMemoriesWithUserId:
             db_session=db_session,
         )
         assert updated_id is not None
-        assert (
-            db_session.get(Memory, updated_id).memory_text
-            == "Updated memory with use_memories off"
-        )
+        fetched_updated = db_session.get(Memory, updated_id)
+        assert fetched_updated is not None
+        assert fetched_updated.memory_text == "Updated memory with use_memories off"
 
         # Verify get_memories returns the updated memory
         context = get_memories(test_user_no_memories, db_session)
