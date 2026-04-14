@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
-import Label from "@/refresh-components/form/Label";
+import { Label } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 interface MCPAuthTemplate {
@@ -184,7 +184,7 @@ export default function MCPApiKeyModal({
               <div className="space-y-4">
                 {authTemplate!.required_fields.map((field) => (
                   <div key={field} className="space-y-2">
-                    <Label name={field}>
+                    <Label label={field}>
                       <Text>
                         {field
                           .replace(/_/g, " ")
@@ -221,7 +221,7 @@ export default function MCPApiKeyModal({
             ) : (
               // Legacy API key field
               <div className="space-y-2">
-                <Label name="apiKey">
+                <Label label="apiKey">
                   <Text>{credsType}</Text>
                 </Label>
                 <div className="relative">

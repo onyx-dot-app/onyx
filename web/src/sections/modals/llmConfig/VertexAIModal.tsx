@@ -3,7 +3,7 @@
 import { useSWRConfig } from "swr";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
@@ -119,9 +119,9 @@ export default function VertexAIModal({
         });
       }}
     >
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="custom_config.vertex_location"
+      <InputPadder>
+        <InputVertical
+          withLabel="custom_config.vertex_location"
           title="Google Cloud Region Name"
           subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
         >
@@ -129,12 +129,12 @@ export default function VertexAIModal({
             name="custom_config.vertex_location"
             placeholder={VERTEXAI_DEFAULT_LOCATION}
           />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+        </InputVertical>
+      </InputPadder>
 
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="custom_config.vertex_credentials"
+      <InputPadder>
+        <InputVertical
+          withLabel="custom_config.vertex_credentials"
           title="API Key"
           subDescription="Attach your API key JSON from Google Cloud to access your models."
         >
@@ -142,22 +142,22 @@ export default function VertexAIModal({
             name="custom_config.vertex_credentials"
             label=""
           />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+        </InputVertical>
+      </InputPadder>
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputDivider />
       <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

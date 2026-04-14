@@ -61,6 +61,9 @@ _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
+_MINIMUM_PAGINATION_LIMIT = 5
+
+_SERVER_ERROR_CODES = {500, 502, 503, 504}
 
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
 _CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
@@ -569,7 +572,8 @@ class OnyxConfluence:
         if not limit:
             limit = _DEFAULT_PAGINATION_LIMIT
 
-        url_suffix = update_param_in_path(url_suffix, "limit", str(limit))
+        current_limit = limit
+        url_suffix = update_param_in_path(url_suffix, "limit", str(current_limit))
 
         while url_suffix:
             logger.debug(f"Making confluence call to {url_suffix}")
@@ -609,39 +613,60 @@ class OnyxConfluence:
                     )
                     continue
 
-                # If we fail due to a 500, try one by one.
-                # NOTE: this iterative approach only works for server, since cloud uses cursor-based
-                # pagination
-                if raw_response.status_code == 500 and not self._is_cloud:
-                    initial_start = get_start_param_from_url(url_suffix)
-                    if initial_start is None:
-                        # can't handle this if we don't have offset-based pagination
-                        raise
+                if raw_response.status_code in _SERVER_ERROR_CODES:
+                    # Try reducing the page size -- Confluence often times out
+                    # on large result sets (especially Cloud 504s).
+                    if current_limit > _MINIMUM_PAGINATION_LIMIT:
+                        old_limit = current_limit
+                        current_limit = max(
+                            current_limit // 2, _MINIMUM_PAGINATION_LIMIT
+                        )
+                        logger.warning(
+                            f"Confluence returned {raw_response.status_code}. "
+                            f"Reducing limit from {old_limit} to {current_limit} "
+                            f"and retrying."
+                        )
+                        url_suffix = update_param_in_path(
+                            url_suffix, "limit", str(current_limit)
+                        )
+                        continue
 
-                    # this will just yield the successful items from the batch
-                    new_url_suffix = yield from self._try_one_by_one_for_paginated_url(
-                        url_suffix,
-                        initial_start=initial_start,
-                        limit=limit,
-                    )
+                    # Limit reduction exhausted -- for Server, fall back to
+                    # one-by-one offset pagination as a last resort.
+                    if not self._is_cloud:
+                        initial_start = get_start_param_from_url(url_suffix)
+                        # this will just yield the successful items from the batch
+                        new_url_suffix = (
+                            yield from self._try_one_by_one_for_paginated_url(
+                                url_suffix,
+                                initial_start=initial_start,
+                                limit=current_limit,
+                            )
+                        )
+                        # this means we ran into an empty page
+                        if new_url_suffix is None:
+                            if next_page_callback:
+                                next_page_callback("")
+                            break
 
-                    # this means we ran into an empty page
-                    if new_url_suffix is None:
-                        if next_page_callback:
-                            next_page_callback("")
-                        break
+                        url_suffix = new_url_suffix
+                        continue
 
-                    url_suffix = new_url_suffix
-                    continue
-
-                else:
                     logger.exception(
-                        f"Error in confluence call to {url_suffix} \n"
-                        f"Raw Response Text: {raw_response.text} \n"
-                        f"Full Response: {raw_response.__dict__} \n"
-                        f"Error: {e} \n"
+                        f"Error in confluence call to {url_suffix} "
+                        f"after reducing limit to {current_limit}.\n"
+                        f"Raw Response Text: {raw_response.text}\n"
+                        f"Error: {e}\n"
                     )
                     raise
+
+                logger.exception(
+                    f"Error in confluence call to {url_suffix} \n"
+                    f"Raw Response Text: {raw_response.text} \n"
+                    f"Full Response: {raw_response.__dict__} \n"
+                    f"Error: {e} \n"
+                )
+                raise
 
             try:
                 next_response = raw_response.json()
@@ -680,6 +705,10 @@ class OnyxConfluence:
             old_url_suffix = url_suffix
             updated_start = get_start_param_from_url(old_url_suffix)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
+            if url_suffix and current_limit != limit:
+                url_suffix = update_param_in_path(
+                    url_suffix, "limit", str(current_limit)
+                )
             for i, result in enumerate(results):
                 updated_start += 1
                 if url_suffix and next_page_callback and i == len(results) - 1:

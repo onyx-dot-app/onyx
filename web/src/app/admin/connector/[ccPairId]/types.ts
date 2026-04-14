@@ -92,6 +92,8 @@ export interface IndexAttemptError {
   time_created: string;
 
   index_attempt_id: number;
+
+  error_type: string | null;
 }
 
 export interface PaginatedIndexAttemptErrors {

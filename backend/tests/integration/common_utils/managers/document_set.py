@@ -62,6 +62,7 @@ class DocumentSetManager:
     ) -> bool:
         doc_set_update_request = {
             "id": document_set.id,
+            "name": document_set.name,
             "description": document_set.description,
             "cc_pair_ids": document_set.cc_pair_ids,
             "is_public": document_set.is_public,

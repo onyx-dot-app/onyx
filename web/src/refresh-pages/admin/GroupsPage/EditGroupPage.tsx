@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, InputHorizontal } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
-import * as InputLayouts from "@/layouts/input-layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -446,11 +445,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
               {/* Delete This Group */}
               <Card>
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
-                  nonInteractive
                 >
                   <Button
                     variant="danger"
@@ -460,7 +458,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   >
                     Delete Group
                   </Button>
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
               </Card>
             </>
           )}

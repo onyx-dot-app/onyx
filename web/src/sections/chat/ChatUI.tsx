@@ -331,10 +331,13 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {/* Error banner when last message is user message or error type */}
+          {/* Error banner when last message is user message or error type.
+              Skip for multi-model per-panel errors — those are shown in
+              their own panel, not as a global banner. */}
           {(((error !== null || loadError !== null) &&
             messages[messages.length - 1]?.type === "user") ||
-            messages[messages.length - 1]?.type === "error") && (
+            (messages[messages.length - 1]?.type === "error" &&
+              !messages[messages.length - 1]?.modelDisplayName)) && (
             <div className={`p-4 w-full ${MSG_MAX_W} self-center`}>
               <ErrorBanner
                 resubmit={onResubmit}

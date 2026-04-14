@@ -542,6 +542,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 **document.model_dump(),
                 processed_sections=[
                     Section(
+                        type=section.type,
                         text=section.text if isinstance(section, TextSection) else "",
                         link=section.link,
                         image_file_id=(
@@ -566,6 +567,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             if isinstance(section, ImageSection):
                 # Default section with image path preserved - ensure text is always a string
                 processed_section = Section(
+                    type=section.type,
                     link=section.link,
                     image_file_id=section.image_file_id,
                     text="",  # Initialize with empty string
@@ -609,6 +611,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             # For TextSection, create a base Section with text and link
             elif isinstance(section, TextSection):
                 processed_section = Section(
+                    type=section.type,
                     text=section.text or "",  # Ensure text is always a string, not None
                     link=section.link,
                     image_file_id=None,

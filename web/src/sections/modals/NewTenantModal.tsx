@@ -10,7 +10,7 @@ import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { ErrorTextLayout } from "@/layouts/input-layouts";
+import { InputErrorText } from "@opal/layouts";
 
 // App domain should not be hardcoded
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
@@ -137,7 +137,7 @@ export default function NewTenantModal({
 
         <Modal.Body>
           <Text>{description}</Text>
-          {error && <ErrorTextLayout>{error}</ErrorTextLayout>}
+          {error && <InputErrorText>{error}</InputErrorText>}
         </Modal.Body>
 
         <Modal.Footer>
