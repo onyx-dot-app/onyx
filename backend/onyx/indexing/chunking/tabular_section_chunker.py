@@ -1,5 +1,7 @@
 import csv
 import io
+from collections.abc import Generator
+from collections.abc import Iterator
 
 from pydantic import BaseModel
 
@@ -9,6 +11,7 @@ from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.natural_language_processing.utils import count_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -19,55 +22,58 @@ FIELD_VALUE_SEPARATOR = ", "
 ROW_JOIN = "\n"
 
 
-# --- Parsing --------------------------------------------------------------
+class _ParsedRow(BaseModel):
+    header: list[str]
+    row: list[str]
 
 
-class _ParsedSection(BaseModel):
-    sheet_name: str
-    link: str
-    headers: list[str]
-    rows: list[list[str]]
-
-
-def _parse_section(section: Section) -> _ParsedSection | None:
-    """Parse CSV into headers + rows. First non-empty row is the header;
-    blank rows are skipped."""
-    section_text = section.text or ""
-    if not section_text.strip():
-        return None
-
-    reader = csv.reader(io.StringIO(section_text))
-    non_empty_rows = [row for row in reader if any(cell.strip() for cell in row)]
-    if not non_empty_rows:
-        return None
-
-    return _ParsedSection(
-        sheet_name=section.link or "",
-        link=section.link or "",
-        headers=non_empty_rows[0],
-        rows=non_empty_rows[1:],
-    )
-
-
-# --- Formatting -----------------------------------------------------------
+def format_row(header: list[str], row: list[str]) -> str:
+    """
+    A header-row combination is formatted like this:
+    field1=value1, field2=value2, field3=value3
+    """
+    pairs = _row_to_pairs(header, row)
+    formatted = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in pairs)
+    return formatted
 
 
 def format_columns_header(headers: list[str]) -> str:
-    """Format the 'Columns:' line. Each header is quoted; underscored
-    headers also get a space-substituted friendly name in parens
-    (e.g. ``"MTTR_hours" (MTTR hours)``)."""
+    """
+    Format the column header line. Underscored headers get a
+    space-substituted friendly alias in parens.
+    Example:
+        headers = ["id", "MTTR_hours"]
+        => "Columns: id, MTTR_hours (MTTR hours)"
+    """
     parts: list[str] = []
     for header in headers:
         friendly = header.replace("_", " ")
         if friendly != header:
-            parts.append(f'"{header}" ({friendly})')
+            parts.append(f"{header} ({friendly})")
         else:
-            parts.append(f'"{header}"')
+            parts.append(header)
     return f"{COLUMNS_MARKER} " + FIELD_VALUE_SEPARATOR.join(parts)
 
 
+def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
+    """Parse CSV into headers + rows. First non-empty row is the header;
+    blank rows are skipped."""
+    section_text = section.text or ""
+    if not section_text.strip():
+        return
+
+    reader = csv.reader(io.StringIO(section_text))
+    non_empty_rows = (row for row in reader if any(cell.strip() for cell in row))
+
+    header = next(non_empty_rows, None)
+    if header is None:
+        return
+
+    for row in non_empty_rows:
+        yield _ParsedRow(header=header, row=row)
+
+
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
-    """Return ``(header, value)`` pairs, dropping empty / missing values."""
     pairs: list[tuple[str, str]] = []
     for i, header in enumerate(headers):
         value = row[i] if i < len(row) else ""
@@ -77,220 +83,141 @@ def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
-def _pairs_to_row(pairs: list[tuple[str, str]]) -> str:
-    """Render ``(header, value)`` pairs as ``col=val, col=val, ...``."""
-    return FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in pairs)
-
-
-def _rows_to_block(rows: list[list[tuple[str, str]]]) -> str:
-    """Render a list of rows as newline-joined ``col=val`` lines."""
-    return ROW_JOIN.join(_pairs_to_row(pairs) for pairs in rows)
-
-
-def _union_of_headers(
-    rows: list[list[tuple[str, str]]],
-    all_headers: list[str],
-) -> list[str]:
-    """Headers present in any row, in original column order."""
-    present: set[str] = set()
-    for row_pairs in rows:
-        for h, _ in row_pairs:
-            present.add(h)
-    return [h for h in all_headers if h in present]
-
-
-# --- Tokenizer helpers ----------------------------------------------------
-
-
-def _count_tokens(tokenizer: BaseTokenizer, text: str) -> int:
-    return len(tokenizer.encode(text))
-
-
-def _token_split(tokenizer: BaseTokenizer, text: str, max_tokens: int) -> list[str]:
-    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens via
-    encode/decode round-trip at token-id boundaries."""
-    if not text:
-        return []
-    token_ids = tokenizer.encode(text)
-    pieces: list[str] = []
-    for start in range(0, len(token_ids), max_tokens):
-        pieces.append(tokenizer.decode(token_ids[start : start + max_tokens]))
-    return pieces
-
-
-# --- Chunk construction ---------------------------------------------------
-
-
-def _full_chunk_fits(
-    tokenizer: BaseTokenizer,
-    rows: list[list[tuple[str, str]]],
-    all_headers: list[str],
-    sheet_header: str,
-    max_tokens: int,
+def can_pack(
+    chunk_content: str, new_row: str, tokenizer: BaseTokenizer, max_tokens: int
 ) -> bool:
-    """Admissibility for packing: does ``[sheet]`` + ``Columns`` + rows
-    fit under ``max_tokens``? (Row block alone when no sheet header.)"""
-    row_block = _rows_to_block(rows)
-    if _count_tokens(tokenizer, row_block) > max_tokens:
-        return False
-    if not sheet_header:
-        return True
-    cols_line = format_columns_header(_union_of_headers(rows, all_headers))
-    full = sheet_header + ROW_JOIN + cols_line + ROW_JOIN + row_block
-    return _count_tokens(tokenizer, full) <= max_tokens
+    """
+    Check that adding this row will not exceed the chunk content
+    """
+    chunk_token_count = count_tokens(chunk_content, tokenizer)
+    new_row_count = count_tokens(new_row, tokenizer)
+
+    # Add the additional 1 token for the \n for packing
+    return chunk_token_count + new_row_count + 1 <= max_tokens
 
 
-def _build_chunk(
+def pack_chunk(chunk: str, new_row: str) -> str:
+    return chunk + "\n" + new_row
+
+
+def _token_split(
+    text: str,
     tokenizer: BaseTokenizer,
-    rows: list[list[tuple[str, str]]],
-    all_headers: list[str],
-    sheet_header: str,
     max_tokens: int,
-) -> str:
-    """Build richest chunk for ``rows``: row block + ``[sheet]`` (if
-    fits) + ``Columns: ...`` (if still fits). Caller ensures row block
-    itself fits."""
-    row_block = _rows_to_block(rows)
-    if not sheet_header:
-        return row_block
-
-    with_sheet = sheet_header + ROW_JOIN + row_block
-    if _count_tokens(tokenizer, with_sheet) > max_tokens:
-        return row_block
-
-    cols_line = format_columns_header(_union_of_headers(rows, all_headers))
-    with_cols = sheet_header + ROW_JOIN + cols_line + ROW_JOIN + row_block
-    if _count_tokens(tokenizer, with_cols) <= max_tokens:
-        return with_cols
-    return with_sheet
+) -> Generator[str, None, None]:
+    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens via
+    encode/decode at token-id boundaries."""
+    if not text:
+        return
+    token_ids = tokenizer.encode(text)
+    for start in range(0, len(token_ids), max_tokens):
+        yield tokenizer.decode(token_ids[start : start + max_tokens])
 
 
-def _build_schema_only_chunks(
+def _split_row_by_pairs(
+    pairs: list[tuple[str, str]],
     tokenizer: BaseTokenizer,
-    parsed: _ParsedSection,
-    sheet_header: str,
     max_tokens: int,
-) -> list[str]:
-    """Header-only table: ``[sheet]\\nColumns: ...`` if it fits, else
-    leaner fallbacks, token-splitting oversized Columns as a last step."""
-    cols_line = format_columns_header(parsed.headers)
+) -> Generator[str, None, None]:
+    """Greedily pack pairs into max-sized pieces. Any single pair that
+    itself exceeds ``max_tokens`` is token-split at id boundaries.
+    No headers."""
+    current: list[tuple[str, str]] = []
+    for pair in pairs:
+        candidate = current + [pair]
+        candidate_str = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in candidate)
+        if count_tokens(candidate_str, tokenizer) <= max_tokens:
+            current = candidate
+            continue
+
+        # Candidate busts the budget — flush what we have.
+        if current:
+            yield FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in current)
+            current = []
+
+        # Single pair itself too large — fall back to token-level split.
+        pair_str = f"{pair[0]}={pair[1]}"
+        if count_tokens(pair_str, tokenizer) > max_tokens:
+            yield from _token_split(pair_str, tokenizer, max_tokens)
+        else:
+            current = [pair]
+    if current:
+        yield FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in current)
+
+
+def build_chunk_from_scratch(
+    header: list[str],
+    pairs: list[tuple[str, str]],
+    sheet_header: str,
+    tokenizer: BaseTokenizer,
+    max_tokens: int,
+) -> Generator[str, None, None]:
+    formatted_row = FIELD_VALUE_SEPARATOR.join(f"{h}={v}" for h, v in pairs)
+
+    # 1. Row alone is too large — split by pairs, no headers.
+    if count_tokens(formatted_row, tokenizer) > max_tokens:
+        yield from _split_row_by_pairs(pairs, tokenizer, max_tokens)
+        return
+
+    chunk = formatted_row
+
+    # 2. Attempt to add column header
+    column_header = format_columns_header(header)
+    candidate = column_header + ROW_JOIN + chunk
+
+    if count_tokens(candidate, tokenizer) <= max_tokens:
+        chunk = candidate
+
+    # 3. Attempt to add sheet header
     if sheet_header:
-        with_cols = sheet_header + ROW_JOIN + cols_line
-        if _count_tokens(tokenizer, with_cols) <= max_tokens:
-            return [with_cols]
-        if _count_tokens(tokenizer, sheet_header) <= max_tokens:
-            return [sheet_header] + _token_split(tokenizer, cols_line, max_tokens)
-    if _count_tokens(tokenizer, cols_line) <= max_tokens:
-        return [cols_line]
-    return _token_split(tokenizer, cols_line, max_tokens)
+        candidate = sheet_header + ROW_JOIN + chunk
+
+        if count_tokens(candidate, tokenizer) <= max_tokens:
+            chunk = candidate
+
+    yield chunk
 
 
-def _split_oversized_row(
-    tokenizer: BaseTokenizer, row_str: str, max_tokens: int
-) -> list[str]:
-    """Split an oversized row into ≤ ``max_tokens`` pieces at ``, ``
-    boundaries; token-split any single field that's itself too big."""
-    fields = row_str.split(FIELD_VALUE_SEPARATOR)
-    pieces: list[str] = []
-    buf: list[str] = []
-
-    def flush() -> None:
-        if buf:
-            pieces.append(FIELD_VALUE_SEPARATOR.join(buf))
-            buf.clear()
-
-    for field in fields:
-        candidate = FIELD_VALUE_SEPARATOR.join(buf + [field]) if buf else field
-        if _count_tokens(tokenizer, candidate) <= max_tokens:
-            buf.append(field)
-            continue
-
-        # Candidate busts the budget. Flush buf; then decide whether
-        # the new field fits alone or needs token-level splitting.
-        flush()
-        if _count_tokens(tokenizer, field) > max_tokens:
-            pieces.extend(_token_split(tokenizer, field, max_tokens))
-        else:
-            buf.append(field)
-
-    flush()
-    return pieces
-
-
-# --- Packing state machine ------------------------------------------------
-
-
-def _pack_rows(
+def parse_to_chunks(
+    rows: Iterator[_ParsedRow],
+    sheet_header: str,
     tokenizer: BaseTokenizer,
-    parsed: _ParsedSection,
     max_tokens: int,
-) -> list[str]:
-    """Produce chunk-text list: pack rows into ``pending`` while the
-    full chunk (prelude + rows) still fits; flush when it wouldn't."""
-    sheet_header = f"[{parsed.sheet_name}]" if parsed.sheet_name else ""
-    chunks: list[str] = []
-    pending: list[list[tuple[str, str]]] = []
-    any_row = False
+) -> Generator[str, None, None]:
+    current_chunk = ""
 
-    for row_values in parsed.rows:
-        pairs = _row_to_pairs(parsed.headers, row_values)
-        if not pairs:
-            continue
-        any_row = True
-        row_str = _pairs_to_row(pairs)
+    for row in rows:
+        pairs: list[tuple[str, str]] = _row_to_pairs(row.header, row.row)
+        formatted = format_row(row.header, row.row)
 
-        # Single row can't fit on its own — flush pending, split it.
-        if _count_tokens(tokenizer, row_str) > max_tokens:
-            if pending:
-                chunks.append(
-                    _build_chunk(
-                        tokenizer, pending, parsed.headers, sheet_header, max_tokens
-                    )
-                )
-                pending = []
-            chunks.extend(_split_oversized_row(tokenizer, row_str, max_tokens))
-            continue
+        if current_chunk:
+            # Attempt to pack it in
+            if can_pack(current_chunk, formatted, tokenizer, max_tokens):
+                current_chunk = pack_chunk(current_chunk, formatted)
+                continue
+            else:
+                # We need to start a new chunk
+                yield current_chunk
+                current_chunk = ""
 
-        # Extend pending only if the full chunk (with prelude) still
-        # fits. Otherwise flush and start a fresh chunk with this row.
-        if _full_chunk_fits(
-            tokenizer, pending + [pairs], parsed.headers, sheet_header, max_tokens
+        # Build chunk from scratch
+        for chunk in build_chunk_from_scratch(
+            header=row.header,
+            pairs=pairs,
+            sheet_header=sheet_header,
+            tokenizer=tokenizer,
+            max_tokens=max_tokens,
         ):
-            pending.append(pairs)
-        else:
-            if pending:
-                chunks.append(
-                    _build_chunk(
-                        tokenizer, pending, parsed.headers, sheet_header, max_tokens
-                    )
-                )
-            pending = [pairs]
+            if current_chunk:
+                yield current_chunk
+            current_chunk = chunk
 
-    if pending:
-        chunks.append(
-            _build_chunk(tokenizer, pending, parsed.headers, sheet_header, max_tokens)
-        )
-
-    # Header-only table: emit a schema chunk so columns still index.
-    if not any_row:
-        chunks.extend(
-            _build_schema_only_chunks(tokenizer, parsed, sheet_header, max_tokens)
-        )
-    return chunks
-
-
-# --- Orchestration --------------------------------------------------------
+    # Flush remaining
+    if current_chunk:
+        yield current_chunk
 
 
 class TabularChunker(SectionChunker):
-    """Chunks tabular sections row-by-row with greedy multi-row packing.
-
-    Each chunk is ``[sheet]\\n`` + tailored ``Columns: ...\\n`` +
-    ``col=val, col=val, ...`` row lines, packed while the full chunk
-    fits under ``max_tokens``. Oversized rows split at ``, `` (and
-    token boundaries for a single oversized field) with no prelude.
-    """
-
     def __init__(self, tokenizer: BaseTokenizer) -> None:
         self.tokenizer = tokenizer
 
@@ -300,31 +227,30 @@ class TabularChunker(SectionChunker):
         accumulator: AccumulatorState,
         content_token_limit: int,
     ) -> SectionChunkerOutput:
-        assert section.text is not None
+        payloads = accumulator.flush_to_list()
 
-        parsed = _parse_section(section)
-        if parsed is None:
+        parsed_rows = parse_section(section)
+        if parsed_rows is None:
             logger.warning(
                 f"TabularChunker: skipping unparseable section (link={section.link})"
             )
-            return SectionChunkerOutput(payloads=[], accumulator=accumulator)
+            return SectionChunkerOutput(
+                payloads=payloads, accumulator=AccumulatorState()
+            )
 
-        chunk_texts = _pack_rows(self.tokenizer, parsed, content_token_limit)
+        sheet_header = section.link or ""
+        chunk_texts = parse_to_chunks(
+            rows=parsed_rows,
+            sheet_header=sheet_header,
+            tokenizer=self.tokenizer,
+            max_tokens=content_token_limit,
+        )
 
-        # Tabular sections are structurally standalone: flush any
-        # pending text buffer before our own chunks.
-        payloads = accumulator.flush_to_list()
         for i, text in enumerate(chunk_texts):
-            n = _count_tokens(self.tokenizer, text)
-            if n > content_token_limit:
-                logger.warning(
-                    f"TabularChunker: emitted chunk of {n} tokens exceeds "
-                    f"max_tokens={content_token_limit} (link={section.link})"
-                )
             payloads.append(
                 ChunkPayload(
                     text=text,
-                    links={0: parsed.link},
+                    links={0: section.link or ""},
                     is_continuation=(i > 0),
                 )
             )
