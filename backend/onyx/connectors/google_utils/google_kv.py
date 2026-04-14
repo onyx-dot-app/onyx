@@ -55,6 +55,13 @@ logger = setup_logger()
 
 
 def _load_google_json(raw: object) -> dict[str, Any]:
+    """Accept both the current (dict) and legacy (JSON string) KV payload shapes.
+
+    Payloads written before the fix for serializing Google credentials into
+    ``EncryptedJson`` columns are stored as JSON strings; new writes store dicts.
+    Once every install has re-uploaded their Google credentials the legacy
+    ``str`` branch can be removed.
+    """
     if isinstance(raw, dict):
         return raw
     if isinstance(raw, str):
@@ -152,9 +159,7 @@ def build_service_account_creds(
     service_account_key = get_service_account_key(source=source)
 
     credential_dict = {
-        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.model_dump(
-            mode="json"
-        ),
+        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.json(),
     }
     if primary_admin_email:
         credential_dict[DB_CREDENTIALS_PRIMARY_ADMIN_KEY] = primary_admin_email
