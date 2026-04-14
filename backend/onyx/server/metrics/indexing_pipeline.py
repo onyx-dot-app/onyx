@@ -19,19 +19,28 @@ from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from redis import Redis
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.configs.constants import OnyxCeleryQueues
+from onyx.db.connector_credential_pair import get_connector_health_for_metrics
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import is_valid_schema_name
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import get_active_index_attempts_for_metrics
+from onyx.db.index_attempt import get_docs_indexed_by_cc_pair
+from onyx.db.index_attempt import get_failed_attempt_counts_by_cc_pair
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 logger = setup_logger()
 
@@ -149,8 +158,6 @@ class QueueDepthCollector(_CachedCollector):
         if self._celery_app is None:
             return []
 
-        from onyx.background.celery.celery_redis import celery_get_broker_client
-
         redis_client = celery_get_broker_client(self._celery_app)
 
         depth = GaugeMetricFamily(
@@ -226,7 +233,7 @@ class QueueDepthCollector(_CachedCollector):
         return None
 
 
-def _iter_tenant_sessions() -> "Generator[tuple[str, Session], None, None]":
+def _iter_tenant_sessions() -> Generator[tuple[str, Session], None, None]:
     """Yield (tenant_id, session) pairs using a single DB connection.
 
     In multi-tenant mode with NullPool + PgBouncer, opening a new connection
@@ -236,15 +243,6 @@ def _iter_tenant_sessions() -> "Generator[tuple[str, Session], None, None]":
     In single-tenant mode (MULTI_TENANT=false), ``get_all_tenant_ids()``
     returns a single entry and no schema switching is needed.
     """
-    from sqlalchemy import text
-    from sqlalchemy.orm import Session
-
-    from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-    from onyx.db.engine.sql_engine import is_valid_schema_name
-    from onyx.db.engine.tenant_utils import get_all_tenant_ids
-    from shared_configs.configs import MULTI_TENANT
-    from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-
     tenant_ids = get_all_tenant_ids()
 
     if not MULTI_TENANT:
@@ -288,16 +286,12 @@ class IndexAttemptCollector(_CachedCollector):
 
     def configure(self) -> None:
         """Call once DB engine is initialized."""
-        from onyx.db.enums import IndexingStatus
-
         self._terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
         self._configured = True
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         if not self._configured:
             return []
-
-        from onyx.db.index_attempt import get_active_index_attempts_for_metrics
 
         attempts_gauge = GaugeMetricFamily(
             "onyx_index_attempts_active",
@@ -344,12 +338,6 @@ class ConnectorHealthCollector(_CachedCollector):
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         if not self._configured:
             return []
-
-        from onyx.db.connector_credential_pair import (
-            get_connector_health_for_metrics,
-        )
-        from onyx.db.index_attempt import get_docs_indexed_by_cc_pair
-        from onyx.db.index_attempt import get_failed_attempt_counts_by_cc_pair
 
         staleness_gauge = GaugeMetricFamily(
             "onyx_connector_last_success_age_seconds",
@@ -464,8 +452,6 @@ class RedisHealthCollector(_CachedCollector):
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         if self._celery_app is None:
             return []
-
-        from onyx.background.celery.celery_redis import celery_get_broker_client
 
         redis_client = celery_get_broker_client(self._celery_app)
 
