@@ -63,7 +63,7 @@ from onyx.server.metrics.deletion_metrics import inc_deletion_blocked
 from onyx.server.metrics.deletion_metrics import inc_deletion_completed
 from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
 from onyx.server.metrics.deletion_metrics import inc_deletion_started
-from onyx.server.metrics.deletion_metrics import observe_deletion_duration
+from onyx.server.metrics.deletion_metrics import observe_deletion_taskset_duration
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -539,7 +539,7 @@ def monitor_connector_deletion_taskset(
             duration = (
                 datetime.now(timezone.utc) - fence_data.submitted
             ).total_seconds()
-            observe_deletion_duration(tenant_id, duration)
+            observe_deletion_taskset_duration(tenant_id, "success", duration)
             inc_deletion_completed(tenant_id, "success")
 
         except Exception as e:
@@ -560,6 +560,10 @@ def monitor_connector_deletion_taskset(
                 f"Connector deletion exceptioned: "
                 f"cc_pair={cc_pair_id} connector={connector_id_to_delete} credential={credential_id_to_delete}"
             )
+            duration = (
+                datetime.now(timezone.utc) - fence_data.submitted
+            ).total_seconds()
+            observe_deletion_taskset_duration(tenant_id, "failure", duration)
             inc_deletion_completed(tenant_id, "failure")
             raise e
 

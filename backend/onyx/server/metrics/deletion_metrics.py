@@ -3,7 +3,11 @@
 Tracks the deletion lifecycle:
   1. Deletions started (taskset generated)
   2. Deletions completed (success or failure)
-  3. Deletion duration (end-to-end, from fence creation to completion)
+  3. Taskset duration (from taskset generation to completion or failure).
+     Note: this measures the most recent taskset execution, NOT wall-clock
+     time since the user triggered the deletion. When deletion is blocked by
+     indexing/pruning/permissions, the fence is cleared and a fresh taskset
+     is generated on each retry, resetting this timer.
   4. Deletion blocked by dependencies (indexing, pruning, permissions, etc.)
   5. Fence resets (stuck deletion recovery)
 
@@ -14,7 +18,7 @@ Usage:
     from onyx.server.metrics.deletion_metrics import (
         inc_deletion_started,
         inc_deletion_completed,
-        observe_deletion_duration,
+        observe_deletion_taskset_duration,
         inc_deletion_blocked,
         inc_deletion_fence_reset,
     )
@@ -39,10 +43,12 @@ DELETION_COMPLETED = Counter(
     ["tenant_id", "outcome"],
 )
 
-DELETION_DURATION = Histogram(
-    "onyx_deletion_duration_seconds",
-    "End-to-end connector deletion duration",
-    ["tenant_id"],
+DELETION_TASKSET_DURATION = Histogram(
+    "onyx_deletion_taskset_duration_seconds",
+    "Duration of a connector deletion taskset, from taskset generation "
+    "to completion or failure. Does not include time spent blocked on "
+    "indexing/pruning/permissions before the taskset was generated.",
+    ["tenant_id", "outcome"],
     buckets=[10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 21600],
 )
 
@@ -73,11 +79,15 @@ def inc_deletion_completed(tenant_id: str, outcome: str) -> None:
         logger.debug("Failed to record deletion completed", exc_info=True)
 
 
-def observe_deletion_duration(tenant_id: str, duration_seconds: float) -> None:
+def observe_deletion_taskset_duration(
+    tenant_id: str, outcome: str, duration_seconds: float
+) -> None:
     try:
-        DELETION_DURATION.labels(tenant_id=tenant_id).observe(duration_seconds)
+        DELETION_TASKSET_DURATION.labels(tenant_id=tenant_id, outcome=outcome).observe(
+            duration_seconds
+        )
     except Exception:
-        logger.debug("Failed to record deletion duration", exc_info=True)
+        logger.debug("Failed to record deletion taskset duration", exc_info=True)
 
 
 def inc_deletion_blocked(tenant_id: str, blocker: str) -> None:
