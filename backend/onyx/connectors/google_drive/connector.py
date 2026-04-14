@@ -75,6 +75,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -207,6 +208,7 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
+    SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
     Resolver,
@@ -1754,6 +1756,7 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         files_batch: list[RetrievedDriveFile] = []
         slim_batch: list[SlimDocument | HierarchyNode] = []
@@ -1763,9 +1766,13 @@ class GoogleDriveConnector(
             nonlocal files_batch, slim_batch
 
             # Get new ancestor hierarchy nodes first
-            permission_sync_context = PermissionSyncContext(
-                primary_admin_email=self.primary_admin_email,
-                google_domain=self.google_domain,
+            permission_sync_context = (
+                PermissionSyncContext(
+                    primary_admin_email=self.primary_admin_email,
+                    google_domain=self.google_domain,
+                )
+                if include_permissions
+                else None
             )
             new_ancestors = self._get_new_ancestors_for_files(
                 files=files_batch,
@@ -1779,10 +1786,7 @@ class GoogleDriveConnector(
                 if doc := build_slim_document(
                     self.creds,
                     file.drive_file,
-                    PermissionSyncContext(
-                        primary_admin_email=self.primary_admin_email,
-                        google_domain=self.google_domain,
-                    ),
+                    permission_sync_context,
                     retriever_email=file.user_email,
                 ):
                     slim_batch.append(doc)
@@ -1821,6 +1825,28 @@ class GoogleDriveConnector(
         # Yield remaining files
         if files_batch:
             yield _yield_slim_batch()
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        try:
+            checkpoint = self.build_dummy_checkpoint()
+            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
+                yield from self._extract_slim_docs_from_google_drive(
+                    checkpoint=checkpoint,
+                    start=start,
+                    end=end,
+                    callback=callback,
+                    include_permissions=False,
+                )
+            logger.info("Drive pruning: Slim doc retrieval complete")
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
+            raise
 
     def retrieve_all_slim_docs_perm_sync(
         self,
