@@ -52,8 +52,8 @@ import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/agents/interfaces";
 import React from "react";
-import { DOCS_ADMINS_PATH } from "./constants";
-import { SvgFileText, SvgGlobe } from "@opal/icons";
+import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "./constants";
+import { SvgFileText, SvgGlobe, SvgUploadCloud } from "@opal/icons";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -412,11 +412,10 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   user_file: {
-    // TODO: write docs for projects and link them here
-    icon: SvgFileText,
-    displayName: "File",
+    icon: SvgUploadCloud,
+    displayName: "Uploaded Files",
     category: SourceCategory.Other,
-    docs: `${DOCS_ADMINS_PATH}/connectors/official/file`,
+    docs: `${DOCS_BASE_URL}/overview/core_features/chat#projects`,
     isPopular: false, // Needs to be false to hide from the Add Connector page
   },
 
