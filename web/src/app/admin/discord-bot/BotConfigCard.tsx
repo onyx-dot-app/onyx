@@ -4,11 +4,10 @@ import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   useDiscordBotConfig,
   useDiscordGuilds,
@@ -119,7 +118,7 @@ export function BotConfigCard() {
             )}
           </Section>
           {isConfigured && (
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 hasServerConfigs ? "Delete server configs first" : undefined
               }
@@ -132,7 +131,7 @@ export function BotConfigCard() {
               >
                 Delete Discord Token
               </Button>
-            </SimpleTooltip>
+            </Tooltip>
           )}
         </Section>
 

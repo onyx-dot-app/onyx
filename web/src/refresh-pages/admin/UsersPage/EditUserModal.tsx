@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, Tooltip } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
@@ -10,7 +10,6 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
@@ -272,12 +271,12 @@ export default function EditUserModal({
                           group.users.length === 1 ? "user" : "users"
                         }`}
                         rightChildren={
-                          <SimpleTooltip
+                          <Tooltip
                             tooltip="Remove from group"
-                            side="left"
+                            tooltipSide="left"
                           >
                             <SvgLogOut height={16} width={16} />
-                          </SimpleTooltip>
+                          </Tooltip>
                         }
                         onClick={() => toggleGroup(group.id)}
                       >

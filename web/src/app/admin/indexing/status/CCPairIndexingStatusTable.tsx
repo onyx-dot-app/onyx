@@ -27,14 +27,13 @@ import {
   FiUnlock,
   FiRefreshCw,
 } from "react-icons/fi";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Button, Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
-import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 
 // Helper to handle navigation with cmd/ctrl+click support
@@ -208,9 +207,9 @@ function ConnectorRow({
       <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
       <TableCell>
         {isEditable && (
-          <SimpleTooltip tooltip="Manage Connector">
+          <Tooltip tooltip="Manage Connector">
             <Button icon={SvgSettings} prominence="tertiary" />
-          </SimpleTooltip>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>

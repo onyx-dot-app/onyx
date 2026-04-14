@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useRef, useState, JSX } from "react";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import Popover from "@/refresh-components/Popover";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 export interface Option<T> {
   name: string;
   value: T;
@@ -112,11 +112,11 @@ export function DefaultDropdownElement({
           {icon && icon({ size: 16, className: "mr-2 h-4 w-4 my-auto" })}
           {name}
           {disabled && disabledReason && (
-            <SimpleTooltip tooltip={disabledReason}>
+            <Tooltip tooltip={disabledReason}>
               <span className="ml-2 my-auto p-1 rounded hover:bg-background-100 text-warning transition-colors cursor-default">
                 <FiInfo size={14} className="text-warning" />
               </span>
-            </SimpleTooltip>
+            </Tooltip>
           )}
         </div>
         {description && <div className="text-xs">{description}</div>}

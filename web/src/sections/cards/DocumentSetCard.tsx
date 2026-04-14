@@ -2,7 +2,7 @@
 
 import { DocumentSetSummary } from "@/lib/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
@@ -24,7 +24,7 @@ export default function DocumentSetCard({
   disabledTooltip,
 }: DocumentSetCardProps) {
   return (
-    <SimpleTooltip
+    <Tooltip
       tooltip={disabled && disabledTooltip ? disabledTooltip : undefined}
       disabled={!disabled || !disabledTooltip}
     >
@@ -65,6 +65,6 @@ export default function DocumentSetCard({
           </Interactive.Container>
         </Interactive.Simple>
       </div>
-    </SimpleTooltip>
+    </Tooltip>
   );
 }

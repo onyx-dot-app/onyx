@@ -10,8 +10,8 @@ import {
 import { Hoverable } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Text from "@/refresh-components/texts/Text";
 import EditUserModal from "./EditUserModal";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 

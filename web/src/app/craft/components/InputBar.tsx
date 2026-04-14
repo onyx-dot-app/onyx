@@ -25,8 +25,7 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
-import { Button } from "@opal/components";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Button, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
@@ -119,17 +118,17 @@ function BuildFileCard({
   // Wrap in tooltip for error or pending status
   if (isFailed && file.error) {
     return (
-      <SimpleTooltip tooltip={file.error} side="top">
+      <Tooltip tooltip={file.error} tooltipSide="top">
         {cardContent}
-      </SimpleTooltip>
+      </Tooltip>
     );
   }
 
   if (isPending) {
     return (
-      <SimpleTooltip tooltip="Waiting for session to be ready..." side="top">
+      <Tooltip tooltip="Waiting for session to be ready..." tooltipSide="top">
         {cardContent}
-      </SimpleTooltip>
+      </Tooltip>
     );
   }
 
@@ -373,9 +372,9 @@ const InputBar = memo(
                 />
                 {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
                 {demoDataEnabled && isWelcomePage && (
-                  <SimpleTooltip
+                  <Tooltip
                     tooltip="Switch to your data in the Configure panel!"
-                    side="top"
+                    tooltipSide="top"
                   >
                     <span>
                       <SelectButton
@@ -390,7 +389,7 @@ const InputBar = memo(
                         Demo Data Active
                       </SelectButton>
                     </span>
-                  </SimpleTooltip>
+                  </Tooltip>
                 )}
               </div>
 

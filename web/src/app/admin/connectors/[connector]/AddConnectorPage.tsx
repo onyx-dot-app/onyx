@@ -55,12 +55,11 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import { Button } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
 
 export interface AdvancedConfig {
@@ -495,7 +494,7 @@ export default function AddConnector({
               hasFederatedOption ? (
                 <span className="inline-flex items-center gap-1.5">
                   {displayName}
-                  <SimpleTooltip
+                  <Tooltip
                     tooltip={
                       <div className="flex flex-col gap-2">
                         <Text as="p" textLight05>
@@ -511,11 +510,11 @@ export default function AddConnector({
                         </Link>
                       </div>
                     }
-                    side="bottom"
+                    tooltipSide="bottom"
                     delayDuration={0}
                   >
                     <SvgAlertCircle size={20} />
-                  </SimpleTooltip>
+                  </Tooltip>
                 </span>
               ) : (
                 displayName

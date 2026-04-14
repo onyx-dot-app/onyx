@@ -13,7 +13,7 @@ import {
   SvgRevert,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import ShareButton from "@/app/craft/components/ShareButton";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 
@@ -125,7 +125,7 @@ export default function UrlBar({
         <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
           {/* Download raw file button */}
           {onDownloadRaw && (
-            <SimpleTooltip tooltip={downloadRawTooltip} delayDuration={200}>
+            <Tooltip tooltip={downloadRawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
                 className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
@@ -133,11 +133,11 @@ export default function UrlBar({
               >
                 <SvgDownloadCloud size={14} />
               </button>
-            </SimpleTooltip>
+            </Tooltip>
           )}
           {/* Open in new tab button - only shown for Preview tab with valid URL */}
           {previewUrl && (
-            <SimpleTooltip tooltip="open in a new tab" delayDuration={200}>
+            <Tooltip tooltip="open in a new tab" delayDuration={200}>
               <button
                 onClick={handleOpenInNewTab}
                 className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
@@ -145,7 +145,7 @@ export default function UrlBar({
               >
                 <SvgExternalLink size={14} />
               </button>
-            </SimpleTooltip>
+            </Tooltip>
           )}
           <Text secondaryBody text03 className="min-w-0 flex-1 truncate">
             {displayUrl}
