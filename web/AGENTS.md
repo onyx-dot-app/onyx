@@ -193,10 +193,11 @@ hover, active, and disabled states.
 
 ### Disabled (`core/disabled/`)
 
-A `<div>` wrapper that applies disabled visuals (`opacity-50`, `cursor-not-allowed`,
-`pointer-events: none`) to its children via the `data-opal-disabled` CSS attribute. Supports an
-optional `tooltip` prop (shown on hover when disabled) and `allowClick` to re-enable pointer
-events. Interactive primitives and buttons manage their own disabled state via a `disabled` prop.
+A pure CSS wrapper that applies disabled visuals (`opacity-50`, `cursor-not-allowed`,
+`pointer-events: none`) to a single child element via Radix `Slot`. Supports an optional `tooltip`
+prop (shown on hover when disabled) and `allowClick` to re-enable pointer events. The child must
+be a single DOM element. Interactive primitives and buttons manage their own disabled state via a
+`disabled` prop.
 
 ### Hoverable (`core/animations/`)
 

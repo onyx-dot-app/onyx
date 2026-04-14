@@ -2,17 +2,17 @@ import "@opal/core/disabled/styles.css";
 import "@opal/components/tooltip.css";
 import React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { Slot } from "@radix-ui/react-slot";
 import type { TooltipSide } from "@opal/components";
-import type { RichStr, WithoutStyles } from "@opal/types";
+import type { RichStr } from "@opal/types";
 import { Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface DisabledProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
-  ref?: React.Ref<HTMLDivElement>;
+interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
+  ref?: React.Ref<HTMLElement>;
 
   /**
    * When truthy, applies disabled styling to child elements.
@@ -37,7 +37,7 @@ interface DisabledProps
   /** Which side the tooltip appears on. @default "right" */
   tooltipSide?: TooltipSide;
 
-  children?: React.ReactNode;
+  children: React.ReactElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,21 +46,19 @@ interface DisabledProps
 
 /**
  * Wrapper component that applies baseline disabled CSS (opacity, cursor,
- * pointer-events) to its children.
+ * pointer-events) to its child element.
  *
- * Renders a `<div>` that carries the `data-opal-disabled` attribute so the
- * CSS rules in `styles.css` take effect on the wrapper and cascade into its
- * descendants. Works with any children (DOM elements, React components, or
- * fragments).
+ * Uses Radix `Slot` — merges props onto the single child element without
+ * adding any DOM node. Works correctly inside Radix `asChild` chains.
  *
  * @example
  * ```tsx
  * <Disabled disabled={!canSubmit}>
- *   <MyComponent />
+ *   <div>...</div>
  * </Disabled>
  *
  * <Disabled disabled={!canSubmit} tooltip="Feature not available">
- *   <MyComponent />
+ *   <div>...</div>
  * </Disabled>
  * ```
  */
@@ -69,6 +67,7 @@ function Disabled({
   allowClick,
   tooltip,
   tooltipSide = "right",
+  children,
   ref,
   ...rest
 }: DisabledProps) {
@@ -76,14 +75,15 @@ function Disabled({
   const enableClick = allowClick || showTooltip;
 
   const wrapper = (
-    <div
+    <Slot
       ref={ref}
-      className="opal-disabled"
       {...rest}
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}
       data-allow-click={disabled && enableClick ? "" : undefined}
-    />
+    >
+      {children}
+    </Slot>
   );
 
   if (!showTooltip) return wrapper;
