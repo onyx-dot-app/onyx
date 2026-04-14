@@ -95,9 +95,9 @@ class TestForceAddSearchToolGuard:
         without a vector DB."""
         import inspect
 
-        from onyx.tools.tool_constructor import construct_tools
+        from onyx.tools.tool_constructor import _construct_tools_impl
 
-        source = inspect.getsource(construct_tools)
+        source = inspect.getsource(_construct_tools_impl)
         assert (
             "DISABLE_VECTOR_DB" in source
         ), "construct_tools should reference DISABLE_VECTOR_DB to suppress force-adding SearchTool"
