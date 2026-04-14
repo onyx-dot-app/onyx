@@ -94,6 +94,11 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
+
+# Original upstream chunk_parser, saved before any patching for fallback use
+_original_responses_chunk_parser = (
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser
+)
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
 from litellm.types.utils import ChatCompletionUsageBlock
@@ -249,20 +254,19 @@ def _patch_ollama_chunk_parser() -> None:
     )
 
 
-def _patch_openai_responses_parallel_tool_calls() -> None:
+def _patch_responses_reasoning_summary_newlines() -> None:
     """
-    Patches OpenAiResponsesToChatCompletionStreamIterator to properly handle:
-    1. Parallel tool calls by using output_index from streaming events
-    2. Reasoning summary sections by inserting newlines between different summary indices
+    Patches OpenAiResponsesToChatCompletionStreamIterator.chunk_parser to insert
+    newlines between different reasoning summary sections in streaming responses.
 
-    LiteLLM's implementation hardcodes index=0 for all tool calls, breaking parallel tool calls.
-    The OpenAI Responses API provides output_index in each event to track which tool call
-    the event belongs to.
+    LiteLLM passes through reasoning_summary_text.delta content as-is, without
+    separating different summary_index sections. This patch prepends "\\n\\n" when
+    the summary_index changes, producing readable section breaks.
 
-    STATUS: STILL NEEDED - LiteLLM hardcodes index=0 in translate_responses_chunk_to_openai_stream
-            for response.output_item.added (line 962), response.function_call_arguments.delta
-            (line 989), and response.output_item.done (line 1033). Our patch uses output_index
-            from the event to properly track parallel tool calls.
+    The original Patch 2 also fixed parallel tool calls (hardcoded index=0) and
+    premature finish_reason="tool_calls" on output_item.done. Both are now fixed
+    upstream in litellm 1.83.0 (output_index is used, finish_reason=None on
+    output_item.done).
     """
     if (
         getattr(
@@ -277,146 +281,24 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
     def _patched_responses_chunk_parser(
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
-        from litellm.types.llms.openai import ChatCompletionToolCallFunctionChunk
-        from litellm.types.llms.openai import ResponsesAPIStreamEvents
-        from litellm.types.utils import ChatCompletionToolCallChunk
-        from litellm.types.utils import Delta
-        from litellm.types.utils import ModelResponseStream
-        from litellm.types.utils import StreamingChoices
         from pydantic import BaseModel
 
-        parsed_chunk = chunk
-        if not parsed_chunk:
-            raise ValueError("Chat provider: Empty parsed_chunk")
+        from litellm.types.llms.openai import ResponsesAPIStreamEvents
+        from litellm.types.utils import (
+            Delta,
+            ModelResponseStream,
+            StreamingChoices,
+        )
 
+        parsed_chunk = chunk
         if isinstance(parsed_chunk, BaseModel):
             parsed_chunk = parsed_chunk.model_dump()
-        if not isinstance(parsed_chunk, dict):
-            raise ValueError(f"Chat provider: Invalid chunk type {type(parsed_chunk)}")
 
-        event_type = parsed_chunk.get("type")
+        event_type = parsed_chunk.get("type") if isinstance(parsed_chunk, dict) else None
         if isinstance(event_type, ResponsesAPIStreamEvents):
             event_type = event_type.value
 
-        # Get the output_index for proper parallel tool call tracking
-        output_index = parsed_chunk.get("output_index", 0)
-
-        if event_type == "response.output_item.added":
-            output_item = parsed_chunk.get("item", {})
-            if output_item.get("type") == "function_call":
-                provider_specific_fields = output_item.get("provider_specific_fields")
-                if provider_specific_fields and not isinstance(
-                    provider_specific_fields, dict
-                ):
-                    provider_specific_fields = (
-                        dict(provider_specific_fields)
-                        if hasattr(provider_specific_fields, "__dict__")
-                        else {}
-                    )
-
-                function_chunk = ChatCompletionToolCallFunctionChunk(
-                    name=output_item.get("name", None),
-                    arguments=parsed_chunk.get("arguments", ""),
-                )
-                if provider_specific_fields:
-                    function_chunk["provider_specific_fields"] = (
-                        provider_specific_fields
-                    )
-
-                tool_call_chunk = ChatCompletionToolCallChunk(
-                    id=output_item.get("call_id"),
-                    index=output_index,  # Use output_index for parallel tool calls
-                    type="function",
-                    function=function_chunk,
-                )
-                if provider_specific_fields:
-                    tool_call_chunk.provider_specific_fields = (  # ty: ignore[unresolved-attribute]
-                        provider_specific_fields
-                    )
-
-                return ModelResponseStream(
-                    choices=[
-                        StreamingChoices(
-                            index=0,
-                            delta=Delta(tool_calls=[tool_call_chunk]),
-                            finish_reason=None,
-                        )
-                    ]
-                )
-
-        elif event_type == "response.function_call_arguments.delta":
-            content_part: Optional[str] = parsed_chunk.get("delta", None)
-            if content_part:
-                return ModelResponseStream(
-                    choices=[
-                        StreamingChoices(
-                            index=0,
-                            delta=Delta(
-                                tool_calls=[
-                                    ChatCompletionToolCallChunk(
-                                        id=None,
-                                        index=output_index,  # Use output_index for parallel tool calls
-                                        type="function",
-                                        function=ChatCompletionToolCallFunctionChunk(
-                                            name=None, arguments=content_part
-                                        ),
-                                    )
-                                ]
-                            ),
-                            finish_reason=None,
-                        )
-                    ]
-                )
-            else:
-                raise ValueError(
-                    f"Chat provider: Invalid function argument delta {parsed_chunk}"
-                )
-
-        elif event_type == "response.output_item.done":
-            output_item = parsed_chunk.get("item", {})
-            if output_item.get("type") == "function_call":
-                provider_specific_fields = output_item.get("provider_specific_fields")
-                if provider_specific_fields and not isinstance(
-                    provider_specific_fields, dict
-                ):
-                    provider_specific_fields = (
-                        dict(provider_specific_fields)
-                        if hasattr(provider_specific_fields, "__dict__")
-                        else {}
-                    )
-
-                function_chunk = ChatCompletionToolCallFunctionChunk(
-                    name=output_item.get("name", None),
-                    arguments="",  # responses API sends everything again, we don't need it
-                )
-                if provider_specific_fields:
-                    function_chunk["provider_specific_fields"] = (
-                        provider_specific_fields
-                    )
-
-                tool_call_chunk = ChatCompletionToolCallChunk(
-                    id=output_item.get("call_id"),
-                    index=output_index,  # Use output_index for parallel tool calls
-                    type="function",
-                    function=function_chunk,
-                )
-                if provider_specific_fields:
-                    tool_call_chunk.provider_specific_fields = (  # ty: ignore[unresolved-attribute]
-                        provider_specific_fields
-                    )
-
-                return ModelResponseStream(
-                    choices=[
-                        StreamingChoices(
-                            index=0,
-                            delta=Delta(tool_calls=[tool_call_chunk]),
-                            finish_reason="tool_calls",
-                        )
-                    ]
-                )
-
-        elif event_type == "response.reasoning_summary_text.delta":
-            # Handle reasoning summary with newlines between sections
+        if event_type == "response.reasoning_summary_text.delta":
             content_part = parsed_chunk.get("delta", None)
             if content_part:
                 summary_index = parsed_chunk.get("summary_index", 0)
@@ -429,7 +311,7 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
                     last_summary_index is not None
                     and summary_index != last_summary_index
                 ):
-                    # New summary part started, prepend newlines to separate them
+                    # New summary section started, prepend newlines to separate them
                     content_part = "\n\n" + content_part
                 self._last_reasoning_summary_index = summary_index
 
@@ -442,10 +324,8 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
                     ]
                 )
 
-        # For all other event types, use the original static method
-        return OpenAiResponsesToChatCompletionStreamIterator.translate_responses_chunk_to_openai_stream(
-            parsed_chunk
-        )
+        # For all other event types, use the original upstream chunk_parser
+        return _original_responses_chunk_parser(self, chunk)
 
     _patched_responses_chunk_parser.__name__ = "_patched_responses_chunk_parser"
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
@@ -797,7 +677,7 @@ def apply_monkey_patches() -> None:
 
     This includes:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
-    - Patching translate_responses_chunk_to_openai_stream for parallel tool calls
+    - Patching chunk_parser for reasoning summary newline insertion between sections
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
@@ -805,7 +685,7 @@ def apply_monkey_patches() -> None:
     - Patching litellm.responses to fix metadata=None causing TypeError in error handling
     """
     _patch_ollama_chunk_parser()
-    _patch_openai_responses_parallel_tool_calls()
+    _patch_responses_reasoning_summary_newlines()
     _patch_openai_responses_transform_response()
     _patch_azure_responses_should_fake_stream()
     _patch_responses_api_usage_format()
