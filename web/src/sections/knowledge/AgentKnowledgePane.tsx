@@ -9,9 +9,8 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import { Content, InputHorizontal } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -1145,16 +1144,17 @@ export default function AgentKnowledgePane({
 
       <Card>
         <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Use Knowledge"
             description="Let this agent reference these documents to inform its responses."
+            withLabel
           >
             <Switch
               name="enable_knowledge"
               checked={enableKnowledge}
               onCheckedChange={onEnableKnowledgeChange}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           <Disabled disabled={!enableKnowledge}>
             <GeneralLayouts.Section alignItems="stretch" height="auto">

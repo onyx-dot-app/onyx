@@ -14,9 +14,8 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content, ContentAction, InputVertical } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import {
   createHook,
@@ -110,8 +109,8 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
     useFormikContext<HookFormState>();
 
   return (
-    <InputLayouts.Vertical
-      name="timeout_seconds"
+    <InputVertical
+      withLabel="timeout_seconds"
       title="Timeout"
       suffix="(seconds)"
       subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
@@ -143,7 +142,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
           }
         />
       </div>
-    </InputLayouts.Vertical>
+    </InputVertical>
   );
 }
 
@@ -302,7 +301,7 @@ export default function HookFormModal({
                     }
                   />
 
-                  <InputLayouts.Vertical name="name" title="Display Name">
+                  <InputVertical withLabel="name" title="Display Name">
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="name"
@@ -310,10 +309,10 @@ export default function HookFormModal({
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
-                  <InputLayouts.Vertical
-                    name="fail_strategy"
+                  <InputVertical
+                    withLabel="fail_strategy"
                     title="Fail Strategy"
                     subDescription={failStrategyDescription}
                   >
@@ -346,12 +345,12 @@ export default function HookFormModal({
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
                   <TimeoutField spec={spec} />
 
-                  <InputLayouts.Vertical
-                    name="endpoint_url"
+                  <InputVertical
+                    withLabel="endpoint_url"
                     title="External API Endpoint URL"
                     subDescription="Only connect to servers you trust. You are responsible for actions taken and data shared with this connection."
                   >
@@ -362,10 +361,10 @@ export default function HookFormModal({
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
-                  <InputLayouts.Vertical
-                    name="api_key"
+                  <InputVertical
+                    withLabel="api_key"
                     title="API Key"
                     subDescription="Onyx will use this key to authenticate with your API endpoint."
                   >
@@ -384,7 +383,7 @@ export default function HookFormModal({
                         }
                       }}
                     />
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
                   {!isEdit && (isSubmitting || isConnected) && (
                     <Section

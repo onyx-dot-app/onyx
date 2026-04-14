@@ -74,7 +74,7 @@ import InputTypeIn from "./InputTypeIn";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import { ErrorTextLayout } from "@/layouts/input-layouts";
+import { InputErrorText } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };
@@ -128,7 +128,7 @@ function KeyValueInputItem({
           aria-invalid={!!error?.key}
           showClearButton={false}
         />
-        {error?.key && <ErrorTextLayout>{error.key}</ErrorTextLayout>}
+        {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
@@ -139,7 +139,7 @@ function KeyValueInputItem({
           aria-invalid={!!error?.value}
           showClearButton={false}
         />
-        {error?.value && <ErrorTextLayout>{error.value}</ErrorTextLayout>}
+        {error?.value && <InputErrorText>{error.value}</InputErrorText>}
       </div>
       <Button
         disabled={!canRemove}

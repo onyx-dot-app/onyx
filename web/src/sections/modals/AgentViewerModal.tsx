@@ -7,7 +7,7 @@ import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Divider } from "@opal/components";
@@ -27,7 +27,6 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-import { Horizontal } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -350,34 +349,30 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   />
                 )}
                 {defaultModel && (
-                  <Horizontal
+                  <InputHorizontal
                     title="Default Model"
                     description="This model will be used by Onyx by default in your chats."
-                    withLabel={false}
-                    sizePreset="main-ui"
                   >
                     <Text>{defaultModel}</Text>
-                  </Horizontal>
+                  </InputHorizontal>
                 )}
                 {agent.search_start_date && (
-                  <Horizontal
+                  <InputHorizontal
                     title="Knowledge Cutoff Date"
                     description="Documents with a last-updated date prior to this will be ignored."
-                    withLabel={false}
-                    sizePreset="main-ui"
                   >
                     <Text mainUiMono>
                       {formatMmDdYyyy(agent.search_start_date)}
                     </Text>
-                  </Horizontal>
+                  </InputHorizontal>
                 )}
-                <Horizontal
+                <InputHorizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  sizePreset="main-ui"
+                  withLabel
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
-                </Horizontal>
+                </InputHorizontal>
               </Section>
             </SimpleCollapsible.Content>
           </SimpleCollapsible>

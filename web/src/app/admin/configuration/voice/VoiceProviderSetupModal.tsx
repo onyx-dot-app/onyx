@@ -15,7 +15,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Vertical, Horizontal } from "@/layouts/input-layouts";
+import { InputVertical, InputHorizontal } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -436,11 +436,12 @@ export default function VoiceProviderSetupModal({
             </FormField>
 
             {providerType === "azure" && (
-              <Vertical
+              <InputVertical
                 title="Target URI"
                 subDescription={markdown(
                   "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: https://westus.api.cognitive.microsoft.com/ or https://westus.tts.speech.microsoft.com/."
                 )}
+                withLabel
               >
                 <InputTypeIn
                   placeholder={
@@ -451,11 +452,11 @@ export default function VoiceProviderSetupModal({
                   value={targetUri}
                   onChange={(e) => setTargetUri(e.target.value)}
                 />
-              </Vertical>
+              </InputVertical>
             )}
 
             {providerType === "openai" && mode === "stt" && (
-              <Horizontal title="STT Model" center>
+              <InputHorizontal title="STT Model" center withLabel>
                 <InputSelect value={sttModel} onValueChange={setSttModel}>
                   <InputSelect.Trigger />
                   <InputSelect.Content>
@@ -466,13 +467,14 @@ export default function VoiceProviderSetupModal({
                     ))}
                   </InputSelect.Content>
                 </InputSelect>
-              </Horizontal>
+              </InputHorizontal>
             )}
 
             {providerType === "openai" && mode === "tts" && (
-              <Vertical
+              <InputVertical
                 title="Default Model"
                 subDescription="This model will be used by Onyx by default for text-to-speech."
+                withLabel
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>
                   <InputSelect.Trigger />
@@ -484,11 +486,11 @@ export default function VoiceProviderSetupModal({
                     ))}
                   </InputSelect.Content>
                 </InputSelect>
-              </Vertical>
+              </InputVertical>
             )}
 
             {mode === "tts" && (
-              <Vertical
+              <InputVertical
                 title="Voice"
                 subDescription={markdown(
                   `This voice will be used for spoken responses. See full list of supported languages and voices at [${
@@ -498,6 +500,7 @@ export default function VoiceProviderSetupModal({
                     PROVIDER_DOCS_URLS[providerType]
                   }).`
                 )}
+                withLabel
               >
                 <InputComboBox
                   value={defaultVoice}
@@ -511,7 +514,7 @@ export default function VoiceProviderSetupModal({
                   disabled={isLoadingVoices}
                   strict={false}
                 />
-              </Vertical>
+              </InputVertical>
             )}
           </Section>
         </Modal.Body>

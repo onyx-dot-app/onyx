@@ -1,6 +1,11 @@
 import "@opal/core/disabled/styles.css";
+import "@opal/components/tooltip.css";
 import React from "react";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { Slot } from "@radix-ui/react-slot";
+import type { TooltipSide } from "@opal/components";
+import type { RichStr } from "@opal/types";
+import { Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,11 +21,21 @@ interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
 
   /**
    * When `true`, re-enables pointer events while keeping the disabled
-   * visual treatment. Useful for elements that need to show tooltips or
-   * error messages on click.
+   * visual treatment. Useful for elements that need to remain interactive
+   * (e.g. to show tooltips or handle clicks at a higher level).
    * @default false
    */
   allowClick?: boolean;
+
+  /**
+   * Tooltip content shown on hover when disabled. Implies `allowClick` so that
+   * the tooltip trigger can receive pointer events. Supports inline markdown
+   * via `markdown()`.
+   */
+  tooltip?: string | RichStr;
+
+  /** Which side the tooltip appears on. @default "right" */
+  tooltipSide?: TooltipSide;
 
   children: React.ReactElement;
 }
@@ -41,25 +56,53 @@ interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
  * <Disabled disabled={!canSubmit}>
  *   <div>...</div>
  * </Disabled>
+ *
+ * <Disabled disabled={!canSubmit} tooltip="Feature not available">
+ *   <div>...</div>
+ * </Disabled>
  * ```
  */
 function Disabled({
   disabled,
   allowClick,
+  tooltip,
+  tooltipSide = "right",
   children,
   ref,
   ...rest
 }: DisabledProps) {
-  return (
+  const showTooltip = disabled && tooltip;
+  const enableClick = allowClick || showTooltip;
+
+  const wrapper = (
     <Slot
       ref={ref}
       {...rest}
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}
-      data-allow-click={disabled && allowClick ? "" : undefined}
+      data-allow-click={disabled && enableClick ? "" : undefined}
     >
       {children}
     </Slot>
+  );
+
+  if (!showTooltip) return wrapper;
+
+  // TODO(@raunakab): Replace this raw Radix tooltip with the opalified
+  // Tooltip component once it lands.
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>{wrapper}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content
+          className="opal-tooltip"
+          side={tooltipSide}
+          sideOffset={4}
+        >
+          <Text font="secondary-body">{tooltip}</Text>
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
 

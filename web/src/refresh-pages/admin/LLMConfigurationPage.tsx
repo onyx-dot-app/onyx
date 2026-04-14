@@ -3,12 +3,9 @@
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import {
-  useAdminLLMProviders,
-  useWellKnownLLMProviders,
-} from "@/hooks/useLLMProviders";
+import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, Card as CardLayout } from "@opal/layouts";
+import { Content, Card as CardLayout, InputHorizontal } from "@opal/layouts";
 import { Button, Divider, SelectCard, Text, Card } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -18,16 +15,11 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/llmConfig";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import {
-  LLMProviderName,
-  LLMProviderView,
-  WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
@@ -37,15 +29,15 @@ const route = ADMIN_ROUTES.LLM_MODELS;
 // Provider form mapping (keyed by provider name from the API)
 // ============================================================================
 
-// Client-side ordering for the "Add Provider" cards. The backend may return
-// wellKnownLLMProviders in an arbitrary order, so we sort explicitly here.
+// Static list of well-known providers rendered in the "Add Provider" grid.
+// Must match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
+// dedicated modal). Order here controls display order.
 const PROVIDER_DISPLAY_ORDER: string[] = [
   LLMProviderName.OPENAI,
   LLMProviderName.ANTHROPIC,
   LLMProviderName.VERTEX_AI,
   LLMProviderName.BEDROCK,
   LLMProviderName.AZURE,
-  LLMProviderName.LITELLM,
   LLMProviderName.LITELLM_PROXY,
   LLMProviderName.OLLAMA_CHAT,
   LLMProviderName.OPENROUTER,
@@ -188,13 +180,16 @@ function ExistingProviderCard({
 // ============================================================================
 
 interface NewProviderCardProps {
-  provider: WellKnownLLMProviderDescriptor;
+  providerName: string;
   isFirstProvider: boolean;
 }
 
-function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
+function NewProviderCard({
+  providerName,
+  isFirstProvider,
+}: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getProvider(provider.name);
+  const { icon, productName, companyName, Modal } = getProvider(providerName);
 
   return (
     <SelectCard
@@ -284,7 +279,6 @@ export default function LLMConfigurationPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
-  const { wellKnownLLMProviders } = useWellKnownLLMProviders();
 
   if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
@@ -337,10 +331,11 @@ export default function LLMConfigurationPage() {
       <SettingsLayouts.Body>
         {hasProviders ? (
           <Card border="solid" rounding="lg">
-            <HorizontalInput
+            <InputHorizontal
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."
               center
+              withLabel
             >
               <InputSelect
                 value={currentDefaultValue}
@@ -365,7 +360,7 @@ export default function LLMConfigurationPage() {
                   )}
                 </InputSelect.Content>
               </InputSelect>
-            </HorizontalInput>
+            </InputHorizontal>
           </Card>
         ) : (
           <Message
@@ -424,22 +419,13 @@ export default function LLMConfigurationPage() {
           />
 
           <div className="grid grid-cols-2 gap-2">
-            {[...(wellKnownLLMProviders ?? [])]
-              .sort((a, b) => {
-                const aIndex = PROVIDER_DISPLAY_ORDER.indexOf(a.name);
-                const bIndex = PROVIDER_DISPLAY_ORDER.indexOf(b.name);
-                return (
-                  (aIndex === -1 ? Infinity : aIndex) -
-                  (bIndex === -1 ? Infinity : bIndex)
-                );
-              })
-              .map((provider) => (
-                <NewProviderCard
-                  key={provider.name}
-                  provider={provider}
-                  isFirstProvider={isFirstProvider}
-                />
-              ))}
+            {PROVIDER_DISPLAY_ORDER.map((name) => (
+              <NewProviderCard
+                key={name}
+                providerName={name}
+                isFirstProvider={isFirstProvider}
+              />
+            ))}
             <NewCustomProviderCard isFirstProvider={isFirstProvider} />
           </div>
         </GeneralLayouts.Section>

@@ -6,7 +6,6 @@ import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -18,6 +17,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
@@ -31,7 +31,12 @@ import { fetchBedrockModels } from "@/lib/llmConfig/svc";
 import { Card } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgAlertCircle } from "@opal/icons";
-import { Content } from "@opal/layouts";
+import {
+  Content,
+  InputDivider,
+  InputPadder,
+  InputVertical,
+} from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
@@ -119,15 +124,21 @@ function BedrockModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue("model_configurations", models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        models,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
   return (
     <>
-      <InputLayouts.FieldPadder>
+      <InputPadder>
         <Section gap={1}>
-          <InputLayouts.Vertical
-            name={FIELD_AWS_REGION_NAME}
+          <InputVertical
+            withLabel={FIELD_AWS_REGION_NAME}
             title="AWS Region"
             subDescription="Region where your Amazon Bedrock models are hosted."
           >
@@ -141,10 +152,10 @@ function BedrockModalInternals({
                 ))}
               </InputSelect.Content>
             </InputSelectField>
-          </InputLayouts.Vertical>
+          </InputVertical>
 
-          <InputLayouts.Vertical
-            name={FIELD_BEDROCK_AUTH_METHOD}
+          <InputVertical
+            withLabel={FIELD_BEDROCK_AUTH_METHOD}
             title="Authentication Method"
             subDescription="Choose how Onyx should authenticate with Bedrock."
           >
@@ -176,37 +187,37 @@ function BedrockModalInternals({
                 </InputSelect.Item>
               </InputSelect.Content>
             </InputSelect>
-          </InputLayouts.Vertical>
+          </InputVertical>
         </Section>
-      </InputLayouts.FieldPadder>
+      </InputPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card background="light" border="none" padding="sm">
           <Section gap={1}>
-            <InputLayouts.Vertical
-              name={FIELD_AWS_ACCESS_KEY_ID}
+            <InputVertical
+              withLabel={FIELD_AWS_ACCESS_KEY_ID}
               title="AWS Access Key ID"
             >
               <InputTypeInField
                 name={FIELD_AWS_ACCESS_KEY_ID}
                 placeholder="AKIAIOSFODNN7EXAMPLE"
               />
-            </InputLayouts.Vertical>
-            <InputLayouts.Vertical
-              name={FIELD_AWS_SECRET_ACCESS_KEY}
+            </InputVertical>
+            <InputVertical
+              withLabel={FIELD_AWS_SECRET_ACCESS_KEY}
               title="AWS Secret Access Key"
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Section>
         </Card>
       )}
 
       {authMethod === AUTH_METHOD_IAM && (
-        <InputLayouts.FieldPadder>
+        <InputPadder>
           <Card background="none" border="solid" padding="sm">
             <Content
               icon={SvgAlertCircle}
@@ -215,33 +226,33 @@ function BedrockModalInternals({
               sizePreset="main-ui"
             />
           </Card>
-        </InputLayouts.FieldPadder>
+        </InputPadder>
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
         <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
-            <InputLayouts.Vertical
-              name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+            <InputVertical
+              withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
               title="Long-term API Key"
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 placeholder="Your long-term API key"
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Section>
         </Card>
       )}
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -249,7 +260,7 @@ function BedrockModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

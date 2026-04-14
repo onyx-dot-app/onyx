@@ -10,7 +10,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
-import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -23,7 +22,13 @@ import { Button, LineItemButton } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import {
+  Content,
+  InputDivider,
+  InputHorizontal,
+  InputPadder,
+  InputVertical,
+} from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -54,9 +59,9 @@ export interface DisplayNameFieldProps {
 }
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <InputLayouts.FieldPadder>
-      <InputLayouts.Vertical
-        name="name"
+    <InputPadder>
+      <InputVertical
+        withLabel="name"
         title="Display Name"
         subDescription="Used to identify this provider in the app."
       >
@@ -65,8 +70,8 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
           placeholder="Display Name"
           variant={disabled ? "disabled" : undefined}
         />
-      </InputLayouts.Vertical>
-    </InputLayouts.FieldPadder>
+      </InputVertical>
+    </InputPadder>
   );
 }
 
@@ -86,9 +91,9 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   return (
-    <InputLayouts.FieldPadder>
-      <InputLayouts.Vertical
-        name={name}
+    <InputPadder>
+      <InputVertical
+        withLabel={name}
         title="API Key"
         subDescription={
           subDescription
@@ -100,8 +105,8 @@ export function APIKeyField({
         suffix={optional ? "optional" : undefined}
       >
         <PasswordInputTypeInField name={name} />
-      </InputLayouts.Vertical>
-    </InputLayouts.FieldPadder>
+      </InputVertical>
+    </InputPadder>
   );
 }
 
@@ -118,16 +123,16 @@ export function APIBaseField({
   placeholder = "https://",
 }: APIBaseFieldProps) {
   return (
-    <InputLayouts.FieldPadder>
-      <InputLayouts.Vertical
-        name="api_base"
+    <InputPadder>
+      <InputVertical
+        withLabel="api_base"
         title="API Base URL"
         subDescription={subDescription}
         suffix={optional ? "optional" : undefined}
       >
         <InputTypeInField name="api_base" placeholder={placeholder} />
-      </InputLayouts.Vertical>
-    </InputLayouts.FieldPadder>
+      </InputVertical>
+    </InputPadder>
   );
 }
 
@@ -221,9 +226,9 @@ export function ModelAccessField() {
 
   return (
     <div className="flex flex-col w-full">
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Horizontal
-          name="is_public"
+      <InputPadder>
+        <InputHorizontal
+          withLabel="is_public"
           title="Models Access"
           description="Who can access this provider."
         >
@@ -241,8 +246,8 @@ export function ModelAccessField() {
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
-        </InputLayouts.Horizontal>
-      </InputLayouts.FieldPadder>
+        </InputHorizontal>
+      </InputPadder>
 
       {!isPublic && (
         <Card background="light" border="none" padding="sm">
@@ -308,7 +313,7 @@ export function ModelAccessField() {
               </div>
             )}
 
-            <InputLayouts.FieldSeparator />
+            <InputDivider />
 
             {selectedAgentIds.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 w-full">
@@ -480,10 +485,9 @@ export function ModelSelectionField({
   return (
     <Card background="light" border="none" padding="sm">
       <Section gap={0.5}>
-        <InputLayouts.Horizontal
+        <InputHorizontal
           title="Models"
           description="Select models to make available for this provider."
-          withLabel={false}
           center
         >
           <Section flexDirection="row" gap={0}>
@@ -497,7 +501,7 @@ export function ModelSelectionField({
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
-        </InputLayouts.Horizontal>
+        </InputHorizontal>
 
         {models.length === 0 ? (
           <EmptyMessageCard title="No models available." padding="sm" />
@@ -610,15 +614,16 @@ export function ModelSelectionField({
         )}
 
         {shouldShowAutoUpdateToggle && (
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Auto Update"
             description="Update the available models when new models are released."
+            withLabel
           >
             <Switch
               checked={isAutoMode}
               onCheckedChange={handleToggleAutoMode}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
         )}
       </Section>
     </Card>

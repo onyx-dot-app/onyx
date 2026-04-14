@@ -1,5 +1,3 @@
-from typing import cast
-
 from chonkie import SentenceChunker
 
 from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
@@ -16,16 +14,14 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
 from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
+from onyx.indexing.chunking import DocumentChunker
+from onyx.indexing.chunking import extract_blurb
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import clean_text
-from onyx.utils.text_processing import shared_precompare_cleanup
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps
 # actually help quality at all
@@ -154,9 +150,6 @@ class Chunker:
         self.tokenizer = tokenizer
         self.callback = callback
 
-        self.max_context = 0
-        self.prompt_tokens = 0
-
         # Create a token counter function that returns the count instead of the tokens
         def token_counter(text: str) -> int:
             return len(tokenizer.encode(text))
@@ -186,234 +179,12 @@ class Chunker:
             else None
         )
 
-    def _split_oversized_chunk(self, text: str, content_token_limit: int) -> list[str]:
-        """
-        Splits the text into smaller chunks based on token count to ensure
-        no chunk exceeds the content_token_limit.
-        """
-        tokens = self.tokenizer.tokenize(text)
-        chunks = []
-        start = 0
-        total_tokens = len(tokens)
-        while start < total_tokens:
-            end = min(start + content_token_limit, total_tokens)
-            token_chunk = tokens[start:end]
-            chunk_text = " ".join(token_chunk)
-            chunks.append(chunk_text)
-            start = end
-        return chunks
-
-    def _extract_blurb(self, text: str) -> str:
-        """
-        Extract a short blurb from the text (first chunk of size `blurb_size`).
-        """
-        # chunker is in `text` mode
-        texts = cast(list[str], self.blurb_splitter.chunk(text))
-        if not texts:
-            return ""
-        return texts[0]
-
-    def _get_mini_chunk_texts(self, chunk_text: str) -> list[str] | None:
-        """
-        For "multipass" mode: additional sub-chunks (mini-chunks) for use in certain embeddings.
-        """
-        if self.mini_chunk_splitter and chunk_text.strip():
-            # chunker is in `text` mode
-            return cast(list[str], self.mini_chunk_splitter.chunk(chunk_text))
-        return None
-
-    # ADDED: extra param image_url to store in the chunk
-    def _create_chunk(
-        self,
-        document: IndexingDocument,
-        chunks_list: list[DocAwareChunk],
-        text: str,
-        links: dict[int, str],
-        is_continuation: bool = False,
-        title_prefix: str = "",
-        metadata_suffix_semantic: str = "",
-        metadata_suffix_keyword: str = "",
-        image_file_id: str | None = None,
-    ) -> None:
-        """
-        Helper to create a new DocAwareChunk, append it to chunks_list.
-        """
-        new_chunk = DocAwareChunk(
-            source_document=document,
-            chunk_id=len(chunks_list),
-            blurb=self._extract_blurb(text),
-            content=text,
-            source_links=links or {0: ""},
-            image_file_id=image_file_id,
-            section_continuation=is_continuation,
-            title_prefix=title_prefix,
-            metadata_suffix_semantic=metadata_suffix_semantic,
-            metadata_suffix_keyword=metadata_suffix_keyword,
-            mini_chunk_texts=self._get_mini_chunk_texts(text),
-            large_chunk_id=None,
-            doc_summary="",
-            chunk_context="",
-            contextual_rag_reserved_tokens=0,  # set per-document in _handle_single_document
+        self._document_chunker = DocumentChunker(
+            tokenizer=tokenizer,
+            blurb_splitter=self.blurb_splitter,
+            chunk_splitter=self.chunk_splitter,
+            mini_chunk_splitter=self.mini_chunk_splitter,
         )
-        chunks_list.append(new_chunk)
-
-    def _chunk_document_with_sections(
-        self,
-        document: IndexingDocument,
-        sections: list[Section],
-        title_prefix: str,
-        metadata_suffix_semantic: str,
-        metadata_suffix_keyword: str,
-        content_token_limit: int,
-    ) -> list[DocAwareChunk]:
-        """
-        Loops through sections of the document, converting them into one or more chunks.
-        Works with processed sections that are base Section objects.
-        """
-        chunks: list[DocAwareChunk] = []
-        link_offsets: dict[int, str] = {}
-        chunk_text = ""
-
-        for section_idx, section in enumerate(sections):
-            # Get section text and other attributes
-            section_text = clean_text(str(section.text or ""))
-            section_link_text = section.link or ""
-            image_url = section.image_file_id
-
-            # If there is no useful content, skip
-            if not section_text and (not document.title or section_idx > 0):
-                logger.warning(
-                    f"Skipping empty or irrelevant section in doc {document.semantic_identifier}, link={section_link_text}"
-                )
-                continue
-
-            # CASE 1: If this section has an image, force a separate chunk
-            if image_url:
-                # First, if we have any partially built text chunk, finalize it
-                if chunk_text.strip():
-                    self._create_chunk(
-                        document,
-                        chunks,
-                        chunk_text,
-                        link_offsets,
-                        is_continuation=False,
-                        title_prefix=title_prefix,
-                        metadata_suffix_semantic=metadata_suffix_semantic,
-                        metadata_suffix_keyword=metadata_suffix_keyword,
-                    )
-                    chunk_text = ""
-                    link_offsets = {}
-
-                # Create a chunk specifically for this image section
-                # (Using the text summary that was generated during processing)
-                self._create_chunk(
-                    document,
-                    chunks,
-                    section_text,
-                    links={0: section_link_text} if section_link_text else {},
-                    image_file_id=image_url,
-                    title_prefix=title_prefix,
-                    metadata_suffix_semantic=metadata_suffix_semantic,
-                    metadata_suffix_keyword=metadata_suffix_keyword,
-                )
-                # Continue to next section
-                continue
-
-            # CASE 2: Normal text section
-            section_token_count = len(self.tokenizer.encode(section_text))
-
-            # If the section is large on its own, split it separately
-            if section_token_count > content_token_limit:
-                if chunk_text.strip():
-                    self._create_chunk(
-                        document,
-                        chunks,
-                        chunk_text,
-                        link_offsets,
-                        False,
-                        title_prefix,
-                        metadata_suffix_semantic,
-                        metadata_suffix_keyword,
-                    )
-                    chunk_text = ""
-                    link_offsets = {}
-
-                # chunker is in `text` mode
-                split_texts = cast(list[str], self.chunk_splitter.chunk(section_text))
-                for i, split_text in enumerate(split_texts):
-                    # If even the split_text is bigger than strict limit, further split
-                    if (
-                        STRICT_CHUNK_TOKEN_LIMIT
-                        and len(self.tokenizer.encode(split_text)) > content_token_limit
-                    ):
-                        smaller_chunks = self._split_oversized_chunk(
-                            split_text, content_token_limit
-                        )
-                        for j, small_chunk in enumerate(smaller_chunks):
-                            self._create_chunk(
-                                document,
-                                chunks,
-                                small_chunk,
-                                {0: section_link_text},
-                                is_continuation=(j != 0),
-                                title_prefix=title_prefix,
-                                metadata_suffix_semantic=metadata_suffix_semantic,
-                                metadata_suffix_keyword=metadata_suffix_keyword,
-                            )
-                    else:
-                        self._create_chunk(
-                            document,
-                            chunks,
-                            split_text,
-                            {0: section_link_text},
-                            is_continuation=(i != 0),
-                            title_prefix=title_prefix,
-                            metadata_suffix_semantic=metadata_suffix_semantic,
-                            metadata_suffix_keyword=metadata_suffix_keyword,
-                        )
-                continue
-
-            # If we can still fit this section into the current chunk, do so
-            current_token_count = len(self.tokenizer.encode(chunk_text))
-            current_offset = len(shared_precompare_cleanup(chunk_text))
-            next_section_tokens = (
-                len(self.tokenizer.encode(SECTION_SEPARATOR)) + section_token_count
-            )
-
-            if next_section_tokens + current_token_count <= content_token_limit:
-                if chunk_text:
-                    chunk_text += SECTION_SEPARATOR
-                chunk_text += section_text
-                link_offsets[current_offset] = section_link_text
-            else:
-                # finalize the existing chunk
-                self._create_chunk(
-                    document,
-                    chunks,
-                    chunk_text,
-                    link_offsets,
-                    False,
-                    title_prefix,
-                    metadata_suffix_semantic,
-                    metadata_suffix_keyword,
-                )
-                # start a new chunk
-                link_offsets = {0: section_link_text}
-                chunk_text = section_text
-
-        # finalize any leftover text chunk
-        if chunk_text.strip() or not chunks:
-            self._create_chunk(
-                document,
-                chunks,
-                chunk_text,
-                link_offsets or {0: ""},  # safe default
-                False,
-                title_prefix,
-                metadata_suffix_semantic,
-                metadata_suffix_keyword,
-            )
-        return chunks
 
     def _handle_single_document(
         self, document: IndexingDocument
@@ -423,7 +194,10 @@ class Chunker:
             logger.debug(f"Chunking {document.semantic_identifier}")
 
         # Title prep
-        title = self._extract_blurb(document.get_title_for_document_index() or "")
+        title = extract_blurb(
+            document.get_title_for_document_index() or "",
+            self.blurb_splitter,
+        )
         title_prefix = title + RETURN_SEPARATOR if title else ""
         title_tokens = len(self.tokenizer.encode(title_prefix))
 
@@ -491,7 +265,7 @@ class Chunker:
         # Use processed_sections if available (IndexingDocument), otherwise use original sections
         sections_to_chunk = document.processed_sections
 
-        normal_chunks = self._chunk_document_with_sections(
+        normal_chunks = self._document_chunker.chunk(
             document,
             sections_to_chunk,
             title_prefix,

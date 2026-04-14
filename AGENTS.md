@@ -49,12 +49,12 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
 
 4. **Light Worker** (`light`)
    - Handles lightweight, fast operations
-   - Tasks: vespa operations, document permissions sync, external group sync
+   - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
    - Higher concurrency for quick tasks
 
 5. **Heavy Worker** (`heavy`)
    - Handles resource-intensive operations
-   - Primary task: document pruning operations
+   - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
    - Runs with 4 threads concurrency
 
 6. **KG Processing Worker** (`kg_processing`)

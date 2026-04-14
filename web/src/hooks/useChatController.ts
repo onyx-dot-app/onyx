@@ -644,6 +644,7 @@ export default function useChatController({
             });
             node.modelDisplayName = model.displayName;
             node.overridden_model = model.modelName;
+            node.is_generating = true;
             return node;
           });
         }
@@ -1052,10 +1053,14 @@ export default function useChatController({
 
               // In multi-model mode, route per-model errors to the specific model's
               // node instead of killing the entire stream. Other models keep streaming.
-              if (isMultiModel && streamingError.details?.model_index != null) {
-                const errorModelIndex = streamingError.details
-                  .model_index as number;
+              if (isMultiModel) {
+                // Multi-model: isolate the error to its panel. Never throw
+                // or set global error state — other models keep streaming.
+                const errorModelIndex = streamingError.details?.model_index as
+                  | number
+                  | undefined;
                 if (
+                  errorModelIndex != null &&
                   errorModelIndex >= 0 &&
                   errorModelIndex < initialAssistantNodes.length
                 ) {
@@ -1088,8 +1093,15 @@ export default function useChatController({
                     completeMessageTreeOverride: currentMessageTreeLocal,
                     chatSessionId: frozenSessionId!,
                   });
+                } else {
+                  // Error without model_index in multi-model — can't route
+                  // to a specific panel. Log and continue; the stream loop
+                  // stays alive for other models.
+                  console.warn(
+                    "Multi-model error without model_index:",
+                    streamingError.error
+                  );
                 }
-                // Skip the normal per-packet upsert — we already upserted the error node
                 continue;
               } else {
                 // Single-model: kill the stream
@@ -1245,6 +1257,7 @@ export default function useChatController({
               errorCode,
               isRetryable,
               errorDetails,
+              is_generating: false,
             })
           : [
               {

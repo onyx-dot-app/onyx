@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Section } from "@/layouts/general-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputHorizontal } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
@@ -190,9 +190,10 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           height="auto"
         >
           {/* Billing Cycle */}
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Billing Cycle"
             description="after your 1-month free trial"
+            withLabel
           >
             <Section
               flexDirection="row"
@@ -215,16 +216,17 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
                 badge="Save 20%"
               />
             </Section>
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           {/* Seats */}
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Seats"
             description={`Minimum ${minRequiredSeats} seat${
               minRequiredSeats !== 1 ? "s" : ""
             } required for your current users and Slack accounts.`}
+            withLabel
           >
             <InputNumber
               value={seats}
@@ -233,7 +235,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
               defaultValue={minRequiredSeats}
               showReset
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
         </Section>
       </div>
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -33,9 +34,17 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
+class SectionType(str, Enum):
+    """Discriminator for Section subclasses."""
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
 class Section(BaseModel):
     """Base section class with common attributes"""
 
+    type: SectionType
     link: str | None = None
     text: str | None = None
     image_file_id: str | None = None
@@ -44,6 +53,7 @@ class Section(BaseModel):
 class TextSection(Section):
     """Section containing text content"""
 
+    type: Literal[SectionType.TEXT] = SectionType.TEXT
     text: str
 
     def __sizeof__(self) -> int:
@@ -53,6 +63,7 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
+    type: Literal[SectionType.IMAGE] = SectionType.IMAGE
     image_file_id: str
 
     def __sizeof__(self) -> int:
@@ -134,7 +145,6 @@ class BasicExpertInfo(BaseModel):
 
     @classmethod
     def from_dict(cls, model_dict: dict[str, Any]) -> "BasicExpertInfo":
-
         first_name = cast(str, model_dict.get("FirstName"))
         last_name = cast(str, model_dict.get("LastName"))
         email = cast(str, model_dict.get("Email"))

@@ -9,7 +9,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, Card as CardLayout } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputHorizontal } from "@opal/layouts";
 import { Button, Card } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
@@ -208,9 +208,10 @@ export default function IndexSettingsPage() {
 
           <Card border="solid" rounding="lg">
             <GeneralLayouts.Section width="full">
-              <InputLayouts.Horizontal
+              <InputHorizontal
                 title="Extract & Caption Images"
                 description="Extract images during document indexing and generate searchable descriptions."
+                withLabel
               >
                 <Switch
                   checked={imageProcessingEnabled}
@@ -220,13 +221,14 @@ export default function IndexSettingsPage() {
                     });
                   }}
                 />
-              </InputLayouts.Horizontal>
+              </InputHorizontal>
 
               <Disabled disabled={!imageProcessingEnabled}>
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Captioning LLM"
                   description="This model will be used to analyze images during indexing."
                   disabled={!imageProcessingEnabled}
+                  withLabel
                 >
                   <InputSelect
                     value=""
@@ -238,15 +240,16 @@ export default function IndexSettingsPage() {
                       {/* TODO: Populate with available LLM models */}
                     </InputSelect.Content>
                   </InputSelect>
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
               </Disabled>
 
               <Disabled disabled={!imageProcessingEnabled}>
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Max Image Size for Analysis"
                   suffix="(MB)"
                   description="Images above this size will be skipped to limit resource usage."
                   disabled={!imageProcessingEnabled}
+                  withLabel
                 >
                   <InputSelect
                     value={String(s.image_analysis_max_size_mb ?? 20)}
@@ -266,7 +269,7 @@ export default function IndexSettingsPage() {
                       ))}
                     </InputSelect.Content>
                   </InputSelect>
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
               </Disabled>
             </GeneralLayouts.Section>
           </Card>
