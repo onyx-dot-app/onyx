@@ -14,8 +14,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# --- Markers / separators used in emitted chunks --------------------------
-
 COLUMNS_MARKER = "Columns:"
 FIELD_VALUE_SEPARATOR = ", "
 ROW_JOIN = "\n"
