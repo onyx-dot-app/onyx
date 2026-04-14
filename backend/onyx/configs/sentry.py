@@ -26,9 +26,15 @@ def _add_instance_tags(
     try:
         import sentry_sdk
 
-        from onyx.utils.telemetry import get_or_generate_uuid
+        from shared_configs.configs import MULTI_TENANT
 
-        instance_id = get_or_generate_uuid()
+        if MULTI_TENANT:
+            instance_id = "multi-tenant-cloud"
+        else:
+            from onyx.utils.telemetry import get_or_generate_uuid
+
+            instance_id = get_or_generate_uuid()
+
         sentry_sdk.set_tag("instance_id", instance_id)
 
         # Also set on this event since set_tag won't retroactively apply
