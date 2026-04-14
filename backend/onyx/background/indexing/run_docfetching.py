@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import sentry_sdk
 from celery import Celery
 from sqlalchemy.orm import Session
 
@@ -556,6 +557,27 @@ def connector_document_extraction(
 
                 # save record of any failures at the connector level
                 if failure is not None:
+                    if failure.exception is not None:
+                        with sentry_sdk.new_scope() as scope:
+                            scope.set_tag("stage", "connector_fetch")
+                            scope.set_tag("connector_source", db_connector.source.value)
+                            scope.set_tag("cc_pair_id", str(cc_pair_id))
+                            scope.set_tag("index_attempt_id", str(index_attempt_id))
+                            scope.set_tag("tenant_id", tenant_id)
+                            if failure.failed_document:
+                                scope.set_tag(
+                                    "doc_id", failure.failed_document.document_id
+                                )
+                            if failure.failed_entity:
+                                scope.set_tag(
+                                    "entity_id", failure.failed_entity.entity_id
+                                )
+                            scope.fingerprint = [
+                                "connector-fetch-failure",
+                                db_connector.source.value,
+                                type(failure.exception).__name__,
+                            ]
+                            sentry_sdk.capture_exception(failure.exception)
                     total_failures += 1
                     with get_session_with_current_tenant() as db_session:
                         create_index_attempt_error(
