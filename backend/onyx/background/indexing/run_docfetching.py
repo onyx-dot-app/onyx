@@ -558,7 +558,7 @@ def connector_document_extraction(
                 # save record of any failures at the connector level
                 if failure is not None:
                     if failure.exception is not None:
-                        with sentry_sdk.push_scope() as scope:
+                        with sentry_sdk.new_scope() as scope:
                             scope.set_tag("stage", "connector_fetch")
                             scope.set_tag("connector_source", db_connector.source.value)
                             scope.set_tag("cc_pair_id", str(cc_pair_id))

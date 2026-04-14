@@ -89,7 +89,7 @@ def write_chunks_to_vector_db_with_backoff(
                 )
             )
         except Exception as e:
-            with sentry_sdk.push_scope() as scope:
+            with sentry_sdk.new_scope() as scope:
                 scope.set_tag("stage", "vector_db_write")
                 scope.set_tag("doc_id", doc_id)
                 scope.set_tag("tenant_id", index_batch_params.tenant_id)

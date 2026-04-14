@@ -293,7 +293,7 @@ def embed_chunks_with_failure_handling(
             )
             embedded_chunks.extend(doc_embedded_chunks)
         except Exception as e:
-            with sentry_sdk.push_scope() as scope:
+            with sentry_sdk.new_scope() as scope:
                 scope.set_tag("stage", "embedding")
                 scope.set_tag("doc_id", doc_id)
                 if tenant_id:

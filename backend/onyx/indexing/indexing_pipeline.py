@@ -333,7 +333,7 @@ def index_doc_batch_with_handler(
     except Exception as e:
         # don't log the batch directly, it's too much text
         document_ids = [doc.id for doc in document_batch]
-        with sentry_sdk.push_scope() as scope:
+        with sentry_sdk.new_scope() as scope:
             scope.set_tag("stage", "indexing_pipeline")
             scope.set_tag("tenant_id", tenant_id)
             scope.set_tag("batch_size", str(len(document_batch)))
