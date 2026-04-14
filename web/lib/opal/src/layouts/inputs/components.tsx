@@ -210,9 +210,14 @@ export type InputErrorType = "error" | "warning";
 interface InputErrorTextProps {
   children?: React.ReactNode;
   type?: InputErrorType;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
+function InputErrorText({
+  children,
+  type = "error",
+  ref,
+}: InputErrorTextProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
   const colorClass =
     type === "error" ? "text-status-error-05" : "text-status-warning-05";
@@ -220,7 +225,7 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
     type === "error" ? "stroke-status-error-05" : "stroke-status-warning-05";
 
   return (
-    <div className="px-1">
+    <div ref={ref} className="px-1">
       {/* TODO(@raunakab): update this with `Content` when it supports custom colours */}
       <Section flexDirection="row" justifyContent="start" gap={0.25}>
         <Icon size={12} className={strokeClass} />
@@ -250,10 +255,12 @@ function InputDivider() {
 // InputPadder
 // ---------------------------------------------------------------------------
 
-type InputPadderProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+type InputPadderProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
+  ref?: React.Ref<HTMLDivElement>;
+};
 
-function InputPadder(props: InputPadderProps) {
-  return <div {...props} className="p-2 w-full" />;
+function InputPadder({ ref, ...props }: InputPadderProps) {
+  return <div ref={ref} {...props} className="p-2 w-full" />;
 }
 
 // ---------------------------------------------------------------------------
