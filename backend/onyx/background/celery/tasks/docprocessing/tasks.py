@@ -400,7 +400,6 @@ def check_indexing_completion(
     tenant_id: str,
     task: Task,
 ) -> None:
-
     logger.info(
         f"Checking for indexing completion: attempt={index_attempt_id} tenant={tenant_id}"
     )
@@ -608,6 +607,35 @@ def active_indexing_attempt(
     return bool(active_indexing_attempt)
 
 
+class _KickoffResult:
+    """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
+
+    __slots__ = (
+        "created",
+        "skipped_active",
+        "skipped_not_found",
+        "skipped_should_not",
+        "failed_to_create",
+    )
+
+    def __init__(self) -> None:
+        self.created = 0
+        self.skipped_active = 0
+        self.skipped_not_found = 0
+        self.skipped_should_not = 0
+        self.failed_to_create = 0
+
+    @property
+    def evaluated(self) -> int:
+        return (
+            self.created
+            + self.skipped_active
+            + self.skipped_not_found
+            + self.skipped_should_not
+            + self.failed_to_create
+        )
+
+
 def _kickoff_indexing_tasks(
     celery_app: Celery,
     db_session: Session,
@@ -617,12 +645,12 @@ def _kickoff_indexing_tasks(
     redis_client: Redis,
     lock_beat: RedisLock,
     tenant_id: str,
-) -> int:
+) -> _KickoffResult:
     """Kick off indexing tasks for the given cc_pair_ids and search_settings.
 
-    Returns the number of tasks successfully created.
+    Returns a _KickoffResult with diagnostic counts.
     """
-    tasks_created = 0
+    result = _KickoffResult()
 
     for cc_pair_id in cc_pair_ids:
         lock_beat.reacquire()
@@ -633,6 +661,7 @@ def _kickoff_indexing_tasks(
             search_settings_id=search_settings.id,
             db_session=db_session,
         ):
+            result.skipped_active += 1
             continue
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -643,6 +672,7 @@ def _kickoff_indexing_tasks(
             task_logger.warning(
                 f"_kickoff_indexing_tasks - CC pair not found: cc_pair={cc_pair_id}"
             )
+            result.skipped_not_found += 1
             continue
 
         # Heavyweight check after fetching cc pair
@@ -657,6 +687,7 @@ def _kickoff_indexing_tasks(
                 f"search_settings={search_settings.id}, "
                 f"secondary_index_building={secondary_index_building}"
             )
+            result.skipped_should_not += 1
             continue
 
         task_logger.debug(
@@ -696,13 +727,14 @@ def _kickoff_indexing_tasks(
             task_logger.info(
                 f"Connector indexing queued: index_attempt={attempt_id} cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
-            tasks_created += 1
+            result.created += 1
         else:
             task_logger.error(
                 f"Failed to create indexing task: cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
+            result.failed_to_create += 1
 
-    return tasks_created
+    return result
 
 
 @shared_task(
@@ -728,6 +760,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     task_logger.warning("check_for_indexing - Starting")
 
     tasks_created = 0
+    primary_result = _KickoffResult()
+    secondary_result: _KickoffResult | None = None
     locked = False
     redis_client = get_redis_client()
     redis_client_replica = get_redis_replica_client()
@@ -863,7 +897,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks
         with get_session_with_current_tenant() as db_session:
             # Primary first
-            tasks_created += _kickoff_indexing_tasks(
+            primary_result = _kickoff_indexing_tasks(
                 celery_app=self.app,
                 db_session=db_session,
                 search_settings=current_search_settings,
@@ -873,6 +907,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 lock_beat=lock_beat,
                 tenant_id=tenant_id,
             )
+            tasks_created += primary_result.created
 
             # Secondary indexing (only if secondary search settings exist and switchover_type is not INSTANT)
             if (
@@ -880,7 +915,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 and secondary_search_settings.switchover_type != SwitchoverType.INSTANT
                 and secondary_cc_pair_ids
             ):
-                tasks_created += _kickoff_indexing_tasks(
+                secondary_result = _kickoff_indexing_tasks(
                     celery_app=self.app,
                     db_session=db_session,
                     search_settings=secondary_search_settings,
@@ -890,6 +925,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     lock_beat=lock_beat,
                     tenant_id=tenant_id,
                 )
+                tasks_created += secondary_result.created
             elif (
                 secondary_search_settings
                 and secondary_search_settings.switchover_type == SwitchoverType.INSTANT
@@ -1002,7 +1038,24 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 redis_lock_dump(lock_beat, redis_client)
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
+    task_logger.info(
+        f"check_for_indexing finished: "
+        f"elapsed={time_elapsed:.2f}s "
+        f"primary=[evaluated={primary_result.evaluated} "
+        f"created={primary_result.created} "
+        f"skipped_active={primary_result.skipped_active} "
+        f"skipped_not_indexable={primary_result.skipped_should_not} "
+        f"failed={primary_result.failed_to_create}]"
+        + (
+            f" secondary=[evaluated={secondary_result.evaluated} "
+            f"created={secondary_result.created} "
+            f"skipped_active={secondary_result.skipped_active} "
+            f"skipped_not_indexable={secondary_result.skipped_should_not} "
+            f"failed={secondary_result.failed_to_create}]"
+            if secondary_result
+            else ""
+        )
+    )
     return tasks_created
 
 
