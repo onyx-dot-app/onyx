@@ -1044,12 +1044,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"primary=[evaluated={primary_result.evaluated} "
         f"created={primary_result.created} "
         f"skipped_active={primary_result.skipped_active} "
+        f"skipped_not_found={primary_result.skipped_not_found} "
         f"skipped_not_indexable={primary_result.skipped_should_not} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
             f"created={secondary_result.created} "
             f"skipped_active={secondary_result.skipped_active} "
+            f"skipped_not_found={secondary_result.skipped_not_found} "
             f"skipped_not_indexable={secondary_result.skipped_should_not} "
             f"failed={secondary_result.failed_to_create}]"
             if secondary_result
