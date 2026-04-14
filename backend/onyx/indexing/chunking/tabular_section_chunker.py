@@ -262,6 +262,12 @@ class TabularChunker(SectionChunker):
         )
 
         for i, text in enumerate(chunk_texts):
+            n = _count_tokens(self.tokenizer, text)
+            if n > content_token_limit:
+                logger.warning(
+                    f"TabularChunker: emitted chunk of {n} tokens exceeds "
+                    f"max_tokens={content_token_limit} (link={section.link})"
+                )
             payloads.append(
                 ChunkPayload(
                     text=text,
