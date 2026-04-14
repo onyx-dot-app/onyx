@@ -6,9 +6,8 @@ import pytest
 import requests
 from requests import HTTPError
 
-from onyx.connectors.confluence.onyx_confluence import (
-    _DEFAULT_PAGINATION_LIMIT,
-)
+from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
+from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
@@ -96,8 +95,7 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
     """
     caplog.set_level("WARNING")  # To check logging messages
 
-    # Use constants from the client instance, but note the test logic goes below MINIMUM
-    _TEST_MINIMUM_LIMIT = 1  # The limit this test expects the retry to reach
+    _TEST_MINIMUM_LIMIT = 1  # The one-by-one fallback always uses limit=1
 
     top_level_cql = "test_cql"
     top_level_expand = "child_items"
@@ -170,15 +168,21 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         url=exp1_page2_path,
     )
 
-    # Problematic Expansion 2 URLs and Errors during limit reduction
+    # Problematic Expansion 2 URLs and Errors during limit reduction.
+    # Limit halves from _DEFAULT_PAGINATION_LIMIT down to _MINIMUM_PAGINATION_LIMIT,
+    # then the one-by-one fallback kicks in at limit=1.
     exp2_base_path = "rest/api/content/2/child"
     exp2_reduction_errors = {}
     limit = _DEFAULT_PAGINATION_LIMIT
-    while limit > _TEST_MINIMUM_LIMIT:  # Reduce all the way to 1 for the test
+    while limit >= _MINIMUM_PAGINATION_LIMIT:
         path = f"{exp2_base_path}?limit={limit}"
         exp2_reduction_errors[path] = _create_http_error(500, url=path)
         new_limit = limit // 2
-        limit = max(new_limit, _TEST_MINIMUM_LIMIT)  # Ensure it hits 1
+        limit = max(new_limit, _MINIMUM_PAGINATION_LIMIT)
+        if limit == _MINIMUM_PAGINATION_LIMIT and path.endswith(
+            f"limit={_MINIMUM_PAGINATION_LIMIT}"
+        ):
+            break
 
     # Expansion 2 - Pagination at Limit = 1 (2 successes, 2 failures)
     exp2_limit1_page1_path = f"{exp2_base_path}?limit={_TEST_MINIMUM_LIMIT}&start=0"
@@ -320,10 +324,14 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         mock_get_call_paths[3] == f"{exp2_base_path}?limit={_DEFAULT_PAGINATION_LIMIT}"
     )
 
-    # 5+. Expansion 2 (retries due to 500s, down to limit=1)
-    call_index = 4
+    # 5+. Expansion 2 (limit reduction retries due to 500s, down to _MINIMUM_PAGINATION_LIMIT)
+    # Then one-by-one fallback at limit=1
+    num_reduction_steps = (
+        len(exp2_reduction_errors) - 1
+    )  # first was already counted at index 3
+    call_index = 4 + num_reduction_steps
 
-    # 5+N. Expansion 2 (limit=1, page 1 success)
+    # Next: one-by-one fallback (limit=1, page 1 success)
     assert mock_get_call_paths[call_index] == exp2_limit1_page1_path
     call_index += 1
     # 5+N+1. Expansion 2 (limit=1, page 2 success)
@@ -680,16 +688,16 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
     assert mock_get_call_paths == expected_calls
 
 
-def test_paginated_cql_retrieval_cloud_no_retry_on_error(
+def test_paginated_cql_retrieval_cloud_reduces_limit_on_error(
     mock_credentials_provider: mock.Mock,
 ) -> None:
     """
     Tests that for Confluence Cloud (is_cloud=True), paginated_cql_retrieval
-    does NOT retry on pagination errors and raises HTTPError immediately.
+    progressively halves the limit on server errors (500/504) and eventually
+    raises once the limit floor is reached.
     """
-    # Setup Confluence Cloud Client
     confluence_cloud_client = OnyxConfluence(
-        is_cloud=True,  # Key difference: Cloud instance
+        is_cloud=True,
         url="https://fake-cloud.atlassian.net",
         credentials_provider=mock_credentials_provider,
         timeout=10,
@@ -701,28 +709,23 @@ def test_paginated_cql_retrieval_cloud_no_retry_on_error(
 
     test_cql = "type=page"
     encoded_cql = "type%3Dpage"
-    test_limit = 50  # Use a standard limit
+    # Start with a small limit so the halving chain is short:
+    # 10 -> 5 (== _MINIMUM_PAGINATION_LIMIT) -> raise
+    test_limit = 10
 
     base_path = f"rest/api/content/search?cql={encoded_cql}"
     page1_path = f"{base_path}&limit={test_limit}"
-    page2_path = f"{base_path}&limit={test_limit}&start={test_limit}"
 
-    # --- Mock Responses ---
-    # Page 1: Success
     page1_response = _create_mock_response(
         200,
         {
             "results": [{"id": i} for i in range(test_limit)],
-            "_links": {"next": f"/{page2_path}"},
+            "_links": {"next": f"/{base_path}&limit={test_limit}&start={test_limit}"},
             "size": test_limit,
         },
         url=page1_path,
     )
 
-    # Page 2: Failure (500)
-    page2_error = _create_http_error(500, url=page2_path)
-
-    # --- Side Effect Logic ---
     mock_get_call_paths: list[str] = []
 
     def get_side_effect(
@@ -732,24 +735,14 @@ def test_paginated_cql_retrieval_cloud_no_retry_on_error(
     ) -> requests.Response:
         path = path.strip("/")
         mock_get_call_paths.append(path)
-        print(f"Mock GET received path: {path}")
-
-        if path == page1_path:
-            print(f"-> Returning page 1 success for {path}")
+        if "limit=10" in path and "start=" not in path:
             return page1_response
-        elif path == page2_path:
-            print(f"-> Returning page 2 500 error for {path}")
-            return page2_error
-        else:
-            # No other paths (like limit=1 retries) should be called
-            print(f"!!! Unexpected GET path in mock for Cloud test: {path}")
-            raise RuntimeError(f"Unexpected GET path in mock for Cloud test: {path}")
+        # Every subsequent call (including reduced-limit retries) returns 500
+        return _create_http_error(500, url=path)
 
     confluence_cloud_client._confluence.get.side_effect = get_side_effect
 
-    # --- Execute & Assert ---
-    with pytest.raises(HTTPError) as excinfo:
-        # Consume the iterator to trigger calls
+    with pytest.raises(HTTPError):
         list(
             confluence_cloud_client.paginated_cql_retrieval(
                 cql=test_cql,
@@ -757,11 +750,240 @@ def test_paginated_cql_retrieval_cloud_no_retry_on_error(
             )
         )
 
-    # Verify the error is the one we simulated for page 2
-    assert excinfo.value.response == page2_error
-    assert excinfo.value.response.status_code == 500
-    assert page2_path in excinfo.value.response.url
+    # First call succeeds (limit=10), then page 2 at limit=10 fails,
+    # retry at limit=5 fails, and since 5 == _MINIMUM_PAGINATION_LIMIT it raises.
+    assert len(mock_get_call_paths) == 3
+    assert f"limit={test_limit}" in mock_get_call_paths[0]
+    assert f"limit={test_limit}" in mock_get_call_paths[1]
+    assert f"limit={_MINIMUM_PAGINATION_LIMIT}" in mock_get_call_paths[2]
 
-    # Verify only two calls were made (page 1 success, page 2 fail)
-    # Crucially, no retry attempts with different limits should exist.
-    assert mock_get_call_paths == [page1_path, page2_path]
+
+def test_paginate_url_reduces_limit_on_504_cloud(
+    mock_credentials_provider: mock.Mock,
+) -> None:
+    """
+    On Cloud, a 504 on the first page triggers limit halving. Once the request
+    succeeds at the reduced limit, pagination continues at that limit and
+    yields all results.
+    """
+    client = OnyxConfluence(
+        is_cloud=True,
+        url="https://fake-cloud.atlassian.net",
+        credentials_provider=mock_credentials_provider,
+        timeout=10,
+    )
+    mock_internal = mock.Mock()
+    mock_internal.url = client._url
+    client._confluence = mock_internal
+    client._kwargs = client.shared_base_kwargs
+
+    test_limit = 20
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        if f"limit={test_limit}" in path:
+            return _create_http_error(504, url=path)
+
+        reduced_limit = test_limit // 2
+        if f"limit={reduced_limit}" in path and "start=" not in path:
+            return _create_mock_response(
+                200,
+                {
+                    "results": [{"id": 1}, {"id": 2}],
+                    "_links": {
+                        "next": f"/rest/api/content/search?cql=type%3Dpage&limit={test_limit}&start=2"
+                    },
+                    "size": 2,
+                },
+                url=path,
+            )
+
+        if f"limit={reduced_limit}" in path and "start=2" in path:
+            return _create_mock_response(
+                200,
+                {"results": [{"id": 3}], "_links": {}, "size": 1},
+                url=path,
+            )
+
+        raise RuntimeError(f"Unexpected path: {path}")
+
+    client._confluence.get.side_effect = get_side_effect
+
+    results = list(client.paginated_cql_retrieval(cql="type=page", limit=test_limit))
+
+    assert [r["id"] for r in results] == [1, 2, 3]
+    assert len(mock_get_call_paths) == 3
+    assert f"limit={test_limit}" in mock_get_call_paths[0]
+    assert f"limit={test_limit // 2}" in mock_get_call_paths[1]
+    # The next-page URL had the old limit but should be rewritten to reduced
+    assert f"limit={test_limit // 2}" in mock_get_call_paths[2]
+
+
+def test_paginate_url_reduces_limit_on_500_server(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    On Server, a 500 triggers limit halving first. If the reduced limit
+    succeeds, results are yielded normally.
+    """
+    test_limit = 20
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        if f"limit={test_limit}" in path:
+            return _create_http_error(500, url=path)
+
+        reduced_limit = test_limit // 2
+        if f"limit={reduced_limit}" in path:
+            return _create_mock_response(
+                200,
+                {"results": [{"id": 1}, {"id": 2}], "_links": {}, "size": 2},
+                url=path,
+            )
+
+        raise RuntimeError(f"Unexpected path: {path}")
+
+    confluence_server_client._confluence.get.side_effect = get_side_effect
+
+    results = list(
+        confluence_server_client.paginated_cql_retrieval(
+            cql="type=page", limit=test_limit
+        )
+    )
+
+    assert [r["id"] for r in results] == [1, 2]
+    assert f"limit={test_limit}" in mock_get_call_paths[0]
+    assert f"limit={test_limit // 2}" in mock_get_call_paths[1]
+
+
+def test_paginate_url_server_falls_back_to_one_by_one_after_limit_floor(
+    confluence_server_client: OnyxConfluence,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    On Server, when limit reduction is exhausted (reaches the floor) and the
+    request still fails, the one-by-one fallback kicks in.
+    """
+    caplog.set_level("WARNING")
+    # Start at the minimum so limit reduction is immediately exhausted
+    test_limit = _MINIMUM_PAGINATION_LIMIT
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        if f"limit={test_limit}" in path and "start=" not in path:
+            return _create_http_error(500, url=path)
+
+        # One-by-one fallback calls (limit=1)
+        if "limit=1" in path:
+            if "start=0" in path:
+                return _create_mock_response(
+                    200,
+                    {"results": [{"id": 1}], "_links": {}, "size": 1},
+                    url=path,
+                )
+            if "start=1" in path:
+                return _create_mock_response(
+                    200,
+                    {"results": [{"id": 2}], "_links": {}, "size": 1},
+                    url=path,
+                )
+            # start=2 onward: empty -> signals end
+            return _create_mock_response(
+                200,
+                {"results": [], "_links": {}, "size": 0},
+                url=path,
+            )
+
+        raise RuntimeError(f"Unexpected path: {path}")
+
+    confluence_server_client._confluence.get.side_effect = get_side_effect
+
+    results = list(
+        confluence_server_client.paginated_cql_retrieval(
+            cql="type=page", limit=test_limit
+        )
+    )
+
+    assert [r["id"] for r in results] == [1, 2]
+    # First call at test_limit fails, then one-by-one at start=0,1,2
+    one_by_one_calls = [p for p in mock_get_call_paths if "limit=1" in p]
+    assert len(one_by_one_calls) >= 2
+
+
+def test_paginate_url_504_halves_multiple_times(
+    mock_credentials_provider: mock.Mock,
+) -> None:
+    """
+    Verifies that the limit is halved repeatedly on consecutive 504s until
+    the request finally succeeds at a smaller limit.
+    """
+    client = OnyxConfluence(
+        is_cloud=True,
+        url="https://fake-cloud.atlassian.net",
+        credentials_provider=mock_credentials_provider,
+        timeout=10,
+    )
+    mock_internal = mock.Mock()
+    mock_internal.url = client._url
+    client._confluence = mock_internal
+    client._kwargs = client.shared_base_kwargs
+
+    test_limit = 40
+    # 40 -> 20 (504) -> 10 (504) -> 5 (success)
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        if "limit=40" in path or "limit=20" in path or "limit=10" in path:
+            return _create_http_error(504, url=path)
+
+        if "limit=5" in path:
+            return _create_mock_response(
+                200,
+                {"results": [{"id": 99}], "_links": {}, "size": 1},
+                url=path,
+            )
+
+        raise RuntimeError(f"Unexpected path: {path}")
+
+    client._confluence.get.side_effect = get_side_effect
+
+    results = list(client.paginated_cql_retrieval(cql="type=page", limit=test_limit))
+
+    assert [r["id"] for r in results] == [99]
+    assert len(mock_get_call_paths) == 4
+    assert "limit=40" in mock_get_call_paths[0]
+    assert "limit=20" in mock_get_call_paths[1]
+    assert "limit=10" in mock_get_call_paths[2]
+    assert "limit=5" in mock_get_call_paths[3]

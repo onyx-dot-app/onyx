@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -16,8 +16,7 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import Message from "@/refresh-components/messages/Message";
-import Separator from "@/refresh-components/Separator";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
@@ -572,8 +571,13 @@ export default function AgentEditorPage({
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
-    // Knowledge - enabled if agent has any knowledge sources attached
+    // Knowledge - enabled if the agent has the internal search tool attached
+    // or any knowledge sources attached.
     enable_knowledge:
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+      ) ??
+        false) ||
       (existingAgent?.document_sets?.length ?? 0) > 0 ||
       (existingAgent?.hierarchy_nodes?.length ?? 0) > 0 ||
       (existingAgent?.attached_documents?.length ?? 0) > 0 ||
@@ -1260,15 +1264,15 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputLayouts.Vertical name="name" title="Name">
+                          <InputVertical withLabel="name" title="Name">
                             <InputTypeInField
                               name="name"
                               placeholder="Name your agent"
                             />
-                          </InputLayouts.Vertical>
+                          </InputVertical>
 
-                          <InputLayouts.Vertical
-                            name="description"
+                          <InputVertical
+                            withLabel="description"
                             title="Description"
                             suffix="optional"
                           >
@@ -1276,24 +1280,27 @@ export default function AgentEditorPage({
                               name="description"
                               placeholder="What does this agent do?"
                             />
-                          </InputLayouts.Vertical>
+                          </InputVertical>
                         </GeneralLayouts.Section>
 
                         <GeneralLayouts.Section width="fit">
-                          <InputLayouts.Vertical
-                            name="agent_avatar"
+                          <InputVertical
+                            withLabel="agent_avatar"
                             title="Agent Avatar"
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
-                          </InputLayouts.Vertical>
+                          </InputVertical>
                         </GeneralLayouts.Section>
                       </GeneralLayouts.Section>
 
-                      <Separator noPadding />
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
 
                       <GeneralLayouts.Section>
-                        <InputLayouts.Vertical
-                          name="instructions"
+                        <InputVertical
+                          withLabel="instructions"
                           title="Instructions"
                           suffix="optional"
                           description="Add instructions to tailor the response for this agent."
@@ -1302,19 +1309,22 @@ export default function AgentEditorPage({
                             name="instructions"
                             placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
                           />
-                        </InputLayouts.Vertical>
+                        </InputVertical>
 
-                        <InputLayouts.Vertical
-                          name="starter_messages"
+                        <InputVertical
+                          withLabel="starter_messages"
                           title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
                         >
                           <StarterMessages />
-                        </InputLayouts.Vertical>
+                        </InputVertical>
                       </GeneralLayouts.Section>
 
-                      <Separator noPadding />
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
 
                       <AgentKnowledgePane
                         enableKnowledge={values.enable_knowledge}
@@ -1359,7 +1369,10 @@ export default function AgentEditorPage({
                         vectorDbEnabled={vectorDbEnabled}
                       />
 
-                      <Separator noPadding />
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1379,8 +1392,8 @@ export default function AgentEditorPage({
                                     : "disabled"
                                 }
                               >
-                                <InputLayouts.Horizontal
-                                  name="image_generation"
+                                <InputHorizontal
+                                  withLabel="image_generation"
                                   title="Image Generation"
                                   description="Generate and manipulate images using AI-powered tools."
                                   disabled={!isImageGenerationAvailable}
@@ -1389,15 +1402,15 @@ export default function AgentEditorPage({
                                     name="image_generation"
                                     disabled={!isImageGenerationAvailable}
                                   />
-                                </InputLayouts.Horizontal>
+                                </InputHorizontal>
                               </Card>
                             </SimpleTooltip>
 
                             <Card
                               variant={!!webSearchTool ? undefined : "disabled"}
                             >
-                              <InputLayouts.Horizontal
-                                name="web_search"
+                              <InputHorizontal
+                                withLabel="web_search"
                                 title="Web Search"
                                 description="Search the web for real-time information and up-to-date results."
                                 disabled={!webSearchTool}
@@ -1406,14 +1419,14 @@ export default function AgentEditorPage({
                                   name="web_search"
                                   disabled={!webSearchTool}
                                 />
-                              </InputLayouts.Horizontal>
+                              </InputHorizontal>
                             </Card>
 
                             <Card
                               variant={!!openURLTool ? undefined : "disabled"}
                             >
-                              <InputLayouts.Horizontal
-                                name="open_url"
+                              <InputHorizontal
+                                withLabel="open_url"
                                 title="Open URL"
                                 description="Fetch and read content from web URLs."
                                 disabled={!openURLTool}
@@ -1422,7 +1435,7 @@ export default function AgentEditorPage({
                                   name="open_url"
                                   disabled={!openURLTool}
                                 />
-                              </InputLayouts.Horizontal>
+                              </InputHorizontal>
                             </Card>
 
                             <Card
@@ -1430,8 +1443,8 @@ export default function AgentEditorPage({
                                 !!codeInterpreterTool ? undefined : "disabled"
                               }
                             >
-                              <InputLayouts.Horizontal
-                                name="code_interpreter"
+                              <InputHorizontal
+                                withLabel="code_interpreter"
                                 title="Code Interpreter"
                                 description="Generate and run code."
                                 disabled={!codeInterpreterTool}
@@ -1440,7 +1453,7 @@ export default function AgentEditorPage({
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
                                 />
-                              </InputLayouts.Horizontal>
+                              </InputHorizontal>
                             </Card>
 
                             {/* Tools */}
@@ -1448,7 +1461,10 @@ export default function AgentEditorPage({
                               {/* render the separator if there is at least one mcp-server or open-api-tool */}
                               {(mcpServers.length > 0 ||
                                 openApiTools.length > 0) && (
-                                <Separator noPadding className="py-1" />
+                                <Divider
+                                  paddingPerpendicular="xs"
+                                  paddingParallel="fit"
+                                />
                               )}
 
                               {/* MCP tools */}
@@ -1483,7 +1499,10 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      <Separator noPadding />
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1493,7 +1512,7 @@ export default function AgentEditorPage({
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
                             <Card>
-                              <InputLayouts.Horizontal
+                              <InputHorizontal
                                 title="Share This Agent"
                                 description="with other users, groups, or everyone in your organization."
                                 center
@@ -1505,16 +1524,16 @@ export default function AgentEditorPage({
                                 >
                                   Share
                                 </OpalButton>
-                              </InputLayouts.Horizontal>
+                              </InputHorizontal>
                               {canUpdateFeaturedStatus && (
                                 <>
-                                  <InputLayouts.Horizontal
-                                    name="is_featured"
+                                  <InputHorizontal
+                                    withLabel="is_featured"
                                     title="Feature This Agent"
                                     description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                                   >
                                     <SwitchField name="is_featured" />
-                                  </InputLayouts.Horizontal>
+                                  </InputHorizontal>
                                   {values.is_featured && !isShared && (
                                     <Message
                                       static
@@ -1528,8 +1547,8 @@ export default function AgentEditorPage({
                             </Card>
 
                             <Card>
-                              <InputLayouts.Horizontal
-                                name="llm_model"
+                              <InputHorizontal
+                                withLabel="llm_model"
                                 title="Default Model"
                                 description="This model will be used by Onyx by default in your chats."
                               >
@@ -1544,9 +1563,9 @@ export default function AgentEditorPage({
                                     onLlmSelect(selected, setFieldValue)
                                   }
                                 />
-                              </InputLayouts.Horizontal>
-                              <InputLayouts.Horizontal
-                                name="knowledge_cutoff_date"
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="knowledge_cutoff_date"
                                 title="Knowledge Cutoff Date"
                                 suffix="optional"
                                 description="Documents with a last-updated date prior to this will be ignored."
@@ -1555,20 +1574,20 @@ export default function AgentEditorPage({
                                   name="knowledge_cutoff_date"
                                   maxDate={new Date()}
                                 />
-                              </InputLayouts.Horizontal>
-                              <InputLayouts.Horizontal
-                                name="replace_base_system_prompt"
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="replace_base_system_prompt"
                                 title="Overwrite System Prompt"
                                 suffix="(Not Recommended)"
                                 description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                               >
                                 <SwitchField name="replace_base_system_prompt" />
-                              </InputLayouts.Horizontal>
+                              </InputHorizontal>
                             </Card>
 
                             <GeneralLayouts.Section gap={0.25}>
-                              <InputLayouts.Vertical
-                                name="reminders"
+                              <InputVertical
+                                withLabel="reminders"
                                 title="Reminders"
                                 suffix="optional"
                               >
@@ -1576,7 +1595,7 @@ export default function AgentEditorPage({
                                   name="reminders"
                                   placeholder="Remember, I want you to always format your response as a numbered list."
                                 />
-                              </InputLayouts.Vertical>
+                              </InputVertical>
                               <Text text03 secondaryBody>
                                 Append a brief reminder to the prompt messages.
                                 Use this to remind the agent if you find that it
@@ -1591,10 +1610,13 @@ export default function AgentEditorPage({
 
                       {existingAgent && (
                         <>
-                          <Separator noPadding />
+                          <Divider
+                            paddingParallel="fit"
+                            paddingPerpendicular="fit"
+                          />
 
                           <Card>
-                            <InputLayouts.Horizontal
+                            <InputHorizontal
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."
                               center
@@ -1606,7 +1628,7 @@ export default function AgentEditorPage({
                               >
                                 Delete Agent
                               </OpalButton>
-                            </InputLayouts.Horizontal>
+                            </InputHorizontal>
                           </Card>
                         </>
                       )}

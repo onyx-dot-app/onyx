@@ -1,0 +1,11 @@
+.opal-input-label {
+  @apply flex-1 self-stretch;
+}
+
+.opal-input-label:not([data-disabled]) {
+  @apply cursor-pointer;
+}
+
+.opal-input-label[data-disabled] {
+  @apply cursor-not-allowed;
+}

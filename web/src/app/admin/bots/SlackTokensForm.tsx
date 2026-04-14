@@ -4,8 +4,7 @@ import { TextFormField } from "@/components/Field";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
-import { Button } from "@opal/components";
-import Separator from "@/refresh-components/Separator";
+import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@/hooks/useToast";
@@ -96,7 +95,7 @@ export const SlackTokensForm = ({
 
           {!isUpdate && (
             <div className="mt-4">
-              <Separator />
+              <Divider />
               Please refer to our{" "}
               <a
                 className="text-blue-500 hover:underline"

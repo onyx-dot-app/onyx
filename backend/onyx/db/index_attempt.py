@@ -899,6 +899,7 @@ def create_index_attempt_error(
     failure: ConnectorFailure,
     db_session: Session,
 ) -> int:
+    exc = failure.exception
     new_error = IndexAttemptError(
         index_attempt_id=index_attempt_id,
         connector_credential_pair_id=connector_credential_pair_id,
@@ -921,6 +922,7 @@ def create_index_attempt_error(
         ),
         failure_message=failure.failure_message,
         is_resolved=False,
+        error_type=type(exc).__name__ if exc else None,
     )
     db_session.add(new_error)
     db_session.commit()

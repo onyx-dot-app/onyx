@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { Label } from "@/components/Field";
 import {
@@ -278,7 +278,7 @@ export default function ChangeCredentialsModal({
                   Update Configuration
                 </Button>
 
-                <Separator />
+                <Divider />
               </div>
             </>
           )}

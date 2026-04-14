@@ -11,7 +11,7 @@ import {
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
@@ -39,7 +39,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import Separator from "@/refresh-components/Separator";
 import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
 
 export interface SlackChannelConfigFormFieldsProps {
@@ -452,7 +451,7 @@ export function SlackChannelConfigFormFields({
           </div>
         )}
       </div>
-      <Separator className="my-4" />
+      <Divider />
       <Accordion type="multiple" className="gap-y-2 w-full">
         {values.knowledge_source !== "non_search_agent" && (
           <AccordionItem value="search-options">

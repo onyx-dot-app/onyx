@@ -65,7 +65,8 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     invite_only_enabled: bool = False
     deep_research_enabled: bool | None = None
-    search_ui_enabled: bool | None = None
+    multi_model_chat_enabled: bool | None = True
+    search_ui_enabled: bool | None = True
 
     # Whether EE features are unlocked for use.
     # Depends on license status: True when the user has a valid license
@@ -89,7 +90,8 @@ class Settings(BaseModel):
         default=DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB, ge=0
     )
     file_token_count_threshold_k: int | None = Field(
-        default=None, ge=0  # thousands of tokens; None = context-aware default
+        default=None,
+        ge=0,  # thousands of tokens; None = context-aware default
     )
 
     # Connector settings

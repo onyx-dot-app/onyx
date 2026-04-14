@@ -10,11 +10,10 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Text } from "@opal/components";
+import { Divider, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
-import Separator from "@/refresh-components/Separator";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
@@ -412,7 +411,7 @@ function Main() {
 
       {documentSets.length > 0 && (
         <>
-          <Separator />
+          <Divider />
           <DocumentSetTable
             documentSets={documentSets}
             editableDocumentSets={editableDocumentSets}

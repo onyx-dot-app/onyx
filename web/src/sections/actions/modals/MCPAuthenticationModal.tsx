@@ -9,7 +9,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { markdown } from "@opal/utils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
@@ -24,7 +24,6 @@ import {
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Separator from "@/refresh-components/Separator";
 import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
@@ -432,7 +431,7 @@ export default function MCPAuthenticationModal({
                         }}
                       />
                     </FormField>
-                    <Separator className="py-0" />
+                    <Divider paddingPerpendicular="fit" />
                   </div>
 
                   {/* OAuth Section */}

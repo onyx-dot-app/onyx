@@ -15,7 +15,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputDivider } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { toast } from "@/hooks/useToast";
 
@@ -80,17 +80,17 @@ export default function OpenAIModal({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputDivider />
       <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

@@ -5,7 +5,7 @@ import {
   federatedSourceToRegularSource,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import Label from "@/refresh-components/form/Label";
+import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

@@ -126,11 +126,6 @@ export const SWR_KEYS = {
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
 
-  // ── Knowledge Graph ───────────────────────────────────────────────────────
-  kgConfig: "/api/admin/kg/config",
-  kgEntityTypes: "/api/admin/kg/entity-types",
-  kgExposed: "/api/admin/kg/exposed",
-
   // ── OpenSearch Migration ──────────────────────────────────────────────────
   opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
   opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",

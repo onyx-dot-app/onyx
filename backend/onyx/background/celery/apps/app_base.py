@@ -10,6 +10,7 @@ from celery import bootsteps  # type: ignore
 from celery import Task
 from celery.app import trace
 from celery.exceptions import WorkerShutdown
+from celery.signals import before_task_publish
 from celery.signals import task_postrun
 from celery.signals import task_prerun
 from celery.states import READY_STATES
@@ -92,6 +93,17 @@ class TenantAwareTask(Task):
             # Clear or reset after the task runs
             # so it does not leak into any subsequent tasks on the same worker process
             CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+
+
+@before_task_publish.connect
+def on_before_task_publish(
+    headers: dict[str, Any] | None = None,
+    **kwargs: Any,  # noqa: ARG001
+) -> None:
+    """Stamp the current wall-clock time into the task message headers so that
+    workers can compute queue wait time (time between publish and execution)."""
+    if headers is not None:
+        headers["enqueued_at"] = time.time()
 
 
 @task_prerun.connect

@@ -4,12 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
-import { Table, Button } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { Table, Button, Divider } from "@opal/components";
+import { IllustrationContent, InputHorizontal } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
-import * as InputLayouts from "@/layouts/input-layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -17,7 +16,6 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
@@ -347,7 +345,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 />
               </Section>
 
-              <Separator noPadding />
+              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
               {/* Members table */}
               <Section
@@ -447,11 +445,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
               {/* Delete This Group */}
               <Card>
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
-                  nonInteractive
                 >
                   <Button
                     variant="danger"
@@ -461,7 +458,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   >
                     Delete Group
                   </Button>
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
               </Card>
             </>
           )}

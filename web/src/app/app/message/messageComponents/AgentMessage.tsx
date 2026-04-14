@@ -51,6 +51,8 @@ export interface AgentMessageProps {
   processingDurationSeconds?: number;
   /** Hide the feedback/toolbar footer (used in multi-model non-preferred panels) */
   hideFooter?: boolean;
+  /** Skip TTS streaming (used in multi-model where voice doesn't apply) */
+  disableTTS?: boolean;
 }
 
 // TODO: Consider more robust comparisons:
@@ -99,6 +101,7 @@ const AgentMessage = React.memo(function AgentMessage({
   parentMessage,
   processingDurationSeconds,
   hideFooter,
+  disableTTS,
 }: AgentMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -201,6 +204,9 @@ const AgentMessage = React.memo(function AgentMessage({
 
     // Skip if we've already finished TTS for this message
     if (ttsCompletedRef.current) return;
+
+    // Multi-model: skip TTS entirely
+    if (disableTTS) return;
 
     // If user cancelled generation, do not send more text to TTS.
     if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
@@ -305,7 +311,7 @@ const AgentMessage = React.memo(function AgentMessage({
                     onRenderComplete();
                   }
                 }}
-                animate={false}
+                animate={!stopPacketSeen}
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >

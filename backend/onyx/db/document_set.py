@@ -335,6 +335,7 @@ def update_document_set(
                 "Cannot update document set while it is syncing. Please wait for it to finish syncing, and then try again."
             )
 
+        document_set_row.name = document_set_update_request.name
         document_set_row.description = document_set_update_request.description
         if not DISABLE_VECTOR_DB:
             document_set_row.is_up_to_date = False

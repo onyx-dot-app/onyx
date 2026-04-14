@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import {
   SvgMoreHorizontal,
   SvgUsers,
@@ -14,7 +14,6 @@ import {
 import { Disabled } from "@opal/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
-import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
@@ -91,7 +90,7 @@ export default function UserRowActions({
               Deactivate User
             </LineItem>
           </Disabled>
-          <Separator paddingXRem={0.5} />
+          <Divider paddingPerpendicular="md" />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
             This is a synced SCIM user managed by your identity provider.
           </Text>
@@ -151,7 +150,7 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            <Separator paddingXRem={0.5} />
+            <Divider paddingPerpendicular="md" />
             <LineItem
               danger
               icon={SvgUserX}
@@ -179,14 +178,14 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            <Separator paddingXRem={0.5} />
+            <Divider paddingPerpendicular="md" />
             <LineItem
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
             >
               Activate User
             </LineItem>
-            <Separator paddingXRem={0.5} />
+            <Divider paddingPerpendicular="md" />
             <LineItem
               danger
               icon={SvgUserX}

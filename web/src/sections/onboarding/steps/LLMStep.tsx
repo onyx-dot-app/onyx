@@ -2,8 +2,7 @@
 
 import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
-import Separator from "@/refresh-components/Separator";
+import { Button, Divider } from "@opal/components";
 import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
 import {
   OnboardingActions,
@@ -169,7 +168,7 @@ const LLMStep = memo(
                 </Button>
               }
             />
-            <Separator />
+            <Divider />
             <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, idx) => (

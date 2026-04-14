@@ -2,12 +2,11 @@
 
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import Separator from "@/refresh-components/Separator";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 
 import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModal from "@/components/modals/UserFilesModal";
@@ -170,7 +169,7 @@ export default function ProjectContextPanel({
           </Hoverable.Root>
         </div>
 
-        <Separator className="py-0" />
+        <Divider paddingPerpendicular="fit" />
         <div className="flex flex-row gap-2 justify-between">
           <div className="min-w-0 flex-1">
             <Text as="p" headingH3 text04>
