@@ -184,10 +184,17 @@ class TestCeleryUtilsRouting:
         slim_doc = MagicMock(
             spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
         )
-        connector.retrieve_all_slim_docs = MagicMock(return_value=iter([[slim_doc]]))
-        connector.retrieve_all_slim_docs_perm_sync = MagicMock()
+        with (
+            patch.object(
+                connector, "retrieve_all_slim_docs", return_value=iter([[slim_doc]])
+            ) as mock_slim,
+            patch.object(
+                connector, "retrieve_all_slim_docs_perm_sync"
+            ) as mock_perm_sync,
+        ):
+            extract_ids_from_runnable_connector(
+                connector, connector_type="google_drive"
+            )
 
-        extract_ids_from_runnable_connector(connector, connector_type="google_drive")
-
-        connector.retrieve_all_slim_docs.assert_called_once()
-        connector.retrieve_all_slim_docs_perm_sync.assert_not_called()
+        mock_slim.assert_called_once()
+        mock_perm_sync.assert_not_called()
