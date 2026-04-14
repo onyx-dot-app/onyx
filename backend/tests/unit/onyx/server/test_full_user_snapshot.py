@@ -54,17 +54,16 @@ def test_from_user_model_personal_name_none() -> None:
     assert snapshot.personal_name is None
 
 
-def test_from_user_model_effective_permissions() -> None:
+def test_from_user_model_is_admin() -> None:
     user = _mock_user()
-    permissions = ["basic", "manage:connectors"]
-    snapshot = FullUserSnapshot.from_user_model(user, effective_permissions=permissions)
+    snapshot = FullUserSnapshot.from_user_model(user, is_admin=True)
 
-    assert snapshot.effective_permissions == permissions
+    assert snapshot.is_admin is True
     assert snapshot.account_type == AccountType.STANDARD
 
 
-def test_from_user_model_defaults_effective_permissions_to_empty() -> None:
+def test_from_user_model_defaults_is_admin_to_false() -> None:
     user = _mock_user()
     snapshot = FullUserSnapshot.from_user_model(user)
 
-    assert snapshot.effective_permissions == []
+    assert snapshot.is_admin is False

@@ -154,10 +154,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  const adminCount =
-    usersData?.accepted.filter(
-      (u) => u.effective_permissions?.includes("admin")
-    ).length ?? 0;
+  const adminCount = usersData?.accepted.filter((u) => u.is_admin).length ?? 0;
 
   const isPublic = formikProps.values.is_public;
   const selectedGroupIds = formikProps.values.groups ?? [];

@@ -41,7 +41,7 @@ class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
     account_type: AccountType
-    effective_permissions: list[str] = []
+    is_admin: bool = False
     is_active: bool
     password_configured: bool
     personal_name: str | None
@@ -56,13 +56,13 @@ class FullUserSnapshot(BaseModel):
         user: User,
         groups: list[UserGroupInfo] | None = None,
         is_scim_synced: bool = False,
-        effective_permissions: list[str] | None = None,
+        is_admin: bool = False,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
             email=user.email,
             account_type=user.account_type,
-            effective_permissions=effective_permissions or [],
+            is_admin=is_admin,
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,

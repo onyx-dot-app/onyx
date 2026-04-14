@@ -130,6 +130,7 @@ export interface User {
   tenant_info?: TenantInfo | null;
   personalization?: UserPersonalization;
   effective_permissions?: string[];
+  is_admin?: boolean;
 }
 
 export interface TenantInfo {

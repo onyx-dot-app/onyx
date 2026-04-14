@@ -20,7 +20,7 @@ interface FullUserSnapshot {
   id: string;
   email: string;
   account_type: AccountType;
-  effective_permissions: string[];
+  is_admin: boolean;
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;

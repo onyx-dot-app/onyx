@@ -172,7 +172,11 @@ async def test_upsert_user(
     )(email=request.email)
     return (
         FullUserSnapshot.from_user_model(
-            user, effective_permissions=user.effective_permissions or []
+            user,
+            is_admin=(
+                Permission.FULL_ADMIN_PANEL_ACCESS.value
+                in (user.effective_permissions or [])
+            ),
         )
         if user
         else None
@@ -239,7 +243,10 @@ def list_accepted_users(
                     for gid, gname in groups_by_user.get(user.id, [])
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
-                effective_permissions=user.effective_permissions or [],
+                is_admin=(
+                    Permission.FULL_ADMIN_PANEL_ACCESS.value
+                    in (user.effective_permissions or [])
+                ),
             )
             for user in filtered_accepted_users
         ],
@@ -285,7 +292,10 @@ def list_all_accepted_users(
                 for gid, gname in groups_by_user.get(user.id, [])
             ],
             is_scim_synced=user.id in scim_synced_ids,
-            effective_permissions=user.effective_permissions or [],
+            is_admin=(
+                Permission.FULL_ADMIN_PANEL_ACCESS.value
+                in (user.effective_permissions or [])
+            ),
         )
         for user in users
     ]
@@ -358,13 +368,21 @@ def list_all_users(
         return AllUsersResponse(
             accepted=[
                 FullUserSnapshot.from_user_model(
-                    user, effective_permissions=user.effective_permissions or []
+                    user,
+                    is_admin=(
+                        Permission.FULL_ADMIN_PANEL_ACCESS.value
+                        in (user.effective_permissions or [])
+                    ),
                 )
                 for user in accepted_users
             ],
             slack_users=[
                 FullUserSnapshot.from_user_model(
-                    user, effective_permissions=user.effective_permissions or []
+                    user,
+                    is_admin=(
+                        Permission.FULL_ADMIN_PANEL_ACCESS.value
+                        in (user.effective_permissions or [])
+                    ),
                 )
                 for user in slack_users
             ],
@@ -378,13 +396,21 @@ def list_all_users(
     return AllUsersResponse(
         accepted=[
             FullUserSnapshot.from_user_model(
-                user, effective_permissions=user.effective_permissions or []
+                user,
+                is_admin=(
+                    Permission.FULL_ADMIN_PANEL_ACCESS.value
+                    in (user.effective_permissions or [])
+                ),
             )
             for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
         slack_users=[
             FullUserSnapshot.from_user_model(
-                user, effective_permissions=user.effective_permissions or []
+                user,
+                is_admin=(
+                    Permission.FULL_ADMIN_PANEL_ACCESS.value
+                    in (user.effective_permissions or [])
+                ),
             )
             for user in slack_users
         ][
