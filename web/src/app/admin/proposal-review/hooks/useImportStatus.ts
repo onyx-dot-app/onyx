@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
-interface ImportJobStatus {
+export interface ImportJobStatus {
   id: string;
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
   source_filename: string;
@@ -15,14 +16,40 @@ interface ImportJobStatus {
 
 /**
  * Polls an import job's status endpoint while the job is active.
- * Stops polling once the job reaches a terminal state (COMPLETED or FAILED).
+ *
+ * If `importJobId` is provided, polls the specific job.
+ * Otherwise, checks the `/import/active` endpoint once on mount to detect
+ * an in-progress import (e.g. when the user navigates away and back).
+ * Once a job ID is discovered, only the specific-job endpoint is polled.
  */
 export function useImportStatus(rulesetId: string, importJobId: string | null) {
-  const isActive = importJobId !== null;
+  // Tracks the job ID discovered via the /active endpoint so we can
+  // stop polling /active once we know which job to watch.
+  const [discoveredJobId, setDiscoveredJobId] = useState<string | null>(null);
+
+  const needsDiscovery = !importJobId && !discoveredJobId;
+
+  // One-shot fetch to discover an already-active import on mount
+  const { data: activeJob } = useSWR<ImportJobStatus | null>(
+    needsDiscovery
+      ? `/api/proposal-review/rulesets/${rulesetId}/import/active`
+      : null,
+    errorHandlingFetcher
+  );
+
+  // Once the /active endpoint returns a job, capture its ID and stop polling /active
+  useEffect(() => {
+    if (activeJob?.id) {
+      setDiscoveredJobId(activeJob.id);
+    }
+  }, [activeJob]);
+
+  // Resolve which job ID to poll
+  const resolvedJobId = importJobId ?? discoveredJobId;
 
   const { data, error } = useSWR<ImportJobStatus>(
-    isActive
-      ? `/api/proposal-review/rulesets/${rulesetId}/import/${importJobId}/status`
+    resolvedJobId
+      ? `/api/proposal-review/rulesets/${rulesetId}/import/${resolvedJobId}/status`
       : null,
     errorHandlingFetcher,
     {
@@ -39,13 +66,14 @@ export function useImportStatus(rulesetId: string, importJobId: string | null) {
     }
   );
 
+  const job = data ?? null;
+
   return {
-    importJob: data ?? null,
+    importJob: job,
     isProcessing:
-      isActive &&
-      (!data || data.status === "PENDING" || data.status === "RUNNING"),
-    isComplete: data?.status === "COMPLETED",
-    isFailed: data?.status === "FAILED",
+      !!job && (job.status === "PENDING" || job.status === "RUNNING"),
+    isComplete: job?.status === "COMPLETED",
+    isFailed: job?.status === "FAILED",
     error,
   };
 }

@@ -457,6 +457,7 @@ class OnyxRedisLocks:
     )
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
+    CHECK_DANGLING_IMPORT_JOBS_BEAT_LOCK = "da_lock:check_dangling_import_jobs_beat"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
@@ -622,6 +623,9 @@ class OnyxCeleryTask:
 
     # License expiry tiered warnings
     CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
+
+    # Proposal review import cleanup
+    CHECK_FOR_DANGLING_IMPORT_JOBS = "check_for_dangling_import_jobs"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"

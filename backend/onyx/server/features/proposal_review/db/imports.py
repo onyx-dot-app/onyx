@@ -1,5 +1,7 @@
 """DB operations for checklist import jobs."""
 
+import datetime
+from datetime import timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -43,3 +45,53 @@ def get_import_job(
         .filter(ProposalReviewImportJob.id == job_id)
         .one_or_none()
     )
+
+
+def get_active_import_job(
+    ruleset_id: UUID,
+    db_session: Session,
+) -> ProposalReviewImportJob | None:
+    """Get the latest PENDING or RUNNING import job for a ruleset, if any."""
+    return (
+        db_session.query(ProposalReviewImportJob)
+        .filter(
+            ProposalReviewImportJob.ruleset_id == ruleset_id,
+            ProposalReviewImportJob.status.in_(["PENDING", "RUNNING"]),
+        )
+        .order_by(ProposalReviewImportJob.created_at.desc())
+        .first()
+    )
+
+
+def get_dangling_import_jobs(
+    db_session: Session,
+    stale_threshold_minutes: int = 30,
+) -> list[ProposalReviewImportJob]:
+    """Return import jobs stuck in PENDING or RUNNING for longer than the threshold."""
+    cutoff = datetime.datetime.now(timezone.utc) - datetime.timedelta(
+        minutes=stale_threshold_minutes
+    )
+    return (
+        db_session.query(ProposalReviewImportJob)
+        .filter(
+            ProposalReviewImportJob.status.in_(["PENDING", "RUNNING"]),
+            ProposalReviewImportJob.created_at < cutoff,
+        )
+        .all()
+    )
+
+
+def mark_import_job_failed(
+    job: ProposalReviewImportJob,
+    error_message: str,
+    db_session: Session,
+) -> None:
+    """Mark an import job as FAILED with the given error message.
+
+    Flushes but does NOT commit — the caller is responsible for committing
+    so that batch operations can be done in a single transaction.
+    """
+    job.status = "FAILED"
+    job.error_message = error_message
+    job.completed_at = datetime.datetime.now(timezone.utc)
+    db_session.flush()

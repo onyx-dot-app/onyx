@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -68,6 +68,7 @@ function RulesetDetailPage() {
 
   // Import job tracking — persists across navigation via the hook's SWR polling
   const [importJobId, setImportJobId] = useState<string | null>(null);
+  const handledJobRef = useRef<string | null>(null);
   const { importJob, isProcessing, isComplete, isFailed } = useImportStatus(
     rulesetId,
     importJobId
@@ -75,7 +76,10 @@ function RulesetDetailPage() {
 
   // When import completes, refresh the ruleset and show toast
   useEffect(() => {
-    if (isComplete && importJob) {
+    if (!importJob || handledJobRef.current === importJob.id) return;
+
+    if (isComplete) {
+      handledJobRef.current = importJob.id;
       mutate(apiUrl);
       toast.success(
         `Imported ${importJob.rules_created} rule${
@@ -84,13 +88,14 @@ function RulesetDetailPage() {
       );
       setImportJobId(null);
     }
-    if (isFailed && importJob) {
+    if (isFailed) {
+      handledJobRef.current = importJob.id;
       toast.error(
         `Import failed: ${importJob.error_message || "Unknown error"}`
       );
       setImportJobId(null);
     }
-  }, [isComplete, isFailed, importJob]);
+  }, [isComplete, isFailed, importJob, apiUrl]);
 
   async function handleImportFile(file: File) {
     setShowImportFlow(false);
@@ -508,12 +513,16 @@ function RulesetDetailPage() {
         separator
       />
       <SettingsLayouts.Body>
-        {/* Import status banner */}
+        {/* Import progress bar */}
         {isProcessing && importJob && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-08 bg-background-neutral-02">
-            <SimpleLoader className="h-4 w-4" />
-            <Text font="main-ui-body" color="text-04">
-              {`Analyzing "${importJob.source_filename}"...`}
+            <div className="h-2 flex-1 min-w-[80px] rounded-08 bg-border-02 animate-pulse" />
+            <Text font="secondary-body" color="text-03" nowrap>
+              {importJob.rules_created > 0
+                ? `${importJob.rules_created} rule${
+                    importJob.rules_created !== 1 ? "s" : ""
+                  } created`
+                : `Analyzing "${importJob.source_filename}"...`}
             </Text>
           </div>
         )}

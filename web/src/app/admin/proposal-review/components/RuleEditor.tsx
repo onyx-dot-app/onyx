@@ -9,7 +9,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { toast } from "@/hooks/useToast";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import Modal from "@/refresh-components/Modal";
-import { Vertical as VerticalInput } from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import type {
   RuleResponse,
   RuleCreate,
@@ -129,12 +129,7 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                       </Text>
                     </div>
                   )}
-                <VerticalInput
-                  name="name"
-                  title="Name"
-                  nonInteractive
-                  sizePreset="main-ui"
-                >
+                <InputVertical title="Name" withLabel="name">
                   <FormikField<string>
                     name="name"
                     render={(field, helper) => (
@@ -146,14 +141,9 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                       />
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
 
-                <VerticalInput
-                  name="description"
-                  title="Description"
-                  nonInteractive
-                  sizePreset="main-ui"
-                >
+                <InputVertical title="Description" withLabel="description">
                   <FormikField<string>
                     name="description"
                     render={(field, helper) => (
@@ -165,14 +155,9 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                       />
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
 
-                <VerticalInput
-                  name="category"
-                  title="Category"
-                  nonInteractive
-                  sizePreset="main-ui"
-                >
+                <InputVertical title="Category" withLabel="category">
                   <FormikField<string>
                     name="category"
                     render={(field, helper) => (
@@ -184,16 +169,11 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                       />
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
 
                 <div className="flex gap-4 w-full">
                   <div className="flex-1 min-w-0">
-                    <VerticalInput
-                      name="rule_type"
-                      title="Rule Type"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical title="Rule Type" withLabel="rule_type">
                       <FormikField<string>
                         name="rule_type"
                         render={(field, helper) => (
@@ -214,16 +194,11 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                           </InputSelect>
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </div>
 
                   <div className="flex-1">
-                    <VerticalInput
-                      name="rule_intent"
-                      title="Intent"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical title="Intent" withLabel="rule_intent">
                       <FormikField<string>
                         name="rule_intent"
                         render={(field, helper) => (
@@ -244,18 +219,13 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                           </InputSelect>
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </div>
                 </div>
 
                 <div className="flex gap-4 w-full">
                   <div className="flex-1 min-w-0">
-                    <VerticalInput
-                      name="authority"
-                      title="Authority"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical title="Authority" withLabel="authority">
                       <FormikField<string>
                         name="authority"
                         render={(field, helper) => (
@@ -279,16 +249,11 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                           </InputSelect>
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </div>
 
                   <div className="flex-1">
-                    <VerticalInput
-                      name="is_hard_stop"
-                      title="Hard Stop"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical title="Hard Stop" withLabel="is_hard_stop">
                       <FormikField<string>
                         name="is_hard_stop"
                         render={(field, helper) => (
@@ -306,15 +271,13 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                           </InputSelect>
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </div>
                 </div>
 
-                <VerticalInput
-                  name="prompt_template"
+                <InputVertical
                   title="Prompt Template"
-                  nonInteractive
-                  sizePreset="main-ui"
+                  withLabel="prompt_template"
                 >
                   <Text font="secondary-body" color="text-04">
                     {
@@ -332,7 +295,7 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                       />
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
               </Modal.Body>
 
               <Modal.Footer>

@@ -30,12 +30,8 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { markdown } from "@opal/utils";
 import { Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
-import { Vertical as VerticalInput } from "@/layouts/input-layouts";
-import type {
-  RulesetResponse,
-  RulesetCreate,
-  RulesetUpdate,
-} from "@/app/admin/proposal-review/interfaces";
+import { InputVertical } from "@opal/layouts";
+import type { RulesetResponse } from "@/app/admin/proposal-review/interfaces";
 
 const API_URL = "/api/proposal-review/rulesets";
 const route = ADMIN_ROUTES.PROPOSAL_REVIEW;
@@ -341,12 +337,7 @@ function RulesetsPage() {
               {({ isSubmitting, values }) => (
                 <Form className="w-full">
                   <Modal.Body>
-                    <VerticalInput
-                      name="name"
-                      title="Name"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical withLabel="name" title="Name">
                       <FormikField<string>
                         name="name"
                         render={(field, helper) => (
@@ -358,13 +349,8 @@ function RulesetsPage() {
                           />
                         )}
                       />
-                    </VerticalInput>
-                    <VerticalInput
-                      name="description"
-                      title="Description"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    </InputVertical>
+                    <InputVertical title="Description" withLabel="description">
                       <FormikField<string>
                         name="description"
                         render={(field, helper) => (
@@ -376,7 +362,7 @@ function RulesetsPage() {
                           />
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </Modal.Body>
                   <Modal.Footer>
                     <Button
@@ -445,12 +431,7 @@ function RulesetsPage() {
               {({ isSubmitting, values }) => (
                 <Form className="w-full">
                   <Modal.Body>
-                    <VerticalInput
-                      name="name"
-                      title="Name"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    <InputVertical withLabel="name" title="Name">
                       <FormikField<string>
                         name="name"
                         render={(field, helper) => (
@@ -462,13 +443,8 @@ function RulesetsPage() {
                           />
                         )}
                       />
-                    </VerticalInput>
-                    <VerticalInput
-                      name="description"
-                      title="Description"
-                      nonInteractive
-                      sizePreset="main-ui"
-                    >
+                    </InputVertical>
+                    <InputVertical withLabel="description" title="Description">
                       <FormikField<string>
                         name="description"
                         render={(field, helper) => (
@@ -480,7 +456,7 @@ function RulesetsPage() {
                           />
                         )}
                       />
-                    </VerticalInput>
+                    </InputVertical>
                   </Modal.Body>
                   <Modal.Footer>
                     <Button

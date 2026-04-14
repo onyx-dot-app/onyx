@@ -84,6 +84,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-dangling-import-jobs",
+        "task": OnyxCeleryTask.CHECK_FOR_DANGLING_IMPORT_JOBS,
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "check-for-index-attempt-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
         "schedule": timedelta(minutes=30),

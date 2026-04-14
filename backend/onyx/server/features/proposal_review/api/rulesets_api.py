@@ -340,6 +340,28 @@ def import_checklist_endpoint(
 
 
 @router.get(
+    "/rulesets/{ruleset_id}/import/active",
+)
+def get_active_import_job(
+    ruleset_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> ImportJobResponse | None:
+    """Get the latest active (PENDING/RUNNING) import job for a ruleset."""
+    tenant_id = get_current_tenant_id()
+
+    ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
+    if not ruleset:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
+
+    job = imports_db.get_active_import_job(ruleset_id, db_session)
+    if not job:
+        return None
+
+    return ImportJobResponse.from_model(job)
+
+
+@router.get(
     "/rulesets/{ruleset_id}/import/{import_job_id}/status",
 )
 def get_import_job_status(

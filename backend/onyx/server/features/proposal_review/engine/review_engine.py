@@ -12,8 +12,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from celery import shared_task
+from redis.lock import Lock as RedisLock
 from sqlalchemy import update
 
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxRedisLocks
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -553,4 +558,78 @@ def sync_decision_to_jira(_self: object, proposal_id: str, tenant_id: str) -> No
         logger.error(f"Jira sync failed for proposal {proposal_id}: {e}", exc_info=True)
         raise
     finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+
+
+@shared_task(
+    name=OnyxCeleryTask.CHECK_FOR_DANGLING_IMPORT_JOBS,
+    bind=True,
+    ignore_result=True,
+    soft_time_limit=60,
+    time_limit=90,
+)
+def check_for_dangling_import_jobs(_self: object, *, tenant_id: str) -> None:
+    """Beat task: mark import jobs stuck in PENDING/RUNNING as FAILED.
+
+    A job is considered stuck if it has been in a non-terminal state for
+    longer than the stale threshold (default 60 minutes).  This handles
+    cases where the Celery message was discarded (e.g. worker restart
+    before the task was registered) or the task crashed without marking
+    the job as FAILED.
+    """
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.server.features.proposal_review.db import imports as imports_db
+
+    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    locked = False
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CHECK_DANGLING_IMPORT_JOBS_BEAT_LOCK,
+        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    )
+
+    if not lock.acquire(blocking=False):
+        logger.info(
+            f"check_for_dangling_import_jobs - Lock not acquired: tenant={tenant_id}"
+        )
+        return None
+
+    try:
+        locked = True
+        with get_session_with_current_tenant() as db_session:
+            dangling = imports_db.get_dangling_import_jobs(
+                db_session, stale_threshold_minutes=60
+            )
+            if not dangling:
+                return
+
+            for job in dangling:
+                logger.warning(
+                    f"Marking dangling import job {job.id} as FAILED "
+                    f"(status={job.status}, created_at={job.created_at})"
+                )
+                imports_db.mark_import_job_failed(
+                    job,
+                    "Import timed out — the background task did not complete. "
+                    "Please try importing again.",
+                    db_session,
+                )
+
+            db_session.commit()
+            logger.info(
+                f"Cleaned up {len(dangling)} dangling import job(s) "
+                f"for tenant {tenant_id}"
+            )
+    except Exception:
+        logger.exception("Unexpected error during dangling import job cleanup")
+    finally:
+        if locked:
+            if lock.owned():
+                lock.release()
+            else:
+                logger.error(
+                    f"check_for_dangling_import_jobs - "
+                    f"Lock not owned on completion: tenant={tenant_id}"
+                )
         CURRENT_TENANT_ID_CONTEXTVAR.set(None)
