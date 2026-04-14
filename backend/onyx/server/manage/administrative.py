@@ -29,6 +29,7 @@ from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
 from onyx.db.feedback import update_document_boost_for_user
 from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
+from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
@@ -226,8 +227,6 @@ def get_failed_documents(
 
     Provides a cross-connector view of document indexing failures.
     """
-    from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
-
     errors, total = get_index_attempt_errors_across_connectors(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
