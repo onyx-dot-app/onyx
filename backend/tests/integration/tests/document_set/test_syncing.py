@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -157,5 +159,60 @@ def test_removing_connector(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[],
+        doc_creating_user=admin_user,
+    )
+
+
+def test_renaming_document_set(
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
+) -> None:
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    api_key: DATestAPIKey = APIKeyManager.create(
+        user_performing_action=admin_user,
+    )
+
+    cc_pair = CCPairManager.create_from_scratch(
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+
+    cc_pair.documents = DocumentManager.seed_dummy_docs(
+        cc_pair=cc_pair,
+        num_docs=NUM_DOCS,
+        api_key=api_key,
+    )
+
+    original_name = f"original_doc_set_{uuid4()}"
+    doc_set = DocumentSetManager.create(
+        name=original_name,
+        cc_pair_ids=[cc_pair.id],
+        user_performing_action=admin_user,
+    )
+
+    DocumentSetManager.wait_for_sync(user_performing_action=admin_user)
+    DocumentSetManager.verify(
+        document_set=doc_set,
+        user_performing_action=admin_user,
+    )
+
+    new_name = f"renamed_doc_set_{uuid4()}"
+    doc_set.name = new_name
+    DocumentSetManager.edit(
+        doc_set,
+        user_performing_action=admin_user,
+    )
+
+    DocumentSetManager.wait_for_sync(user_performing_action=admin_user)
+    DocumentSetManager.verify(
+        document_set=doc_set,
+        user_performing_action=admin_user,
+    )
+
+    DocumentManager.verify(
+        vespa_client=vespa_client,
+        cc_pair=cc_pair,
+        doc_set_names=[new_name],
         doc_creating_user=admin_user,
     )
