@@ -227,7 +227,7 @@ export default function ModelSelector({
       </div>
 
       {!(atMax && replacingIndex === null) && (
-        <Popover.Content side="top" align="end" width="lg">
+        <Popover.Content side="top" align="end" width="xl">
           <ModelListContent
             llmProviders={llmManager.llmProviders}
             isLoading={llmManager.isLoadingProviders}
