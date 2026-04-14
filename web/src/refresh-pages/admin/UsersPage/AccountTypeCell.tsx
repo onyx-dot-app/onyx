@@ -14,12 +14,12 @@ const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
     [AccountType.SERVICE_ACCOUNT]: SvgKey,
   };
 
-interface UserRoleCellProps {
+interface AccountTypeCellProps {
   user: UserRow;
   onMutate: () => void;
 }
 
-export default function UserRoleCell({ user }: UserRoleCellProps) {
+export default function AccountTypeCell({ user }: AccountTypeCellProps) {
   if (!user.account_type) {
     return (
       <Text as="span" secondaryBody text03>

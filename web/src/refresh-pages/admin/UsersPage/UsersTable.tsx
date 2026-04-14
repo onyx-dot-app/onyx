@@ -19,7 +19,7 @@ import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
-import UserRoleCell from "./UserRoleCell";
+import AccountTypeCell from "./AccountTypeCell";
 import type {
   UserRow,
   GroupOption,
@@ -104,7 +104,7 @@ function buildColumns(onMutate: () => void) {
     tc.column("account_type", {
       header: "Account Type",
       weight: 16,
-      cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
+      cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
     }),
     tc.column("status", {
       header: "Status",
