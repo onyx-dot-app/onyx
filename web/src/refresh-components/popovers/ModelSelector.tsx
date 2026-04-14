@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/llmConfig";
-import { Button, SelectButton, OpenButton } from "@opal/components";
+import { Button, OpenButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
@@ -166,13 +166,23 @@ export default function ModelSelector({
                   model.modelName
                 );
 
-                if (!isMultiModel) {
-                  // Stable key — keying on model would unmount the pill
-                  // on change and leave Radix's anchorRef detached,
-                  // flashing the closing popover at (0,0).
-                  return (
+                return (
+                  <div
+                    key={
+                      isMultiModel
+                        ? modelKey(model.provider, model.modelName)
+                        : "single-model-pill"
+                    }
+                    className="flex items-center"
+                  >
+                    {isMultiModel && index > 0 && (
+                      <Separator
+                        orientation="vertical"
+                        paddingXRem={0.5}
+                        className="h-5"
+                      />
+                    )}
                     <OpenButton
-                      key="single-model-pill"
                       icon={ProviderIcon}
                       onClick={(e: React.MouseEvent) =>
                         handlePillClick(index, e.currentTarget as HTMLElement)
@@ -180,44 +190,14 @@ export default function ModelSelector({
                     >
                       {model.displayName}
                     </OpenButton>
-                  );
-                }
-
-                return (
-                  <div
-                    key={modelKey(model.provider, model.modelName)}
-                    className="flex items-center"
-                  >
-                    {index > 0 && (
-                      <Separator
-                        orientation="vertical"
-                        paddingXRem={0.5}
-                        className="h-5"
+                    {isMultiModel && (
+                      <Button
+                        prominence="tertiary"
+                        icon={SvgX}
+                        size="sm"
+                        onClick={() => onRemove(index)}
                       />
                     )}
-                    <SelectButton
-                      icon={ProviderIcon}
-                      rightIcon={SvgX}
-                      state="empty"
-                      variant="select-tinted"
-                      interaction="hover"
-                      size="lg"
-                      onClick={(e: React.MouseEvent) => {
-                        const target = e.target as HTMLElement;
-                        const btn = e.currentTarget as HTMLElement;
-                        const icons = btn.querySelectorAll(
-                          ".interactive-foreground-icon"
-                        );
-                        const lastIcon = icons[icons.length - 1];
-                        if (lastIcon && lastIcon.contains(target)) {
-                          onRemove(index);
-                        } else {
-                          handlePillClick(index, btn);
-                        }
-                      }}
-                    >
-                      {model.displayName}
-                    </SelectButton>
                   </div>
                 );
               })}
