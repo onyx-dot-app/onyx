@@ -737,10 +737,7 @@ export const BooleanFormField = memo(function BooleanFormField({
 
           return (
             <Tooltip
-              // This may seem confusing, but we only want to show the `disabledTooltip` if and only if the `BooleanFormField` is disabled.
-              // If it disabled, then we "enable" the showing of the tooltip. Thus, `disabled={!disabled}` is not a mistake.
-              disabled={!disabled}
-              tooltip={disabledTooltip}
+              tooltip={disabled ? disabledTooltip : undefined}
               side={disabledTooltipSide}
             >
               <Section flexDirection="row" width="fit" height="fit" gap={0}>

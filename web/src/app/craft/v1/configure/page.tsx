@@ -424,7 +424,6 @@ export default function BuildConfigPage() {
                           ? "Configure an LLM provider first"
                           : undefined
                       }
-                      disabled={hasLlmProvider}
                     >
                       <button
                         type="button"
@@ -505,11 +504,6 @@ export default function BuildConfigPage() {
                           : !hasConnectorEverSucceeded
                             ? "Connect and sync a data source to disable demo data"
                             : undefined
-                      }
-                      disabled={
-                        hasConnectorEverSucceeded &&
-                        !isUpdating &&
-                        !isPreProvisioning
                       }
                     >
                       <Card

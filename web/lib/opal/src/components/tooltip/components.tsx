@@ -3,7 +3,6 @@
 import "@opal/components/tooltip/styles.css";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { RichStr } from "@opal/types";
-type TooltipSide = "top" | "bottom" | "left" | "right";
 import { Text } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 
@@ -11,6 +10,7 @@ import { isRichStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
+type TooltipSide = "top" | "bottom" | "left" | "right";
 type TooltipAlign = "start" | "center" | "end";
 
 interface TooltipProps {
@@ -30,11 +30,17 @@ interface TooltipProps {
   align?: TooltipAlign;
 
   /**
-   * When `true`, suppresses the tooltip even if `tooltip` is defined.
-   * Children are still rendered normally.
-   * @default false
+   * Controlled open state. When provided, the tooltip's visibility is
+   * externally managed. When omitted, the tooltip uses Radix's default
+   * hover-based open handling.
    */
-  disabled?: boolean;
+  open?: boolean;
+
+  /**
+   * Callback fired when the tooltip's open state changes. Use with `open`
+   * for controlled behavior.
+   */
+  onOpenChange?: (open: boolean) => void;
 
   /**
    * Delay in milliseconds before the tooltip appears on hover.
@@ -59,24 +65,24 @@ interface TooltipProps {
 /**
  * A minimal tooltip wrapper that shows content on hover.
  *
- * Renders nothing extra when `tooltip` is `undefined` or `disabled` is
- * `true` — just passes children through. When `tooltip` is provided,
- * wraps children with a Radix tooltip.
+ * Renders nothing extra when `tooltip` is `undefined` — just passes children
+ * through. When `tooltip` is provided, wraps children with a Radix tooltip.
+ *
+ * Supports both uncontrolled (default hover behavior) and controlled
+ * (`open` + `onOpenChange`) modes.
  *
  * @example
  * ```tsx
  * import { Tooltip } from "@opal/components";
  *
+ * // Uncontrolled (default)
  * <Tooltip tooltip="Delete this item">
  *   <Button icon={SvgTrash} />
  * </Tooltip>
  *
- * <Tooltip tooltip="Not available" disabled={isAvailable}>
- *   <Button icon={SvgTrash} />
- * </Tooltip>
- *
- * <Tooltip tooltip="Quick tooltip" delayDuration={0} side="top">
- *   <span>Instant</span>
+ * // Controlled
+ * <Tooltip tooltip="Details" open={isOpen} onOpenChange={setIsOpen}>
+ *   <Button icon={SvgInfo} />
  * </Tooltip>
  * ```
  */
@@ -84,12 +90,13 @@ function Tooltip({
   tooltip,
   side = "right",
   align = "center",
-  disabled = false,
+  open,
+  onOpenChange,
   delayDuration,
   sideOffset = 4,
   children,
 }: TooltipProps) {
-  if (!tooltip || disabled) return children;
+  if (!tooltip) return children;
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
@@ -101,7 +108,11 @@ function Tooltip({
     );
 
   return (
-    <TooltipPrimitive.Root delayDuration={delayDuration}>
+    <TooltipPrimitive.Root
+      open={open}
+      onOpenChange={onOpenChange}
+      delayDuration={delayDuration}
+    >
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content

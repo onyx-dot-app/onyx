@@ -122,7 +122,6 @@ export function BotConfigCard() {
               tooltip={
                 hasServerConfigs ? "Delete server configs first" : undefined
               }
-              disabled={!hasServerConfigs}
             >
               <Button
                 disabled={isSubmitting || hasServerConfigs}

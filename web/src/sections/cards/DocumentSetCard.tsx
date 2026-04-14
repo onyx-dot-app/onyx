@@ -26,7 +26,6 @@ export default function DocumentSetCard({
   return (
     <Tooltip
       tooltip={disabled && disabledTooltip ? disabledTooltip : undefined}
-      disabled={!disabled || !disabledTooltip}
     >
       <div className="max-w-[12rem]">
         <Interactive.Simple

@@ -155,8 +155,7 @@ export default function GroupsCell({
             <Tooltip
               side="bottom"
               align="start"
-              tooltip={allGroupsTooltip}
-              disabled={!hasOverflow}
+              tooltip={hasOverflow ? allGroupsTooltip : undefined}
               delayDuration={200}
             >
               <div
