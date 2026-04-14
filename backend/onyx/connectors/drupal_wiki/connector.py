@@ -15,8 +15,8 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    is_tabular_file,
     tabular_file_to_sections,
 )
 from onyx.connectors.drupal_wiki.models import DrupalWikiCheckpoint
@@ -218,7 +218,7 @@ class DrupalWikiConnector(
         attachment: dict[str, Any],
         page_id: int,
         download_url: str,
-    ) -> tuple[list[TextSection | ImageSection], str | None]:
+    ) -> tuple[list[TextSection | ImageSection | TabularSection], str | None]:
         """
         Process a single attachment and return generated sections.
 
@@ -521,7 +521,7 @@ class DrupalWikiConnector(
             page_url = build_drupal_wiki_document_id(self.base_url, page.id)
 
             # Create sections with just the page content
-            sections: list[TextSection | ImageSection] = [
+            sections: list[TextSection | ImageSection | TabularSection] = [
                 TextSection(text=text_content, link=page_url)
             ]
 

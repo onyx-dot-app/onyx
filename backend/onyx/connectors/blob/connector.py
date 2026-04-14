@@ -10,6 +10,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import boto3
+from backend.onyx.connectors.models import TabularSection
 from botocore.client import Config
 from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError
@@ -26,8 +27,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    is_tabular_file,
     tabular_file_to_sections,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -474,7 +475,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                                 sections=(
                                     tabular_sections
                                     if tabular_sections
-                                    else [TextSection(link=link, text="")]
+                                    else [TabularSection(link=link, text="")]
                                 ),
                                 source=DocumentSource(self.bucket_type.value),
                                 semantic_identifier=file_name,

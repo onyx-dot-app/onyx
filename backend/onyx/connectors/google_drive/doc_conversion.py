@@ -1,7 +1,3 @@
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    is_tabular_file,
-    tabular_file_to_sections,
-)
 import io
 from collections.abc import Callable
 from datetime import datetime
@@ -17,6 +13,10 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.models import GDriveMimeType
