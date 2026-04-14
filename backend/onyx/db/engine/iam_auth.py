@@ -44,11 +44,10 @@ def provide_iam_token(
     cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
-        host = POSTGRES_HOST
-        port = POSTGRES_PORT
-        user = POSTGRES_USER
+        host = cparams.get("host") or POSTGRES_HOST
+        port = str(cparams.get("port", POSTGRES_PORT))
+        user = cparams.get("user") or POSTGRES_USER
         region = os.getenv("AWS_REGION_NAME", "us-east-2")
-        # Configure for psycopg2 with IAM token
         configure_psycopg2_iam_auth(cparams, host, port, user, region)
 
 

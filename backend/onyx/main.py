@@ -318,13 +318,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
 
-    SqlEngine.init_engine(
+    SqlEngine.init_all_engines(
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
     )
     SqlEngine.get_engine()
 
-    SqlEngine.init_readonly_engine(
+    SqlEngine.init_all_readonly_engines(
         pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
     )

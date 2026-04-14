@@ -19,6 +19,7 @@ from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_HOSTS
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
@@ -35,13 +36,10 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
-# Moved is_valid_schema_name here to avoid circular import
-
 
 logger = setup_logger()
 
 
-# Schema name validation (moved here to avoid circular import)
 SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
@@ -52,7 +50,6 @@ def is_valid_schema_name(name: str) -> bool:
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
 
-# why isn't this in configs?
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
 
@@ -73,7 +70,6 @@ def build_connection_string(
     else:
         base_conn_str = f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
 
-    # For asyncpg, do not include application_name in the connection string
     if app_name and db_api != "asyncpg":
         if "?" in base_conn_str:
             return f"{base_conn_str}&application_name={app_name}"
@@ -139,87 +135,107 @@ if LOG_POSTGRES_CONN_COUNTS:
 
 
 class SqlEngine:
-    _engine: Engine | None = None
-    _readonly_engine: Engine | None = None
+    """Registry of SQLAlchemy engines keyed by Postgres host index.
+
+    Host index 0 is always the "catalog" host (where the public schema
+    lives).  Additional hosts can be registered for tenant routing.
+    """
+
+    _engines: dict[int, Engine] = {}
+    _readonly_engines: dict[int, Engine] = {}
     _lock: threading.Lock = threading.Lock()
     _readonly_lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
+
+    # ── write engines ──────────────────────────────────────────────
 
     @classmethod
     def init_engine(
         cls,
         pool_size: int,
-        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
         max_overflow: int,
+        host_index: int = 0,
+        host: str | None = None,
         app_name: str | None = None,  # noqa: ARG003
         db_api: str = SYNC_DB_API,
         use_iam: bool = USE_IAM_AUTH,
         connection_string: str | None = None,
         **extra_engine_kwargs: Any,
     ) -> None:
-        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
-        important args, and if incorrectly specified, we have run into hitting the pool
-        limit / using too many connections and overwhelming the database.
-
-        Specifying connection_string directly will cause some of the other parameters
-        to be ignored.
-        """
         with cls._lock:
-            if cls._engine:
+            if host_index in cls._engines:
                 return
 
             if not connection_string:
                 connection_string = build_connection_string(
                     db_api=db_api,
+                    host=host or POSTGRES_HOST,
                     app_name=cls._app_name + "_sync",
                     use_iam_auth=use_iam,
                 )
 
-            # Start with base kwargs that are valid for all pool types
             final_engine_kwargs: dict[str, Any] = {}
 
             if POSTGRES_USE_NULL_POOL:
-                # if null pool is specified, then we need to make sure that
-                # we remove any passed in kwargs related to pool size that would
-                # cause the initialization to fail
                 final_engine_kwargs.update(extra_engine_kwargs)
-
                 final_engine_kwargs["poolclass"] = pool.NullPool
-                if "pool_size" in final_engine_kwargs:
-                    del final_engine_kwargs["pool_size"]
-                if "max_overflow" in final_engine_kwargs:
-                    del final_engine_kwargs["max_overflow"]
+                final_engine_kwargs.pop("pool_size", None)
+                final_engine_kwargs.pop("max_overflow", None)
             else:
                 final_engine_kwargs["pool_size"] = pool_size
                 final_engine_kwargs["max_overflow"] = max_overflow
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
-
-                # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
 
-            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
-            # echo=True here for inspecting all emitted db queries
+            logger.info(
+                f"Creating engine for host_index={host_index} "
+                f"with kwargs: {final_engine_kwargs}"
+            )
             engine = create_engine(connection_string, **final_engine_kwargs)
 
             if use_iam:
                 event.listen(engine, "do_connect", provide_iam_token)
 
-            cls._engine = engine
+            cls._engines[host_index] = engine
+
+    @classmethod
+    def init_all_engines(
+        cls,
+        pool_size: int,
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        """Initialize one engine per configured Postgres host.
+
+        Pool sizes are divided evenly across hosts so total connection
+        consumption stays roughly the same.
+        """
+        num_hosts = len(POSTGRES_HOSTS)
+        per_host_pool = max(1, pool_size // num_hosts)
+        per_host_overflow = max(0, max_overflow // num_hosts)
+        for idx, host in enumerate(POSTGRES_HOSTS):
+            cls.init_engine(
+                pool_size=per_host_pool,
+                max_overflow=per_host_overflow,
+                host_index=idx,
+                host=host,
+                **extra_engine_kwargs,
+            )
+
+    # ── readonly engines ───────────────────────────────────────────
 
     @classmethod
     def init_readonly_engine(
         cls,
         pool_size: int,
-        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
         max_overflow: int,
+        host_index: int = 0,
+        host: str | None = None,
         **extra_engine_kwargs: Any,
     ) -> None:
-        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
-        important args, and if incorrectly specified, we have run into hitting the pool
-        limit / using too many connections and overwhelming the database."""
         with cls._readonly_lock:
-            if cls._readonly_engine:
+            if host_index in cls._readonly_engines:
                 return
 
             if not DB_READONLY_USER or not DB_READONLY_PASSWORD:
@@ -227,59 +243,85 @@ class SqlEngine:
                     "Custom database user credentials not configured in environment variables"
                 )
 
-            # Build connection string with custom user
             connection_string = build_connection_string(
                 user=DB_READONLY_USER,
                 password=DB_READONLY_PASSWORD,
-                use_iam_auth=False,  # Custom users typically don't use IAM auth
-                db_api=SYNC_DB_API,  # Explicitly use sync DB API
+                host=host or POSTGRES_HOST,
+                use_iam_auth=False,
+                db_api=SYNC_DB_API,
             )
 
-            # Start with base kwargs that are valid for all pool types
             final_engine_kwargs: dict[str, Any] = {}
 
             if POSTGRES_USE_NULL_POOL:
-                # if null pool is specified, then we need to make sure that
-                # we remove any passed in kwargs related to pool size that would
-                # cause the initialization to fail
                 final_engine_kwargs.update(extra_engine_kwargs)
-
                 final_engine_kwargs["poolclass"] = pool.NullPool
-                if "pool_size" in final_engine_kwargs:
-                    del final_engine_kwargs["pool_size"]
-                if "max_overflow" in final_engine_kwargs:
-                    del final_engine_kwargs["max_overflow"]
+                final_engine_kwargs.pop("pool_size", None)
+                final_engine_kwargs.pop("max_overflow", None)
             else:
                 final_engine_kwargs["pool_size"] = pool_size
                 final_engine_kwargs["max_overflow"] = max_overflow
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
-
-                # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
 
-            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
-            # echo=True here for inspecting all emitted db queries
+            logger.info(
+                f"Creating readonly engine for host_index={host_index} "
+                f"with kwargs: {final_engine_kwargs}"
+            )
             engine = create_engine(connection_string, **final_engine_kwargs)
 
             if USE_IAM_AUTH:
                 event.listen(engine, "do_connect", provide_iam_token)
 
-            cls._readonly_engine = engine
+            cls._readonly_engines[host_index] = engine
 
     @classmethod
-    def get_engine(cls) -> Engine:
-        if not cls._engine:
-            raise RuntimeError("Engine not initialized. Must call init_engine first.")
-        return cls._engine
-
-    @classmethod
-    def get_readonly_engine(cls) -> Engine:
-        if not cls._readonly_engine:
-            raise RuntimeError(
-                "Readonly engine not initialized. Must call init_readonly_engine first."
+    def init_all_readonly_engines(
+        cls,
+        pool_size: int,
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        num_hosts = len(POSTGRES_HOSTS)
+        per_host_pool = max(1, pool_size // num_hosts)
+        per_host_overflow = max(0, max_overflow // num_hosts)
+        for idx, host in enumerate(POSTGRES_HOSTS):
+            cls.init_readonly_engine(
+                pool_size=per_host_pool,
+                max_overflow=per_host_overflow,
+                host_index=idx,
+                host=host,
+                **extra_engine_kwargs,
             )
-        return cls._readonly_engine
+
+    # ── getters ────────────────────────────────────────────────────
+
+    @classmethod
+    def get_engine(cls, host_index: int = 0) -> Engine:
+        engine = cls._engines.get(host_index)
+        if engine is None:
+            raise RuntimeError(
+                f"Engine for host_index={host_index} not initialized. "
+                "Must call init_engine / init_all_engines first."
+            )
+        return engine
+
+    @classmethod
+    def get_readonly_engine(cls, host_index: int = 0) -> Engine:
+        engine = cls._readonly_engines.get(host_index)
+        if engine is None:
+            raise RuntimeError(
+                f"Readonly engine for host_index={host_index} not initialized. "
+                "Must call init_readonly_engine / init_all_readonly_engines first."
+            )
+        return engine
+
+    @classmethod
+    def get_all_engines(cls) -> dict[int, Engine]:
+        return dict(cls._engines)
+
+    # ── metadata ───────────────────────────────────────────────────
 
     @classmethod
     def set_app_name(cls, app_name: str) -> None:
@@ -291,12 +333,14 @@ class SqlEngine:
             return ""
         return cls._app_name
 
+    # ── lifecycle ──────────────────────────────────────────────────
+
     @classmethod
     def reset_engine(cls) -> None:
         with cls._lock:
-            if cls._engine:
-                cls._engine.dispose()
-                cls._engine = None
+            for engine in cls._engines.values():
+                engine.dispose()
+            cls._engines.clear()
 
     @classmethod
     @contextmanager
@@ -309,12 +353,25 @@ class SqlEngine:
             cls.reset_engine()
 
 
-def get_sqlalchemy_engine() -> Engine:
-    return SqlEngine.get_engine()
+# ── convenience accessors ──────────────────────────────────────────
 
 
-def get_readonly_sqlalchemy_engine() -> Engine:
-    return SqlEngine.get_readonly_engine()
+def get_sqlalchemy_engine(host_index: int = 0) -> Engine:
+    return SqlEngine.get_engine(host_index)
+
+
+def get_readonly_sqlalchemy_engine(host_index: int = 0) -> Engine:
+    return SqlEngine.get_readonly_engine(host_index)
+
+
+# ── session factories ──────────────────────────────────────────────
+
+
+def _get_host_index_for_tenant(tenant_id: str) -> int:
+    """Thin wrapper to keep the import lazy and avoid circular deps."""
+    from onyx.db.engine.tenant_host_mapping import get_host_index_for_tenant
+
+    return get_host_index_for_tenant(tenant_id)
 
 
 @contextmanager
@@ -337,32 +394,30 @@ def get_session_with_current_tenant_if_none(
         yield session
 
 
-# Used in multi tenant mode when need to refer to the shared `public` schema
 @contextmanager
 def get_session_with_shared_schema() -> Generator[Session, None, None]:
+    """Always targets host 0 — the catalog host where public-schema tables live."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as session:
+    engine = SqlEngine.get_engine(host_index=0)
+    with Session(bind=engine, expire_on_commit=False) as session:
         yield session
     CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @contextmanager
 def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
-    """
-    Generate a database session for a specific tenant.
-    """
-    engine = get_sqlalchemy_engine()
-
+    """Generate a database session for a specific tenant."""
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    # no need to use the schema translation map for self-hosted + default schema
+    host_index = _get_host_index_for_tenant(tenant_id)
+    engine = SqlEngine.get_engine(host_index)
+
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         with Session(bind=engine, expire_on_commit=False) as session:
             yield session
         return
 
-    # Create connection with schema translation to handle querying the right schema
     schema_translate_map = {None: tenant_id}
     with engine.connect().execution_options(
         schema_translate_map=schema_translate_map
@@ -391,18 +446,15 @@ def get_session() -> Generator[Session, None, None]:
 def get_db_readonly_user_session_with_current_tenant() -> (
     Generator[Session, None, None]
 ):
-    """
-    Generate a database session using a custom database user for the current tenant.
-    The custom user credentials are obtained from environment variables.
-    """
+    """Generate a database session using a readonly database user for the current tenant."""
     tenant_id = get_current_tenant_id()
 
-    readonly_engine = get_readonly_sqlalchemy_engine()
+    host_index = _get_host_index_for_tenant(tenant_id)
+    readonly_engine = get_readonly_sqlalchemy_engine(host_index)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         with Session(readonly_engine, expire_on_commit=False) as session:
             yield session

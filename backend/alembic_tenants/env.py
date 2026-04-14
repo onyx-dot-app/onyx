@@ -72,10 +72,12 @@ async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context.
 
+    Always targets host 0 — the catalog host where public-schema tables live.
     """
+    from onyx.configs.app_configs import POSTGRES_HOSTS
 
     connectable = create_async_engine(
-        build_connection_string(),
+        build_connection_string(host=POSTGRES_HOSTS[0]),
         poolclass=pool.NullPool,
     )
 

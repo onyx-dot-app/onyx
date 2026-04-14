@@ -194,20 +194,31 @@ def pre_provision_tenant() -> bool:
         tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
         task_logger.info(f"Pre-provisioning tenant: {tenant_id}")
 
-        # Create the schema for the new tenant
-        schema_created = create_schema_if_not_exists(tenant_id)
+        # Determine target host via cutoff-based routing
+        from datetime import timezone as _tz
+
+        from onyx.db.engine.tenant_host_mapping import compute_host_index
+        from onyx.db.engine.tenant_host_mapping import set_tenant_host_in_redis
+
+        host_index = compute_host_index(datetime.datetime.now(_tz.utc))
+
+        # Create the schema on the correct host
+        schema_created = create_schema_if_not_exists(tenant_id, host_index=host_index)
         if schema_created:
             task_logger.debug(f"Created schema for tenant: {tenant_id}")
         else:
             task_logger.debug(f"Schema already exists for tenant: {tenant_id}")
 
+        # Seed Redis so the pool-claim path can read the mapping
+        set_tenant_host_in_redis(tenant_id, host_index)
+
         # Set up the tenant with all necessary configurations
         task_logger.debug(f"Setting up tenant configuration: {tenant_id}")
-        asyncio.run(setup_tenant(tenant_id))
+        asyncio.run(setup_tenant(tenant_id, host_index=host_index))
         task_logger.debug(f"Tenant configuration completed: {tenant_id}")
 
-        # Get the current Alembic version
-        alembic_version = get_current_alembic_version(tenant_id)
+        # Get the current Alembic version from the correct host
+        alembic_version = get_current_alembic_version(tenant_id, host_index=host_index)
         task_logger.debug(
             f"Tenant {tenant_id} using Alembic version: {alembic_version}"
         )

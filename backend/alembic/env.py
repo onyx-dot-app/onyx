@@ -2,11 +2,11 @@ from typing import Any
 from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_HOSTS
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
@@ -227,18 +227,70 @@ def provide_iam_token_for_alembic(
     cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
-        # Database connection settings
         region = AWS_REGION_NAME
-        host = POSTGRES_HOST
-        port = POSTGRES_PORT
-        user = POSTGRES_USER
+        host = cparams.get("host") or POSTGRES_HOST
+        port = str(cparams.get("port", POSTGRES_PORT))
+        user = cparams.get("user") or POSTGRES_USER
 
-        # Get IAM authentication token
         token = get_iam_auth_token(host, port, user, region)
 
-        # For Alembic / SQLAlchemy in this context, set SSL and password
         cparams["password"] = token
         cparams["ssl"] = ssl_context
+
+
+def _create_async_engine_for_host(host: str) -> Any:
+    """Create a NullPool async engine targeting a specific Postgres host."""
+    conn_str = build_connection_string(host=host)
+    eng = create_async_engine(conn_str, poolclass=pool.NullPool)
+    if USE_IAM_AUTH:
+
+        @event.listens_for(eng.sync_engine, "do_connect")
+        def _iam(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> None:
+            provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
+
+    return eng
+
+
+def _discover_tenant_schemas_sync(engine: Any) -> list[str]:
+    """Query information_schema.schemata on the given engine (sync)."""
+    with engine.sync_engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                f"""
+                SELECT schema_name
+                FROM information_schema.schemata
+                WHERE schema_name NOT IN (
+                    'pg_catalog', 'information_schema', '{POSTGRES_DEFAULT_SCHEMA}'
+                )"""
+            )
+        )
+        return [r[0] for r in rows if r[0].startswith(TENANT_ID_PREFIX)]
+
+
+async def _migrate_schemas(
+    engine: Any,
+    schemas: list[str],
+    create_schema: bool,
+    continue_on_error: bool,
+    label: str = "",
+) -> None:
+    num = len(schemas)
+    for i, schema in enumerate(schemas, 1):
+        logger.info(f"Migrating schema: index={i} total={num} schema={schema} {label}")
+        try:
+            async with engine.connect() as connection:
+                await connection.run_sync(
+                    do_run_migrations,
+                    schema_name=schema,
+                    create_schema=create_schema,
+                )
+                await connection.commit()
+        except Exception as e:
+            logger.error(f"Error migrating schema {schema}: {e}")
+            if not continue_on_error:
+                logger.error("--continue=true is not set, raising exception!")
+                raise
+            logger.warning("--continue=true is set, continuing to next schema.")
 
 
 async def run_async_migrations() -> None:
@@ -254,96 +306,64 @@ async def run_async_migrations() -> None:
     if not schemas and not MULTI_TENANT:
         schemas = [POSTGRES_DEFAULT_SCHEMA]
 
-    # without init_engine, subsequent engine calls fail hard intentionally
-    SqlEngine.init_engine(pool_size=20, max_overflow=5)
-
-    engine = create_async_engine(
-        build_connection_string(),
-        poolclass=pool.NullPool,
-    )
-
-    if USE_IAM_AUTH:
-
-        @event.listens_for(engine.sync_engine, "do_connect")
-        def event_provide_iam_token_for_alembic(
-            dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
-        ) -> None:
-            provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
+    SqlEngine.init_all_engines(pool_size=20, max_overflow=5)
 
     if schemas:
-        # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
+        # Specific schemas target a single host.  When called programmatically
+        # (e.g. schema_management.run_alembic_migrations) the sqlalchemy.url
+        # in the Alembic config already points at the correct host.  When
+        # called from the CLI, default to host 0.  We must NOT iterate every
+        # host — that would duplicate the schema across RDS instances.
+        url_override = config.get_main_option("sqlalchemy.url")
+        if url_override:
+            engine = create_async_engine(url_override, poolclass=pool.NullPool)
+            if USE_IAM_AUTH:
 
-        i_schema = 0
-        num_schemas = len(schemas)
-        for schema in schemas:
-            i_schema += 1
-            logger.info(
-                f"Migrating schema: index={i_schema} num_schemas={num_schemas} schema={schema}"
-            )
-            try:
-                async with engine.connect() as connection:
-                    await connection.run_sync(
-                        do_run_migrations,
-                        schema_name=schema,
-                        create_schema=create_schema,
-                    )
-                    await connection.commit()
-            except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
-                if not continue_on_error:
-                    logger.error("--continue=true is not set, raising exception!")
-                    raise
+                @event.listens_for(engine.sync_engine, "do_connect")
+                def _iam_specific(
+                    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
+                ) -> None:
+                    provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
 
-                logger.warning("--continue=true is set, continuing to next schema.")
+        else:
+            engine = _create_async_engine_for_host(POSTGRES_HOSTS[0])
+
+        await _migrate_schemas(
+            engine,
+            schemas,
+            create_schema,
+            continue_on_error,
+        )
+        await engine.dispose()
 
     elif upgrade_all_tenants:
-        tenant_schemas = get_all_tenant_ids()
-
-        filtered_tenant_schemas = filter_tenants_by_range(
-            tenant_schemas, tenant_range_start, tenant_range_end
-        )
-
-        if tenant_range_start is not None or tenant_range_end is not None:
-            logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+        for host_idx, host in enumerate(POSTGRES_HOSTS):
+            engine = _create_async_engine_for_host(host)
+            tenant_schemas = _discover_tenant_schemas_sync(engine)
+            filtered = filter_tenants_by_range(
+                tenant_schemas, tenant_range_start, tenant_range_end
             )
+            if tenant_range_start is not None or tenant_range_end is not None:
+                logger.info(
+                    f"Host {host_idx}: total={len(tenant_schemas)}, "
+                    f"filtered={len(filtered)}"
+                )
             logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+                f"Migrating {len(filtered)} schemas on host {host_idx} ({host})"
             )
-
-        i_tenant = 0
-        num_tenants = len(filtered_tenant_schemas)
-        for schema in filtered_tenant_schemas:
-            i_tenant += 1
-            logger.info(
-                f"Migrating schema: index={i_tenant} num_tenants={num_tenants} schema={schema}"
+            await _migrate_schemas(
+                engine,
+                filtered,
+                create_schema,
+                continue_on_error,
+                label=f"host={host_idx}",
             )
-            try:
-                async with engine.connect() as connection:
-                    await connection.run_sync(
-                        do_run_migrations,
-                        schema_name=schema,
-                        create_schema=create_schema,
-                    )
-                    await connection.commit()
-            except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
-                if not continue_on_error:
-                    logger.error("--continue=true is not set, raising exception!")
-                    raise
-
-                logger.warning("--continue=true is set, continuing to next schema.")
-
+            await engine.dispose()
     else:
-        # This should not happen in the new design since we require either
-        # upgrade_all_tenants=true or schemas in multi-tenant mode
-        # and for non-multi-tenant mode, we should use schemas with the default schema
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true "
+            "for all tenants or schemas for specific schemas."
         )
-
-    await engine.dispose()
 
 
 def run_migrations_offline() -> None:
@@ -359,8 +379,7 @@ def run_migrations_offline() -> None:
 
     logger.info("run_migrations_offline starting.")
 
-    # without init_engine, subsequent engine calls fail hard intentionally
-    SqlEngine.init_engine(pool_size=20, max_overflow=5)
+    SqlEngine.init_all_engines(pool_size=20, max_overflow=5)
 
     (
         create_schema,
@@ -370,12 +389,10 @@ def run_migrations_offline() -> None:
         tenant_range_end,
         schemas,
     ) = get_schema_options()
-    url = build_connection_string()
 
     if schemas:
-        # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
-
+        url_override = config.get_main_option("sqlalchemy.url")
+        url = url_override or build_connection_string(host=POSTGRES_HOSTS[0])
         for schema in schemas:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
@@ -387,54 +404,46 @@ def run_migrations_offline() -> None:
                 script_location=config.get_main_option("script_location"),
                 dialect_opts={"paramstyle": "named"},
             )
-
             with context.begin_transaction():
                 context.run_migrations()
 
     elif upgrade_all_tenants:
-        engine = create_async_engine(url)
+        for host in POSTGRES_HOSTS:
+            url = build_connection_string(host=host)
+            engine = create_async_engine(url)
 
-        if USE_IAM_AUTH:
+            if USE_IAM_AUTH:
 
-            @event.listens_for(engine.sync_engine, "do_connect")
-            def event_provide_iam_token_for_alembic_offline(
-                dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
-            ) -> None:
-                provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
+                @event.listens_for(engine.sync_engine, "do_connect")
+                def event_provide_iam_token_for_alembic_offline(
+                    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
+                ) -> None:
+                    provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
 
-        tenant_schemas = get_all_tenant_ids()
-        engine.sync_engine.dispose()
+            tenant_schemas = _discover_tenant_schemas_sync(engine)
+            engine.sync_engine.dispose()
 
-        filtered_tenant_schemas = filter_tenants_by_range(
-            tenant_schemas, tenant_range_start, tenant_range_end
-        )
-
-        if tenant_range_start is not None or tenant_range_end is not None:
-            logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
-            )
-            logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+            filtered = filter_tenants_by_range(
+                tenant_schemas, tenant_range_start, tenant_range_end
             )
 
-        for schema in filtered_tenant_schemas:
-            logger.info(f"Migrating schema: {schema}")
-            context.configure(
-                url=url,
-                target_metadata=target_metadata,  # type: ignore
-                literal_binds=True,
-                version_table_schema=schema,
-                include_schemas=True,
-                script_location=config.get_main_option("script_location"),
-                dialect_opts={"paramstyle": "named"},
-            )
-
-            with context.begin_transaction():
-                context.run_migrations()
+            for schema in filtered:
+                logger.info(f"Migrating schema: {schema}")
+                context.configure(
+                    url=url,
+                    target_metadata=target_metadata,  # type: ignore
+                    literal_binds=True,
+                    version_table_schema=schema,
+                    include_schemas=True,
+                    script_location=config.get_main_option("script_location"),
+                    dialect_opts={"paramstyle": "named"},
+                )
+                with context.begin_transaction():
+                    context.run_migrations()
     else:
-        # This should not happen in the new design
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true "
+            "for all tenants or schemas for specific schemas."
         )
 
 

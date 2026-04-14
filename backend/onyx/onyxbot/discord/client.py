@@ -200,7 +200,7 @@ def main() -> None:
     logger.info("Starting Onyx Discord Bot...")
 
     # Initialize the database engine (required before any DB operations)
-    SqlEngine.init_engine(pool_size=20, max_overflow=5)
+    SqlEngine.init_all_engines(pool_size=20, max_overflow=5)
 
     # Initialize EE features based on environment
     set_is_ee_based_on_env_variable()

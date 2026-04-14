@@ -86,7 +86,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # type: ignore
-    SqlEngine.init_engine(
+    SqlEngine.init_all_engines(
         pool_size=pool_size, max_overflow=CELERY_WORKER_PRIMARY_POOL_OVERFLOW
     )
 

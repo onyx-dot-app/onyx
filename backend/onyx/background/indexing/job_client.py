@@ -75,7 +75,7 @@ def _initializer(
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
 
     # Initialize a new engine with desired parameters
-    SqlEngine.init_engine(
+    SqlEngine.init_all_engines(
         pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
     )
 

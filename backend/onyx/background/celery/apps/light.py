@@ -98,7 +98,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info(f"Concurrency: {sender.concurrency}")  # type: ignore
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
+    SqlEngine.init_all_engines(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
 
     if MANAGED_VESPA:
         httpx_init_vespa_pool(

@@ -1,5 +1,7 @@
 import asyncio
 import uuid
+from datetime import datetime
+from datetime import timezone
 
 import aiohttp  # Async HTTP client
 import httpx
@@ -99,14 +101,22 @@ async def get_or_provision_tenant(
         tenant_id = await get_available_tenant()
 
         if tenant_id:
-            # Run migrations to ensure the pre-provisioned tenant schema is current.
-            # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so mypy can type the lambda correctly.
+            from onyx.db.engine.tenant_host_mapping import compute_host_index
+            from onyx.db.engine.tenant_host_mapping import get_host_index_from_redis
+            from onyx.db.engine.tenant_host_mapping import set_tenant_host_in_redis
+
             _tenant_id: str = tenant_id
+            # Pool creator seeds Redis at creation time.  Don't fall through
+            # to the CP — it doesn't know about this tenant yet.
+            _host_index = get_host_index_from_redis(_tenant_id)
+            if _host_index is None:
+                _host_index = compute_host_index(datetime.now(timezone.utc))
+                set_tenant_host_in_redis(_tenant_id, _host_index)
             loop = asyncio.get_running_loop()
             try:
                 await loop.run_in_executor(
-                    None, lambda: run_alembic_migrations(_tenant_id)
+                    None,
+                    lambda: run_alembic_migrations(_tenant_id, host_index=_host_index),
                 )
             except Exception:
                 # The tenant was already dequeued from the pool — roll it back so
@@ -170,6 +180,13 @@ async def create_tenant(
     return tenant_id
 
 
+def _compute_host_index_for_new_tenant() -> int:
+    """Determine which Postgres host a brand-new tenant should live on."""
+    from onyx.db.engine.tenant_host_mapping import compute_host_index
+
+    return compute_host_index(datetime.now(timezone.utc))
+
+
 async def provision_tenant(tenant_id: str, email: str) -> None:
     if not MULTI_TENANT:
         raise HTTPException(status_code=403, detail="Multi-tenancy is not enabled")
@@ -179,19 +196,24 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.debug(f"Provisioning tenant {tenant_id} for user {email}")
+    host_index = _compute_host_index_for_new_tenant()
+    logger.info(
+        f"Provisioning tenant {tenant_id} for user {email} on host_index={host_index}"
+    )
 
     try:
-        # Create the schema for the tenant
-        if not create_schema_if_not_exists(tenant_id):
+        if not create_schema_if_not_exists(tenant_id, host_index=host_index):
             logger.debug(f"Created schema for tenant {tenant_id}")
         else:
             logger.debug(f"Schema already exists for tenant {tenant_id}")
 
-        # Set up the tenant with all necessary configurations
-        await setup_tenant(tenant_id)
+        # Pre-populate the Redis cache so the host mapping is warm from the start
+        from onyx.db.engine.tenant_host_mapping import set_tenant_host_in_redis
 
-        # Assign the tenant to the user
+        set_tenant_host_in_redis(tenant_id, host_index)
+
+        await setup_tenant(tenant_id, host_index=host_index)
+
         await assign_tenant_to_user(tenant_id, email)
 
     except Exception as e:
@@ -235,12 +257,16 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     """
     logger.info(f"Rolling back tenant provisioning for tenant_id: {tenant_id}")
 
+    from onyx.db.engine.tenant_host_mapping import get_host_index_from_redis
+
+    host_index = get_host_index_from_redis(tenant_id) or 0
+
     # Track if any part of the rollback fails
     rollback_errors = []
 
-    # 1. Try to drop the tenant's schema
+    # 1. Try to drop the tenant's schema on the correct host
     try:
-        drop_schema(tenant_id)
+        drop_schema(tenant_id, host_index=host_index)
         logger.info(f"Successfully dropped schema for tenant {tenant_id}")
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
@@ -659,7 +685,7 @@ async def get_available_tenant() -> str | None:
             return None
 
 
-async def setup_tenant(tenant_id: str) -> None:
+async def setup_tenant(tenant_id: str, host_index: int = 0) -> None:
     """
     Set up a tenant with all necessary configurations.
     This is a centralized function that handles all tenant setup logic.
@@ -668,11 +694,10 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations in a way that isolates it from the current event loop
-        # Create a new event loop for this synchronous operation
         loop = asyncio.get_event_loop()
-        # Use run_in_executor which properly isolates the thread execution
-        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
+        await loop.run_in_executor(
+            None, lambda: run_alembic_migrations(tenant_id, host_index=host_index)
+        )
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:

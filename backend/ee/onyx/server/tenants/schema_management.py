@@ -9,20 +9,17 @@ from sqlalchemy.schema import CreateSchema
 
 from alembic import command
 from alembic.config import Config
+from onyx.configs.app_configs import POSTGRES_HOSTS
 from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import SqlEngine
 from shared_configs.configs import TENANT_ID_PREFIX
 
 logger = logging.getLogger(__name__)
 
-# Regex pattern for valid tenant IDs:
-# - UUID format: tenant_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-# - AWS instance ID format: tenant_i-xxxxxxxxxxxxxxxxx
-# Also useful for not accidentally dropping `public` schema
 TENANT_ID_PATTERN = re.compile(
     rf"^{re.escape(TENANT_ID_PREFIX)}("
-    r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
-    r"|i-[a-f0-9]+"  # AWS instance ID
+    r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+    r"|i-[a-f0-9]+"
     r")$"
 )
 
@@ -36,32 +33,37 @@ def validate_tenant_id(tenant_id: str) -> bool:
     return bool(TENANT_ID_PATTERN.match(tenant_id))
 
 
-def run_alembic_migrations(schema_name: str) -> None:
-    logger.info(f"Starting Alembic migrations for schema: {schema_name}")
+def run_alembic_migrations(schema_name: str, host_index: int = 0) -> None:
+    logger.info(
+        f"Starting Alembic migrations for schema: {schema_name} "
+        f"on host_index={host_index}"
+    )
 
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".."))
         alembic_ini_path = os.path.join(root_dir, "alembic.ini")
 
-        # Configure Alembic
+        host = (
+            POSTGRES_HOSTS[host_index]
+            if host_index < len(POSTGRES_HOSTS)
+            else POSTGRES_HOSTS[0]
+        )
         alembic_cfg = Config(alembic_ini_path)
-        alembic_cfg.set_main_option("sqlalchemy.url", build_connection_string())
+        alembic_cfg.set_main_option(
+            "sqlalchemy.url", build_connection_string(host=host)
+        )
         alembic_cfg.set_main_option(
             "script_location", os.path.join(root_dir, "alembic")
         )
 
-        # Ensure that logging isn't broken
         alembic_cfg.attributes["configure_logger"] = False
 
-        # Mimic command-line options by adding 'cmd_opts' to the config
         alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
         alembic_cfg.cmd_opts.x = [f"schemas={schema_name}"]  # type: ignore
 
-        # Run migrations programmatically
         command.upgrade(alembic_cfg, "head")
 
-        # Run migrations programmatically
         logger.info(
             f"Alembic migrations completed successfully for schema: {schema_name}"
         )
@@ -71,8 +73,9 @@ def run_alembic_migrations(schema_name: str) -> None:
         raise
 
 
-def create_schema_if_not_exists(tenant_id: str) -> bool:
-    with Session(get_sqlalchemy_engine()) as db_session:
+def create_schema_if_not_exists(tenant_id: str, host_index: int = 0) -> bool:
+    engine = SqlEngine.get_engine(host_index)
+    with Session(engine) as db_session:
         with db_session.begin():
             result = db_session.execute(
                 text(
@@ -88,7 +91,7 @@ def create_schema_if_not_exists(tenant_id: str) -> bool:
             return False
 
 
-def drop_schema(tenant_id: str) -> None:
+def drop_schema(tenant_id: str, host_index: int = 0) -> None:
     """Drop a tenant's schema.
 
     Uses strict regex validation to reject unexpected formats early,
@@ -97,24 +100,22 @@ def drop_schema(tenant_id: str) -> None:
     if not validate_tenant_id(tenant_id):
         raise ValueError(f"Invalid tenant_id format: {tenant_id}")
 
-    with get_sqlalchemy_engine().connect() as connection:
+    engine = SqlEngine.get_engine(host_index)
+    with engine.connect() as connection:
         with connection.begin():
-            # Use string formatting with validated tenant_id (safe after validation)
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
 
 
-def get_current_alembic_version(tenant_id: str) -> str:
+def get_current_alembic_version(tenant_id: str, host_index: int = 0) -> str:
     """Get the current Alembic version for a tenant."""
     from alembic.runtime.migration import MigrationContext
     from sqlalchemy import text
 
-    engine = get_sqlalchemy_engine()
+    engine = SqlEngine.get_engine(host_index)
 
-    # Set the search path to the tenant's schema
     with engine.connect() as connection:
         connection.execute(text(f'SET search_path TO "{tenant_id}"'))
 
-        # Get the current version from the alembic_version table
         context = MigrationContext.configure(connection)
         current_rev = context.get_current_revision()
 

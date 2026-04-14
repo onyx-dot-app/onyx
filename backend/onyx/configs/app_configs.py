@@ -388,6 +388,16 @@ POSTGRES_HOSTS: list[str] = (
     else [POSTGRES_HOST]
 )
 
+# ISO-8601 cutoff timestamps that partition tenants across POSTGRES_HOSTS by creation
+# date.  Length must be len(POSTGRES_HOSTS) - 1.  Tenants created before the first
+# cutoff route to host 0, between cutoff 0 and 1 to host 1, etc.
+_POSTGRES_HOST_CUTOFFS_STR = os.environ.get("POSTGRES_HOST_CUTOFFS", "").strip()
+POSTGRES_HOST_CUTOFFS: list[str] = (
+    [c.strip() for c in _POSTGRES_HOST_CUTOFFS_STR.split(",") if c.strip()]
+    if _POSTGRES_HOST_CUTOFFS_STR
+    else []
+)
+
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
 )
