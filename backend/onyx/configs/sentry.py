@@ -23,8 +23,6 @@ def _add_instance_tags(
     if _instance_id_resolved:
         return event
 
-    _instance_id_resolved = True
-
     try:
         import sentry_sdk
 
@@ -35,6 +33,9 @@ def _add_instance_tags(
 
         # Also set on this event since set_tag won't retroactively apply
         event.setdefault("tags", {})["instance_id"] = instance_id
+
+        # Only mark resolved after success — if DB wasn't ready, retry next event
+        _instance_id_resolved = True
     except Exception:
         logger.debug("Failed to resolve instance_id for Sentry tagging")
 
