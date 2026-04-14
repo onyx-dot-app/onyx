@@ -299,7 +299,7 @@ h11==0.16.0
     #   uvicorn
 h2==4.3.0
     # via httpx
-hf-xet==1.2.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
 hpack==4.1.0
     # via h2
@@ -322,6 +322,7 @@ httpx==0.28.1
     #   fastmcp
     #   google-genai
     #   httpx-oauth
+    #   huggingface-hub
     #   langfuse
     #   langsmith
     #   litellm
@@ -334,7 +335,7 @@ httpx-sse==0.4.3
     #   cohere
     #   mcp
 hubspot-api-client==11.1.0
-huggingface-hub==0.35.3
+huggingface-hub==1.10.2
     # via tokenizers
 humanfriendly==10.0
     # via coloredlogs
@@ -784,7 +785,6 @@ requests==2.33.0
     #   google-api-core
     #   google-genai
     #   hubspot-api-client
-    #   huggingface-hub
     #   jira
     #   jsonschema-path
     #   kubernetes
@@ -911,7 +911,7 @@ tiktoken==0.7.0
 timeago==1.0.16
 tld==0.13.1
     # via courlan
-tokenizers==0.21.4
+tokenizers==0.22.2
     # via
     #   chonkie
     #   cohere
@@ -933,7 +933,9 @@ tqdm==4.67.1
     #   unstructured
 trafilatura==1.12.2
 typer==0.20.0
-    # via mcp
+    # via
+    #   huggingface-hub
+    #   mcp
 types-awscrt==0.28.4
     # via botocore-stubs
 types-openpyxl==3.0.4.7

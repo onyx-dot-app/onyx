@@ -60,7 +60,7 @@ backend = [
     "httpcore==1.0.9",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
-    "huggingface-hub==0.35.3",
+    "huggingface-hub==1.10.2",
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
@@ -189,9 +189,9 @@ model_server = [
     "einops==0.8.1",
     "numpy==2.4.1",
     "safetensors==0.5.3",
-    "sentence-transformers==4.0.2",
+    "sentence-transformers==5.4.1",
     "torch==2.9.1",
-    "transformers==4.53.0",
+    "transformers==5.5.4",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
