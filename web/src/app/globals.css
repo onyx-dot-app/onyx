@@ -406,6 +406,15 @@ textarea {
   /* Preserves whitespace and wraps text */
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0% 0;
+  }
+}
+
 .shimmer-text {
   animation: shimmer 1s ease-out infinite;
   background-size: 300% 100%;
@@ -417,7 +426,7 @@ textarea {
   );
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .collapsible {
