@@ -54,6 +54,8 @@ interface InputLayoutProps {
   withLabel?: boolean | string;
 
   disabled?: boolean;
+  /** Ref forwarded to the inner content `Section`. */
+  ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   title: string | RichStr;
   /** Tag rendered inline beside the title (passed through to Content). */
@@ -73,6 +75,7 @@ export interface VerticalProps extends InputLayoutProps {
 function Vertical({
   withLabel: withLabelProp = false,
   disabled,
+  ref,
   children,
   subDescription,
   title,
@@ -84,7 +87,7 @@ function Vertical({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section gap={0.25} alignItems="start">
+    <Section ref={ref} gap={0.25} alignItems="start">
       <Content
         title={title}
         description={description}
@@ -123,6 +126,7 @@ export interface HorizontalProps extends InputLayoutProps {
 function Horizontal({
   withLabel: withLabelProp = false,
   disabled,
+  ref,
   children,
   center,
   title,
@@ -134,7 +138,7 @@ function Horizontal({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section gap={0.25} alignItems="start">
+    <Section ref={ref} gap={0.25} alignItems="start">
       <Section
         flexDirection="row"
         justifyContent="between"
