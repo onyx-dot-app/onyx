@@ -15,6 +15,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
@@ -83,7 +84,13 @@ function OllamaModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue("model_configurations", models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        models,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
   return (
