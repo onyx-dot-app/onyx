@@ -41,7 +41,7 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
@@ -148,9 +148,9 @@ export function ExplanationText({
 
 export function ToolTipDetails({ children }: { children: string }) {
   return (
-    <SimpleTooltip tooltip={children} side="top" align="center">
+    <Tooltip tooltip={children} side="top" align="center">
       <FiInfo size={12} />
-    </SimpleTooltip>
+    </Tooltip>
   );
 }
 
@@ -736,7 +736,7 @@ export const BooleanFormField = memo(function BooleanFormField({
           };
 
           return (
-            <SimpleTooltip
+            <Tooltip
               // This may seem confusing, but we only want to show the `disabledTooltip` if and only if the `BooleanFormField` is disabled.
               // If it disabled, then we "enable" the showing of the tooltip. Thus, `disabled={!disabled}` is not a mistake.
               disabled={!disabled}
@@ -776,7 +776,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                   </div>
                 )}
               </Section>
-            </SimpleTooltip>
+            </Tooltip>
           );
         }}
       </FastField>

@@ -30,7 +30,7 @@ import { toast } from "@/hooks/useToast";
 
 import { Badge } from "@/components/ui/badge";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { SvgSettings } from "@opal/icons";
@@ -780,7 +780,7 @@ export function FederatedConnectorForm({
             <Badge variant="outline" className="text-xs">
               Federated
             </Badge>
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 sourceMetadata.federatedTooltip ||
                 "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
@@ -788,7 +788,7 @@ export function FederatedConnectorForm({
               side="bottom"
             >
               <Info className="cursor-help" size={16} />
-            </SimpleTooltip>
+            </Tooltip>
           </div>
         </div>
 
