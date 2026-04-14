@@ -981,6 +981,53 @@ def get_index_attempt_errors_for_cc_pair(
     return list(db_session.scalars(stmt).all())
 
 
+def get_index_attempt_errors_across_connectors(
+    db_session: Session,
+    cc_pair_id: int | None = None,
+    error_type: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    unresolved_only: bool = True,
+    page: int = 0,
+    page_size: int = 25,
+) -> tuple[list[IndexAttemptError], int]:
+    """Query index attempt errors across all connectors with optional filters.
+
+    Returns (errors, total_count) for pagination.
+    """
+    stmt = select(IndexAttemptError)
+    count_stmt = select(func.count()).select_from(IndexAttemptError)
+
+    if cc_pair_id is not None:
+        stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+        count_stmt = count_stmt.where(
+            IndexAttemptError.connector_credential_pair_id == cc_pair_id
+        )
+
+    if error_type is not None:
+        stmt = stmt.where(IndexAttemptError.error_type == error_type)
+        count_stmt = count_stmt.where(IndexAttemptError.error_type == error_type)
+
+    if unresolved_only:
+        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
+        count_stmt = count_stmt.where(IndexAttemptError.is_resolved.is_(False))
+
+    if start_time is not None:
+        stmt = stmt.where(IndexAttemptError.time_created >= start_time)
+        count_stmt = count_stmt.where(IndexAttemptError.time_created >= start_time)
+
+    if end_time is not None:
+        stmt = stmt.where(IndexAttemptError.time_created <= end_time)
+        count_stmt = count_stmt.where(IndexAttemptError.time_created <= end_time)
+
+    stmt = stmt.order_by(desc(IndexAttemptError.time_created))
+    stmt = stmt.offset(page * page_size).limit(page_size)
+
+    total = db_session.scalar(count_stmt) or 0
+    errors = list(db_session.scalars(stmt).all())
+    return errors, total
+
+
 # ── Metrics query helpers ──────────────────────────────────────────────
 
 
