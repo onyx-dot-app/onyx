@@ -3,6 +3,7 @@ import uuid
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
@@ -21,8 +22,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -37,6 +38,57 @@ def is_api_key_email_address(email: str) -> bool:
     return email.endswith(get_api_key_email_pattern())
 
 
+def _get_user_groups(db_session: Session, user_id: uuid.UUID) -> list[UserGroupInfo]:
+    """Get lightweight group info for a user."""
+    groups = (
+        db_session.scalars(
+            select(UserGroup)
+            .join(User__UserGroup, User__UserGroup.user_group_id == UserGroup.id)
+            .where(User__UserGroup.user_id == user_id)
+        )
+        .unique()
+        .all()
+    )
+    return [UserGroupInfo(id=g.id, name=g.name) for g in groups]
+
+
+def _set_user_groups__no_commit(
+    db_session: Session,
+    user_id: uuid.UUID,
+    group_ids: list[int],
+) -> None:
+    """Replace all group memberships for a user with the given group_ids.
+    Does NOT commit."""
+    if group_ids:
+        # Validate that all requested group IDs exist
+        existing_ids = set(
+            db_session.scalars(
+                select(UserGroup.id).where(UserGroup.id.in_(group_ids))
+            ).all()
+        )
+        missing = set(group_ids) - existing_ids
+        if missing:
+            raise ValueError(f"Group IDs do not exist: {sorted(missing)}")
+
+    # Remove all existing memberships
+    db_session.execute(
+        delete(User__UserGroup).where(User__UserGroup.user_id == user_id)
+    )
+
+    # Add new memberships
+    if group_ids:
+        insert_stmt = (
+            pg_insert(User__UserGroup)
+            .values([{"user_id": user_id, "user_group_id": gid} for gid in group_ids])
+            .on_conflict_do_nothing(
+                index_elements=[User__UserGroup.user_group_id, User__UserGroup.user_id]
+            )
+        )
+        db_session.execute(insert_stmt)
+
+    recompute_user_permissions__no_commit(user_id, db_session)
+
+
 def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     api_keys = (
         db_session.scalars(select(ApiKey).options(joinedload(ApiKey.user)))
@@ -46,10 +98,10 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
-            api_key_account_type=api_key.user.account_type,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
+            groups=_get_user_groups(db_session, api_key.user_id),
         )
         for api_key in api_keys
     ]
@@ -94,7 +146,7 @@ def insert_api_key(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=api_key_args.role,
+        role=UserRole.BASIC,
         account_type=AccountType.SERVICE_ACCOUNT,
     )
     db_session.add(api_key_user_row)
@@ -108,25 +160,18 @@ def insert_api_key(
     )
     db_session.add(api_key_row)
 
-    # Assign the API key virtual user to the appropriate default group
-    # before commit so everything is atomic.
-    # Only ADMIN and BASIC roles get default group membership.
-    if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
-        assign_user_to_default_groups__no_commit(
-            db_session,
-            api_key_user_row,
-            is_admin=(api_key_args.role == UserRole.ADMIN),
-        )
+    # Assign the service account to the specified groups
+    _set_user_groups__no_commit(db_session, api_key_user_id, api_key_args.group_ids)
 
     db_session.commit()
 
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_account_type=api_key_user_row.account_type,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
         user_id=api_key_user_id,
+        groups=_get_user_groups(db_session, api_key_user_id),
     )
 
 
@@ -147,31 +192,8 @@ def update_api_key(
     email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
     api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
 
-    old_role = api_key_user.role
-    api_key_user.role = api_key_args.role
-
-    # Reconcile default-group membership when the role changes.
-    if old_role != api_key_args.role:
-        # Remove from all default groups first.
-        delete_stmt = delete(User__UserGroup).where(
-            User__UserGroup.user_id == api_key_user.id,
-            User__UserGroup.user_group_id.in_(
-                select(UserGroup.id).where(UserGroup.is_default.is_(True))
-            ),
-        )
-        db_session.execute(delete_stmt)
-
-        # Re-assign to the correct default group (only for ADMIN/BASIC).
-        if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
-            assign_user_to_default_groups__no_commit(
-                db_session,
-                api_key_user,
-                is_admin=(api_key_args.role == UserRole.ADMIN),
-            )
-        else:
-            # No group assigned for LIMITED, but we still need to recompute
-            # since we just removed the old default-group membership above.
-            recompute_user_permissions__no_commit(api_key_user.id, db_session)
+    # Replace all group memberships with the specified groups
+    _set_user_groups__no_commit(db_session, api_key_user.id, api_key_args.group_ids)
 
     db_session.commit()
 
@@ -179,8 +201,8 @@ def update_api_key(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
-        api_key_account_type=api_key_user.account_type,
         user_id=existing_api_key.user_id,
+        groups=_get_user_groups(db_session, existing_api_key.user_id),
     )
 
 
@@ -209,8 +231,8 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
-        api_key_account_type=api_key_user.account_type,
         user_id=existing_api_key.user_id,
+        groups=_get_user_groups(db_session, existing_api_key.user_id),
     )
 
 

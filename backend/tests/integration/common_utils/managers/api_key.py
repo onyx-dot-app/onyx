@@ -2,7 +2,6 @@ from uuid import uuid4
 
 import requests
 
-from onyx.db.models import UserRole
 from onyx.server.api_key.models import APIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -15,12 +14,12 @@ class APIKeyManager:
     def create(
         user_performing_action: DATestUser,
         name: str | None = None,
-        api_key_role: UserRole = UserRole.ADMIN,
+        group_ids: list[int] | None = None,
     ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
         api_key_request = APIKeyArgs(
             name=name,
-            role=api_key_role,
+            group_ids=group_ids or [],
         )
         api_key_response = requests.post(
             f"{API_SERVER_URL}/admin/api-key",
@@ -34,7 +33,7 @@ class APIKeyManager:
             api_key_display=api_key["api_key_display"],
             api_key=api_key["api_key"],
             api_key_name=name,
-            api_key_role=api_key_role,
+            groups=api_key.get("groups", []),
             user_id=api_key["user_id"],
             headers=GENERAL_HEADERS,
         )
@@ -76,10 +75,7 @@ class APIKeyManager:
             if key.api_key_id == api_key.api_key_id:
                 if verify_deleted:
                     raise ValueError("API Key found when it should have been deleted")
-                if (
-                    key.api_key_name == api_key.api_key_name
-                    and key.api_key_role == api_key.api_key_role
-                ):
+                if key.api_key_name == api_key.api_key_name:
                     return
 
         if not verify_deleted:

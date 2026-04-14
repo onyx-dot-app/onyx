@@ -2,7 +2,6 @@ from uuid import UUID
 
 import requests
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -12,31 +11,23 @@ from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_limited(reset: None) -> None:  # noqa: ARG001
-    """Verify that with a limited role key, limited endpoints are accessible and
-    others are not."""
-
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-
-    api_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.LIMITED,
+def _get_default_group_ids(
+    admin_user: DATestUser,
+) -> tuple[int, int]:
+    """Return (admin_group_id, basic_group_id) from default groups."""
+    all_groups = UserGroupManager.get_all(
         user_performing_action=admin_user,
+        include_default=True,
     )
-
-    # test limited endpoint
-    response = requests.get(
-        f"{API_SERVER_URL}/persona/0",
-        headers=api_key.headers,
+    admin_group = next(
+        (g for g in all_groups if g.name == "Admin" and g.is_default), None
     )
-    assert response.status_code == 200
-
-    # test admin endpoints
-    response = requests.get(
-        f"{API_SERVER_URL}/admin/api-key",
-        headers=api_key.headers,
+    basic_group = next(
+        (g for g in all_groups if g.name == "Basic" and g.is_default), None
     )
-    assert response.status_code == 403
+    assert admin_group is not None, "Admin default group not found"
+    assert basic_group is not None, "Basic default group not found"
+    return admin_group.id, basic_group.id
 
 
 def _get_service_account_account_type(
@@ -82,12 +73,37 @@ def _get_default_group_user_ids(
     return admin_ids, basic_ids
 
 
-def test_api_key_limited_service_account(reset: None) -> None:  # noqa: ARG001
-    """LIMITED role API key: account_type is SERVICE_ACCOUNT, no group membership."""
+def test_no_groups(reset: None) -> None:  # noqa: ARG001
+    """Verify that an API key with no group membership has limited access."""
+
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
     api_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.LIMITED,
+        group_ids=[],
+        user_performing_action=admin_user,
+    )
+
+    # test limited endpoint (accessible without groups)
+    response = requests.get(
+        f"{API_SERVER_URL}/persona/0",
+        headers=api_key.headers,
+    )
+    assert response.status_code == 200
+
+    # test admin endpoints (should be blocked)
+    response = requests.get(
+        f"{API_SERVER_URL}/admin/api-key",
+        headers=api_key.headers,
+    )
+    assert response.status_code == 403
+
+
+def test_api_key_no_groups_service_account(reset: None) -> None:  # noqa: ARG001
+    """API key with no groups: account_type is SERVICE_ACCOUNT, no group membership."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    api_key: DATestAPIKey = APIKeyManager.create(
+        group_ids=[],
         user_performing_action=admin_user,
     )
 
@@ -102,18 +118,19 @@ def test_api_key_limited_service_account(reset: None) -> None:  # noqa: ARG001
     user_id_str = str(api_key.user_id)
     assert (
         user_id_str not in admin_ids
-    ), "LIMITED API key should NOT be in Admin default group"
+    ), "No-groups API key should NOT be in Admin default group"
     assert (
         user_id_str not in basic_ids
-    ), "LIMITED API key should NOT be in Basic default group"
+    ), "No-groups API key should NOT be in Basic default group"
 
 
-def test_api_key_basic_service_account(reset: None) -> None:  # noqa: ARG001
-    """BASIC role API key: account_type is SERVICE_ACCOUNT, in Basic group only."""
+def test_api_key_basic_group_service_account(reset: None) -> None:  # noqa: ARG001
+    """API key in Basic group: account_type is SERVICE_ACCOUNT, in Basic group only."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
+    _admin_group_id, basic_group_id = _get_default_group_ids(admin_user)
 
     api_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.BASIC,
+        group_ids=[basic_group_id],
         user_performing_action=admin_user,
     )
 
@@ -126,18 +143,21 @@ def test_api_key_basic_service_account(reset: None) -> None:  # noqa: ARG001
     # Verify Basic group membership
     admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
     user_id_str = str(api_key.user_id)
-    assert user_id_str in basic_ids, "BASIC API key should be in Basic default group"
+    assert (
+        user_id_str in basic_ids
+    ), "Basic-group API key should be in Basic default group"
     assert (
         user_id_str not in admin_ids
-    ), "BASIC API key should NOT be in Admin default group"
+    ), "Basic-group API key should NOT be in Admin default group"
 
 
-def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
-    """ADMIN role API key: account_type is SERVICE_ACCOUNT, in Admin group only."""
+def test_api_key_admin_group_service_account(reset: None) -> None:  # noqa: ARG001
+    """API key in Admin group: account_type is SERVICE_ACCOUNT, in Admin group only."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
+    admin_group_id, _basic_group_id = _get_default_group_ids(admin_user)
 
     api_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.ADMIN,
+        group_ids=[admin_group_id],
         user_performing_action=admin_user,
     )
 
@@ -150,47 +170,50 @@ def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
     # Verify Admin group membership
     admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
     user_id_str = str(api_key.user_id)
-    assert user_id_str in admin_ids, "ADMIN API key should be in Admin default group"
+    assert (
+        user_id_str in admin_ids
+    ), "Admin-group API key should be in Admin default group"
     assert (
         user_id_str not in basic_ids
-    ), "ADMIN API key should NOT be in Basic default group"
+    ), "Admin-group API key should NOT be in Basic default group"
 
 
-def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
-    """A LIMITED API key (service account, no permissions) should be rejected
+def test_no_groups_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
+    """An API key with no groups (no permissions) should be rejected
     by endpoints behind current_user but allowed through current_limited_user."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
     limited_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.LIMITED,
+        group_ids=[],
         user_performing_action=admin_user,
     )
 
-    # current_limited_user endpoint → should succeed
+    # current_limited_user endpoint -> should succeed
     resp = requests.get(
         f"{API_SERVER_URL}/persona/0",
         headers=limited_key.headers,
     )
     assert (
         resp.status_code == 200
-    ), f"Limited key should access /persona/0, got {resp.status_code}: {resp.text}"
+    ), f"No-groups key should access /persona/0, got {resp.status_code}: {resp.text}"
 
-    # current_user endpoint → should be blocked
+    # current_user endpoint -> should be blocked
     resp = requests.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=limited_key.headers,
     )
     assert (
         resp.status_code == 403
-    ), f"Limited key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
+    ), f"No-groups key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
 
 
-def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
-    """A BASIC API key should pass the current_user dependency."""
+def test_basic_group_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
+    """An API key in the Basic group should pass the current_user dependency."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
+    _admin_group_id, basic_group_id = _get_default_group_ids(admin_user)
 
     basic_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.BASIC,
+        group_ids=[basic_group_id],
         user_performing_action=admin_user,
     )
 
@@ -200,15 +223,16 @@ def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
     )
     assert (
         resp.status_code == 200
-    ), f"Basic key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    ), f"Basic-group key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
 
 
-def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
-    """An ADMIN API key should pass the current_user dependency."""
+def test_admin_group_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
+    """An API key in the Admin group should pass the current_user dependency."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
+    admin_group_id, _basic_group_id = _get_default_group_ids(admin_user)
 
     admin_key: DATestAPIKey = APIKeyManager.create(
-        api_key_role=UserRole.ADMIN,
+        group_ids=[admin_group_id],
         user_performing_action=admin_user,
     )
 
@@ -218,4 +242,4 @@ def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
     )
     assert (
         resp.status_code == 200
-    ), f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    ), f"Admin-group key should access /query/valid-tags, got {resp.status_code}: {resp.text}"

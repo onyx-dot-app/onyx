@@ -14,7 +14,6 @@ from fastapi import Depends
 from pydantic import BaseModel
 from pydantic import field_validator
 
-from onyx.auth.users import current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -231,6 +230,13 @@ def has_permission(user: User, permission: Permission) -> bool:
     return permission in get_effective_permissions(user)
 
 
+def _get_current_user() -> Any:
+    """Lazy import to break circular dependency between permissions and users modules."""
+    from onyx.auth.users import current_user
+
+    return current_user
+
+
 def require_permission(
     required: Permission,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
@@ -242,7 +248,9 @@ def require_permission(
             ...
     """
 
-    async def dependency(user: User = Depends(current_user)) -> User:
+    async def dependency(
+        user: User = Depends(_get_current_user()),
+    ) -> User:
         effective = get_effective_permissions(user)
 
         if Permission.FULL_ADMIN_PANEL_ACCESS in effective:

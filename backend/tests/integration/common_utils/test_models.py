@@ -58,7 +58,7 @@ class DATestAPIKey(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    groups: list[dict] = []
 
     user_id: UUID
     headers: dict

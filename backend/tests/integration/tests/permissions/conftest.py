@@ -1,9 +1,9 @@
 """Shared fixtures for permission integration tests.
 
 Creates six user types that cover the full access spectrum:
-  - admin_user:               STANDARD account, ADMIN role
-  - basic_user:               STANDARD account, BASIC role
-  - limited_service_account:  SERVICE_ACCOUNT, LIMITED role (no group)
+  - admin_user:               STANDARD account, Admin group
+  - basic_user:               STANDARD account, Basic group
+  - limited_service_account:  SERVICE_ACCOUNT, no groups
   - bot_user:                 BOT account, SLACK_USER role
   - ext_perm_user:            EXT_PERM_USER account, EXT_PERM_USER role
   - anonymous (no fixture):   unauthenticated request (empty headers)
@@ -15,7 +15,6 @@ This avoids a costly full reset per test.
 
 import pytest
 
-from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.pat import create_pat
 from onyx.db.users import add_slack_user_if_not_exists
@@ -51,9 +50,9 @@ def permission_basic_user(
 def limited_service_account(
     permission_admin_user: DATestUser,
 ) -> DATestAPIKey:
-    """API key with LIMITED role — creates a SERVICE_ACCOUNT with no group membership."""
+    """API key with no groups — creates a SERVICE_ACCOUNT with no group membership."""
     return APIKeyManager.create(
-        api_key_role=UserRole.LIMITED,
+        group_ids=[],
         user_performing_action=permission_admin_user,
         name="limited_svc_key",
     )
