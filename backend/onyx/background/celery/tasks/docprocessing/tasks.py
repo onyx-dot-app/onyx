@@ -615,7 +615,7 @@ class _KickoffResult:
     created: int = 0
     skipped_active: int = 0
     skipped_not_found: int = 0
-    skipped_should_not: int = 0
+    skipped_not_indexable: int = 0
     failed_to_create: int = 0
 
     @property
@@ -624,7 +624,7 @@ class _KickoffResult:
             self.created
             + self.skipped_active
             + self.skipped_not_found
-            + self.skipped_should_not
+            + self.skipped_not_indexable
             + self.failed_to_create
         )
 
@@ -680,7 +680,7 @@ def _kickoff_indexing_tasks(
                 f"search_settings={search_settings.id}, "
                 f"secondary_index_building={secondary_index_building}"
             )
-            result.skipped_should_not += 1
+            result.skipped_not_indexable += 1
             continue
 
         task_logger.debug(
@@ -1038,14 +1038,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"created={primary_result.created} "
         f"skipped_active={primary_result.skipped_active} "
         f"skipped_not_found={primary_result.skipped_not_found} "
-        f"skipped_not_indexable={primary_result.skipped_should_not} "
+        f"skipped_not_indexable={primary_result.skipped_not_indexable} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
             f"created={secondary_result.created} "
             f"skipped_active={secondary_result.skipped_active} "
             f"skipped_not_found={secondary_result.skipped_not_found} "
-            f"skipped_not_indexable={secondary_result.skipped_should_not} "
+            f"skipped_not_indexable={secondary_result.skipped_not_indexable} "
             f"failed={secondary_result.failed_to_create}]"
             if secondary_result
             else ""
