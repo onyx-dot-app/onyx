@@ -723,6 +723,7 @@ def run_deep_research_llm_loop(
                     simple_chat_history.append(assistant_with_tools)
 
                     # Now add TOOL_CALL_RESPONSE messages and tool call info for each result
+                    research_agent_tool_id = _get_research_agent_tool_id()
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
@@ -743,7 +744,7 @@ def run_deep_research_llm_loop(
                             tab_index=tab_index,
                             tool_name=current_tool_call.tool_name,
                             tool_call_id=current_tool_call.tool_call_id,
-                            tool_id=_get_research_agent_tool_id(),
+                            tool_id=research_agent_tool_id,
                             reasoning_tokens=llm_step_result.reasoning
                             or most_recent_reasoning,
                             tool_call_arguments=current_tool_call.tool_args,

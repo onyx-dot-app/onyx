@@ -11,7 +11,7 @@ from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
@@ -354,12 +354,13 @@ def _safe_close_session(session: Session) -> None:
     open for minutes.  If the underlying connection is dropped by cloud
     infrastructure (load-balancer timeouts, PgBouncer, idle-in-transaction
     timeouts, etc.), the implicit rollback in Session.close() raises
-    OperationalError.  Since the work is already complete, we log and move
-    on — SQLAlchemy internally invalidates the connection for pool recycling.
+    OperationalError or InterfaceError.  Since the work is already complete,
+    we log and move on — SQLAlchemy internally invalidates the connection
+    for pool recycling.
     """
     try:
         session.close()
-    except OperationalError:
+    except DBAPIError:
         logger.warning(
             "DB connection lost during session cleanup — the connection will be invalidated and recycled by the pool."
         )
