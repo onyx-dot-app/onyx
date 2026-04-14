@@ -10,8 +10,8 @@ messages in vertical or horizontal orientations with optional `<label>` wrapping
 
 ### Label
 
-Low-level `<label>` wrapper with cursor styling. Most consumers should use `Vertical` or
-`Horizontal` with `withLabel` instead of using `Label` directly.
+Low-level `<label>` wrapper with cursor styling. Most consumers should use `InputVertical` or
+`InputHorizontal` with `withLabel` instead of using `Label` directly.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
