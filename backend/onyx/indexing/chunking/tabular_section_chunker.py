@@ -77,23 +77,6 @@ def parse_section(section: Section) -> list[_ParsedRow]:
     return [_ParsedRow(header=header, row=row) for row in data_rows]
 
 
-def parse_section(section: Section) -> Generator[_ParsedRow, None, None]:
-    """Parse CSV into headers + rows. First non-empty row is the header;
-    blank rows are skipped."""
-    section_text = section.text or ""
-    if not section_text.strip():
-        return []
-
-    reader = csv.reader(io.StringIO(section_text))
-    non_empty_rows = [row for row in reader if any(cell.strip() for cell in row)]
-
-    if not non_empty_rows:
-        return []
-
-    header, *data_rows = non_empty_rows
-    return [_ParsedRow(header=header, row=row) for row in data_rows]
-
-
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
     return [(h, v) for h, v in zip(headers, row) if v.strip()]
 
