@@ -170,7 +170,12 @@ export default function IndexSettingsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={route.title}
+        description="Configure how documents are indexed, embedded, and prepared for search and retrieval."
+        separator
+      />
 
       <SettingsLayouts.Body>
         <MessageCard
