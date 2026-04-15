@@ -8,8 +8,10 @@ import {
   SvgXCircle,
   SvgRefreshCw,
 } from "@opal/icons";
+import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import "@/app/proposal-review/components/decision-toggle.css";
 import { toast } from "@/hooks/useToast";
 import {
   submitProposalDecision,
@@ -17,8 +19,23 @@ import {
 } from "@/app/proposal-review/services/apiServices";
 import type {
   ProposalDecisionOutcome,
+  ProposalStatus,
   Finding,
 } from "@/app/proposal-review/types";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Map proposal status back to a decision outcome, or null if no decision yet. */
+function statusToDecision(
+  status: ProposalStatus
+): ProposalDecisionOutcome | null {
+  if (status === "APPROVED") return "APPROVED";
+  if (status === "CHANGES_REQUESTED") return "CHANGES_REQUESTED";
+  if (status === "REJECTED") return "REJECTED";
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -27,6 +44,8 @@ import type {
 interface DecisionPanelProps {
   proposalId: string;
   findings: Finding[];
+  proposalStatus: ProposalStatus;
+  existingDecisionNotes?: string;
   onDecisionSubmitted: () => void;
 }
 
@@ -37,15 +56,19 @@ interface DecisionPanelProps {
 export default function DecisionPanel({
   proposalId,
   findings,
+  proposalStatus,
+  existingDecisionNotes,
   onDecisionSubmitted,
 }: DecisionPanelProps) {
+  const existingDecision = statusToDecision(proposalStatus);
+
   const [selectedDecision, setSelectedDecision] =
-    useState<ProposalDecisionOutcome | null>(null);
-  const [notes, setNotes] = useState("");
+    useState<ProposalDecisionOutcome | null>(existingDecision);
+  const [notes, setNotes] = useState(existingDecisionNotes ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [decisionSaved, setDecisionSaved] = useState(false);
+  const [decisionSaved, setDecisionSaved] = useState(existingDecision !== null);
 
   // Check for unresolved hard stops
   const unresolvedHardStops = findings.filter(
@@ -109,17 +132,21 @@ export default function DecisionPanel({
           justifyContent="start"
           alignItems="start"
         >
-          <Button
-            variant={selectedDecision === "APPROVED" ? "action" : "default"}
-            prominence={
-              selectedDecision === "APPROVED" ? "primary" : "secondary"
-            }
-            icon={SvgCheckCircle}
-            disabled={hasUnresolvedHardStops || isSubmitting}
-            onClick={() => setSelectedDecision("APPROVED")}
+          <div
+            className={cn(
+              selectedDecision === "APPROVED" && "decision-toggle-green"
+            )}
           >
-            Approve
-          </Button>
+            <Button
+              variant="default"
+              prominence="secondary"
+              icon={SvgCheckCircle}
+              disabled={hasUnresolvedHardStops || isSubmitting}
+              onClick={() => setSelectedDecision("APPROVED")}
+            >
+              Approve
+            </Button>
+          </div>
 
           {hasUnresolvedHardStops && (
             <Text font="secondary-body" color="text-03">
@@ -131,19 +158,22 @@ export default function DecisionPanel({
             </Text>
           )}
 
-          <Button
-            variant={
-              selectedDecision === "CHANGES_REQUESTED" ? "action" : "default"
-            }
-            prominence={
-              selectedDecision === "CHANGES_REQUESTED" ? "primary" : "secondary"
-            }
-            icon={SvgAlertTriangle}
-            disabled={isSubmitting}
-            onClick={() => setSelectedDecision("CHANGES_REQUESTED")}
+          <div
+            className={cn(
+              selectedDecision === "CHANGES_REQUESTED" &&
+                "decision-toggle-yellow"
+            )}
           >
-            Request Changes
-          </Button>
+            <Button
+              variant="default"
+              prominence="secondary"
+              icon={SvgAlertTriangle}
+              disabled={isSubmitting}
+              onClick={() => setSelectedDecision("CHANGES_REQUESTED")}
+            >
+              Request Changes
+            </Button>
+          </div>
 
           <Button
             variant={selectedDecision === "REJECTED" ? "danger" : "default"}
@@ -174,7 +204,7 @@ export default function DecisionPanel({
           alignItems="start"
         >
           <Button
-            variant="action"
+            variant="default"
             prominence="primary"
             disabled={!selectedDecision || isSubmitting}
             onClick={handleSubmit}

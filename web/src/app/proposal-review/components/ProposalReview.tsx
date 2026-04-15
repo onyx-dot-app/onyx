@@ -99,6 +99,8 @@ export default function ProposalReview({ proposalId }: ProposalReviewProps) {
         <div className="w-[320px] shrink-0 border-l border-border-01 overflow-y-auto">
           <ReviewSidebar
             proposalId={proposalId}
+            proposalStatus={proposal.status}
+            existingDecisionNotes={proposal.decision_notes ?? undefined}
             onDecisionSubmitted={handleDecisionSubmitted}
           />
         </div>

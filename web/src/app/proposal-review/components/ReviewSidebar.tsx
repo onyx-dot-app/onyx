@@ -17,6 +17,7 @@ import {
   VERDICT_CONFIG,
   type Finding,
   type FindingsByCategory,
+  type ProposalStatus,
 } from "@/app/proposal-review/types";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,8 @@ import {
 
 interface ReviewSidebarProps {
   proposalId: string;
+  proposalStatus: ProposalStatus;
+  existingDecisionNotes?: string;
   onDecisionSubmitted: () => void;
 }
 
@@ -34,6 +37,8 @@ interface ReviewSidebarProps {
 
 export default function ReviewSidebar({
   proposalId,
+  proposalStatus,
+  existingDecisionNotes,
   onDecisionSubmitted,
 }: ReviewSidebarProps) {
   const { viewingRunId, setFocusedFindingId } = useProposalReviewContext();
@@ -252,6 +257,8 @@ export default function ReviewSidebar({
       <DecisionPanel
         proposalId={proposalId}
         findings={findings}
+        proposalStatus={proposalStatus}
+        existingDecisionNotes={existingDecisionNotes}
         onDecisionSubmitted={onDecisionSubmitted}
       />
     </div>

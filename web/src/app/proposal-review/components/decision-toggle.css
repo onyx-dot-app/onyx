@@ -1,0 +1,74 @@
+/* Decision toggle button color overrides.
+
+   The Opal Interactive system doesn't support custom color variants, so we
+   override via scoped CSS classes. All colors use design-system CSS variables
+   that auto-switch for dark mode — no `dark:` modifier needed.
+
+   Specificity is intentionally 0,6,0 for hover states to beat the base
+   Interactive rules (0,5,0). */
+
+/* ---------------------------------------------------------------------------
+   Green — Approve / Verify
+   --------------------------------------------------------------------------- */
+.decision-toggle-green
+  .interactive[data-interactive-variant][data-interactive-prominence] {
+  background-color: var(--status-success-00);
+  --interactive-foreground: var(--status-success-05);
+  --interactive-foreground-icon: var(--status-success-05);
+}
+.decision-toggle-green
+  .interactive[data-interactive-variant][data-interactive-prominence]:hover:not(
+    [data-disabled]
+  ) {
+  background-color: var(--status-success-01);
+}
+.decision-toggle-green
+  .interactive[data-interactive-variant][data-interactive-prominence]:active:not(
+    [data-disabled]
+  ) {
+  background-color: var(--status-success-02);
+}
+
+/* ---------------------------------------------------------------------------
+   Yellow — Request Changes / Flag
+   --------------------------------------------------------------------------- */
+.decision-toggle-yellow
+  .interactive[data-interactive-variant][data-interactive-prominence] {
+  background-color: var(--status-warning-00);
+  --interactive-foreground: var(--status-warning-05);
+  --interactive-foreground-icon: var(--status-warning-05);
+}
+.decision-toggle-yellow
+  .interactive[data-interactive-variant][data-interactive-prominence]:hover:not(
+    [data-disabled]
+  ) {
+  background-color: var(--status-warning-01);
+}
+.decision-toggle-yellow
+  .interactive[data-interactive-variant][data-interactive-prominence]:active:not(
+    [data-disabled]
+  ) {
+  background-color: var(--status-warning-02);
+}
+
+/* ---------------------------------------------------------------------------
+   Gray — N/A
+   --------------------------------------------------------------------------- */
+.decision-toggle-gray
+  .interactive[data-interactive-variant][data-interactive-prominence] {
+  background-color: var(--background-neutral-03);
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.decision-toggle-gray
+  .interactive[data-interactive-variant][data-interactive-prominence]:hover:not(
+    [data-disabled]
+  ) {
+  background-color: var(--background-neutral-04);
+}
+.decision-toggle-gray
+  .interactive[data-interactive-variant][data-interactive-prominence]:active:not(
+    [data-disabled]
+  ) {
+  background-color: var(--background-neutral-04);
+}

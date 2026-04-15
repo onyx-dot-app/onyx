@@ -11,6 +11,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import "@/app/proposal-review/components/decision-toggle.css";
 
 /** Tailwind prose classes with design-system color tokens so dark mode works
  *  without the `dark:` modifier — the CSS variables auto-switch via colors.css. */
@@ -245,20 +246,23 @@ export default function FindingCard({
                       justifyContent="start"
                       alignItems="center"
                     >
-                      <Button
-                        variant={
-                          currentAction === "VERIFIED" ? "action" : "default"
-                        }
-                        prominence={
-                          currentAction === "VERIFIED" ? "primary" : "secondary"
-                        }
-                        size="sm"
-                        icon={SvgCheckCircle}
-                        disabled={isSaving}
-                        onClick={() => handleDecision("VERIFIED")}
+                      <div
+                        className={cn(
+                          currentAction === "VERIFIED" &&
+                            "decision-toggle-green"
+                        )}
                       >
-                        Verify
-                      </Button>
+                        <Button
+                          variant="default"
+                          prominence="secondary"
+                          size="sm"
+                          icon={SvgCheckCircle}
+                          disabled={isSaving}
+                          onClick={() => handleDecision("VERIFIED")}
+                        >
+                          Verify
+                        </Button>
+                      </div>
                       <Button
                         variant={
                           currentAction === "ISSUE" ? "danger" : "default"
@@ -273,23 +277,22 @@ export default function FindingCard({
                       >
                         Issue
                       </Button>
-                      <Button
-                        variant={
-                          currentAction === "NOT_APPLICABLE"
-                            ? "action"
-                            : "default"
-                        }
-                        prominence={
-                          currentAction === "NOT_APPLICABLE"
-                            ? "primary"
-                            : "secondary"
-                        }
-                        size="sm"
-                        disabled={isSaving}
-                        onClick={() => handleDecision("NOT_APPLICABLE")}
+                      <div
+                        className={cn(
+                          currentAction === "NOT_APPLICABLE" &&
+                            "decision-toggle-gray"
+                        )}
                       >
-                        N/A
-                      </Button>
+                        <Button
+                          variant="default"
+                          prominence="secondary"
+                          size="sm"
+                          disabled={isSaving}
+                          onClick={() => handleDecision("NOT_APPLICABLE")}
+                        >
+                          N/A
+                        </Button>
+                      </div>
                     </Section>
 
                     <InputTextArea
