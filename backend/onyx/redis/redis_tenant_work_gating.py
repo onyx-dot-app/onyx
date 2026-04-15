@@ -57,11 +57,21 @@ def mark_tenant_active(tenant_id: str) -> None:
         logger.exception(f"mark_tenant_active failed: tenant_id={tenant_id}")
 
 
-def get_active_tenants(ttl_seconds: int) -> set[str]:
+def get_active_tenants(ttl_seconds: int) -> set[str] | None:
     """Return tenants whose last-seen timestamp is within `ttl_seconds` of
-    now. Returns an empty set in single-tenant mode or on Redis error."""
+    now.
+
+    Return values:
+    - `set[str]` (possibly empty) — Redis read succeeded. Empty set means
+      no tenants are currently marked active; callers should *skip* all
+      tenants if the gate is enforcing.
+    - `None` — Redis read failed *or* we are in single-tenant mode. Callers
+      should fail open (dispatch to every tenant this cycle). Distinguishing
+      failure from "genuinely empty" prevents a Redis outage from silently
+      starving every tenant on every enforced cycle.
+    """
     if not MULTI_TENANT:
-        return set()
+        return None
 
     cutoff_ms = _now_ms() - (ttl_seconds * 1000)
     try:
@@ -71,7 +81,7 @@ def get_active_tenants(ttl_seconds: int) -> set[str]:
         )
     except Exception:
         logger.exception("get_active_tenants failed")
-        return set()
+        return None
 
     return {m.decode() if isinstance(m, bytes) else m for m in raw}
 

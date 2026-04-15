@@ -1126,9 +1126,11 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 
 # Master switch for the tenant work-gating feature (see
-# plans/tenant-work-gating-redis-sets.md). Acts as a feature-level off-switch:
-# when False, the gate is neither computed nor enforced regardless of the
-# runtime Redis toggles. Default off.
+# plans/tenant-work-gating-redis-sets.md). Controls the `enabled` axis only
+# — flipping this True puts the feature in shadow mode (compute the gate,
+# log skip counts, but do not actually skip). The `enforce` axis is
+# Redis-only with a hard-coded default of False, so this env flag alone
+# cannot cause real tenants to be skipped. Default off.
 ENABLE_TENANT_WORK_GATING = (
     os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
 )

@@ -45,13 +45,28 @@ def test_mark_adds_tenant_to_set() -> None:
 
 
 def test_mark_refreshes_timestamp() -> None:
-    """ZADD overwrites the score on existing members. Re-marking a tenant
-    keeps them in the active window."""
-    mark_tenant_active("tenant_a")
-    time.sleep(0.05)
-    mark_tenant_active("tenant_a")
+    """ZADD overwrites the score on existing members. Without a refresh,
+    reading with a TTL that excludes the first write should return empty;
+    after a second mark_tenant_active at a newer timestamp, the same TTL
+    read should include the tenant. Pins `_now_ms` so the test is
+    deterministic."""
+    base_ms = int(time.time() * 1000)
 
-    assert get_active_tenants(ttl_seconds=1) == {"tenant_a"}
+    # First write at t=0.
+    with patch.object(twg, "_now_ms", return_value=base_ms):
+        mark_tenant_active("tenant_a")
+
+    # Read 5s later with a 1s TTL — first write is outside the window.
+    with patch.object(twg, "_now_ms", return_value=base_ms + 5000):
+        assert get_active_tenants(ttl_seconds=1) == set()
+
+    # Refresh at t=5s.
+    with patch.object(twg, "_now_ms", return_value=base_ms + 5000):
+        mark_tenant_active("tenant_a")
+
+    # Read at t=5s with a 1s TTL — refreshed write is inside the window.
+    with patch.object(twg, "_now_ms", return_value=base_ms + 5000):
+        assert get_active_tenants(ttl_seconds=1) == {"tenant_a"}
 
 
 def test_get_active_tenants_filters_by_ttl() -> None:
@@ -80,7 +95,27 @@ def test_get_active_tenants_multiple_members() -> None:
 
 
 def test_get_active_tenants_empty_set() -> None:
+    """Genuinely-empty set returns an empty set (not None)."""
     assert get_active_tenants(ttl_seconds=60) == set()
+
+
+def test_get_active_tenants_returns_none_on_redis_error() -> None:
+    """Callers need to distinguish Redis failure from "no tenants active" so
+    they can fail open. Simulate failure by patching the client to raise."""
+    from unittest.mock import MagicMock
+
+    failing_client = MagicMock()
+    failing_client.zrangebyscore.side_effect = RuntimeError("simulated outage")
+
+    with patch.object(twg, "_client", return_value=failing_client):
+        assert get_active_tenants(ttl_seconds=60) is None
+
+
+def test_get_active_tenants_returns_none_in_single_tenant_mode() -> None:
+    """Single-tenant mode returns None so callers can skip the gate entirely
+    (same fail-open handling as Redis unavailability)."""
+    with patch.object(twg, "MULTI_TENANT", False):
+        assert get_active_tenants(ttl_seconds=60) is None
 
 
 def test_cleanup_expired_removes_only_stale_members() -> None:
@@ -105,7 +140,7 @@ def test_cleanup_expired_empty_set_noop() -> None:
 def test_noop_when_multi_tenant_false() -> None:
     with patch.object(twg, "MULTI_TENANT", False):
         mark_tenant_active("tenant_a")
-        assert get_active_tenants(ttl_seconds=60) == set()
+        assert get_active_tenants(ttl_seconds=60) is None
         assert cleanup_expired(ttl_seconds=60) == 0
 
     # Verify nothing was written while MULTI_TENANT was False.

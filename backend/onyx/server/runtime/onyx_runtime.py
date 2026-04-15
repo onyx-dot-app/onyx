@@ -143,15 +143,11 @@ class OnyxRuntime:
         return value
 
     @staticmethod
-    def _get_tenant_work_gating_flag(axis: str) -> bool:
-        """Shared helper for the two-axis tenant work gating toggle. Reads
-        `runtime:tenant_work_gating:{axis}` from Redis; falls back to the
-        `ENABLE_TENANT_WORK_GATING` env var master switch when no override is
-        set. `axis` is either `enabled` (compute the gate) or `enforce`
-        (actually skip).
-        """
-        default = ENABLE_TENANT_WORK_GATING
-
+    def _read_tenant_work_gating_flag(axis: str, default: bool) -> bool:
+        """Read `runtime:tenant_work_gating:{axis}` from Redis and interpret
+        it as a bool. Returns `default` if the key is absent or unparseable.
+        `axis` is either `enabled` (compute the gate) or `enforce` (actually
+        skip)."""
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
         raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:{axis}")
         if raw is None:
@@ -165,14 +161,25 @@ class OnyxRuntime:
     @staticmethod
     def get_tenant_work_gating_enabled() -> bool:
         """Should we *compute* the work gate? (read the Redis set, log how
-        many tenants would be skipped). Orthogonal to `enforce`."""
-        return OnyxRuntime._get_tenant_work_gating_flag("enabled")
+        many tenants would be skipped). Env-var `ENABLE_TENANT_WORK_GATING`
+        is the fallback default when no Redis override is set — it acts as
+        the master switch that turns the feature on in shadow mode."""
+        return OnyxRuntime._read_tenant_work_gating_flag(
+            "enabled", default=ENABLE_TENANT_WORK_GATING
+        )
 
     @staticmethod
     def get_tenant_work_gating_enforce() -> bool:
-        """Should we *actually skip* tenants not in the work set? Only takes
-        effect when `get_tenant_work_gating_enabled()` is also True."""
-        return OnyxRuntime._get_tenant_work_gating_flag("enforce")
+        """Should we *actually skip* tenants not in the work set?
+
+        Deliberately Redis-only with a hard-coded default of False: the env
+        var `ENABLE_TENANT_WORK_GATING` only flips `enabled` (shadow mode),
+        never `enforce`. Enforcement has to be turned on by an explicit
+        `runtime:tenant_work_gating:enforce=true` write so ops can't
+        accidentally skip real tenant traffic by flipping an env flag. Only
+        meaningful when `get_tenant_work_gating_enabled()` is also True.
+        """
+        return OnyxRuntime._read_tenant_work_gating_flag("enforce", default=False)
 
     @staticmethod
     def get_tenant_work_gating_ttl_seconds() -> int:
