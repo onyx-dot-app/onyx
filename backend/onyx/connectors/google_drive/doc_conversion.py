@@ -390,7 +390,7 @@ def _download_and_extract_sections_basic(
 
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
-        pdf_sections: list[TextSection | ImageSection] = [
+        pdf_sections: list[TextSection | ImageSection | TabularSection] = [
             TextSection(link=link, text=text)
         ]
 
