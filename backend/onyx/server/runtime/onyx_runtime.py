@@ -8,7 +8,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
 from onyx.configs.app_configs import ENABLE_TENANT_WORK_GATING
-from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_EVERY_N
+from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
 from onyx.configs.app_configs import TENANT_WORK_GATING_TTL_SECONDS
 from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
@@ -201,15 +201,18 @@ class OnyxRuntime:
             return default
 
     @staticmethod
-    def get_tenant_work_gating_full_fanout_every_n() -> int:
-        """Every Nth fanout cycle the generator bypasses the gate and
-        dispatches to all tenants, letting consumers re-populate the active
-        set. Self-healing path — see plan for cadence rationale."""
-        default = TENANT_WORK_GATING_FULL_FANOUT_EVERY_N
+    def get_tenant_work_gating_full_fanout_interval_seconds() -> int:
+        """Minimum wall-clock interval between full-fanout cycles. When at
+        least this many seconds have elapsed since the last bypass, the
+        generator ignores the gate on its next invocation and dispatches to
+        every non-gated tenant, letting consumers re-populate the active
+        set. Schedule-independent so beat drift or backlog can't skew the
+        self-heal cadence."""
+        default = TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
 
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
         raw = r.get(
-            f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_every_n"
+            f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_interval_seconds"
         )
         if raw is None:
             return default

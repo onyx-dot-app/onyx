@@ -1135,18 +1135,20 @@ ENABLE_TENANT_WORK_GATING = (
 )
 
 # Membership TTL for the `active_tenants` sorted set. Members older than this
-# are treated as inactive by the gate read path. Must be > (full-fanout
-# cadence × base task schedule) so self-healing re-adds a genuinely-working
-# tenant before their membership expires. Default 30 min.
+# are treated as inactive by the gate read path. Must be > the full-fanout
+# interval so self-healing re-adds a genuinely-working tenant before their
+# membership expires. Default 30 min.
 TENANT_WORK_GATING_TTL_SECONDS = int(
-    os.environ.get("TENANT_WORK_GATING_TTL_SECONDS", str(30 * 60))
+    os.environ.get("TENANT_WORK_GATING_TTL_SECONDS", 30 * 60)
 )
 
-# Every Nth fanout cycle the generator bypasses the gate and dispatches to
-# every non-gated tenant, letting consumers re-populate the active set. This
-# is the self-healing path that replaces the earlier hourly reconcile task.
-TENANT_WORK_GATING_FULL_FANOUT_EVERY_N = int(
-    os.environ.get("TENANT_WORK_GATING_FULL_FANOUT_EVERY_N", "10")
+# Minimum wall-clock interval between full-fanout cycles. When this many
+# seconds have elapsed since the last bypass, the generator ignores the gate
+# on the next invocation and dispatches to every non-gated tenant, letting
+# consumers re-populate the active set. Schedule-independent so beat drift
+# or backlog can't make the self-heal bursty or sparse. Default 20 min.
+TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS", 20 * 60)
 )
 
 
