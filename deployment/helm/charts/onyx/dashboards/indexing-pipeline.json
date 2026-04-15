@@ -567,7 +567,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (status) (increase(onyx_index_attempt_transitions_total{tenant_id=~\"$tenant_id\"}[1h]))",
+          "expr": "sum by (status) (increase(onyx_index_attempt_transitions_total{tenant_id=~\"$tenant_id\", source=~\"$source\"}[1h]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -1980,13 +1980,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_timestamp_seconds, source)",
+        "definition": "label_values(onyx_index_attempt_transitions_total, source)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "source",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_timestamp_seconds, source)",
+        "query": "label_values(onyx_index_attempt_transitions_total, source)",
         "refresh": 1,
         "type": "query"
       },
@@ -1996,13 +1996,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_timestamp_seconds, connector_name)",
+        "definition": "label_values(onyx_index_attempt_transitions_total, connector_name)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "connector_name",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_timestamp_seconds, connector_name)",
+        "query": "label_values(onyx_index_attempt_transitions_total, connector_name)",
         "refresh": 1,
         "type": "query"
       },
@@ -2028,13 +2028,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_timestamp_seconds, tenant_id)",
+        "definition": "label_values(onyx_index_attempt_transitions_total, tenant_id)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "tenant_id",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_timestamp_seconds, tenant_id)",
+        "query": "label_values(onyx_index_attempt_transitions_total, tenant_id)",
         "refresh": 1,
         "type": "query"
       }
