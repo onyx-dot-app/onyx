@@ -1,7 +1,7 @@
 import "@opal/components/cards/message-card/styles.css";
 import type { RichStr, IconFunctionComponent } from "@opal/types";
-import { Content } from "@opal/layouts";
-import { Button, Card, Divider } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
+import { Button, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
@@ -16,7 +16,7 @@ import {
 
 type MessageCardVariant = "default" | "info" | "success" | "warning" | "error";
 
-interface MessageCardProps {
+interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
   variant?: MessageCardVariant;
 
@@ -28,25 +28,30 @@ interface MessageCardProps {
 
   /**
    * Content rendered below a divider, under the main content area.
-   * When provided, a `Divider` is inserted between the `Content` and this node.
+   * When provided, a `Divider` is inserted between the `ContentAction` and this node.
    */
   bottomChildren?: React.ReactNode;
-
-  /** Content rendered on the right side, below the close button. */
-  rightChildren?: React.ReactNode;
-
-  /**
-   * Called when the close button is clicked. When omitted, no close button
-   * is rendered.
-   */
-  onClose?: () => void;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
 
+type MessageCardProps = MessageCardBaseProps &
+  (
+    | {
+        /** Content rendered on the right side of the card. Mutually exclusive with `onClose`. */
+        rightChildren?: React.ReactNode;
+        onClose?: never;
+      }
+    | {
+        rightChildren?: never;
+        /** Close button callback. Mutually exclusive with `rightChildren`. */
+        onClose?: () => void;
+      }
+  );
+
 // ---------------------------------------------------------------------------
-// Default icons per variant
+// Variant config
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
@@ -67,26 +72,35 @@ const VARIANT_CONFIG: Record<
 /**
  * A styled card for displaying messages, alerts, or status notifications.
  *
- * Uses `Card` as the structural base and `Content` internally for consistent
- * title/description/icon layout. Supports 5 variants with corresponding
- * background and border colors.
+ * Uses `ContentAction` internally for consistent title/description/icon layout
+ * with optional right-side actions. Supports 5 variants with corresponding
+ * background, border, and icon colors.
+ *
+ * `onClose` and `rightChildren` are mutually exclusive — specify one or neither.
  *
  * @example
  * ```tsx
  * import { MessageCard } from "@opal/components";
  *
+ * // Simple message
  * <MessageCard
  *   variant="info"
  *   title="Heads up"
  *   description="Changes apply to newly indexed documents only."
  * />
  *
+ * // With close button
  * <MessageCard
  *   variant="warning"
  *   title="Re-indexing required"
- *   description="Toggle this setting to re-index all documents."
  *   onClose={() => setDismissed(true)}
- *   bottomChildren={<Button>Re-index Now</Button>}
+ * />
+ *
+ * // With right children
+ * <MessageCard
+ *   variant="error"
+ *   title="Connection failed"
+ *   rightChildren={<Button>Retry</Button>}
  * />
  * ```
  */
@@ -101,34 +115,29 @@ function MessageCard({
 }: MessageCardProps) {
   const { icon: Icon, iconClass } = VARIANT_CONFIG[variant];
 
+  const right = onClose ? (
+    <Button
+      icon={SvgX}
+      prominence="internal"
+      size="sm"
+      onClick={onClose}
+      aria-label="Close"
+    />
+  ) : (
+    rightChildren
+  );
+
   return (
     <div className="opal-message-card" data-variant={variant} ref={ref}>
-      <div className="opal-message-card-header">
-        <div className="opal-message-card-content">
-          <Content
-            icon={(props) => <Icon {...props} className={iconClass} />}
-            title={title}
-            description={description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-        </div>
-
-        {(onClose || rightChildren) && (
-          <div className="opal-message-card-right">
-            {onClose && (
-              <Button
-                icon={SvgX}
-                prominence="internal"
-                size="sm"
-                onClick={onClose}
-                aria-label="Close"
-              />
-            )}
-            {rightChildren}
-          </div>
-        )}
-      </div>
+      <ContentAction
+        icon={(props) => <Icon {...props} className={iconClass} />}
+        title={title}
+        description={description}
+        sizePreset="main-ui"
+        variant="section"
+        paddingVariant="lg"
+        rightChildren={right}
+      />
 
       {bottomChildren && (
         <>

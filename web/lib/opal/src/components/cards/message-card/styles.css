@@ -2,18 +2,6 @@
   @apply flex flex-col self-stretch rounded-16 border p-2;
 }
 
-.opal-message-card-header {
-  @apply flex flex-row items-start gap-1 p-2;
-}
-
-.opal-message-card-content {
-  @apply flex-1 min-w-0;
-}
-
-.opal-message-card-right {
-  @apply flex flex-col items-end gap-1 shrink-0;
-}
-
 /* Variant colors */
 
 .opal-message-card[data-variant="default"] {
