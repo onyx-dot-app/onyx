@@ -4,7 +4,6 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
-from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -113,28 +112,22 @@ async def transcribe_audio(
         ) from exc
 
 
+class SynthesizeRequest(BaseModel):
+    text: str
+    voice: str | None = None
+    speed: float | None = None
+
+
 @router.post("/synthesize")
 async def synthesize_speech(
-    text: str | None = Query(
-        default=None, description="Text to synthesize", max_length=4096
-    ),
-    voice: str | None = Query(default=None, description="Voice ID to use"),
-    speed: float | None = Query(
-        default=None, description="Playback speed (0.5-2.0)", ge=0.5, le=2.0
-    ),
+    body: SynthesizeRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> StreamingResponse:
-    """
-    Synthesize text to speech using the default TTS provider.
-
-    Accepts parameters via query string for streaming compatibility.
-    """
-    logger.info(
-        f"TTS request: text length={len(text) if text else 0}, voice={voice}, speed={speed}"
-    )
-
-    if not text:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Text is required")
+    """Synthesize text to speech using the default TTS provider."""
+    text = body.text
+    voice = body.voice
+    speed = body.speed
+    logger.info(f"TTS request: text length={len(text)}, voice={voice}, speed={speed}")
 
     # Use short-lived session to fetch provider config, then release connection
     # before starting the long-running streaming response
@@ -177,31 +170,34 @@ async def synthesize_speech(
             logger.error(f"Failed to get voice provider: {exc}")
             raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
-    # Session is now closed - streaming response won't hold DB connection
+    # Pull the first chunk before returning the StreamingResponse. If the
+    # provider rejects the request (e.g. text too long), the error surfaces
+    # as a proper HTTP error instead of a broken audio stream.
+    stream_iter = provider.synthesize_stream(
+        text=text, voice=final_voice, speed=final_speed
+    )
+    try:
+        first_chunk = await stream_iter.__anext__()
+    except StopAsyncIteration:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "TTS provider returned no audio")
+    except Exception as exc:
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(exc)) from exc
+
     async def audio_stream() -> AsyncIterator[bytes]:
-        try:
-            chunk_count = 0
-            async for chunk in provider.synthesize_stream(
-                text=text, voice=final_voice, speed=final_speed
-            ):
-                chunk_count += 1
-                yield chunk
-            logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
-        except NotImplementedError as exc:
-            logger.error(f"TTS not implemented: {exc}")
-            raise
-        except Exception as exc:
-            logger.error(f"Synthesis failed: {exc}")
-            raise
+        yield first_chunk
+        chunk_count = 1
+        async for chunk in stream_iter:
+            chunk_count += 1
+            yield chunk
+        logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
 
     return StreamingResponse(
         audio_stream(),
         media_type="audio/mpeg",
         headers={
             "Content-Disposition": "inline; filename=speech.mp3",
-            # Allow streaming by not setting content-length
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )
 
