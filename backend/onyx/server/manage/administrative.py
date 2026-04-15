@@ -226,7 +226,12 @@ def get_failed_documents(
     """Get indexing errors across all connectors with optional filters.
 
     Provides a cross-connector view of document indexing failures.
+    Defaults to last 30 days if no start_time is provided to avoid
+    unbounded count queries.
     """
+    if start_time is None:
+        start_time = datetime.now(tz=timezone.utc) - timedelta(days=30)
+
     errors, total = get_index_attempt_errors_across_connectors(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
