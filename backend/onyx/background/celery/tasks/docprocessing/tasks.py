@@ -109,6 +109,9 @@ from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
+from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
+from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
@@ -524,12 +527,22 @@ def check_indexing_completion(
 
         # Update CC pair status if successful
         cc_pair = get_connector_credential_pair_from_id(
-            db_session, attempt.connector_credential_pair_id
+            db_session,
+            attempt.connector_credential_pair_id,
+            eager_load_connector=True,
         )
         if cc_pair is None:
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        source = cc_pair.connector.source.value
+        on_index_attempt_status_change(
+            tenant_id=tenant_id,
+            source=source,
+            cc_pair_id=cc_pair.id,
+            status=attempt.status.value,
+        )
 
         if attempt.status.is_successful():
             # NOTE: we define the last successful index time as the time the last successful
@@ -551,6 +564,14 @@ def check_indexing_completion(
                 event=MilestoneRecordType.CONNECTOR_SUCCEEDED,
             )
 
+            on_connector_indexing_success(
+                tenant_id=tenant_id,
+                source=source,
+                cc_pair_id=cc_pair.id,
+                docs_indexed=attempt.new_docs_indexed or 0,
+                success_timestamp=attempt.time_updated.timestamp(),
+            )
+
             # Clear repeated error state on success
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
@@ -570,6 +591,12 @@ def check_indexing_completion(
                         db_session.delete(notif)
 
                 db_session.commit()
+                on_connector_error_state_change(
+                    tenant_id=tenant_id,
+                    source=source,
+                    cc_pair_id=cc_pair.id,
+                    in_error=False,
+                )
 
             if attempt.status == IndexingStatus.SUCCESS:
                 logger.info(
@@ -893,6 +920,12 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
+                    on_connector_error_state_change(
+                        tenant_id=tenant_id,
+                        source=cc_pair.connector.source.value,
+                        cc_pair_id=cc_pair_id,
+                        in_error=True,
+                    )
 
                     connector_name = (
                         cc_pair.name
@@ -920,7 +953,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         f"connector={cc_pair.connector.name} "
                         f"source={source}"
                     )
-
                     # When entering repeated error state, also pause the connector
                     # to prevent continued indexing retry attempts burning through embedding credits.
                     # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding

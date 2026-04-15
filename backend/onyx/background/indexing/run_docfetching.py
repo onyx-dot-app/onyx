@@ -69,6 +69,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
     get_persistent_document_writer,
 )
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
@@ -267,6 +268,13 @@ def run_docfetching_entrypoint(
             attempt.connector_credential_pair.connector.connector_specific_config
         )
         credential_id = attempt.connector_credential_pair.credential_id
+
+        on_index_attempt_status_change(
+            tenant_id=tenant_id,
+            source=attempt.connector_credential_pair.connector.source.value,
+            cc_pair_id=connector_credential_pair_id,
+            status="in_progress",
+        )
 
     logger.info(
         f"Docfetching starting{tenant_str}: "
