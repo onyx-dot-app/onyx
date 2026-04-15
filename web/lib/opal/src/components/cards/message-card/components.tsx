@@ -46,12 +46,15 @@ interface MessageCardProps {
 // Default icons per variant
 // ---------------------------------------------------------------------------
 
-const DEFAULT_ICONS: Record<MessageCardVariant, IconFunctionComponent> = {
-  default: SvgAlertCircle,
-  info: SvgAlertCircle,
-  success: SvgCheckCircle,
-  warning: SvgAlertTriangle,
-  error: SvgXOctagon,
+const VARIANT_CONFIG: Record<
+  MessageCardVariant,
+  { icon: IconFunctionComponent; iconClass: string }
+> = {
+  default: { icon: SvgAlertCircle, iconClass: "stroke-text-03" },
+  info: { icon: SvgAlertCircle, iconClass: "stroke-status-info-05" },
+  success: { icon: SvgCheckCircle, iconClass: "stroke-status-success-05" },
+  warning: { icon: SvgAlertTriangle, iconClass: "stroke-status-warning-05" },
+  error: { icon: SvgXOctagon, iconClass: "stroke-status-error-05" },
 };
 
 // ---------------------------------------------------------------------------
@@ -92,14 +95,14 @@ function MessageCard({
   onClose,
   ref,
 }: MessageCardProps) {
-  const Icon = DEFAULT_ICONS[variant];
+  const { icon: Icon, iconClass } = VARIANT_CONFIG[variant];
 
   return (
     <div className="opal-message-card" data-variant={variant}>
       <div className="opal-message-card-header">
         <div className="opal-message-card-content">
           <Content
-            icon={Icon}
+            icon={(props) => <Icon {...props} className={iconClass} />}
             title={title}
             description={description}
             sizePreset="main-ui"
