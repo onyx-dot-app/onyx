@@ -351,6 +351,41 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Select-Input — Empty
+   Matches input bar background at rest, tints on hover/open.
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"] {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
    Select-Tinted — Filled
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="select-tinted"][data-interactive-state="filled"] {
