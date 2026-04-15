@@ -66,6 +66,21 @@ def get_latest_review_run(
     )
 
 
+def list_review_runs_by_proposal(
+    proposal_id: UUID,
+    db_session: Session,
+    limit: int = 20,
+) -> list[ProposalReviewRun]:
+    """List review runs for a proposal, most recent first."""
+    return (
+        db_session.query(ProposalReviewRun)
+        .filter(ProposalReviewRun.proposal_id == proposal_id)
+        .order_by(desc(ProposalReviewRun.created_at))
+        .limit(limit)
+        .all()
+    )
+
+
 # =============================================================================
 # Findings
 # =============================================================================
@@ -109,12 +124,11 @@ def get_finding(
     finding_id: UUID,
     db_session: Session,
 ) -> ProposalReviewFinding | None:
-    """Get a finding by ID with its decision and rule eagerly loaded."""
+    """Get a finding by ID with its rule eagerly loaded."""
     return (
         db_session.query(ProposalReviewFinding)
         .filter(ProposalReviewFinding.id == finding_id)
         .options(
-            selectinload(ProposalReviewFinding.decision),
             selectinload(ProposalReviewFinding.rule),
         )
         .one_or_none()
@@ -131,7 +145,6 @@ def list_findings_by_proposal(
         db_session.query(ProposalReviewFinding)
         .filter(ProposalReviewFinding.proposal_id == proposal_id)
         .options(
-            selectinload(ProposalReviewFinding.decision),
             selectinload(ProposalReviewFinding.rule),
         )
         .order_by(ProposalReviewFinding.created_at)
@@ -150,9 +163,44 @@ def list_findings_by_run(
         db_session.query(ProposalReviewFinding)
         .filter(ProposalReviewFinding.review_run_id == review_run_id)
         .options(
-            selectinload(ProposalReviewFinding.decision),
             selectinload(ProposalReviewFinding.rule),
         )
         .order_by(ProposalReviewFinding.created_at)
         .all()
     )
+
+
+def get_failed_findings_for_run(
+    review_run_id: UUID,
+    db_session: Session,
+) -> list[ProposalReviewFinding]:
+    """Get findings that failed due to system errors (LLM timeout, etc.).
+
+    Error findings are created by _save_error_finding and are identifiable
+    by having no LLM metadata (the call never completed successfully).
+    """
+    return (
+        db_session.query(ProposalReviewFinding)
+        .filter(
+            ProposalReviewFinding.review_run_id == review_run_id,
+            ProposalReviewFinding.verdict == "NEEDS_REVIEW",
+            ProposalReviewFinding.llm_model.is_(None),
+            ProposalReviewFinding.llm_tokens_used.is_(None),
+        )
+        .all()
+    )
+
+
+def delete_findings(
+    finding_ids: list[UUID],
+    db_session: Session,
+) -> int:
+    """Delete findings by ID. Returns the number deleted."""
+    if not finding_ids:
+        return 0
+    count = (
+        db_session.query(ProposalReviewFinding)
+        .filter(ProposalReviewFinding.id.in_(finding_ids))
+        .delete(synchronize_session="fetch")
+    )
+    return count

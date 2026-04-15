@@ -52,7 +52,7 @@ export default function DecisionPanel({
     (f) =>
       f.rule_is_hard_stop &&
       (f.verdict === "FAIL" || f.verdict === "FLAG") &&
-      (!f.decision || f.decision.action === "ISSUE")
+      (!f.decision_action || f.decision_action === "ISSUE")
   );
   const hasUnresolvedHardStops = unresolvedHardStops.length > 0;
 

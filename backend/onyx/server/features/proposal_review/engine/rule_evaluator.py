@@ -80,29 +80,17 @@ def evaluate_rule(
         UserMessage(content=user_content),
     ]
 
-    # 3. Call LLM
-    try:
-        llm = get_default_llm()
-        with llm_generation_span(llm, "proposal_review", prompt_messages) as gen_span:
-            response = llm.invoke(prompt_messages)
-            record_llm_response(gen_span, response)
-        raw_text = llm_response_to_string(response)
+    # 3. Call LLM — exceptions propagate to the caller so the retry
+    #    mechanism in _evaluate_single_rule can handle transient failures.
+    llm = get_default_llm()
+    with llm_generation_span(llm, "proposal_review", prompt_messages) as gen_span:
+        response = llm.invoke(prompt_messages)
+        record_llm_response(gen_span, response)
+    raw_text = llm_response_to_string(response)
 
-        # Extract model info
-        llm_model = llm.config.model_name if llm.config else None
-        llm_tokens_used = _extract_token_usage(response)
-
-    except Exception as e:
-        logger.error(f"LLM call failed for rule {rule.id} '{rule.name}': {e}")
-        return {
-            "verdict": "NEEDS_REVIEW",
-            "confidence": "LOW",
-            "evidence": None,
-            "explanation": f"LLM evaluation failed: {str(e)}",
-            "suggested_action": "Manual review required due to system error.",
-            "llm_model": None,
-            "llm_tokens_used": None,
-        }
+    # Extract model info
+    llm_model = llm.config.model_name if llm.config else None
+    llm_tokens_used = _extract_token_usage(response)
 
     # 4. Parse JSON response
     result = _parse_llm_response(raw_text)

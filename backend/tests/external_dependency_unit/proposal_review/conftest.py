@@ -22,14 +22,12 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # Tables to clean up after each test, in dependency order (children first).
 _PROPOSAL_REVIEW_TABLES = [
-    "proposal_review_audit_log",
-    "proposal_review_decision",
-    "proposal_review_proposal_decision",
     "proposal_review_finding",
     "proposal_review_run",
     "proposal_review_document",
     "proposal_review_proposal",
     "proposal_review_rule",
+    "proposal_review_import_job",
     "proposal_review_ruleset",
     "proposal_review_config",
 ]

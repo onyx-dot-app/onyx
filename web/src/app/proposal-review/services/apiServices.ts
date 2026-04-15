@@ -34,6 +34,16 @@ export async function triggerReview(
   return handleResponse(res);
 }
 
+/** Retry only the rules that failed (LLM timeout, etc.) in the latest run. */
+export async function retryFailedRules(
+  proposalId: string
+): Promise<{ id: string }> {
+  const res = await fetch(`${BASE}/proposals/${proposalId}/retry-failed`, {
+    method: "POST",
+  });
+  return handleResponse(res);
+}
+
 /** Record an officer decision on an individual finding. */
 export async function submitFindingDecision(
   findingId: string,

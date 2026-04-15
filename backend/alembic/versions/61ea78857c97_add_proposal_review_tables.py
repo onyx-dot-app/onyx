@@ -122,6 +122,13 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "refinement_needed",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column("refinement_question", sa.Text(), nullable=True),
+        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
@@ -147,6 +154,7 @@ def upgrade() -> None:
     )
 
     # -- proposal_review_proposal --
+    # Includes inline proposal-level decision fields (no separate decision table).
     op.create_table(
         "proposal_review_proposal",
         sa.Column(
@@ -163,6 +171,21 @@ def upgrade() -> None:
             server_default=sa.text("'PENDING'"),
             nullable=False,
         ),
+        # Inline proposal-level decision fields
+        sa.Column("decision_notes", sa.Text(), nullable=True),
+        sa.Column(
+            "decision_officer_id",
+            fastapi_users_db_sqlalchemy.generics.GUID(),
+            nullable=True,
+        ),
+        sa.Column("decision_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "jira_synced",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column("jira_synced_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -175,6 +198,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.ForeignKeyConstraint(["decision_officer_id"], ["user.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("document_id", "tenant_id"),
     )
@@ -258,6 +282,7 @@ def upgrade() -> None:
     )
 
     # -- proposal_review_finding --
+    # Includes inline per-finding decision fields (no separate decision table).
     op.create_table(
         "proposal_review_finding",
         sa.Column(
@@ -288,6 +313,15 @@ def upgrade() -> None:
         sa.Column("suggested_action", sa.Text(), nullable=True),
         sa.Column("llm_model", sa.Text(), nullable=True),
         sa.Column("llm_tokens_used", sa.Integer(), nullable=True),
+        # Inline per-finding decision fields
+        sa.Column("decision_action", sa.Text(), nullable=True),
+        sa.Column("decision_notes", sa.Text(), nullable=True),
+        sa.Column(
+            "decision_officer_id",
+            fastapi_users_db_sqlalchemy.generics.GUID(),
+            nullable=True,
+        ),
+        sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -309,6 +343,7 @@ def upgrade() -> None:
             ["proposal_review_run.id"],
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(["decision_officer_id"], ["user.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -321,96 +356,10 @@ def upgrade() -> None:
         "proposal_review_finding",
         ["review_run_id"],
     )
-
-    # -- proposal_review_decision (per-finding) --
-    op.create_table(
-        "proposal_review_decision",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "finding_id",
-            postgresql.UUID(as_uuid=True),
-            nullable=False,
-        ),
-        sa.Column(
-            "officer_id",
-            fastapi_users_db_sqlalchemy.generics.GUID(),
-            nullable=False,
-        ),
-        sa.Column("action", sa.Text(), nullable=False),
-        sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(
-            ["finding_id"],
-            ["proposal_review_finding.id"],
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(["officer_id"], ["user.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("finding_id"),
-    )
-
-    # -- proposal_review_proposal_decision --
-    op.create_table(
-        "proposal_review_proposal_decision",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "proposal_id",
-            postgresql.UUID(as_uuid=True),
-            nullable=False,
-        ),
-        sa.Column(
-            "officer_id",
-            fastapi_users_db_sqlalchemy.generics.GUID(),
-            nullable=False,
-        ),
-        sa.Column("decision", sa.Text(), nullable=False),
-        sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "jira_synced",
-            sa.Boolean(),
-            server_default=sa.text("false"),
-            nullable=False,
-        ),
-        sa.Column("jira_synced_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(
-            ["proposal_id"],
-            ["proposal_review_proposal.id"],
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(["officer_id"], ["user.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
     op.create_index(
-        "ix_proposal_review_proposal_decision_proposal_id",
-        "proposal_review_proposal_decision",
-        ["proposal_id"],
+        "ix_proposal_review_finding_rule_id",
+        "proposal_review_finding",
+        ["rule_id"],
     )
 
     # -- proposal_review_document --
@@ -454,47 +403,6 @@ def upgrade() -> None:
     op.create_index(
         "ix_proposal_review_document_proposal_id",
         "proposal_review_document",
-        ["proposal_id"],
-    )
-
-    # -- proposal_review_audit_log --
-    op.create_table(
-        "proposal_review_audit_log",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "proposal_id",
-            postgresql.UUID(as_uuid=True),
-            nullable=False,
-        ),
-        sa.Column(
-            "user_id",
-            fastapi_users_db_sqlalchemy.generics.GUID(),
-            nullable=True,
-        ),
-        sa.Column("action", sa.Text(), nullable=False),
-        sa.Column("details", postgresql.JSONB(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(
-            ["proposal_id"],
-            ["proposal_review_proposal.id"],
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["user.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "ix_proposal_review_audit_log_proposal_id",
-        "proposal_review_audit_log",
         ["proposal_id"],
     )
 
@@ -583,10 +491,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("proposal_review_import_job")
     op.drop_table("proposal_review_config")
-    op.drop_table("proposal_review_audit_log")
     op.drop_table("proposal_review_document")
-    op.drop_table("proposal_review_proposal_decision")
-    op.drop_table("proposal_review_decision")
     op.drop_table("proposal_review_finding")
     op.drop_table("proposal_review_run")
     op.drop_table("proposal_review_proposal")

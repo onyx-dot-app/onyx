@@ -118,17 +118,6 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
           {({ isSubmitting, values }) => (
             <Form className="w-full">
               <Modal.Body>
-                {existingRule?.refinement_needed &&
-                  existingRule.refinement_question && (
-                    <div className="w-full rounded-08 bg-status-warning-01 p-3 flex flex-col gap-1">
-                      <Text font="main-ui-action" color="text-05">
-                        This rule needs refinement
-                      </Text>
-                      <Text font="secondary-body" color="text-04">
-                        {existingRule.refinement_question}
-                      </Text>
-                    </div>
-                  )}
                 <InputVertical title="Name" withLabel="name">
                   <FormikField<string>
                     name="name"

@@ -8,8 +8,21 @@ import {
   SvgAlertCircle,
   SvgShield,
 } from "@opal/icons";
-import { markdown } from "@opal/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+
+/** Tailwind prose classes with design-system color tokens so dark mode works
+ *  without the `dark:` modifier — the CSS variables auto-switch via colors.css. */
+const PROSE_CLASSES = cn(
+  "prose prose-sm max-w-full",
+  "[--tw-prose-body:var(--text-03)]",
+  "[--tw-prose-bold:var(--text-04)]",
+  "[--tw-prose-headings:var(--text-04)]",
+  "[--tw-prose-links:var(--action-link-05)]",
+  "[--tw-prose-counters:var(--text-03)]",
+  "[--tw-prose-bullets:var(--text-03)]"
+);
 import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { toast } from "@/hooks/useToast";
@@ -49,7 +62,8 @@ export default function FindingCard({
     explanation,
     evidence,
     suggested_action,
-    decision,
+    decision_action,
+    decision_notes,
   } = finding;
 
   const isActionable = verdict === "FAIL" || verdict === "FLAG";
@@ -58,14 +72,16 @@ export default function FindingCard({
 
   // Default expansion: FAIL/FLAG/NEEDS_REVIEW expanded, PASS collapsed
   const [isExpanded, setIsExpanded] = useState(!isPass);
-  const [notes, setNotes] = useState(decision?.notes ?? "");
+  const [notes, setNotes] = useState(decision_notes ?? "");
   const [currentAction, setCurrentAction] = useState<DecisionAction | null>(
-    decision?.action ?? null
+    decision_action ?? null
   );
   const [isSaving, setIsSaving] = useState(false);
 
   // Scroll into view and expand when focused from sidebar.
   // Delay accounts for the Radix collapsible open animation (~200ms).
+  // onFocusHandled is called INSIDE the timeout so that clearing focusedFindingId
+  // doesn't trigger effect cleanup (clearTimeout) before the scroll fires.
   useEffect(() => {
     if (isFocused && cardRef.current) {
       setIsExpanded(true);
@@ -74,8 +90,8 @@ export default function FindingCard({
           behavior: "smooth",
           block: "center",
         });
+        onFocusHandled?.();
       }, 250);
-      onFocusHandled?.();
       return () => clearTimeout(timer);
     }
   }, [isFocused, onFocusHandled]);
@@ -101,7 +117,7 @@ export default function FindingCard({
   );
 
   const handleNotesBlur = useCallback(async () => {
-    if (currentAction && notes !== (decision?.notes ?? "")) {
+    if (currentAction && notes !== (decision_notes ?? "")) {
       setIsSaving(true);
       try {
         await submitFindingDecision(
@@ -118,7 +134,7 @@ export default function FindingCard({
         setIsSaving(false);
       }
     }
-  }, [currentAction, notes, decision?.notes, finding.id, onDecisionSaved]);
+  }, [currentAction, notes, decision_notes, finding.id, onDecisionSaved]);
 
   return (
     <div ref={cardRef}>
@@ -180,9 +196,11 @@ export default function FindingCard({
             >
               {/* Explanation */}
               {explanation && (
-                <Text font="main-ui-body" color="text-03" as="p">
-                  {markdown(explanation)}
-                </Text>
+                <div className={PROSE_CLASSES}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {explanation}
+                  </ReactMarkdown>
+                </div>
               )}
 
               {/* Evidence */}
@@ -191,9 +209,11 @@ export default function FindingCard({
                   <Text font="secondary-body" color="text-03" as="p">
                     Evidence:
                   </Text>
-                  <Text font="main-ui-body" color="text-03" as="p">
-                    {markdown(`\u201C${evidence}\u201D`)}
-                  </Text>
+                  <div className={PROSE_CLASSES}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {evidence}
+                    </ReactMarkdown>
+                  </div>
                 </Card>
               )}
 
@@ -201,9 +221,11 @@ export default function FindingCard({
               {suggested_action && (
                 <div className="flex items-start gap-2">
                   <SvgAlertCircle className="h-4 w-4 text-status-warning-03 shrink-0 mt-0.5" />
-                  <Text font="secondary-body" color="text-03" as="p">
-                    {markdown(suggested_action)}
-                  </Text>
+                  <div className={PROSE_CLASSES}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {suggested_action}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               )}
 

@@ -12,11 +12,9 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.proposal_review.api.models import AuditLogEntry
 from onyx.server.features.proposal_review.api.models import FindingResponse
 from onyx.server.features.proposal_review.api.models import ReviewRunResponse
 from onyx.server.features.proposal_review.api.models import ReviewRunTriggerRequest
-from onyx.server.features.proposal_review.db import decisions as decisions_db
 from onyx.server.features.proposal_review.db import findings as findings_db
 from onyx.server.features.proposal_review.db import proposals as proposals_db
 from onyx.server.features.proposal_review.db import rulesets as rulesets_db
@@ -38,11 +36,7 @@ def trigger_review(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ReviewRunResponse:
-    """Trigger a new review run for a proposal.
-
-    Creates a ReviewRun record and returns it. No Celery dispatch yet --
-    the engine will be wired in Workstream 3.
-    """
+    """Trigger a new review run for a proposal."""
     tenant_id = get_current_tenant_id()
 
     # Verify proposal exists
@@ -74,19 +68,6 @@ def trigger_review(
         db_session=db_session,
     )
 
-    # Create audit log entry
-    decisions_db.create_audit_log(
-        proposal_id=proposal_id,
-        action="review_triggered",
-        user_id=user.id,
-        details={
-            "review_run_id": str(run.id),
-            "ruleset_id": str(request.ruleset_id),
-            "total_rules": active_rule_count,
-        },
-        db_session=db_session,
-    )
-
     db_session.commit()
     logger.info(
         f"Review triggered for proposal {proposal_id} "
@@ -106,6 +87,24 @@ def trigger_review(
 
 
 @router.get(
+    "/proposals/{proposal_id}/review-runs",
+)
+def list_review_runs(
+    proposal_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> list[ReviewRunResponse]:
+    """List all review runs for a proposal, most recent first."""
+    tenant_id = get_current_tenant_id()
+    proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
+    if not proposal:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
+
+    runs = findings_db.list_review_runs_by_proposal(proposal_id, db_session)
+    return [ReviewRunResponse.from_model(r) for r in runs]
+
+
+@router.get(
     "/proposals/{proposal_id}/review-status",
 )
 def get_review_status(
@@ -122,6 +121,63 @@ def get_review_status(
     run = findings_db.get_latest_review_run(proposal_id, db_session)
     if not run:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "No review runs found")
+
+    return ReviewRunResponse.from_model(run)
+
+
+@router.post(
+    "/proposals/{proposal_id}/retry-failed",
+    status_code=200,
+)
+def retry_failed_rules_endpoint(
+    proposal_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> ReviewRunResponse:
+    """Retry only the rules that failed in the latest review run."""
+    tenant_id = get_current_tenant_id()
+
+    proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
+    if not proposal:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
+
+    run = findings_db.get_latest_review_run(proposal_id, db_session)
+    if not run:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No review runs found")
+
+    if run.status not in ("COMPLETED", "FAILED"):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Cannot retry: review is still running",
+        )
+
+    failed = findings_db.get_failed_findings_for_run(run.id, db_session)
+    if not failed:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No failed rules to retry",
+        )
+
+    rule_ids = list({str(f.rule_id) for f in failed})
+
+    # Set status to RUNNING before dispatching so a second call is rejected
+    run.status = "RUNNING"
+    run.completed_at = None
+    db_session.commit()
+
+    logger.info(
+        f"Retrying {len(rule_ids)} failed rules for run {run.id} "
+        f"on proposal {proposal_id}"
+    )
+
+    from onyx.background.celery.versioned_apps.client import app as celery_app
+
+    celery_app.send_task(
+        "run_proposal_review",
+        args=[str(run.id), tenant_id],
+        kwargs={"rule_ids": rule_ids},
+        expires=3600,
+    )
 
     return ReviewRunResponse.from_model(run)
 
@@ -153,21 +209,3 @@ def get_findings(
 
     results = findings_db.list_findings_by_run(review_run_id, db_session)
     return [FindingResponse.from_model(f) for f in results]
-
-
-@router.get(
-    "/proposals/{proposal_id}/audit-log",
-)
-def get_audit_log(
-    proposal_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
-    db_session: Session = Depends(get_session),
-) -> list[AuditLogEntry]:
-    """Get the audit trail for a proposal."""
-    tenant_id = get_current_tenant_id()
-    proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
-    if not proposal:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
-
-    entries = decisions_db.list_audit_log(proposal_id, db_session)
-    return [AuditLogEntry.from_model(e) for e in entries]

@@ -17,9 +17,7 @@ from onyx.server.features.proposal_review.db import decisions as decisions_db
 from onyx.server.features.proposal_review.db import findings as findings_db
 from onyx.server.features.proposal_review.db import proposals as proposals_db
 from onyx.server.features.proposal_review.db.models import ProposalReviewFinding
-from onyx.server.features.proposal_review.db.models import (
-    ProposalReviewProposalDecision,
-)
+from onyx.server.features.proposal_review.db.models import ProposalReviewProposal
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -37,7 +35,7 @@ def sync_to_jira(
     2. POST transition (move to configured column)
     3. POST comment (structured review summary)
 
-    Then marks the decision as jira_synced.
+    Then marks the proposal as jira_synced.
 
     Raises:
         ValueError: If required config/data is missing.
@@ -45,16 +43,15 @@ def sync_to_jira(
     """
     tenant_id = get_current_tenant_id()
 
-    # Load proposal and decision
+    # Load proposal
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
         raise ValueError(f"Proposal {proposal_id} not found")
 
-    latest_decision = decisions_db.get_latest_proposal_decision(proposal_id, db_session)
-    if not latest_decision:
+    if not proposal.decision_at:
         raise ValueError(f"No decision found for proposal {proposal_id}")
 
-    if latest_decision.jira_synced:
+    if proposal.jira_synced:
         logger.info(f"Decision for proposal {proposal_id} already synced to Jira")
         return
 
@@ -107,7 +104,7 @@ def sync_to_jira(
         jira_base_url=jira_base_url,
         auth_headers=auth_headers,
         issue_key=issue_key,
-        decision=latest_decision.decision,
+        decision=proposal.status,
         verdict_counts=verdict_counts,
         writeback_config=writeback_config,
     )
@@ -117,7 +114,7 @@ def sync_to_jira(
         jira_base_url=jira_base_url,
         auth_headers=auth_headers,
         issue_key=issue_key,
-        decision=latest_decision.decision,
+        decision=proposal.status,
         writeback_config=writeback_config,
     )
 
@@ -126,13 +123,13 @@ def sync_to_jira(
         jira_base_url=jira_base_url,
         auth_headers=auth_headers,
         issue_key=issue_key,
-        decision=latest_decision,
+        proposal=proposal,
         verdict_counts=verdict_counts,
         findings=all_findings,
     )
 
-    # Mark the decision as synced
-    decisions_db.mark_decision_jira_synced(latest_decision.id, db_session)
+    # Mark as synced
+    decisions_db.mark_proposal_jira_synced(proposal_id, tenant_id, db_session)
     db_session.flush()
 
     logger.info(
@@ -305,12 +302,12 @@ def _post_comment(
     jira_base_url: str,
     auth_headers: dict[str, str],
     issue_key: str,
-    decision: ProposalReviewProposalDecision | None,
+    proposal: ProposalReviewProposal,
     verdict_counts: dict[str, int],
     findings: list[ProposalReviewFinding],
 ) -> None:
     """POST a structured review summary as a Jira comment."""
-    comment_text = _build_comment_text(decision, verdict_counts, findings)
+    comment_text = _build_comment_text(proposal, verdict_counts, findings)
 
     url = f"{jira_base_url}/rest/api/3/issue/{issue_key}/comment"
     # Jira Cloud uses ADF (Atlassian Document Format) for comments
@@ -342,7 +339,7 @@ def _post_comment(
 
 
 def _build_comment_text(
-    decision: ProposalReviewProposalDecision | None,
+    proposal: ProposalReviewProposal,
     verdict_counts: dict[str, int],
     findings: list[ProposalReviewFinding],
 ) -> str:
@@ -353,8 +350,8 @@ def _build_comment_text(
     lines.append("")
 
     # Decision
-    decision_text = getattr(decision, "decision", "N/A")
-    decision_notes = getattr(decision, "notes", None)
+    decision_text = proposal.status or "N/A"
+    decision_notes = proposal.decision_notes
     lines.append(f"Final Decision: {decision_text}")
     if decision_notes:
         lines.append(f"Notes: {decision_notes}")
@@ -377,8 +374,8 @@ def _build_comment_text(
             rule_name = f.rule.name if f.rule else "Unknown Rule"
             verdict = f.verdict or "N/A"
             officer_action = ""
-            if f.decision:
-                officer_action = f" | Officer: {f.decision.action}"
+            if f.decision_action:
+                officer_action = f" | Officer: {f.decision_action}"
             lines.append(f"  [{verdict}] {rule_name}{officer_action}")
             if f.explanation:
                 # Truncate long explanations

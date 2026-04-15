@@ -56,13 +56,6 @@ export type DocumentRole =
   | "SOW"
   | "OTHER";
 
-export type AuditAction =
-  | "review_triggered"
-  | "finding_decided"
-  | "decision_submitted"
-  | "jira_synced"
-  | "document_uploaded";
-
 // --- Core Interfaces ---
 
 export interface ProposalMetadata {
@@ -78,6 +71,12 @@ export interface Proposal {
   tenant_id: string;
   status: ProposalStatus;
   metadata: ProposalMetadata;
+  // Inline decision fields
+  decision_notes: string | null;
+  decision_officer_id: string | null;
+  decision_at: string | null;
+  jira_synced: boolean;
+  jira_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +113,7 @@ export interface ReviewRun {
   status: ReviewRunStatus;
   total_rules: number;
   completed_rules: number;
+  failed_rules: number;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -123,16 +123,6 @@ export interface ReviewStatus {
   status: ReviewRunStatus;
   total_rules: number;
   completed_rules: number;
-}
-
-export interface FindingDecision {
-  id: string;
-  finding_id: string;
-  officer_id: string;
-  action: DecisionAction;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface Finding {
@@ -152,7 +142,10 @@ export interface Finding {
   rule_name: string | null;
   rule_category: string | null;
   rule_is_hard_stop: boolean | null;
-  decision: FindingDecision | null;
+  // Inline decision fields (no separate decision entity)
+  decision_action: DecisionAction | null;
+  decision_notes: string | null;
+  decided_at: string | null;
 }
 
 export interface ProposalDocument {
@@ -166,26 +159,6 @@ export interface ProposalDocument {
   created_at: string;
 }
 
-export interface ProposalDecision {
-  id: string;
-  proposal_id: string;
-  officer_id: string;
-  decision: ProposalDecisionOutcome;
-  notes: string | null;
-  jira_synced: boolean;
-  jira_synced_at: string | null;
-  created_at: string;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  proposal_id: string;
-  user_id: string | null;
-  action: AuditAction;
-  details: Record<string, unknown> | null;
-  created_at: string;
-}
-
 // --- Grouped findings by category ---
 
 export interface FindingsByCategory {
@@ -193,7 +166,7 @@ export interface FindingsByCategory {
   findings: Finding[];
 }
 
-// --- Verdict → Tag color mapping (shared across components) ---
+// --- Verdict -> Tag color mapping (shared across components) ---
 
 export const VERDICT_CONFIG: Record<
   FindingVerdict,

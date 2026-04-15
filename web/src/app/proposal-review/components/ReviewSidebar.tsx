@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import useSWR from "swr";
 import { Text, Tag, Card } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -11,16 +10,13 @@ import {
 } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useFindings } from "@/app/proposal-review/hooks/useFindings";
 import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
 import DecisionPanel from "@/app/proposal-review/components/DecisionPanel";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import {
   VERDICT_CONFIG,
   type Finding,
   type FindingsByCategory,
-  type AuditLogEntry,
 } from "@/app/proposal-review/types";
 
 // ---------------------------------------------------------------------------
@@ -40,12 +36,11 @@ export default function ReviewSidebar({
   proposalId,
   onDecisionSubmitted,
 }: ReviewSidebarProps) {
-  const { findings, findingsByCategory } = useFindings(proposalId);
-  const { setFocusedFindingId } = useProposalReviewContext();
-
-  const { data: auditLog, isLoading: auditLoading } = useSWR<AuditLogEntry[]>(
-    `/api/proposal-review/proposals/${proposalId}/audit-log`,
-    errorHandlingFetcher
+  const { viewingRunId, setFocusedFindingId } = useProposalReviewContext();
+  const { findings, findingsByCategory } = useFindings(
+    proposalId,
+    false,
+    viewingRunId
   );
 
   const stats = useMemo(() => {
@@ -68,7 +63,8 @@ export default function ReviewSidebar({
     // same category-sorted order as the main checklist panel.
     const unresolvedFindings = findingsByCategory.flatMap((group) =>
       group.findings.filter(
-        (f) => (f.verdict === "FAIL" || f.verdict === "FLAG") && !f.decision
+        (f) =>
+          (f.verdict === "FAIL" || f.verdict === "FLAG") && !f.decision_action
       )
     );
 
@@ -169,21 +165,39 @@ export default function ReviewSidebar({
               </Text>
             </Section>
             {stats.hardStops.map((finding) => (
-              <div key={finding.id} className="flex items-center gap-2 py-1">
-                <Text font="secondary-body" color="text-03">
-                  {finding.rule_name ?? "Unnamed Rule"}
-                </Text>
-                {finding.decision ? (
-                  <Tag
-                    title={finding.decision.action}
-                    color={
-                      finding.decision.action === "VERIFIED" ? "green" : "amber"
-                    }
-                    size="sm"
-                  />
-                ) : (
-                  <Tag title="Unresolved" color="amber" size="sm" />
-                )}
+              <div
+                key={finding.id}
+                role="button"
+                tabIndex={0}
+                className="flex items-center gap-2 py-1 px-2 w-full overflow-hidden rounded-08 hover:bg-background-neutral-02 cursor-pointer"
+                onClick={() => setFocusedFindingId(finding.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFocusedFindingId(finding.id);
+                  }
+                }}
+              >
+                <div className="min-w-0 truncate">
+                  <Text font="secondary-body" color="text-03">
+                    {finding.rule_name ?? "Unnamed Rule"}
+                  </Text>
+                </div>
+                <div className="shrink-0">
+                  {finding.decision_action ? (
+                    <Tag
+                      title={finding.decision_action}
+                      color={
+                        finding.decision_action === "VERIFIED"
+                          ? "green"
+                          : "amber"
+                      }
+                      size="sm"
+                    />
+                  ) : (
+                    <Tag title="Unresolved" color="amber" size="sm" />
+                  )}
+                </div>
               </div>
             ))}
           </Section>
@@ -207,7 +221,7 @@ export default function ReviewSidebar({
                 key={finding.id}
                 role="button"
                 tabIndex={0}
-                className="flex items-center gap-2 py-1 px-2 rounded-08 hover:bg-background-neutral-02 cursor-pointer"
+                className="flex items-center gap-2 py-1 px-2 w-full overflow-hidden rounded-08 hover:bg-background-neutral-02 cursor-pointer"
                 onClick={() => setFocusedFindingId(finding.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -233,49 +247,6 @@ export default function ReviewSidebar({
           </Section>
         </Card>
       )}
-
-      {/* Audit trail */}
-      <Card padding="md" border="solid" background="light">
-        <Section
-          gap={0.5}
-          height="auto"
-          justifyContent="start"
-          alignItems="start"
-        >
-          <Text font="main-ui-action" color="text-04">
-            Audit Trail
-          </Text>
-          {auditLoading && (
-            <div className="flex items-center justify-center py-2">
-              <SimpleLoader />
-            </div>
-          )}
-          {!auditLoading && (!auditLog || auditLog.length === 0) && (
-            <Text font="secondary-body" color="text-03">
-              No activity recorded yet.
-            </Text>
-          )}
-          {auditLog && auditLog.length > 0 && (
-            <Section
-              gap={0.25}
-              height="auto"
-              justifyContent="start"
-              alignItems="start"
-              className="max-h-[200px] overflow-y-auto"
-            >
-              {[...auditLog]
-                .sort(
-                  (a, b) =>
-                    new Date(b.created_at).getTime() -
-                    new Date(a.created_at).getTime()
-                )
-                .map((entry) => (
-                  <AuditEntry key={entry.id} entry={entry} />
-                ))}
-            </Section>
-          )}
-        </Section>
-      </Card>
 
       {/* Decision panel at the bottom */}
       <DecisionPanel
@@ -332,7 +303,9 @@ interface CategoryProgressProps {
 }
 
 function CategoryProgress({ group }: CategoryProgressProps) {
-  const decidedCount = group.findings.filter((f) => f.decision !== null).length;
+  const decidedCount = group.findings.filter(
+    (f) => f.decision_action !== null
+  ).length;
   const total = group.findings.length;
   const allDone = decidedCount === total;
 
@@ -351,45 +324,6 @@ function CategoryProgress({ group }: CategoryProgressProps) {
           <SvgCheckCircle className="h-3.5 w-3.5 text-status-success-03" />
         )}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Audit log entry
-// ---------------------------------------------------------------------------
-
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  review_triggered: "Review triggered",
-  finding_decided: "Finding decided",
-  decision_submitted: "Decision submitted",
-  jira_synced: "Jira synced",
-  document_uploaded: "Document uploaded",
-};
-
-interface AuditEntryProps {
-  entry: AuditLogEntry;
-}
-
-function AuditEntry({ entry }: AuditEntryProps) {
-  const timestamp = new Date(entry.created_at).toLocaleString();
-  const actionLabel = AUDIT_ACTION_LABELS[entry.action] || entry.action;
-
-  return (
-    <div className="flex items-start justify-between gap-2 py-1">
-      <div className="flex flex-col gap-0.5">
-        <Text font="secondary-body" color="text-03">
-          {actionLabel}
-        </Text>
-        {entry.user_id && (
-          <Text font="secondary-body" color="text-03">
-            {`User: ${entry.user_id.slice(0, 8)}...`}
-          </Text>
-        )}
-      </div>
-      <Text font="secondary-body" color="text-03" nowrap>
-        {timestamp}
-      </Text>
     </div>
   );
 }

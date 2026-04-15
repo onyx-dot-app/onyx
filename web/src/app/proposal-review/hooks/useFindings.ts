@@ -7,13 +7,27 @@ import type { Finding, FindingsByCategory } from "@/app/proposal-review/types";
 
 const NATURAL_SORT_OPTIONS = { numeric: true, sensitivity: "base" } as const;
 
-export function useFindings(proposalId: string | null) {
+export function useFindings(
+  proposalId: string | null,
+  polling = false,
+  reviewRunId: string | null = null
+) {
+  const url = proposalId
+    ? `/api/proposal-review/proposals/${proposalId}/findings${
+        reviewRunId ? `?review_run_id=${reviewRunId}` : ""
+      }`
+    : null;
+
   const { data, error, isLoading, mutate } = useSWR<Finding[]>(
-    proposalId ? `/api/proposal-review/proposals/${proposalId}/findings` : null,
-    errorHandlingFetcher
+    url,
+    errorHandlingFetcher,
+    {
+      refreshInterval: polling ? 3000 : 0,
+      revalidateOnFocus: false,
+    }
   );
 
-  const findings = data ?? [];
+  const findings = useMemo(() => data ?? [], [data]);
 
   const findingsByCategory = useMemo(() => {
     const result: FindingsByCategory[] = [];

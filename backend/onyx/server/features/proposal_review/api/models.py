@@ -7,16 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.server.features.proposal_review.db.models import ProposalReviewAuditLog
 from onyx.server.features.proposal_review.db.models import ProposalReviewConfig
-from onyx.server.features.proposal_review.db.models import ProposalReviewDecision
 from onyx.server.features.proposal_review.db.models import ProposalReviewDocument
 from onyx.server.features.proposal_review.db.models import ProposalReviewFinding
 from onyx.server.features.proposal_review.db.models import ProposalReviewImportJob
 from onyx.server.features.proposal_review.db.models import ProposalReviewProposal
-from onyx.server.features.proposal_review.db.models import (
-    ProposalReviewProposalDecision,
-)
 from onyx.server.features.proposal_review.db.models import ProposalReviewRule
 from onyx.server.features.proposal_review.db.models import ProposalReviewRuleset
 from onyx.server.features.proposal_review.db.models import ProposalReviewRun
@@ -181,12 +176,19 @@ class RuleTestResponse(BaseModel):
 
 
 class ProposalResponse(BaseModel):
-    """Thin response -- status + document_id. Metadata comes from Document."""
+    """Proposal response including inline decision fields."""
 
     id: UUID
     document_id: str
     tenant_id: str
     status: str
+    # Inline decision fields
+    decision_notes: str | None = None
+    decision_officer_id: UUID | None = None
+    decision_at: datetime | None = None
+    jira_synced: bool = False
+    jira_synced_at: datetime | None = None
+
     created_at: datetime
     updated_at: datetime
     # Resolved metadata from Document table via field_mapping
@@ -203,6 +205,11 @@ class ProposalResponse(BaseModel):
             document_id=proposal.document_id,
             tenant_id=proposal.tenant_id,
             status=proposal.status,
+            decision_notes=proposal.decision_notes,
+            decision_officer_id=proposal.decision_officer_id,
+            decision_at=proposal.decision_at,
+            jira_synced=proposal.jira_synced,
+            jira_synced_at=proposal.jira_synced_at,
             created_at=proposal.created_at,
             updated_at=proposal.updated_at,
             metadata=metadata or {},
@@ -232,6 +239,7 @@ class ReviewRunResponse(BaseModel):
     status: str
     total_rules: int
     completed_rules: int
+    failed_rules: int
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
@@ -246,6 +254,7 @@ class ReviewRunResponse(BaseModel):
             status=run.status,
             total_rules=run.total_rules,
             completed_rules=run.completed_rules,
+            failed_rules=run.failed_rules,
             started_at=run.started_at,
             completed_at=run.completed_at,
             created_at=run.created_at,
@@ -255,28 +264,6 @@ class ReviewRunResponse(BaseModel):
 # =============================================================================
 # Finding Schemas
 # =============================================================================
-
-
-class FindingDecisionResponse(BaseModel):
-    id: UUID
-    finding_id: UUID
-    officer_id: UUID
-    action: str
-    notes: str | None
-    created_at: datetime
-    updated_at: datetime
-
-    @classmethod
-    def from_model(cls, decision: ProposalReviewDecision) -> "FindingDecisionResponse":
-        return cls(
-            id=decision.id,
-            finding_id=decision.finding_id,
-            officer_id=decision.officer_id,
-            action=decision.action,
-            notes=decision.notes,
-            created_at=decision.created_at,
-            updated_at=decision.updated_at,
-        )
 
 
 class FindingResponse(BaseModel):
@@ -296,15 +283,13 @@ class FindingResponse(BaseModel):
     rule_name: str | None = None
     rule_category: str | None = None
     rule_is_hard_stop: bool | None = None
-    # Nested decision if exists
-    decision: FindingDecisionResponse | None = None
+    # Inline decision fields
+    decision_action: str | None = None
+    decision_notes: str | None = None
+    decided_at: datetime | None = None
 
     @classmethod
     def from_model(cls, finding: ProposalReviewFinding) -> "FindingResponse":
-        decision = None
-        if finding.decision is not None:
-            decision = FindingDecisionResponse.from_model(finding.decision)
-
         rule_name = None
         rule_category = None
         rule_is_hard_stop = None
@@ -329,7 +314,9 @@ class FindingResponse(BaseModel):
             rule_name=rule_name,
             rule_category=rule_category,
             rule_is_hard_stop=rule_is_hard_stop,
-            decision=decision,
+            decision_action=finding.decision_action,
+            decision_notes=finding.decision_notes,
+            decided_at=finding.decided_at,
         )
 
 
@@ -349,28 +336,24 @@ class ProposalDecisionCreate(BaseModel):
 
 
 class ProposalDecisionResponse(BaseModel):
-    id: UUID
+    """Response after recording a proposal-level decision."""
+
     proposal_id: UUID
-    officer_id: UUID
-    decision: str
-    notes: str | None
+    status: str
+    decision_notes: str | None
     jira_synced: bool
-    jira_synced_at: datetime | None
-    created_at: datetime
+    decision_at: datetime | None
 
     @classmethod
-    def from_model(
-        cls, decision: ProposalReviewProposalDecision
+    def from_proposal(
+        cls, proposal: ProposalReviewProposal
     ) -> "ProposalDecisionResponse":
         return cls(
-            id=decision.id,
-            proposal_id=decision.proposal_id,
-            officer_id=decision.officer_id,
-            decision=decision.decision,
-            notes=decision.notes,
-            jira_synced=decision.jira_synced,
-            jira_synced_at=decision.jira_synced_at,
-            created_at=decision.created_at,
+            proposal_id=proposal.id,
+            status=proposal.status,
+            decision_notes=proposal.decision_notes,
+            jira_synced=proposal.jira_synced,
+            decision_at=proposal.decision_at,
         )
 
 
@@ -475,31 +458,6 @@ class ProposalDocumentResponse(BaseModel):
             uploaded_by=doc.uploaded_by,
             extracted_text=getattr(doc, "extracted_text", None),
             created_at=doc.created_at,
-        )
-
-
-# =============================================================================
-# Audit Log Schemas
-# =============================================================================
-
-
-class AuditLogEntry(BaseModel):
-    id: UUID
-    proposal_id: UUID
-    user_id: UUID | None
-    action: str
-    details: dict[str, Any] | None
-    created_at: datetime
-
-    @classmethod
-    def from_model(cls, entry: ProposalReviewAuditLog) -> "AuditLogEntry":
-        return cls(
-            id=entry.id,
-            proposal_id=entry.proposal_id,
-            user_id=entry.user_id,
-            action=entry.action,
-            details=entry.details,
-            created_at=entry.created_at,
         )
 
 

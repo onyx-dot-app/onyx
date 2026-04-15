@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import Form
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,6 @@ from onyx.server.features.proposal_review.api.models import BulkRuleUpdateReques
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateResponse
 from onyx.server.features.proposal_review.api.models import ImportJobResponse
 from onyx.server.features.proposal_review.api.models import RuleCreate
-from onyx.server.features.proposal_review.api.models import RuleRefinementRequest
 from onyx.server.features.proposal_review.api.models import RuleResponse
 from onyx.server.features.proposal_review.api.models import RulesetCreate
 from onyx.server.features.proposal_review.api.models import RulesetResponse
@@ -437,9 +437,10 @@ def test_rule(
 
 
 @router.post("/rules/{rule_id}/refine")
-def refine_rule_endpoint(
+async def refine_rule_endpoint(
     rule_id: UUID,
-    request: RuleRefinementRequest,
+    answer: str = Form(...),
+    file: UploadFile | None = None,
     user: User = Depends(  # noqa: ARG001
         require_permission(Permission.MANAGE_CONNECTORS)
     ),
@@ -449,7 +450,8 @@ def refine_rule_endpoint(
 
     Re-runs the LLM to produce a refined prompt_template that incorporates
     the user's institution-specific information, then clears the refinement
-    flag on the rule.
+    flag on the rule.  An optional file attachment (pdf, docx, etc.) can be
+    included — its extracted text is appended to the answer.
     """
     tenant_id = get_current_tenant_id()
     rule = rulesets_db.get_rule_with_tenant_check(rule_id, tenant_id, db_session)
@@ -468,6 +470,40 @@ def refine_rule_endpoint(
             "Rule is marked for refinement but has no refinement question",
         )
 
+    # Build the combined answer from the text field + optional attachment
+    combined_answer = answer.strip()
+
+    if file and file.filename:
+        import io
+
+        file_content = await file.read()
+        if file_content:
+            filename = file.filename
+            file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+            if file_ext in ("txt", "text", "md"):
+                file_text = file_content.decode("utf-8", errors="replace")
+            else:
+                try:
+                    from onyx.file_processing.extract_file_text import (
+                        extract_file_text,
+                    )
+
+                    file_text = extract_file_text(
+                        file=io.BytesIO(file_content),
+                        file_name=filename,
+                    )
+                except Exception as e:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"Failed to extract text from file: {str(e)}",
+                    )
+
+            if file_text and file_text.strip():
+                combined_answer += (
+                    f"\n\n--- Attached file: {filename} ---\n{file_text.strip()}"
+                )
+
     from onyx.llm.factory import get_default_llm
     from onyx.server.features.proposal_review.engine.checklist_importer import (
         refine_rule,
@@ -481,7 +517,7 @@ def refine_rule_endpoint(
             rule_description=rule.description,
             rule_prompt_template=rule.prompt_template,
             refinement_question=rule.refinement_question,
-            user_answer=request.answer,
+            user_answer=combined_answer,
             llm=llm,
         )
     except RuntimeError as e:

@@ -2,7 +2,12 @@
 
 import { useEffect, useCallback, useState, useRef } from "react";
 import { Button, Text } from "@opal/components";
-import { SvgPlayCircle, SvgChevronDown, SvgChevronUp } from "@opal/icons";
+import {
+  SvgPlayCircle,
+  SvgRefreshCw,
+  SvgChevronDown,
+  SvgChevronUp,
+} from "@opal/icons";
 import { IllustrationContent } from "@opal/layouts";
 import SvgEmpty from "@opal/illustrations/empty";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -13,11 +18,16 @@ import {
 } from "@/refresh-components/Collapsible";
 import RulesetSelector from "@/app/proposal-review/components/RulesetSelector";
 import ReviewProgress from "@/app/proposal-review/components/ReviewProgress";
+import RunHistorySelector from "@/app/proposal-review/components/RunHistorySelector";
 import FindingCard from "@/app/proposal-review/components/FindingCard";
 import { useFindings } from "@/app/proposal-review/hooks/useFindings";
 import { useReviewStatus } from "@/app/proposal-review/hooks/useReviewStatus";
+import { useReviewRuns } from "@/app/proposal-review/hooks/useReviewRuns";
 import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
-import { triggerReview } from "@/app/proposal-review/services/apiServices";
+import {
+  triggerReview,
+  retryFailedRules,
+} from "@/app/proposal-review/services/apiServices";
 import type { Finding } from "@/app/proposal-review/types";
 
 // ---------------------------------------------------------------------------
@@ -37,7 +47,10 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     selectedRulesetId,
     isReviewRunning,
     setIsReviewRunning,
+    currentReviewRunId,
     setCurrentReviewRunId,
+    viewingRunId,
+    setViewingRunId,
     focusedFindingId,
     setFocusedFindingId,
     resetReviewState,
@@ -61,38 +74,68 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     isReviewRunning
   );
 
-  // Fetch findings
+  // Fetch all runs for the history selector
+  const { runs: reviewRuns, mutate: mutateReviewRuns } =
+    useReviewRuns(proposalId);
+
+  const isViewingLatest =
+    viewingRunId === null || viewingRunId === reviewRuns[0]?.id;
+
+  // Fetch findings — poll while review is running so results appear in real time.
+  // When viewing an older run, don't poll.
   const {
     findingsByCategory,
     isLoading: findingsLoading,
     mutate: mutateFindings,
     findings,
-  } = useFindings(proposalId);
+  } = useFindings(
+    proposalId,
+    isViewingLatest && isReviewRunning,
+    isViewingLatest ? null : viewingRunId
+  );
 
-  // When review completes, stop polling and load findings
+  // When review completes, stop polling and load findings.
+  // Guards: (1) must be actively polling, (2) must have status data,
+  // (3) must match the run we triggered — prevents stale COMPLETED status
+  // from a previous run from immediately killing polling on re-run.
   useEffect(() => {
-    if (!reviewStatus) return;
+    if (!isReviewRunning || !reviewStatus || !currentReviewRunId) return;
+    if (reviewStatus.id !== currentReviewRunId) return;
     if (
       reviewStatus.status === "COMPLETED" ||
       reviewStatus.status === "FAILED"
     ) {
       setIsReviewRunning(false);
-      if (reviewStatus.status === "COMPLETED") {
-        mutateFindings();
-      }
+      mutateFindings();
+      mutateReviewRuns();
     }
-  }, [reviewStatus, setIsReviewRunning, mutateFindings]);
+  }, [
+    reviewStatus,
+    isReviewRunning,
+    currentReviewRunId,
+    setIsReviewRunning,
+    mutateFindings,
+    mutateReviewRuns,
+  ]);
 
   const handleRunReview = useCallback(async () => {
     if (!selectedRulesetId) return;
 
     setTriggerError(null);
+    // Clear run ID first — blocks the completion effect and hides stale
+    // data via isTriggerInFlight until the trigger API returns.
+    setCurrentReviewRunId(null);
     setIsReviewRunning(true);
+    setViewingRunId(null);
 
     try {
       const result = await triggerReview(proposalId, selectedRulesetId);
       setCurrentReviewRunId(result.id);
+      // Revalidate caches — the backend APIs now return data for the new
+      // (latest) run, so SWR naturally picks up fresh data.
       mutateReviewStatus();
+      mutateFindings();
+      mutateReviewRuns();
     } catch (err) {
       setIsReviewRunning(false);
       setTriggerError(
@@ -104,8 +147,43 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
     selectedRulesetId,
     setIsReviewRunning,
     setCurrentReviewRunId,
+    mutateFindings,
+    mutateReviewStatus,
+    mutateReviewRuns,
+  ]);
+
+  const handleRetryFailed = useCallback(async () => {
+    setTriggerError(null);
+    setCurrentReviewRunId(null);
+    setIsReviewRunning(true);
+    setViewingRunId(null);
+
+    try {
+      const result = await retryFailedRules(proposalId);
+      setCurrentReviewRunId(result.id);
+      mutateReviewStatus();
+    } catch (err) {
+      setIsReviewRunning(false);
+      setTriggerError(err instanceof Error ? err.message : "Failed to retry");
+    }
+  }, [
+    proposalId,
+    setIsReviewRunning,
+    setCurrentReviewRunId,
     mutateReviewStatus,
   ]);
+
+  // True between clicking "Run Review" and the trigger API returning.
+  // During this window, currentReviewRunId is null — we hide stale data
+  // from the previous run so the UI looks clean.
+  const isTriggerInFlight = isReviewRunning && !currentReviewRunId;
+
+  const showRetryButton =
+    isViewingLatest &&
+    !isReviewRunning &&
+    (reviewStatus?.status === "COMPLETED" ||
+      reviewStatus?.status === "FAILED") &&
+    (reviewStatus?.failed_rules ?? 0) > 0;
 
   const handleFocusHandled = useCallback(
     () => setFocusedFindingId(null),
@@ -128,7 +206,20 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
         >
           {isReviewRunning ? "Running..." : "Run Review"}
         </Button>
-        {reviewStatus && <ReviewProgress reviewStatus={reviewStatus} />}
+        {reviewStatus && !isTriggerInFlight && (
+          <ReviewProgress reviewStatus={reviewStatus} />
+        )}
+        {showRetryButton && (
+          <Button
+            variant="default"
+            prominence="secondary"
+            icon={SvgRefreshCw}
+            size="sm"
+            onClick={handleRetryFailed}
+          >
+            Retry Failed
+          </Button>
+        )}
         {isReviewRunning && !reviewStatus && (
           <SimpleLoader className="h-4 w-4" />
         )}
@@ -142,9 +233,18 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
         </div>
       )}
 
+      {/* Run history selector */}
+      {reviewRuns.length > 1 && (
+        <RunHistorySelector
+          runs={reviewRuns}
+          selectedRunId={viewingRunId}
+          onSelectRun={setViewingRunId}
+        />
+      )}
+
       {/* Findings list */}
       <div className="flex-1 overflow-y-auto">
-        {!isReviewRunning && findingsLoading && (
+        {(isTriggerInFlight || (!isReviewRunning && findingsLoading)) && (
           <div className="flex items-center justify-center py-8">
             <SimpleLoader className="h-6 w-6" />
           </div>
@@ -160,7 +260,7 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
           </div>
         )}
 
-        {!isReviewRunning && findingsByCategory.length > 0 && (
+        {!isTriggerInFlight && findingsByCategory.length > 0 && (
           <div className="flex flex-col gap-3 p-4">
             {findingsByCategory.map((group) => (
               <CategoryGroup
@@ -201,7 +301,9 @@ function CategoryGroup({
   const failCount = findings.filter(
     (f) => f.verdict === "FAIL" || f.verdict === "FLAG"
   ).length;
-  const decidedCount = findings.filter((f) => f.decision !== null).length;
+  const decidedCount = findings.filter(
+    (f) => f.decision_action !== null
+  ).length;
 
   // Default open if there are failures/flags
   const [isOpen, setIsOpen] = useState(failCount > 0);

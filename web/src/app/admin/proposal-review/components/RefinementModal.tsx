@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, Text } from "@opal/components";
-import { SvgEdit } from "@opal/icons";
+import { SvgEdit, SvgPaperclip, SvgX } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -24,10 +24,13 @@ function RefinementModal({
   onRefined,
 }: RefinementModalProps) {
   const [answer, setAnswer] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleClose() {
     setAnswer("");
+    setFile(null);
     setLoading(false);
     onClose();
   }
@@ -36,10 +39,14 @@ function RefinementModal({
     if (!rule || !answer.trim()) return;
     setLoading(true);
     try {
+      const formData = new FormData();
+      formData.append("answer", answer.trim());
+      if (file) {
+        formData.append("file", file);
+      }
       const res = await fetch(`/api/proposal-review/rules/${rule.id}/refine`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer: answer.trim() }),
+        body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -68,7 +75,6 @@ function RefinementModal({
         <Modal.Header
           icon={SvgEdit}
           title="Refine Rule"
-          description={rule.name}
           onClose={handleClose}
         />
 
@@ -82,6 +88,22 @@ function RefinementModal({
             </Section>
           ) : (
             <Section alignItems="start" gap={1}>
+              <Section alignItems="start" gap={0.25}>
+                <Text font="main-ui-action" color="text-04">
+                  Rule
+                </Text>
+                <div className="w-full rounded-08 bg-background-neutral-02 p-3 flex flex-col gap-1">
+                  <Text font="main-ui-action" color="text-05">
+                    {rule.name}
+                  </Text>
+                  {rule.description && (
+                    <Text font="secondary-body" color="text-03">
+                      {rule.description}
+                    </Text>
+                  )}
+                </div>
+              </Section>
+
               <Section alignItems="start" gap={0.25}>
                 <Text font="main-ui-action" color="text-04">
                   Question from the AI
@@ -107,6 +129,43 @@ function RefinementModal({
                   placeholder="Enter your answer..."
                   rows={5}
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md,.rtf"
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0] ?? null;
+                    setFile(selected);
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                />
+                {file ? (
+                  <div className="flex items-center gap-2 w-full rounded-08 bg-background-neutral-02 px-3 py-2">
+                    <SvgPaperclip className="size-4 shrink-0 text-text-03" />
+                    <div className="truncate flex-1">
+                      <Text font="secondary-body" color="text-04">
+                        {file.name}
+                      </Text>
+                    </div>
+                    <Button
+                      icon={SvgX}
+                      prominence="tertiary"
+                      size="2xs"
+                      onClick={() => setFile(null)}
+                      tooltip="Remove file"
+                    />
+                  </div>
+                ) : (
+                  <Button
+                    icon={SvgPaperclip}
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Attach file
+                  </Button>
+                )}
               </Section>
             </Section>
           )}

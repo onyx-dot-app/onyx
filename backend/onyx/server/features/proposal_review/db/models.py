@@ -126,6 +126,22 @@ class ProposalReviewProposal(Base):
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'PENDING'")
     )
+
+    # Inline proposal-level decision fields
+    decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_officer_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id"), nullable=True
+    )
+    decision_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    jira_synced: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    jira_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -143,18 +159,8 @@ class ProposalReviewProposal(Base):
         back_populates="proposal",
         cascade="all, delete-orphan",
     )
-    proposal_decisions: Mapped[list["ProposalReviewProposalDecision"]] = relationship(
-        "ProposalReviewProposalDecision",
-        back_populates="proposal",
-        cascade="all, delete-orphan",
-    )
     documents: Mapped[list["ProposalReviewDocument"]] = relationship(
         "ProposalReviewDocument",
-        back_populates="proposal",
-        cascade="all, delete-orphan",
-    )
-    audit_logs: Mapped[list["ProposalReviewAuditLog"]] = relationship(
-        "ProposalReviewAuditLog",
         back_populates="proposal",
         cascade="all, delete-orphan",
     )
@@ -187,6 +193,9 @@ class ProposalReviewRun(Base):
     )
     total_rules: Mapped[int] = mapped_column(Integer, nullable=False)
     completed_rules: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    failed_rules: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
     started_at: Mapped[datetime.datetime | None] = mapped_column(
@@ -242,6 +251,17 @@ class ProposalReviewFinding(Base):
     suggested_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Inline per-finding decision fields
+    decision_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_officer_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id"), nullable=True
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -253,82 +273,6 @@ class ProposalReviewFinding(Base):
         "ProposalReviewRun", back_populates="findings"
     )
     rule: Mapped["ProposalReviewRule"] = relationship("ProposalReviewRule")
-    decision: Mapped["ProposalReviewDecision | None"] = relationship(
-        "ProposalReviewDecision",
-        back_populates="finding",
-        uselist=False,
-        cascade="all, delete-orphan",
-    )
-
-
-class ProposalReviewDecision(Base):
-    """Officer's decision on a single finding."""
-
-    __tablename__ = "proposal_review_decision"
-    __table_args__ = (UniqueConstraint("finding_id"),)
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        server_default=text("gen_random_uuid()"),
-    )
-    finding_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("proposal_review_finding.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    officer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("user.id"), nullable=False
-    )
-    action: Mapped[str] = mapped_column(Text, nullable=False)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    finding: Mapped["ProposalReviewFinding"] = relationship(
-        "ProposalReviewFinding", back_populates="decision"
-    )
-
-
-class ProposalReviewProposalDecision(Base):
-    """Officer's final decision on the entire proposal."""
-
-    __tablename__ = "proposal_review_proposal_decision"
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        server_default=text("gen_random_uuid()"),
-    )
-    proposal_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("proposal_review_proposal.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    officer_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("user.id"), nullable=False
-    )
-    decision: Mapped[str] = mapped_column(Text, nullable=False)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    jira_synced: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
-    jira_synced_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    proposal: Mapped["ProposalReviewProposal"] = relationship(
-        "ProposalReviewProposal", back_populates="proposal_decisions"
-    )
 
 
 class ProposalReviewDocument(Base):
@@ -361,36 +305,6 @@ class ProposalReviewDocument(Base):
 
     proposal: Mapped["ProposalReviewProposal"] = relationship(
         "ProposalReviewProposal", back_populates="documents"
-    )
-
-
-class ProposalReviewAuditLog(Base):
-    """Audit trail for all proposal review actions."""
-
-    __tablename__ = "proposal_review_audit_log"
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        server_default=text("gen_random_uuid()"),
-    )
-    proposal_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("proposal_review_proposal.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("user.id"), nullable=True
-    )
-    action: Mapped[str] = mapped_column(Text, nullable=False)
-    details: Mapped[dict | None] = mapped_column(PGJSONB(), nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    proposal: Mapped["ProposalReviewProposal"] = relationship(
-        "ProposalReviewProposal", back_populates="audit_logs"
     )
 
 

@@ -68,6 +68,7 @@ function RulesetDetailPage() {
 
   // Import job tracking — persists across navigation via the hook's SWR polling
   const [importJobId, setImportJobId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const handledJobRef = useRef<string | null>(null);
   const { importJob, isProcessing, isComplete, isFailed } = useImportStatus(
     rulesetId,
@@ -77,6 +78,9 @@ function RulesetDetailPage() {
   // When import completes, refresh the ruleset and show toast
   useEffect(() => {
     if (!importJob || handledJobRef.current === importJob.id) return;
+
+    // SWR has picked up the job — safe to drop the eager upload indicator
+    setIsUploading(false);
 
     if (isComplete) {
       handledJobRef.current = importJob.id;
@@ -99,6 +103,7 @@ function RulesetDetailPage() {
 
   async function handleImportFile(file: File) {
     setShowImportFlow(false);
+    setIsUploading(true);
 
     try {
       const formData = new FormData();
@@ -117,6 +122,7 @@ function RulesetDetailPage() {
       const data = await res.json();
       setImportJobId(data.import_job_id);
     } catch (err) {
+      setIsUploading(false);
       toast.error(err instanceof Error ? err.message : "Import failed");
     }
   }
@@ -177,7 +183,7 @@ function RulesetDetailPage() {
         body: JSON.stringify(ruleData),
       });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Failed to update rule");
       }
       toast.success("Rule updated.");
@@ -191,7 +197,7 @@ function RulesetDetailPage() {
         }
       );
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Failed to create rule");
       }
       toast.success("Rule created.");
@@ -289,9 +295,13 @@ function RulesetDetailPage() {
       rules = rules.filter((r) => r.refinement_needed);
     }
 
-    // Default sort by category (natural order), then name within each category
+    // Sort: refinement-needed first, then by category + name
     const natural = { numeric: true, sensitivity: "base" } as const;
     return [...rules].sort((a, b) => {
+      // Refinement-needed rules float to the top
+      if (a.refinement_needed !== b.refinement_needed) {
+        return a.refinement_needed ? -1 : 1;
+      }
       const catCmp = (a.category ?? "").localeCompare(
         b.category ?? "",
         undefined,
@@ -301,6 +311,15 @@ function RulesetDetailPage() {
       return a.name.localeCompare(b.name, undefined, natural);
     });
   }, [ruleset, ruleSearch, categoryFilter, statusFilter]);
+
+  const refinementRules = useMemo(
+    () => filteredRules.filter((r) => r.refinement_needed),
+    [filteredRules]
+  );
+  const otherRules = useMemo(
+    () => filteredRules.filter((r) => !r.refinement_needed),
+    [filteredRules]
+  );
 
   const filteredRuleIds = useMemo(
     () => new Set(filteredRules.map((r) => r.id)),
@@ -360,10 +379,14 @@ function RulesetDetailPage() {
           />
         </div>
         <div
-          className="flex-1 cursor-pointer"
+          className="flex-1 min-w-0 cursor-pointer"
           onClick={() => {
-            setEditingRule(rule);
-            setShowRuleEditor(true);
+            if (rule.refinement_needed) {
+              setRefineTarget(rule);
+            } else {
+              setEditingRule(rule);
+              setShowRuleEditor(true);
+            }
           }}
         >
           <Card padding="md" border="solid" background="light">
@@ -374,7 +397,7 @@ function RulesetDetailPage() {
               description={rule.description || rule.category || undefined}
               rightChildren={
                 <div
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 shrink-0"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {rule.category && (
@@ -504,7 +527,15 @@ function RulesetDetailPage() {
       <SettingsLayouts.Header
         icon={SvgClipboard}
         title={ruleset.name}
-        description={ruleset.description || undefined}
+        description={
+          ruleset.description
+            ? `${ruleset.description} · ${ruleset.rules.length} rule${
+                ruleset.rules.length !== 1 ? "s" : ""
+              }`
+            : `${ruleset.rules.length} rule${
+                ruleset.rules.length !== 1 ? "s" : ""
+              }`
+        }
         backButton
         editable
         onTitleChange={async (newName) => {
@@ -514,15 +545,17 @@ function RulesetDetailPage() {
       />
       <SettingsLayouts.Body>
         {/* Import progress bar */}
-        {isProcessing && importJob && (
+        {(isUploading || (isProcessing && importJob)) && (
           <div className="flex items-center gap-3 px-4 py-3 rounded-08 bg-background-neutral-02">
             <div className="h-2 flex-1 min-w-[80px] rounded-08 bg-border-02 animate-pulse" />
             <Text font="secondary-body" color="text-03" nowrap>
-              {importJob.rules_created > 0
+              {importJob && importJob.rules_created > 0
                 ? `${importJob.rules_created} rule${
                     importJob.rules_created !== 1 ? "s" : ""
                   } created`
-                : `Analyzing "${importJob.source_filename}"...`}
+                : isUploading
+                  ? "Uploading..."
+                  : `Analyzing "${importJob!.source_filename}"...`}
             </Text>
           </div>
         )}
@@ -645,7 +678,13 @@ function RulesetDetailPage() {
           />
         ) : (
           <div className="flex flex-col gap-2">
-            {filteredRules.map((rule) => (
+            {refinementRules.map((rule) => (
+              <RuleCard key={rule.id} rule={rule} />
+            ))}
+            {refinementRules.length > 0 && otherRules.length > 0 && (
+              <hr className="border-border-02" />
+            )}
+            {otherRules.map((rule) => (
               <RuleCard key={rule.id} rule={rule} />
             ))}
           </div>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextvars
 import os
+import time
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -27,8 +28,16 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def _execute_review(review_run_id: str) -> None:
-    """Core review logic, separated for testability."""
+def _execute_review(
+    review_run_id: str,
+    rule_ids: list[str] | None = None,
+) -> None:
+    """Core review logic, separated for testability.
+
+    When rule_ids is None, evaluates all active rules in the run's ruleset
+    (full run). When rule_ids is provided, deletes the old error findings
+    for those rules and re-evaluates only them (retry flow).
+    """
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
     from onyx.server.features.proposal_review.db import rulesets as rulesets_db
@@ -39,19 +48,49 @@ def _execute_review(review_run_id: str) -> None:
     from onyx.server.features.proposal_review.engine.foa_fetcher import fetch_foa
 
     run_uuid = UUID(review_run_id)
+    is_retry = rule_ids is not None
 
-    # Step 1: Set run status to RUNNING
+    if is_retry and not rule_ids:
+        logger.warning(f"Retry called with empty rule_ids for run {review_run_id}")
+        # Reset status since the API already set it to RUNNING
+        with get_session_with_current_tenant() as db_session:
+            run = findings_db.get_review_run(run_uuid, db_session)
+            if run and run.status == "RUNNING":
+                run.status = "COMPLETED"
+                db_session.commit()
+        return
+
+    # Step 1: Set run status to RUNNING; for retries, clean up old findings
     with get_session_with_current_tenant() as db_session:
         run = findings_db.get_review_run(run_uuid, db_session)
         if not run:
             raise ValueError(f"Review run {review_run_id} not found")
 
-        run.status = "RUNNING"
-        run.started_at = datetime.now(timezone.utc)
-        db_session.commit()
-
         proposal_id = run.proposal_id
         ruleset_id = run.ruleset_id
+
+        if is_retry:
+            rule_id_set = set(rule_ids)
+            # Delete old error findings for the rules being retried
+            failed = findings_db.get_failed_findings_for_run(run_uuid, db_session)
+            failed_for_rules = [f for f in failed if str(f.rule_id) in rule_id_set]
+            if failed_for_rules:
+                findings_db.delete_findings(
+                    [f.id for f in failed_for_rules], db_session
+                )
+            # Roll back counters so re-evaluated rules are tracked correctly.
+            # completed_rules is rolled back by the number of rules being
+            # re-evaluated (not findings — a rule may lack a finding if
+            # _save_error_finding itself failed). failed_rules is rolled back
+            # by the number of error findings actually deleted.
+            run.completed_rules = max(0, run.completed_rules - len(rule_ids))
+            run.failed_rules = max(0, run.failed_rules - len(failed_for_rules))
+            run.completed_at = None
+
+        run.status = "RUNNING"
+        if not is_retry:
+            run.started_at = datetime.now(timezone.utc)
+        db_session.commit()
 
     # Step 2: Assemble proposal context
     with get_session_with_current_tenant() as db_session:
@@ -73,76 +112,77 @@ def _execute_review(review_run_id: str) -> None:
         except Exception as e:
             logger.warning(f"FOA auto-fetch failed (non-fatal): {e}")
 
-    # Step 4: Get all active rules for the ruleset
-    with get_session_with_current_tenant() as db_session:
-        rules = rulesets_db.list_rules_by_ruleset(
-            ruleset_id, db_session, active_only=True
-        )
-        # Detach rules from the session so we can use them outside
-        rule_data = [
-            {
-                "id": rule.id,
-                "name": rule.name,
-                "prompt_template": rule.prompt_template,
-                "rule_type": rule.rule_type,
-                "rule_intent": rule.rule_intent,
-                "is_hard_stop": rule.is_hard_stop,
-                "category": rule.category,
-            }
-            for rule in rules
-        ]
+    # Step 4: Determine which rules to evaluate
+    if is_retry:
+        # Retry: use the specific rule IDs passed in
+        rules_to_eval = rule_ids
+    else:
+        # Full run: get all active rules for the ruleset
+        with get_session_with_current_tenant() as db_session:
+            rules = rulesets_db.list_rules_by_ruleset(
+                ruleset_id, db_session, active_only=True
+            )
+            rules_to_eval = [str(rule.id) for rule in rules]
 
-    if not rule_data:
-        logger.warning(f"No active rules found for ruleset {ruleset_id}")
+        if not rules_to_eval:
+            logger.warning(f"No active rules found for ruleset {ruleset_id}")
+            with get_session_with_current_tenant() as db_session:
+                run = findings_db.get_review_run(run_uuid, db_session)
+                if run:
+                    run.status = "COMPLETED"
+                    run.completed_at = datetime.now(timezone.utc)
+                    db_session.commit()
+            return
+
+        # Step 5: Update total_rules on the run (full run only)
         with get_session_with_current_tenant() as db_session:
             run = findings_db.get_review_run(run_uuid, db_session)
             if run:
-                run.status = "COMPLETED"
-                run.completed_at = datetime.now(timezone.utc)
+                run.total_rules = len(rules_to_eval)
                 db_session.commit()
-        return
-
-    # Step 5: Update total_rules on the run
-    with get_session_with_current_tenant() as db_session:
-        run = findings_db.get_review_run(run_uuid, db_session)
-        if run:
-            run.total_rules = len(rule_data)
-            db_session.commit()
 
     # Step 6: Evaluate rules in parallel via ThreadPoolExecutor
     parallel_workers = int(os.environ.get("PROPOSAL_REVIEW_PARALLEL_WORKERS", "4"))
-    workers = min(parallel_workers, len(rule_data))
+    workers = min(parallel_workers, len(rules_to_eval))
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_to_rule = {
+        future_to_rule_id = {
             executor.submit(
                 contextvars.copy_context().run,
                 _evaluate_single_rule,
                 review_run_id,
-                str(rule_info["id"]),
+                rid,
                 proposal_id,
                 context,
-            ): rule_info
-            for rule_info in rule_data
+            ): rid
+            for rid in rules_to_eval
         }
 
-        for future in as_completed(future_to_rule):
-            rule_info = future_to_rule[future]
+        for future in as_completed(future_to_rule_id):
+            rid = future_to_rule_id[future]
+            succeeded = True
             try:
-                future.result()
+                succeeded = future.result()
             except Exception as e:
+                succeeded = False
                 logger.error(
-                    f"Rule {rule_info['id']} '{rule_info['name']}' failed: {e}",
+                    f"Rule {rid} failed: {e}",
                     exc_info=True,
                 )
 
-            # Increment completed_rules atomically — tracks processed count
-            # (including errors) so the frontend progress bar always reaches 100%.
+            # Increment completed_rules (and failed_rules on error) atomically
+            # so the frontend progress bar always reaches 100%.
+            updates: dict = {
+                "completed_rules": ProposalReviewRun.completed_rules + 1,
+            }
+            if not succeeded:
+                updates["failed_rules"] = ProposalReviewRun.failed_rules + 1
+
             with get_session_with_current_tenant() as db_session:
                 db_session.execute(
                     update(ProposalReviewRun)
                     .where(ProposalReviewRun.id == run_uuid)
-                    .values(completed_rules=ProposalReviewRun.completed_rules + 1)
+                    .values(**updates)
                 )
                 db_session.commit()
 
@@ -156,7 +196,8 @@ def _execute_review(review_run_id: str) -> None:
 
     logger.info(
         f"Review run {review_run_id} completed: "
-        f"{len(rule_data)} rules evaluated in parallel"
+        f"{len(rules_to_eval)} rules evaluated"
+        f"{' (retry)' if is_retry else ''}"
     )
 
 
@@ -249,31 +290,53 @@ def _mark_run_failed(review_run_id: str) -> None:
         logger.error(f"Failed to mark run {review_run_id} as FAILED: {e}")
 
 
+_MAX_RULE_RETRIES = int(os.environ.get("PROPOSAL_REVIEW_RULE_MAX_RETRIES", "2"))
+_RETRY_BACKOFF_BASE = 2  # seconds — retry waits 2s, 4s, ...
+
+
 def _evaluate_single_rule(
     review_run_id: str,
     rule_id: str,
     proposal_id: "UUID",
     context: "ProposalContext",
-) -> None:
+) -> bool:
     """Evaluate one rule, save the finding. Called from ThreadPoolExecutor.
 
     Context is shared in-memory from the parent — no DB re-fetch needed.
-    On evaluation failure, an error finding (NEEDS_REVIEW) is saved so the
-    officer sees which rule failed.
+    Retries up to _MAX_RULE_RETRIES times with exponential backoff on failure
+    (e.g. LLM timeout). On final failure, an error finding (NEEDS_REVIEW) is
+    saved so the officer sees which rule failed.
+
+    Returns True on success, False if all attempts failed.
     """
-    try:
-        _evaluate_and_save(review_run_id, rule_id, proposal_id, context)
-    except Exception as e:
-        logger.error(
-            f"Rule {rule_id} evaluation failed: {e}",
-            exc_info=True,
-        )
-        _save_error_finding(
-            review_run_id=review_run_id,
-            rule_id=rule_id,
-            proposal_id=proposal_id,
-            error=str(e),
-        )
+    last_error: Exception | None = None
+
+    for attempt in range(_MAX_RULE_RETRIES + 1):
+        try:
+            _evaluate_and_save(review_run_id, rule_id, proposal_id, context)
+            return True
+        except Exception as e:
+            last_error = e
+            if attempt < _MAX_RULE_RETRIES:
+                wait = _RETRY_BACKOFF_BASE * (2**attempt)
+                logger.warning(
+                    f"Rule {rule_id} attempt {attempt + 1} failed: {e}. "
+                    f"Retrying in {wait}s..."
+                )
+                time.sleep(wait)
+            else:
+                logger.error(
+                    f"Rule {rule_id} failed after {attempt + 1} attempts: {e}",
+                    exc_info=True,
+                )
+
+    _save_error_finding(
+        review_run_id=review_run_id,
+        rule_id=rule_id,
+        proposal_id=proposal_id,
+        error=str(last_error),
+    )
+    return False
 
 
 def _execute_checklist_import(import_job_id: str) -> None:

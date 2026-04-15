@@ -26,6 +26,10 @@ interface ProposalReviewContextValue {
   currentReviewRunId: string | null;
   setCurrentReviewRunId: (id: string | null) => void;
 
+  /** ID of a prior run the user is viewing (null = latest). */
+  viewingRunId: string | null;
+  setViewingRunId: (id: string | null) => void;
+
   /** Finding ID to scroll to and highlight in ChecklistPanel. */
   focusedFindingId: string | null;
   setFocusedFindingId: (id: string | null) => void;
@@ -60,11 +64,13 @@ export function ProposalReviewProvider({
   const [currentReviewRunId, setCurrentReviewRunId] = useState<string | null>(
     null
   );
+  const [viewingRunId, setViewingRunId] = useState<string | null>(null);
   const [focusedFindingId, setFocusedFindingId] = useState<string | null>(null);
 
   const resetReviewState = useCallback(() => {
     setIsReviewRunning(false);
     setCurrentReviewRunId(null);
+    setViewingRunId(null);
     setFocusedFindingId(null);
   }, []);
 
@@ -76,6 +82,8 @@ export function ProposalReviewProvider({
       setIsReviewRunning,
       currentReviewRunId,
       setCurrentReviewRunId,
+      viewingRunId,
+      setViewingRunId,
       focusedFindingId,
       setFocusedFindingId,
       resetReviewState,
@@ -84,6 +92,7 @@ export function ProposalReviewProvider({
       selectedRulesetId,
       isReviewRunning,
       currentReviewRunId,
+      viewingRunId,
       focusedFindingId,
       resetReviewState,
     ]

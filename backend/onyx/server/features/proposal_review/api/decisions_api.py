@@ -13,7 +13,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.api.models import FindingDecisionCreate
-from onyx.server.features.proposal_review.api.models import FindingDecisionResponse
+from onyx.server.features.proposal_review.api.models import FindingResponse
 from onyx.server.features.proposal_review.api.models import JiraSyncResponse
 from onyx.server.features.proposal_review.api.models import ProposalDecisionCreate
 from onyx.server.features.proposal_review.api.models import ProposalDecisionResponse
@@ -36,7 +36,7 @@ def record_finding_decision(
     request: FindingDecisionCreate,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> FindingDecisionResponse:
+) -> FindingResponse:
     """Record or update a decision on a finding (upsert)."""
     tenant_id = get_current_tenant_id()
 
@@ -50,7 +50,7 @@ def record_finding_decision(
     if not proposal:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Finding not found")
 
-    decision = decisions_db.upsert_finding_decision(
+    finding = decisions_db.upsert_finding_decision(
         finding_id=finding_id,
         officer_id=user.id,
         action=request.action,
@@ -58,20 +58,8 @@ def record_finding_decision(
         db_session=db_session,
     )
 
-    # Audit log
-    decisions_db.create_audit_log(
-        proposal_id=finding.proposal_id,
-        action="finding_decided",
-        user_id=user.id,
-        details={
-            "finding_id": str(finding_id),
-            "action": request.action,
-        },
-        db_session=db_session,
-    )
-
     db_session.commit()
-    return FindingDecisionResponse.from_model(decision)
+    return FindingResponse.from_model(finding)
 
 
 @router.post(
@@ -90,45 +78,25 @@ def record_proposal_decision(
     if not proposal:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
-    # Map decision to proposal status
-    status_map = {
-        "APPROVED": "APPROVED",
-        "CHANGES_REQUESTED": "CHANGES_REQUESTED",
-        "REJECTED": "REJECTED",
-    }
-    new_status = status_map.get(request.decision)
-    if not new_status:
+    # Validate decision value
+    valid_decisions = {"APPROVED", "CHANGES_REQUESTED", "REJECTED"}
+    if request.decision not in valid_decisions:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "decision must be APPROVED, CHANGES_REQUESTED, or REJECTED",
         )
 
-    # Update proposal status
-    proposals_db.update_proposal_status(proposal_id, tenant_id, new_status, db_session)
-
-    # Create the decision record
-    decision = decisions_db.create_proposal_decision(
+    proposal = decisions_db.update_proposal_decision(
         proposal_id=proposal_id,
+        tenant_id=tenant_id,
         officer_id=user.id,
         decision=request.decision,
         notes=request.notes,
         db_session=db_session,
     )
 
-    # Audit log
-    decisions_db.create_audit_log(
-        proposal_id=proposal_id,
-        action="decision_submitted",
-        user_id=user.id,
-        details={
-            "decision_id": str(decision.id),
-            "decision": request.decision,
-        },
-        db_session=db_session,
-    )
-
     db_session.commit()
-    return ProposalDecisionResponse.from_model(decision)
+    return ProposalDecisionResponse.from_proposal(proposal)
 
 
 @router.post(
@@ -136,7 +104,7 @@ def record_proposal_decision(
 )
 def sync_jira(
     proposal_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> JiraSyncResponse:
     """Sync the latest proposal decision to Jira.
@@ -151,14 +119,13 @@ def sync_jira(
     if not proposal:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
-    latest_decision = decisions_db.get_latest_proposal_decision(proposal_id, db_session)
-    if not latest_decision:
+    if not proposal.decision_at:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "No decision to sync -- record a proposal decision first",
         )
 
-    if latest_decision.jira_synced:
+    if proposal.jira_synced:
         return JiraSyncResponse(
             success=True,
             message="Decision already synced to Jira",
@@ -171,15 +138,6 @@ def sync_jira(
         "sync_decision_to_jira",
         args=[str(proposal_id), tenant_id],
         expires=300,
-    )
-
-    # Audit log
-    decisions_db.create_audit_log(
-        proposal_id=proposal_id,
-        action="jira_sync_dispatched",
-        user_id=user.id,
-        details={"decision_id": str(latest_decision.id)},
-        db_session=db_session,
     )
 
     db_session.commit()

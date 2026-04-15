@@ -24,17 +24,17 @@ logger = setup_logger()
     soft_time_limit=3600,
     time_limit=3660,
 )
-def run_proposal_review(_self: object, review_run_id: str, tenant_id: str) -> None:
-    """Parent task: orchestrates rule evaluation for a review run.
+def run_proposal_review(
+    _self: object,
+    review_run_id: str,
+    tenant_id: str,
+    rule_ids: list[str] | None = None,
+) -> None:
+    """Evaluate rules for a review run.
 
-    1. Set run status=RUNNING
-    2. Call get_proposal_context() once
-    3. Try to auto-fetch FOA if opportunity_id in metadata and no FOA doc
-    4. Get all active rules for the run's ruleset
-    5. Set total_rules on the run
-    6. Evaluate rules in parallel via ThreadPoolExecutor
-    7. After all complete: set status=COMPLETED
-    8. On error: set status=FAILED
+    When rule_ids is None, evaluates all active rules in the run's ruleset
+    (full run). When rule_ids is provided, evaluates only those specific
+    rules (retry flow).
     """
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
@@ -49,7 +49,7 @@ def run_proposal_review(_self: object, review_run_id: str, tenant_id: str) -> No
                 _execute_review,
             )
 
-            _execute_review(review_run_id)
+            _execute_review(review_run_id, rule_ids=rule_ids)
     except Exception as e:
         logger.error(f"Review run {review_run_id} failed: {e}", exc_info=True)
         from onyx.server.features.proposal_review.engine.review_engine import (
