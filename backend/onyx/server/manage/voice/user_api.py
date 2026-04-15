@@ -1,3 +1,4 @@
+import json
 import secrets
 from collections.abc import AsyncIterator
 
@@ -112,6 +113,31 @@ async def transcribe_audio(
         ) from exc
 
 
+def _extract_provider_error(exc: Exception) -> str:
+    """Extract a human-readable message from a provider exception.
+
+    Provider errors often embed JSON from upstream APIs (e.g. ElevenLabs).
+    This tries to parse a readable ``message`` field out of common JSON
+    error shapes; falls back to ``str(exc)`` if nothing better is found.
+    """
+    raw = str(exc)
+    try:
+        # Many providers embed JSON after a prefix like "ElevenLabs TTS failed: {...}"
+        json_start = raw.find("{")
+        if json_start == -1:
+            return raw
+        parsed = json.loads(raw[json_start:])
+        # Shape: {"detail": {"message": "..."}} (ElevenLabs)
+        detail = parsed.get("detail", parsed)
+        if isinstance(detail, dict):
+            return detail.get("message") or detail.get("error") or raw
+        if isinstance(detail, str):
+            return detail
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return raw
+
+
 class SynthesizeRequest(BaseModel):
     text: str
     voice: str | None = None
@@ -181,7 +207,9 @@ async def synthesize_speech(
     except StopAsyncIteration:
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "TTS provider returned no audio")
     except Exception as exc:
-        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(exc)) from exc
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, _extract_provider_error(exc)
+        ) from exc
 
     async def audio_stream() -> AsyncIterator[bytes]:
         yield first_chunk

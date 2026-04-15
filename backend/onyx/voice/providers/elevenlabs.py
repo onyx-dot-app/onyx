@@ -757,18 +757,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(f"ElevenLabs TTS failed: {error_text}")
-                    # Extract human-readable message from ElevenLabs JSON error
-                    message = error_text
-                    try:
-                        import json
-
-                        parsed = json.loads(error_text)
-                        detail = parsed.get("detail", {})
-                        if isinstance(detail, dict) and detail.get("message"):
-                            message = detail["message"]
-                    except (json.JSONDecodeError, AttributeError):
-                        pass
-                    raise RuntimeError(message)
+                    raise RuntimeError(f"ElevenLabs TTS failed: {error_text}")
 
                 # Use 8192 byte chunks for smoother streaming
                 chunk_count = 0
