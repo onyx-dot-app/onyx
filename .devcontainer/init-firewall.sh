@@ -4,21 +4,11 @@ set -euo pipefail
 
 echo "Setting up firewall..."
 
-# Preserve docker dns resolution
-DOCKER_DNS_RULES=$(iptables-save | grep -E "^-A.*-d 127.0.0.11/32" || true)
-
-# Flush all rules
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
+# Only flush the filter table.  The nat and mangle tables are managed by Docker
+# (DNS DNAT to 127.0.0.11, container networking, etc.) and must not be touched —
+# flushing them breaks Docker's embedded DNS resolver.
 iptables -F
 iptables -X
-
-# Restore docker dns rules
-if [ -n "$DOCKER_DNS_RULES" ]; then
-    echo "$DOCKER_DNS_RULES" | iptables-restore -n
-fi
 
 # Create ipset for allowed destinations
 ipset create allowed-domains hash:net || true
@@ -34,6 +24,7 @@ done
 
 # Resolve allowed domains
 ALLOWED_DOMAINS=(
+    "github.com"
     "registry.npmjs.org"
     "api.anthropic.com"
     "api-staging.anthropic.com"
@@ -64,6 +55,14 @@ if [ -n "$DOCKER_GATEWAY" ]; then
         echo "warning: failed to add Docker gateway $DOCKER_GATEWAY to allowlist" >&2
     fi
 fi
+
+# Allow traffic to all attached Docker network subnets so the container can
+# reach sibling services (e.g. relational_db, cache) on shared compose networks.
+for subnet in $(ip -4 -o addr show scope global | awk '{print $4}'); do
+    if ! ipset add allowed-domains "$subnet" -exist 2>&1; then
+        echo "warning: failed to add Docker subnet $subnet to allowlist" >&2
+    fi
+done
 
 # Set default policies to DROP
 iptables -P FORWARD DROP
