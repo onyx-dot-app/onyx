@@ -10,7 +10,6 @@ from typing import Optional
 from urllib.parse import quote
 
 import boto3
-from backend.onyx.connectors.models import TabularSection
 from botocore.client import Config
 from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError
@@ -43,6 +42,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
