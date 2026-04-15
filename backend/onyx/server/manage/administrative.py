@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
@@ -28,6 +29,7 @@ from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
 from onyx.db.feedback import update_document_boost_for_user
 from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
+from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
@@ -35,6 +37,7 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import BoostDoc
 from onyx.server.manage.models import BoostUpdateRequest
 from onyx.server.manage.models import HiddenUpdateRequest
@@ -206,3 +209,40 @@ def create_deletion_attempt_for_connector_id(
         file_store = get_default_file_store()
         for file_id in connector.connector_specific_config.get("file_locations", []):
             file_store.delete_file(file_id)
+
+
+@router.get("/admin/indexing/failed-documents")
+def get_failed_documents(
+    cc_pair_id: int | None = None,
+    error_type: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    include_resolved: bool = False,
+    page_num: int = 0,
+    page_size: int = 25,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[IndexAttemptErrorPydantic]:
+    """Get indexing errors across all connectors with optional filters.
+
+    Provides a cross-connector view of document indexing failures.
+    Defaults to last 30 days if no start_time is provided to avoid
+    unbounded count queries.
+    """
+    if start_time is None:
+        start_time = datetime.now(tz=timezone.utc) - timedelta(days=30)
+
+    errors, total = get_index_attempt_errors_across_connectors(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        error_type=error_type,
+        start_time=start_time,
+        end_time=end_time,
+        unresolved_only=not include_resolved,
+        page=page_num,
+        page_size=page_size,
+    )
+    return PaginatedReturn(
+        items=[IndexAttemptErrorPydantic.from_model(e) for e in errors],
+        total_items=total,
+    )
