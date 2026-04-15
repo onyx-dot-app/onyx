@@ -6,7 +6,14 @@ import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, Card as CardLayout, InputHorizontal } from "@opal/layouts";
-import { Button, Divider, SelectCard, Text, Card } from "@opal/components";
+import {
+  Button,
+  Divider,
+  MessageCard,
+  SelectCard,
+  Text,
+  Card,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -16,7 +23,6 @@ import { getProvider } from "@/lib/llmConfig";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
@@ -363,13 +369,9 @@ export default function LLMConfigurationPage() {
             </InputHorizontal>
           </Card>
         ) : (
-          <Message
-            info
-            large
-            icon
-            close={false}
-            text="Set up an LLM provider to start chatting."
-            className="w-full"
+          <MessageCard
+            variant="info"
+            title="Set up an LLM provider to start chatting."
           />
         )}
 

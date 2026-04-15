@@ -20,6 +20,9 @@ interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
   variant?: MessageCardVariant;
 
+  /** Override the default variant icon. */
+  icon?: IconFunctionComponent;
+
   /** Main title text. */
   title: string | RichStr;
 
@@ -106,6 +109,7 @@ const VARIANT_CONFIG: Record<
  */
 function MessageCard({
   variant = "default",
+  icon: iconOverride,
   title,
   description,
   bottomChildren,
@@ -113,7 +117,8 @@ function MessageCard({
   onClose,
   ref,
 }: MessageCardProps) {
-  const { icon: Icon, iconClass } = VARIANT_CONFIG[variant];
+  const { icon: DefaultIcon, iconClass } = VARIANT_CONFIG[variant];
+  const Icon = iconOverride ?? DefaultIcon;
 
   const right = onClose ? (
     <Button

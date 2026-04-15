@@ -12,7 +12,6 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Message from "@/refresh-components/messages/Message";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
@@ -27,7 +26,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
 
@@ -285,12 +284,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               </Section>
               {values.isPublic && (
                 <Section>
-                  <Message
-                    iconComponent={SvgOrganization}
-                    close={false}
-                    static
-                    className="w-full"
-                    text="This agent is public to your organization."
+                  <MessageCard
+                    icon={SvgOrganization}
+                    title="This agent is public to your organization."
                     description="Everyone in your organization has access to this agent."
                   />
                 </Section>

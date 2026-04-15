@@ -9,7 +9,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
@@ -27,7 +27,6 @@ import {
 import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
-import Message from "@/refresh-components/messages/Message";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
@@ -613,25 +612,15 @@ export default function MCPAuthenticationModal({
                     </div>
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
-                    <Message
-                      text="No authentication for this MCP server"
+                    <MessageCard
+                      title="No authentication for this MCP server"
                       description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
-                    <Message
-                      text="Use pass-through for services with shared identity provider."
+                    <MessageCard
+                      title="Use pass-through for services with shared identity provider."
                       description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                 </Modal.Body>

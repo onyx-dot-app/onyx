@@ -11,6 +11,7 @@ and border colors.
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `variant` | `"default" \| "info" \| "success" \| "warning" \| "error"` | `"default"` | Visual variant (controls background, border, and icon) |
+| `icon` | `IconFunctionComponent` | per variant | Override the default variant icon |
 | `title` | `string \| RichStr` | — | Main title text |
 | `description` | `string \| RichStr` | — | Description below the title |
 | `bottomChildren` | `ReactNode` | — | Content below a divider, under the main content |
