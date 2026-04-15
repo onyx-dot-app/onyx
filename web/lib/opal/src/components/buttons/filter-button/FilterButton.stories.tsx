@@ -102,6 +102,6 @@ export const WithTooltip: Story = {
     icon: SvgUser,
     children: "Everyone",
     tooltip: "Filter by creator",
-    side: "bottom",
+    tooltipSide: "bottom",
   },
 };

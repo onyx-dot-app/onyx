@@ -80,6 +80,6 @@ export const WithTooltip: Story = {
     icon: SvgSettings,
     children: "Settings",
     tooltip: "Open settings",
-    side: "bottom",
+    tooltipSide: "bottom",
   },
 };
