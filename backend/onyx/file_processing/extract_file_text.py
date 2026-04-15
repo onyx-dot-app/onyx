@@ -379,12 +379,24 @@ def _worksheet_to_matrix(
     worksheet: Worksheet,
 ) -> list[list[str]]:
     """
-    Converts a singular worksheet to a matrix of values
+    Converts a singular worksheet to a matrix of values.
+
+    Rows are padded to a uniform width. In openpyxl's read_only mode,
+    iter_rows can yield rows of differing lengths (trailing empty cells
+    are sometimes omitted), and downstream column cleanup assumes a
+    rectangular matrix.
     """
     rows: list[list[str]] = []
+    max_len = 0
     for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
         row = ["" if cell is None else str(cell) for cell in worksheet_row]
+        if len(row) > max_len:
+            max_len = len(row)
         rows.append(row)
+
+    for row in rows:
+        if len(row) < max_len:
+            row.extend([""] * (max_len - len(row)))
 
     return rows
 
