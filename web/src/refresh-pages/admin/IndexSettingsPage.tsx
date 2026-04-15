@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -173,8 +174,10 @@ export default function IndexSettingsPage() {
 
       <SettingsLayouts.Body>
         <MessageCard
-          variant="info"
-          title="Changes to indexing settings will apply to newly indexed documents. Existing documents will retain their current settings until re-indexed."
+          title="Changes require a full re-index."
+          description={markdown(
+            "Modifying embedding settings requires a full re-index of all documents to take effect, which may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+          )}
         />
 
         {/* ── Embedding Model ── */}
