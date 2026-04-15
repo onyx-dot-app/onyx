@@ -33,15 +33,22 @@ def _make_chunker() -> TabularChunker:
     return TabularChunker(tokenizer=CharTokenizer())
 
 
-def _tabular_section(text: str, link: str = "sheet:Test") -> Section:
-    return TabularSection(text=text, link=link)
+_DEFAULT_LINK = "https://example.com/doc"
+
+
+def _tabular_section(
+    text: str,
+    link: str = _DEFAULT_LINK,
+    heading: str | None = "sheet:Test",
+) -> Section:
+    return TabularSection(text=text, link=link, heading=heading)
 
 
 class TestTabularChunkerChunkSection:
     def test_simple_csv_all_rows_fit_one_chunk(self) -> None:
         # --- INPUT -----------------------------------------------------
         csv_text = "Name,Age,City\n" "Alice,30,NYC\n" "Bob,25,SF\n"
-        link = "sheet:People"
+        heading = "sheet:People"
         content_token_limit = 500
 
         # --- EXPECTED --------------------------------------------------
@@ -56,7 +63,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -64,7 +71,7 @@ class TestTabularChunkerChunkSection:
         # --- ASSERT ----------------------------------------------------
         assert [p.text for p in out.payloads] == expected_texts
         assert [p.is_continuation for p in out.payloads] == [False]
-        assert all(p.links == {0: link} for p in out.payloads)
+        assert all(p.links == {0: _DEFAULT_LINK} for p in out.payloads)
         assert out.accumulator.is_empty()
 
     def test_overflow_splits_into_two_deterministic_chunks(self) -> None:
@@ -74,7 +81,7 @@ class TestTabularChunkerChunkSection:
         # Each row "col=a, val=1" is 12 tokens; two rows + \n = 25 (fits),
         # three rows + 2×\n = 38 (overflows) → split after 2 rows.
         csv_text = "col,val\n" "a,1\n" "b,2\n" "c,3\n" "d,4\n"
-        link = "sheet:S"
+        heading = "sheet:S"
         content_token_limit = 57
 
         # --- EXPECTED --------------------------------------------------
@@ -85,7 +92,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -95,7 +102,7 @@ class TestTabularChunkerChunkSection:
         # First chunk is fresh; subsequent chunks mark as continuations.
         assert [p.is_continuation for p in out.payloads] == [False, True]
         # Link carries through every chunk.
-        assert all(p.links == {0: link} for p in out.payloads)
+        assert all(p.links == {0: _DEFAULT_LINK} for p in out.payloads)
 
     # Add back in shortly
     # def test_header_only_csv_produces_single_prelude_chunk(self) -> None:
@@ -123,7 +130,7 @@ class TestTabularChunkerChunkSection:
         # Alice's Age is empty; Bob's City is empty. Empty cells should
         # not appear as `field=` pairs in the output.
         csv_text = "Name,Age,City\n" "Alice,,NYC\n" "Bob,25,\n"
-        link = "sheet:P"
+        heading = "sheet:P"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
@@ -137,7 +144,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
         )
@@ -151,7 +158,7 @@ class TestTabularChunkerChunkSection:
         # a single field. The surrounding quotes are stripped during
         # decoding, so the chunk text carries the bare value.
         csv_text = "Name,Notes\n" 'Alice,"Hello, world"\n'
-        link = "sheet:P"
+        heading = "sheet:P"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
@@ -160,7 +167,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
         )
@@ -173,7 +180,7 @@ class TestTabularChunkerChunkSection:
         # Stray blank rows in the CSV (e.g. export artifacts) shouldn't
         # produce ghost rows in the output.
         csv_text = "A,B\n" "\n" "1,2\n" "\n" "\n" "3,4\n"
-        link = "sheet:S"
+        heading = "sheet:S"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
@@ -182,7 +189,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
         )
@@ -199,7 +206,7 @@ class TestTabularChunkerChunkSection:
         pending_link = "prev-link"
 
         csv_text = "a,b\n" "1,2\n"
-        link = "sheet:S"
+        heading = "sheet:S"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
@@ -209,7 +216,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(
                 text=pending_text,
                 link_offsets={0: pending_link},
@@ -222,7 +229,7 @@ class TestTabularChunkerChunkSection:
         # Flushed chunk keeps the prior text's link; tabular chunk uses
         # the tabular section's link.
         assert out.payloads[0].links == {0: pending_link}
-        assert out.payloads[1].links == {0: link}
+        assert out.payloads[1].links == {0: _DEFAULT_LINK}
         # Accumulator resets — tabular section is a structural boundary.
         assert out.accumulator.is_empty()
 
@@ -234,7 +241,7 @@ class TestTabularChunkerChunkSection:
         csv_text = (
             "x\n" "aaaaaaaaaaaaaaaaaa\n" "bbbbbbbbbbbbbbbbbb\n" "cccccccccccccccccc\n"
         )
-        link = "S"
+        heading = "S"
         content_token_limit = 100
 
         # --- EXPECTED --------------------------------------------------
@@ -252,7 +259,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -274,7 +281,7 @@ class TestTabularChunkerChunkSection:
         # Every emitted chunk therefore carries its full prelude rather
         # than dropping Columns at emit time.
         csv_text = "x\n" "aa\n" "bb\n" "cc\n" "dd\n" "ee\n"
-        link = "S"
+        heading = "S"
         content_token_limit = 30
 
         # --- EXPECTED --------------------------------------------------
@@ -290,7 +297,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -311,7 +318,7 @@ class TestTabularChunkerChunkSection:
         # pieces (they already consume the full budget). A 53-token row
         # packs into 3 field-boundary pieces under a 20-token budget.
         csv_text = "field 1,field 2,field 3,field 4,field 5\n" "1,2,3,4,5\n"
-        link = "S"
+        heading = "S"
         content_token_limit = 20
 
         # --- EXPECTED --------------------------------------------------
@@ -331,7 +338,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -359,7 +366,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section("", link="sheet:Empty"),
+            _tabular_section("", heading="sheet:Empty"),
             AccumulatorState(
                 text=pending_text,
                 link_offsets=pending_link_offsets,
@@ -381,7 +388,7 @@ class TestTabularChunkerChunkSection:
         # CSV has one column "x" with a 50-char value. Formatted pair =
         # "x=" + 50 a's = 52 tokens. Budget = 10.
         csv_text = "x\n" + ("a" * 50) + "\n"
-        link = "S"
+        heading = "S"
         content_token_limit = 10
 
         # --- EXPECTED --------------------------------------------------
@@ -404,7 +411,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -421,7 +428,7 @@ class TestTabularChunkerChunkSection:
         # alias appended in parens on the `Columns:` line. Plain headers
         # pass through untouched.
         csv_text = "MTTR_hours,id,owner_name\n" "3,42,Alice\n"
-        link = "sheet:M"
+        heading = "sheet:M"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
@@ -434,7 +441,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
         )
@@ -455,7 +462,7 @@ class TestTabularChunkerChunkSection:
         # populated (tiny). Row 2 is a "fat" row with all four columns
         # populated.
         csv_text = "a,b,c,d\n" "1,,,\n" "xxx,yyy,zzz,www\n" "2,,,\n"
-        link = "S"
+        heading = "S"
         content_token_limit = 20
 
         # --- EXPECTED --------------------------------------------------
@@ -481,7 +488,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -503,7 +510,7 @@ class TestTabularChunkerChunkSection:
         #   cols + row:        10+1+3          = 14 ≤ 15 ✓
         #   sheet + cols + row: 13+1+10+1+3    = 28 > 15 ✗
         csv_text = "x\n" "y\n"
-        link = "LongSheetName"
+        heading = "LongSheetName"
         content_token_limit = 15
 
         # --- EXPECTED --------------------------------------------------
@@ -511,7 +518,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )
@@ -534,7 +541,7 @@ class TestTabularChunkerChunkSection:
         #   cols + row:        17+1+12        = 30 > 20 ✗
         #   sheet + row:        1+1+12        = 14 ≤ 20 ✓
         csv_text = "ABC,DEF\n" "1,2\n"
-        link = "S"
+        heading = "S"
         content_token_limit = 20
 
         # --- EXPECTED --------------------------------------------------
@@ -542,7 +549,7 @@ class TestTabularChunkerChunkSection:
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker().chunk_section(
-            _tabular_section(csv_text, link=link),
+            _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
         )

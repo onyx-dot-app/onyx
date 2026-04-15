@@ -270,7 +270,7 @@ class TabularChunker(SectionChunker):
                 payloads=payloads, accumulator=AccumulatorState()
             )
 
-        sheet_header = section.link or ""
+        sheet_header = section.heading or ""
         chunk_texts = parse_to_chunks(
             rows=parsed_rows,
             sheet_header=sheet_header,
