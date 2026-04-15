@@ -1125,6 +1125,32 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 
+# Master switch for the tenant work-gating feature. Controls the `enabled`
+# axis only — flipping this True puts the feature in shadow mode (compute
+# the gate, log skip counts, but do not actually skip). The `enforce` axis
+# is Redis-only with a hard-coded default of False, so this env flag alone
+# cannot cause real tenants to be skipped. Default off.
+ENABLE_TENANT_WORK_GATING = (
+    os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
+)
+
+# Membership TTL for the `active_tenants` sorted set. Members older than this
+# are treated as inactive by the gate read path. Must be > the full-fanout
+# interval so self-healing re-adds a genuinely-working tenant before their
+# membership expires. Default 30 min.
+TENANT_WORK_GATING_TTL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_TTL_SECONDS", 30 * 60)
+)
+
+# Minimum wall-clock interval between full-fanout cycles. When this many
+# seconds have elapsed since the last bypass, the generator ignores the gate
+# on the next invocation and dispatches to every non-gated tenant, letting
+# consumers re-populate the active set. Schedule-independent so beat drift
+# or backlog can't make the self-heal bursty or sparse. Default 20 min.
+TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS", 20 * 60)
+)
+
 
 # Image summarization configuration
 IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(

@@ -217,19 +217,19 @@ Enriches docfetching and docprocessing tasks with connector-level labels. Silent
 | `onyx_indexing_task_completed_total`  | Counter   | `task_name`, `source`, `tenant_id`, `cc_pair_id`, `outcome` | Indexing tasks completed per connector   |
 | `onyx_indexing_task_duration_seconds` | Histogram | `task_name`, `source`, `tenant_id`                          | Indexing task duration by connector type |
 
-`connector_name` is intentionally excluded from these push-based counters to avoid unbounded cardinality (it's a free-form user string).
+`connector_name` is intentionally excluded from these per-task counters to avoid unbounded cardinality (it's a free-form user string).
 
 ### Connector Health Metrics (`onyx.server.metrics.connector_health_metrics`)
 
-Push-based metrics emitted by docfetching and docprocessing workers at the point where connector state changes occur. Scales to any number of tenants (no schema iteration).
+Push-based metrics emitted by docfetching and docprocessing workers at the point where connector state changes occur. Scales to any number of tenants (no schema iteration). Unlike the per-task counters above, these include `connector_name` because their cardinality is bounded by the number of connectors (one series per connector), not by the number of task executions.
 
-| Metric                                          | Type    | Labels                                        | Description                                                   |
-| ----------------------------------------------- | ------- | --------------------------------------------- | ------------------------------------------------------------- |
-| `onyx_index_attempt_transitions_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`, `status` | Index attempt status transitions (in_progress, success, etc.) |
-| `onyx_connector_in_error_state`                 | Gauge   | `tenant_id`, `source`, `cc_pair_id`           | Whether connector is in repeated error state (1=yes, 0=no)    |
-| `onyx_connector_last_success_timestamp_seconds` | Gauge   | `tenant_id`, `source`, `cc_pair_id`           | Unix timestamp of last successful indexing                    |
-| `onyx_connector_docs_indexed_total`             | Counter | `tenant_id`, `source`, `cc_pair_id`           | Total documents indexed per connector (monotonic)             |
-| `onyx_connector_indexing_errors_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`           | Total failed index attempts per connector (monotonic)         |
+| Metric                                          | Type    | Labels                                                          | Description                                                   |
+| ----------------------------------------------- | ------- | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `onyx_index_attempt_transitions_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`, `connector_name`, `status` | Index attempt status transitions (in_progress, success, etc.) |
+| `onyx_connector_in_error_state`                 | Gauge   | `tenant_id`, `source`, `cc_pair_id`, `connector_name`           | Whether connector is in repeated error state (1=yes, 0=no)    |
+| `onyx_connector_last_success_timestamp_seconds` | Gauge   | `tenant_id`, `source`, `cc_pair_id`, `connector_name`           | Unix timestamp of last successful indexing                    |
+| `onyx_connector_docs_indexed_total`             | Counter | `tenant_id`, `source`, `cc_pair_id`, `connector_name`           | Total documents indexed per connector (monotonic)             |
+| `onyx_connector_indexing_errors_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`, `connector_name`           | Total failed index attempts per connector (monotonic)         |
 
 ### Pull-Based Collectors (`onyx.server.metrics.indexing_pipeline`)
 

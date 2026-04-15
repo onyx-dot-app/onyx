@@ -537,10 +537,12 @@ def check_indexing_completion(
             )
 
         source = cc_pair.connector.source.value
+        connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
         on_index_attempt_status_change(
             tenant_id=tenant_id,
             source=source,
             cc_pair_id=cc_pair.id,
+            connector_name=connector_name,
             status=attempt.status.value,
         )
 
@@ -568,6 +570,7 @@ def check_indexing_completion(
                 tenant_id=tenant_id,
                 source=source,
                 cc_pair_id=cc_pair.id,
+                connector_name=connector_name,
                 docs_indexed=attempt.new_docs_indexed or 0,
                 success_timestamp=attempt.time_updated.timestamp(),
             )
@@ -595,6 +598,7 @@ def check_indexing_completion(
                     tenant_id=tenant_id,
                     source=source,
                     cc_pair_id=cc_pair.id,
+                    connector_name=connector_name,
                     in_error=False,
                 )
 
@@ -920,10 +924,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
+                    error_connector_name = (
+                        cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
+                    )
                     on_connector_error_state_change(
                         tenant_id=tenant_id,
                         source=cc_pair.connector.source.value,
                         cc_pair_id=cc_pair_id,
+                        connector_name=error_connector_name,
                         in_error=True,
                     )
 
