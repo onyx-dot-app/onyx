@@ -10,7 +10,7 @@ import { Content, Card as CardLayout } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
-import { Button, Card, Divider } from "@opal/components";
+import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -30,7 +30,6 @@ import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
-import Message from "@/refresh-components/messages/Message";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -173,11 +172,9 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
       <SettingsLayouts.Body>
-        <Message
-          static
-          info
-          close={false}
-          text="Changes to indexing settings will apply to newly indexed documents. Existing documents will retain their current settings until re-indexed."
+        <MessageCard
+          variant="info"
+          title="Changes to indexing settings will apply to newly indexed documents. Existing documents will retain their current settings until re-indexed."
         />
 
         {/* ── Embedding Model ── */}
