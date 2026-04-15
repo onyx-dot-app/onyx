@@ -185,7 +185,7 @@ def generate_ollama_display_name(model_name: str) -> str:
         "deepseek-r1:14b" → "DeepSeek R1 14B"
         "gemma4:e4b" → "Gemma 4 E4B"
         "deepseek-v3.1:671b-cloud" → "DeepSeek V3.1 671B Cloud"
-        "qwen3-vl:235b-instruct-cloud" → "Qwen 3 VL 235B Instruct Cloud"
+        "qwen3-vl:235b-instruct-cloud" → "Qwen 3-vl 235B Instruct Cloud"
     """
     # Split into base name and tag
     if ":" in model_name:
