@@ -158,6 +158,14 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
+
+from onyx.server.documents.cc_pair import update_cc_pair_status
+from onyx.server.documents.models import BulkCCPairStatusAction
+from onyx.server.documents.models import BulkCCPairStatusRequest
+from onyx.server.documents.models import BulkCCPairStatusResponse
+from onyx.server.documents.models import CCStatusUpdateRequest
+
+
 logger = setup_logger()
 
 _GMAIL_CREDENTIAL_ID_COOKIE_NAME = "gmail_credential_id"
@@ -1491,6 +1499,103 @@ def _apply_connector_status_filters(
 
     return filtered_statuses
 
+def _flatten_cc_pair_statuses_from_indexing_status_response(
+    response_list: list[ConnectorIndexingStatusLiteResponse],
+) -> tuple[list[ConnectorIndexingStatusLite], list[ConnectorIndexingStatusLite]]:
+    editable_statuses: list[ConnectorIndexingStatusLite] = []
+    non_editable_statuses: list[ConnectorIndexingStatusLite] = []
+
+    for response in response_list:
+        for status in response.indexing_statuses:
+            if isinstance(status, ConnectorIndexingStatusLite):
+                if status.is_editable:
+                    editable_statuses.append(status)
+                else:
+                    non_editable_statuses.append(status)
+
+    return editable_statuses, non_editable_statuses
+
+
+@router.post("/admin/connector/bulk/status", tags=PUBLIC_API_TAGS)
+def bulk_update_connector_status(
+    request: BulkCCPairStatusRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> BulkCCPairStatusResponse:
+    filters = IndexingStatusRequest(**request.filters.dict())
+    filters.get_all_connectors = True
+    filters.source_to_page = {}
+
+    response_list = get_connector_indexing_status(
+        request=filters,
+        user=user,
+        db_session=db_session,
+    )
+
+    editable_statuses, non_editable_statuses = (
+        _flatten_cc_pair_statuses_from_indexing_status_response(response_list)
+    )
+
+    target_status = (
+        ConnectorCredentialPairStatus.PAUSED
+        if request.action == BulkCCPairStatusAction.PAUSE
+        else ConnectorCredentialPairStatus.ACTIVE
+    )
+
+    skipped_reasons = {
+        "forbidden": len(non_editable_statuses),
+        "already_in_target_state": 0,
+        "missing_cc_pair_status": 0,
+        "update_failed": 0,
+    }
+
+    eligible_statuses: list[ConnectorIndexingStatusLite] = []
+
+    for status in editable_statuses:
+        if status.cc_pair_status is None:
+            skipped_reasons["missing_cc_pair_status"] += 1
+            continue
+
+        if status.cc_pair_status == target_status:
+            skipped_reasons["already_in_target_state"] += 1
+            continue
+
+        eligible_statuses.append(status)
+
+    updated_count = 0
+
+    for status in eligible_statuses:
+        try:
+            update_cc_pair_status(
+                cc_pair_id=status.cc_pair_id,
+                status_update_request=CCStatusUpdateRequest(status=target_status),
+                user=user,
+                db_session=db_session,
+            )
+            updated_count += 1
+        except HTTPException:
+            db_session.rollback()
+            skipped_reasons["update_failed"] += 1
+        except Exception:
+            db_session.rollback()
+            logger.exception(
+                "Bulk status update failed for cc_pair_id=%s",
+                status.cc_pair_id,
+            )
+            skipped_reasons["update_failed"] += 1
+
+    matched_count = len(editable_statuses) + len(non_editable_statuses)
+    eligible_count = len(eligible_statuses)
+    skipped_count = sum(skipped_reasons.values())
+
+    return BulkCCPairStatusResponse(
+        action=request.action,
+        matched_count=matched_count,
+        eligible_count=eligible_count,
+        updated_count=updated_count,
+        skipped_count=skipped_count,
+        skipped_reasons={k: v for k, v in skipped_reasons.items() if v > 0},
+    )
 
 def _apply_federated_connector_status_filters(
     statuses: list[FederatedConnectorStatus],

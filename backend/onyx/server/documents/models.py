@@ -628,3 +628,21 @@ class IndexingStatusRequest(BaseModel):
     name_filter: str | None = None
     source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)
     get_all_connectors: bool = False
+
+class BulkCCPairStatusAction(str, Enum):
+    PAUSE = "pause"
+    RESUME = "resume"
+
+
+class BulkCCPairStatusRequest(BaseModel):
+    action: BulkCCPairStatusAction
+    filters: IndexingStatusRequest
+
+
+class BulkCCPairStatusResponse(BaseModel):
+    action: BulkCCPairStatusAction
+    matched_count: int
+    eligible_count: int
+    updated_count: int
+    skipped_count: int
+    skipped_reasons: dict[str, int] = Field(default_factory=dict)
