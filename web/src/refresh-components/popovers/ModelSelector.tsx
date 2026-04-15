@@ -186,7 +186,7 @@ export default function ModelSelector({
                       icon={ProviderIcon}
                       rightIcon={isMultiModel ? SvgX : undefined}
                       state="empty"
-                      variant="select-heavy"
+                      variant="select-input"
                       size="lg"
                       onClick={(e: React.MouseEvent) => {
                         if (isMultiModel) {
