@@ -1,9 +1,8 @@
 import "@opal/core/disabled/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
-import type { TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipSide } from "@opal/components";
 import type { RichStr } from "@opal/types";
-import { Tooltip } from "@opal/components/tooltip/components";
 
 // ---------------------------------------------------------------------------
 // Types

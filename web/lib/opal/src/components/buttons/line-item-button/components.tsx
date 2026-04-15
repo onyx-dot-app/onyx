@@ -3,12 +3,10 @@ import {
   type InteractiveStatefulProps,
   InteractiveContainerRoundingVariant,
 } from "@opal/core";
-import type { ExtremaSizeVariants } from "@opal/types";
-import type { TooltipSide } from "@opal/components";
-import type { DistributiveOmit } from "@opal/types";
+import type { ExtremaSizeVariants, DistributiveOmit } from "@opal/types";
+import { Tooltip, type TooltipSide } from "@opal/components";
 import type { ContentActionProps } from "@opal/layouts/content-action/components";
 import { ContentAction } from "@opal/layouts";
-import { Tooltip } from "@opal/components/tooltip/components";
 
 // ---------------------------------------------------------------------------
 // Types
