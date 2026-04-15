@@ -70,6 +70,11 @@ from onyx.redis.redis_connector_ext_group_sync import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
+from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
+from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
+from onyx.server.metrics.perm_sync_metrics import observe_group_sync_duration
+from onyx.server.metrics.perm_sync_metrics import observe_group_sync_upsert_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
@@ -471,7 +476,9 @@ def _perform_external_group_sync(
     tenant_id: str,
     timeout_seconds: int = JOB_TIMEOUT,
 ) -> None:
-    # Create attempt record at the start
+    sync_start = time.monotonic()
+    connector_type: str = "unknown"
+
     with get_session_with_current_tenant() as db_session:
         attempt_id = create_external_group_sync_attempt(
             connector_credential_pair_id=cc_pair_id,
@@ -480,6 +487,26 @@ def _perform_external_group_sync(
         logger.info(
             f"Created external group sync attempt: {attempt_id} for cc_pair={cc_pair_id}"
         )
+
+    try:
+        _timed_perform_external_group_sync(
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            timeout_seconds=timeout_seconds,
+            attempt_id=attempt_id,
+        )
+
+    finally:
+        observe_group_sync_duration(time.monotonic() - sync_start, connector_type)
+
+
+def _timed_perform_external_group_sync(
+    cc_pair_id: int,
+    tenant_id: str,
+    attempt_id: int,
+    timeout_seconds: int = JOB_TIMEOUT,
+) -> None:
+    start_time = time.monotonic()
 
     with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair_from_id(
@@ -491,6 +518,7 @@ def _perform_external_group_sync(
             raise ValueError(f"No connector credential pair found for id: {cc_pair_id}")
 
         source_type = cc_pair.connector.source
+        connector_type = source_type
         sync_config = get_source_perm_sync_config(source_type)
         if sync_config is None:
             msg = f"No sync config found for {source_type} for cc_pair: {cc_pair_id}"
@@ -522,6 +550,7 @@ def _perform_external_group_sync(
         seen_users: set[str] = set()  # Track unique users across all groups
         total_groups_processed = 0
         total_group_memberships_synced = 0
+        cumulative_upsert_time = 0.0
         start_time = time.monotonic()
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
@@ -550,22 +579,26 @@ def _perform_external_group_sync(
                     logger.debug(
                         f"New external user groups: {external_user_group_batch}"
                     )
+                    upsert_start = time.monotonic()
                     upsert_external_groups(
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
                         external_groups=external_user_group_batch,
                         source=cc_pair.connector.source,
                     )
+                    cumulative_upsert_time += time.monotonic() - upsert_start
                     external_user_group_batch = []
 
             if external_user_group_batch:
                 logger.debug(f"New external user groups: {external_user_group_batch}")
+                upsert_start = time.monotonic()
                 upsert_external_groups(
                     db_session=db_session,
                     cc_pair_id=cc_pair_id,
                     external_groups=external_user_group_batch,
                     source=cc_pair.connector.source,
                 )
+                cumulative_upsert_time += time.monotonic() - upsert_start
         except Exception as e:
             format_error_for_logging(e)
 
@@ -575,10 +608,13 @@ def _perform_external_group_sync(
             )
 
             # TODO: add some notification to the admins here
+            inc_group_sync_errors(connector_type)
             logger.exception(
                 f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
             )
             raise e
+
+        observe_group_sync_upsert_duration(cumulative_upsert_time, connector_type)
 
         logger.info(
             f"Removing stale external groups for {source_type} for cc_pair: {cc_pair_id}"
@@ -602,6 +638,9 @@ def _perform_external_group_sync(
             f"{total_groups_processed} groups, {total_users_processed} users, "
             f"{total_group_memberships_synced} memberships"
         )
+
+        inc_group_sync_groups_processed(connector_type, total_groups_processed)
+        inc_group_sync_users_processed(connector_type, total_users_processed)
 
         mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
 
