@@ -121,13 +121,15 @@ function MessageCard({
   const Icon = iconOverride ?? DefaultIcon;
 
   const right = onClose ? (
-    <Button
-      icon={SvgX}
-      prominence="internal"
-      size="sm"
-      onClick={onClose}
-      aria-label="Close"
-    />
+    <div className="p-1.5">
+      <Button
+        icon={SvgX}
+        prominence="internal"
+        size="sm"
+        onClick={onClose}
+        aria-label="Close"
+      />
+    </div>
   ) : (
     rightChildren
   );
