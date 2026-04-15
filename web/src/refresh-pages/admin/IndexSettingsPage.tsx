@@ -178,6 +178,7 @@ export default function IndexSettingsPage() {
           description={markdown(
             "Modifying embedding settings requires a full re-index of all documents to take effect, which may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
           )}
+          variant="error"
         />
 
         {/* ── Embedding Model ── */}

@@ -1,7 +1,7 @@
 import "@opal/components/cards/message-card/styles.css";
 import type { RichStr, IconFunctionComponent } from "@opal/types";
 import { Content } from "@opal/layouts";
-import { Button, Divider } from "@opal/components";
+import { Button, Card, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
@@ -61,8 +61,9 @@ const DEFAULT_ICONS: Record<MessageCardVariant, IconFunctionComponent> = {
 /**
  * A styled card for displaying messages, alerts, or status notifications.
  *
- * Uses `Content` internally for consistent title/description/icon layout.
- * Supports 5 variants with corresponding background and border colors.
+ * Uses `Card` as the structural base and `Content` internally for consistent
+ * title/description/icon layout. Supports 5 variants with corresponding
+ * background and border colors.
  *
  * @example
  * ```tsx
@@ -94,7 +95,7 @@ function MessageCard({
   const Icon = DEFAULT_ICONS[variant];
 
   return (
-    <div ref={ref} className="opal-message-card" data-variant={variant}>
+    <div className="opal-message-card" data-variant={variant}>
       <div className="opal-message-card-header">
         <div className="opal-message-card-content">
           <Content
