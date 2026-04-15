@@ -88,9 +88,11 @@ export default function MultiModelPanel({
   const header = (
     <div
       className={cn(
-        "rounded-12",
-        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00"
+        "rounded-12 transition-colors",
+        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
+        canSelect && "cursor-pointer hover:bg-background-tint-02"
       )}
+      onClick={handlePanelClick}
     >
       <ContentAction
         sizePreset="main-ui"
@@ -145,13 +147,7 @@ export default function MultiModelPanel({
   }
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
-        canSelect && "cursor-pointer hover:bg-background-tint-02"
-      )}
-      onClick={canSelect ? handlePanelClick : undefined}
-    >
+    <div className="flex flex-col gap-3 min-w-0 rounded-16">
       {header}
       {errorMessage ? (
         <div className="p-4">
