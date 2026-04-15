@@ -22,6 +22,7 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -841,11 +842,10 @@ class GithubConnector(
         """Iterate all PRs and issues across all configured repos as SlimDocuments.
 
         Drives _fetch_from_github in a checkpoint loop — each call processes one
-        page and returns an updated checkpoint. The inner while True drains all
-        yielded Documents from a single page, terminating when _fetch_from_github
-        returns (which raises StopIteration and carries the next checkpoint as
-        e.value). Rate limiting and pagination are handled centrally by
-        _fetch_from_github via _get_batch_rate_limited.
+        page and returns an updated checkpoint. CheckpointOutputWrapper handles
+        draining the generator and extracting the returned checkpoint. Rate
+        limiting and pagination are handled centrally by _fetch_from_github via
+        _get_batch_rate_limited.
         """
         checkpoint = self.build_dummy_checkpoint()
         while checkpoint.has_more:
@@ -853,17 +853,18 @@ class GithubConnector(
             gen = self._fetch_from_github(
                 checkpoint, include_permissions=include_permissions, is_slim=True
             )
-            try:
-                while True:
-                    result = next(gen)
-                    if isinstance(result, Document):
-                        batch.append(
-                            SlimDocument(
-                                id=result.id, external_access=result.external_access
-                            )
+            wrapper: CheckpointOutputWrapper[GithubConnectorCheckpoint] = (
+                CheckpointOutputWrapper()
+            )
+            for document, _, _, next_checkpoint in wrapper(gen):
+                if document is not None:
+                    batch.append(
+                        SlimDocument(
+                            id=document.id, external_access=document.external_access
                         )
-            except StopIteration as e:
-                checkpoint = e.value
+                    )
+                if next_checkpoint is not None:
+                    checkpoint = next_checkpoint
             if batch:
                 yield batch
             if callback and callback.should_stop():
