@@ -50,6 +50,7 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -85,6 +86,7 @@ from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.notification import create_notification
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -400,7 +402,6 @@ def check_indexing_completion(
     tenant_id: str,
     task: Task,
 ) -> None:
-
     logger.info(
         f"Checking for indexing completion: attempt={index_attempt_id} tenant={tenant_id}"
     )
@@ -848,6 +849,33 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
+
+                    connector_name = (
+                        cc_pair.name
+                        or cc_pair.connector.name
+                        or f"CC pair {cc_pair.id}"
+                    )
+                    source = cc_pair.connector.source.value
+                    create_notification(
+                        user_id=None,
+                        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                        db_session=db_session,
+                        title=f"Connector '{connector_name}' has entered repeated error state",
+                        description=(
+                            f"The {source} connector has failed repeatedly and "
+                            f"has been flagged. Check the connector's indexing "
+                            f"history for details."
+                        ),
+                        additional_data={"cc_pair_id": cc_pair.id},
+                    )
+
+                    task_logger.error(
+                        f"Connector entered repeated error state: "
+                        f"cc_pair={cc_pair.id} "
+                        f"connector={cc_pair.connector.name} "
+                        f"source={source}"
+                    )
+
                     # When entering repeated error state, also pause the connector
                     # to prevent continued indexing retry attempts burning through embedding credits.
                     # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
