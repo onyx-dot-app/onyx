@@ -100,6 +100,39 @@ class TestGenerateOllamaDisplayName:
         result = generate_ollama_display_name("llama3.3:70b")
         assert "3.3" in result or "3 3" in result  # Either format is acceptable
 
+    def test_non_size_tag_shown(self) -> None:
+        """Test that non-size tags like 'e4b' are included in the display name."""
+        result = generate_ollama_display_name("gemma4:e4b")
+        assert "Gemma" in result
+        assert "4" in result
+        assert "E4B" in result
+
+    def test_size_with_cloud_modifier(self) -> None:
+        """Test size tag with cloud modifier."""
+        result = generate_ollama_display_name("deepseek-v3.1:671b-cloud")
+        assert "DeepSeek" in result
+        assert "671B" in result
+        assert "Cloud" in result
+
+    def test_size_with_multiple_modifiers(self) -> None:
+        """Test size tag with multiple modifiers."""
+        result = generate_ollama_display_name("qwen3-vl:235b-instruct-cloud")
+        assert "Qwen" in result
+        assert "235B" in result
+        assert "Instruct" in result
+        assert "Cloud" in result
+
+    def test_quantization_tag_shown(self) -> None:
+        """Test that quantization tags are included in the display name."""
+        result = generate_ollama_display_name("llama3:q4_0")
+        assert "Llama" in result
+        assert "Q4_0" in result
+
+    def test_cloud_only_tag(self) -> None:
+        """Test standalone cloud tag."""
+        result = generate_ollama_display_name("glm-4.6:cloud")
+        assert "CLOUD" in result
+
 
 class TestStripOpenrouterVendorPrefix:
     """Tests for OpenRouter vendor prefix stripping."""
