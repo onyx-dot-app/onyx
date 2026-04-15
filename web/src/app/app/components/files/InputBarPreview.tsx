@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
-import { Button, Tooltip } from "@opal/components";
+import { Tooltip } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 export interface InputBarPreviewImageProviderProps {
   file: FileDescriptor;

@@ -136,32 +136,49 @@ const AgentMessage = React.memo(function AgentMessage({
       finalAnswerComing
     );
 
-  // Memoize merged citations separately to avoid creating new object when neither source changed
+  // Merge streaming citation/document data with chatState props.
+  // NOTE: citationMap and documentMap from usePacketProcessor are mutated in
+  // place (same object reference), so we use citations.length / documentMap.size
+  // as change-detection proxies to bust the memo cache when new data arrives.
   const mergedCitations = useMemo(
     () => ({
       ...chatState.citations,
       ...citationMap,
     }),
-    [chatState.citations, citationMap]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatState.citations, citationMap, citations.length]
   );
 
-  // Create a chatState that uses streaming citations for immediate rendering
-  // This merges the prop citations with streaming citations, preferring streaming ones
-  // Memoized with granular dependencies to prevent cascading re-renders
+  // Merge streaming documentMap into chatState.docs so inline citation chips
+  // can resolve [1] → document even when chatState.docs is empty (multi-model).
+  const mergedDocs = useMemo(() => {
+    const propDocs = chatState.docs ?? [];
+    if (documentMap.size === 0) return propDocs;
+    const seen = new Set(propDocs.map((d) => d.document_id));
+    const extras = Array.from(documentMap.values()).filter(
+      (d) => !seen.has(d.document_id)
+    );
+    return extras.length > 0 ? [...propDocs, ...extras] : propDocs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatState.docs, documentMap, documentMap.size]);
+
+  // Create a chatState that uses streaming citations and documents for immediate rendering.
+  // Memoized with granular dependencies to prevent cascading re-renders.
   // Note: chatState object is recreated upstream on every render, so we depend on
-  // individual fields instead of the whole object for proper memoization
+  // individual fields instead of the whole object for proper memoization.
   const effectiveChatState = useMemo<FullChatState>(
     () => ({
       ...chatState,
       citations: mergedCitations,
+      docs: mergedDocs,
     }),
     [
       chatState.agent,
-      chatState.docs,
       chatState.setPresentingDocument,
       chatState.overriddenModel,
       chatState.researchType,
       mergedCitations,
+      mergedDocs,
     ]
   );
 

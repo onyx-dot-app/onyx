@@ -55,11 +55,12 @@ import {
 } from "@/lib/connectors/oauth";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
-import { Button, Tooltip } from "@opal/components";
+import { Button } from "@opal/components";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
+import { Tooltip } from "@opal/components";
 import Link from "next/link";
 
 export interface AdvancedConfig {

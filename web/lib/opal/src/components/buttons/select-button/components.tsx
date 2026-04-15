@@ -5,12 +5,10 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
-import { Tooltip } from "@opal/components/tooltip/components";
+import { Text, Tooltip, type TooltipSide } from "@opal/components";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 

@@ -463,29 +463,13 @@ def _remove_empty_runs(
     return result
 
 
-def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    # TODO: switch back to this approach in a few months when markitdown
-    # fixes their handling of excel files
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
 
-    # md = get_markitdown_converter()
-    # stream_info = StreamInfo(
-    #     mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
-    # )
-    # try:
-    #     workbook = md.convert(to_bytesio(file), stream_info=stream_info)
-    # except (
-    #     BadZipFile,
-    #     ValueError,
-    #     FileConversionException,
-    #     UnsupportedFormatException,
-    # ) as e:
-    #     error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
-    #     if file_name.startswith("~"):
-    #         logger.debug(error_str + " (this is expected for files with ~)")
-    #     else:
-    #         logger.warning(error_str)
-    #     return ""
-    # return workbook.markdown
+    Returns a list of (csv_text, sheet)
+    """
     try:
         workbook = openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
@@ -494,23 +478,30 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return ""
+        return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
-            return ""
+            return []
         raise
 
-    text_content = []
+    sheets: list[tuple[str, str]] = []
     for sheet in workbook.worksheets:
         sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerows(sheet_matrix)
-        text_content.append(buf.getvalue().rstrip("\n"))
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+        csv_text = buf.getvalue().rstrip("\n")
+        if csv_text.strip():
+            sheets.append((csv_text, sheet.title))
+    return sheets
+
+
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    sheets = xlsx_sheet_extraction(file, file_name)
+    return TEXT_SECTION_SEPARATOR.join(csv_text for csv_text, _title in sheets)
 
 
 def eml_to_text(file: IO[Any]) -> str:

@@ -256,7 +256,7 @@ export const AppearanceThemeSettings = forwardRef<
                   <Tabs.Trigger
                     value="logo_and_name"
                     tooltip="Show both your application logo and name."
-                    side="top"
+                    tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo & Name
@@ -269,7 +269,7 @@ export const AppearanceThemeSettings = forwardRef<
                         ? "Show only your application logo."
                         : "Upload a logo to enable this option."
                     }
-                    side="top"
+                    tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo Only
@@ -282,7 +282,7 @@ export const AppearanceThemeSettings = forwardRef<
                         ? "Show only your application name."
                         : "Enter an application name to enable this option."
                     }
-                    side="top"
+                    tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
                     Name Only

@@ -96,7 +96,7 @@ function Tooltip({
   sideOffset = 4,
   children,
 }: TooltipProps) {
-  if (!tooltip) return children;
+  if (tooltip == null) return children;
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
@@ -120,7 +120,6 @@ function Tooltip({
           side={side}
           align={align}
           sideOffset={sideOffset}
-          asChild
         >
           {content}
         </TooltipPrimitive.Content>

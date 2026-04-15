@@ -7,8 +7,6 @@ import time
 from collections.abc import Callable
 from typing import cast
 
-from sqlalchemy.orm import Session
-
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -22,6 +20,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
@@ -184,6 +183,14 @@ def generate_final_report(
         return has_reasoned
 
 
+def _get_research_agent_tool_id() -> int:
+    with get_session_with_current_tenant() as db_session:
+        return get_tool_by_name(
+            tool_name=RESEARCH_AGENT_TOOL_NAME,
+            db_session=db_session,
+        ).id
+
+
 @log_function_time(print_only=True)
 def run_deep_research_llm_loop(
     emitter: Emitter,
@@ -193,7 +200,6 @@ def run_deep_research_llm_loop(
     custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
-    db_session: Session,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
@@ -717,6 +723,7 @@ def run_deep_research_llm_loop(
                     simple_chat_history.append(assistant_with_tools)
 
                     # Now add TOOL_CALL_RESPONSE messages and tool call info for each result
+                    research_agent_tool_id = _get_research_agent_tool_id()
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
@@ -737,10 +744,7 @@ def run_deep_research_llm_loop(
                             tab_index=tab_index,
                             tool_name=current_tool_call.tool_name,
                             tool_call_id=current_tool_call.tool_call_id,
-                            tool_id=get_tool_by_name(
-                                tool_name=RESEARCH_AGENT_TOOL_NAME,
-                                db_session=db_session,
-                            ).id,
+                            tool_id=research_agent_tool_id,
                             reasoning_tokens=llm_step_result.reasoning
                             or most_recent_reasoning,
                             tool_call_arguments=current_tool_call.tool_args,

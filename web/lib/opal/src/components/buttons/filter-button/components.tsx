@@ -3,11 +3,9 @@ import {
   type InteractiveStatefulInteraction,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type { TooltipSide } from "@opal/components";
+import { Text, Tooltip, type TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
-import { Tooltip } from "@opal/components/tooltip/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
 import { Button } from "@opal/components/buttons/button/components";

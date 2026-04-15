@@ -37,10 +37,11 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
-import { Button as OpalButton, Tooltip } from "@opal/components";
+import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@opal/components";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */

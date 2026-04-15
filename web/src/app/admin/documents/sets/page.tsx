@@ -120,13 +120,9 @@ const EditRow = ({
     <div className="relative flex">
       <Tooltip
         tooltip={
-          !documentSet.is_up_to_date ? (
-            <div className="flex break-words break-keep whitespace-pre-wrap items-start">
-              <InfoIcon className="mr-2 mt-0.5" />
-              Cannot update while syncing! Wait for the sync to finish, then try
-              again.
-            </div>
-          ) : undefined
+          !documentSet.is_up_to_date
+            ? "Cannot update while syncing! Wait for the sync to finish, then try again."
+            : undefined
         }
       >
         <div

@@ -9,8 +9,9 @@ import {
 } from "react";
 import { Hoverable } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
-import { Button, Tag, Tooltip } from "@opal/components";
+import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
+import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 

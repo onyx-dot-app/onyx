@@ -80,22 +80,11 @@ export default function Truncated({
     [showTooltip]
   );
 
+  const tooltipContent = showTooltip ? children : undefined;
+
   return (
     <>
-      <Tooltip
-        tooltip={
-          showTooltip ? (
-            typeof children === "string" ? (
-              <Text as="p" textLight05>
-                {children}
-              </Text>
-            ) : (
-              children
-            )
-          ) : undefined
-        }
-        side={side}
-      >
+      <Tooltip tooltip={tooltipContent} side={side} sideOffset={sideOffset}>
         <div
           ref={visibleRef}
           className="flex-grow overflow-hidden text-left w-full"
@@ -109,11 +98,11 @@ export default function Truncated({
 
         # Note
 
-        The placement of this `div` *after* the above `Tooltip` is *VERY* important to our tests!
+        The placement of this `div` *after* the above Tooltip is *VERY* important to our tests!
         If the bottom `div` were placed first, any tests that try locating the string that the `Truncated` component is trying to render would find the bottom div first.
         This can break expectations (since it's supposed to be hidden in the first place).
 
-        All in all, keep the below `div` *below* the above `Tooltip`.
+        All in all, keep the below `div` *below* the above Tooltip.
 
         - @raunakab
       */}

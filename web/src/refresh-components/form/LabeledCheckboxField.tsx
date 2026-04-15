@@ -85,7 +85,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   );
 
   return (
-    <Tooltip tooltip={tooltip} side="top">
+    <Tooltip tooltip={tooltip} side="top" sideOffset={25}>
       {checkboxContent}
     </Tooltip>
   );

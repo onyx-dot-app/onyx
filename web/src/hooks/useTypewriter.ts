@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 // Fixed reveal rate — NOT adaptive. Any ceil(delta/N) formula produces
 // visible chunks on burst packet arrivals. 1 = 60 cps, 2 = 120 cps.
-const CHARS_PER_FRAME = 2;
+const CHARS_PER_FRAME = 3;
 
 /**
  * Reveals `target` one character at a time on each animation frame.

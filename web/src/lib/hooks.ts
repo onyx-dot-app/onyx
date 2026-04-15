@@ -1154,6 +1154,16 @@ export function useSourcePreferences({
     setSelectedSources,
   ]);
 
+  // Re-initialize when the available source set changes (e.g. switching agents).
+  const prevSourcesKey = useRef(availableSources.join(","));
+  useEffect(() => {
+    const key = availableSources.join(",");
+    if (key !== prevSourcesKey.current) {
+      prevSourcesKey.current = key;
+      setSourcesInitialized(false);
+    }
+  }, [availableSources]);
+
   const enableSources = (sources: SourceMetadata[]) => {
     setSelectedSources([...sources]);
     persistSourcePreferencesState(sources, configuredSources);

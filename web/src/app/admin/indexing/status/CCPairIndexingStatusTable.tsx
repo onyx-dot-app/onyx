@@ -27,13 +27,14 @@ import {
   FiUnlock,
   FiRefreshCw,
 } from "react-icons/fi";
-import { Button, Tooltip } from "@opal/components";
+import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 
 // Helper to handle navigation with cmd/ctrl+click support

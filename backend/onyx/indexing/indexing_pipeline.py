@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Protocol
 
+import sentry_sdk
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
@@ -332,6 +333,13 @@ def index_doc_batch_with_handler(
     except Exception as e:
         # don't log the batch directly, it's too much text
         document_ids = [doc.id for doc in document_batch]
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("stage", "indexing_pipeline")
+            scope.set_tag("tenant_id", tenant_id)
+            scope.set_tag("batch_size", str(len(document_batch)))
+            scope.set_extra("document_ids", document_ids)
+            scope.fingerprint = ["indexing-pipeline-failure", type(e).__name__]
+            sentry_sdk.capture_exception(e)
         logger.exception(f"Failed to index document batch: {document_ids}")
 
         index_pipeline_result = IndexingPipelineResult(

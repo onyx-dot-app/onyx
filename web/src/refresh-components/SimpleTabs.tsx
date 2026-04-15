@@ -103,7 +103,7 @@ export default function SimpleTabs({
             value={key}
             icon={tab.icon}
             tooltip={tab.tooltip}
-            side={tab.side}
+            tooltipSide={tab.side}
             disabled={tab.disabled}
           >
             {tab.name}

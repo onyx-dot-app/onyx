@@ -5,9 +5,8 @@ import type { ButtonType, IconFunctionComponent } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
-import { Text } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
 import Link from "next/link";
-import { Tooltip } from "@opal/components/tooltip/components";
 
 // ---------------------------------------------------------------------------
 // Types

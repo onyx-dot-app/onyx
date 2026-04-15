@@ -5,6 +5,7 @@ from pydantic import ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.models import Memory
 from onyx.db.models import User
 
@@ -83,47 +84,51 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
 def add_memory(
     user_id: UUID,
     memory_text: str,
-    db_session: Session,
-) -> Memory:
+    db_session: Session | None = None,
+) -> int:
     """Insert a new Memory row for the given user.
 
     If the user already has MAX_MEMORIES_PER_USER memories, the oldest
     one (lowest id) is deleted before inserting the new one.
+
+    Returns the id of the newly created Memory row.
     """
-    existing = db_session.scalars(
-        select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
-    ).all()
+    with get_session_with_current_tenant_if_none(db_session) as db_session:
+        existing = db_session.scalars(
+            select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
+        ).all()
 
-    if len(existing) >= MAX_MEMORIES_PER_USER:
-        db_session.delete(existing[0])
+        if len(existing) >= MAX_MEMORIES_PER_USER:
+            db_session.delete(existing[0])
 
-    memory = Memory(
-        user_id=user_id,
-        memory_text=memory_text,
-    )
-    db_session.add(memory)
-    db_session.commit()
-    return memory
+        memory = Memory(
+            user_id=user_id,
+            memory_text=memory_text,
+        )
+        db_session.add(memory)
+        db_session.commit()
+        return memory.id
 
 
 def update_memory_at_index(
     user_id: UUID,
     index: int,
     new_text: str,
-    db_session: Session,
-) -> Memory | None:
+    db_session: Session | None = None,
+) -> int | None:
     """Update the memory at the given 0-based index (ordered by id ASC, matching get_memories()).
 
-    Returns the updated Memory row, or None if the index is out of range.
+    Returns the id of the updated Memory row, or None if the index is out of range.
     """
-    memory_rows = db_session.scalars(
-        select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
-    ).all()
+    with get_session_with_current_tenant_if_none(db_session) as db_session:
+        memory_rows = db_session.scalars(
+            select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.asc())
+        ).all()
 
-    if index < 0 or index >= len(memory_rows):
-        return None
+        if index < 0 or index >= len(memory_rows):
+            return None
 
-    memory = memory_rows[index]
-    memory.memory_text = new_text
-    db_session.commit()
-    return memory
+        memory = memory_rows[index]
+        memory.memory_text = new_text
+        db_session.commit()
+        return memory.id

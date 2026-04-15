@@ -4,10 +4,8 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
+import { Text, type TooltipSide, Tooltip } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
-import { Tooltip } from "@opal/components/tooltip/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,8 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
-import { Button, Tooltip } from "@opal/components";
+import { Button } from "@opal/components";
+import { Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,

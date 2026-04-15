@@ -9,7 +9,7 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import { Text, Tooltip } from "@opal/components";
+import { Text } from "@opal/components";
 import { Callout } from "@/components/ui/callout";
 import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
@@ -19,6 +19,7 @@ import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import { Tooltip } from "@opal/components";
 import { SvgClock } from "@opal/icons";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;

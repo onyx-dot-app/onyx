@@ -4,8 +4,6 @@ from collections.abc import Callable
 from typing import Any
 from typing import Literal
 
-from sqlalchemy.orm import Session
-
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
@@ -635,7 +633,6 @@ def run_llm_loop(
     user_memory_context: UserMemoryContext | None,
     llm: LLM,
     token_counter: Callable[[str], int],
-    db_session: Session,
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
@@ -1020,20 +1017,16 @@ def run_llm_loop(
                     persisted_memory_id: int | None = None
                     if user_memory_context and user_memory_context.user_id:
                         if tool_response.rich_response.index_to_replace is not None:
-                            memory = update_memory_at_index(
+                            persisted_memory_id = update_memory_at_index(
                                 user_id=user_memory_context.user_id,
                                 index=tool_response.rich_response.index_to_replace,
                                 new_text=tool_response.rich_response.memory_text,
-                                db_session=db_session,
                             )
-                            persisted_memory_id = memory.id if memory else None
                         else:
-                            memory = add_memory(
+                            persisted_memory_id = add_memory(
                                 user_id=user_memory_context.user_id,
                                 memory_text=tool_response.rich_response.memory_text,
-                                db_session=db_session,
                             )
-                            persisted_memory_id = memory.id
                     operation: Literal["add", "update"] = (
                         "update"
                         if tool_response.rich_response.index_to_replace is not None

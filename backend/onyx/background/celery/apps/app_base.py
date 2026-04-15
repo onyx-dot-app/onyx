@@ -63,11 +63,14 @@ logger = setup_logger()
 task_logger = get_task_logger(__name__)
 
 if SENTRY_DSN:
+    from onyx.configs.sentry import _add_instance_tags
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
         traces_sample_rate=0.1,
         release=__version__,
+        before_send=_add_instance_tags,
     )
     logger.info("Sentry initialized")
 else:

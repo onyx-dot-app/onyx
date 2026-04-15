@@ -568,7 +568,7 @@ export function SlackChannelConfigFormFields({
           <Tooltip
             side="top"
             tooltip={
-              <>
+              <div className="space-y-2">
                 <Label className="text-text mb-2 font-semibold">
                   Privacy Alert
                 </Label>
@@ -606,7 +606,7 @@ export function SlackChannelConfigFormFields({
                     ))}
                   </div>
                 </div>
-              </>
+              </div>
             }
           >
             <div className="flex hover:bg-background-150 cursor-pointer p-2 rounded-lg items-center">

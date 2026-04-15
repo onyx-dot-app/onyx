@@ -67,7 +67,6 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import reserve_multi_model_message_ids
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
@@ -1006,93 +1005,86 @@ def _run_models(
         model_llm = setup.llms[model_idx]
 
         try:
-            # Each worker opens its own session — SQLAlchemy sessions are not thread-safe.
-            # Do NOT write to the outer db_session (or any shared DB state) from here;
-            # all DB writes in this thread must go through thread_db_session.
-            with get_session_with_current_tenant() as thread_db_session:
-                thread_tool_dict = construct_tools(
-                    persona=setup.persona,
-                    db_session=thread_db_session,
-                    emitter=model_emitter,
-                    user=user,
-                    llm=model_llm,
-                    search_tool_config=SearchToolConfig(
-                        user_selected_filters=setup.new_msg_req.internal_search_filters,
-                        project_id_filter=setup.search_params.project_id_filter,
-                        persona_id_filter=setup.search_params.persona_id_filter,
-                        bypass_acl=setup.bypass_acl,
-                        slack_context=setup.slack_context,
-                        enable_slack_search=_should_enable_slack_search(
-                            setup.persona, setup.new_msg_req.internal_search_filters
-                        ),
+            # Each function opens short-lived DB sessions on demand.
+            # Do NOT pass a long-lived session here — it would hold a
+            # connection for the entire LLM loop (minutes), and cloud
+            # infrastructure may drop idle connections.
+            thread_tool_dict = construct_tools(
+                persona=setup.persona,
+                emitter=model_emitter,
+                user=user,
+                llm=model_llm,
+                search_tool_config=SearchToolConfig(
+                    user_selected_filters=setup.new_msg_req.internal_search_filters,
+                    project_id_filter=setup.search_params.project_id_filter,
+                    persona_id_filter=setup.search_params.persona_id_filter,
+                    bypass_acl=setup.bypass_acl,
+                    slack_context=setup.slack_context,
+                    enable_slack_search=_should_enable_slack_search(
+                        setup.persona, setup.new_msg_req.internal_search_filters
                     ),
-                    custom_tool_config=CustomToolConfig(
-                        chat_session_id=setup.chat_session.id,
-                        message_id=setup.user_message.id,
-                        additional_headers=setup.custom_tool_additional_headers,
-                        mcp_headers=setup.mcp_headers,
-                    ),
-                    file_reader_tool_config=FileReaderToolConfig(
-                        user_file_ids=setup.available_files.user_file_ids,
-                        chat_file_ids=setup.available_files.chat_file_ids,
-                    ),
-                    allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
-                    search_usage_forcing_setting=setup.search_params.search_usage,
+                ),
+                custom_tool_config=CustomToolConfig(
+                    chat_session_id=setup.chat_session.id,
+                    message_id=setup.user_message.id,
+                    additional_headers=setup.custom_tool_additional_headers,
+                    mcp_headers=setup.mcp_headers,
+                ),
+                file_reader_tool_config=FileReaderToolConfig(
+                    user_file_ids=setup.available_files.user_file_ids,
+                    chat_file_ids=setup.available_files.chat_file_ids,
+                ),
+                allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+                search_usage_forcing_setting=setup.search_params.search_usage,
+            )
+            model_tools = [
+                tool for tool_list in thread_tool_dict.values() for tool in tool_list
+            ]
+
+            if setup.forced_tool_id and setup.forced_tool_id not in {
+                tool.id for tool in model_tools
+            }:
+                raise ValueError(
+                    f"Forced tool {setup.forced_tool_id} not found in tools"
                 )
-                model_tools = [
-                    tool
-                    for tool_list in thread_tool_dict.values()
-                    for tool in tool_list
-                ]
 
-                if setup.forced_tool_id and setup.forced_tool_id not in {
-                    tool.id for tool in model_tools
-                }:
-                    raise ValueError(
-                        f"Forced tool {setup.forced_tool_id} not found in tools"
-                    )
-
-                # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-                if n_models == 1 and setup.new_msg_req.deep_research:
-                    if setup.chat_session.project_id:
-                        raise RuntimeError(
-                            "Deep research is not supported for projects"
-                        )
-                    run_deep_research_llm_loop(
-                        emitter=model_emitter,
-                        state_container=sc,
-                        simple_chat_history=list(setup.simple_chat_history),
-                        tools=model_tools,
-                        custom_agent_prompt=setup.custom_agent_prompt,
-                        llm=model_llm,
-                        token_counter=get_llm_token_counter(model_llm),
-                        db_session=thread_db_session,
-                        skip_clarification=setup.skip_clarification,
-                        user_identity=setup.user_identity,
-                        chat_session_id=str(setup.chat_session.id),
-                        all_injected_file_metadata=setup.all_injected_file_metadata,
-                    )
-                else:
-                    run_llm_loop(
-                        emitter=model_emitter,
-                        state_container=sc,
-                        simple_chat_history=list(setup.simple_chat_history),
-                        tools=model_tools,
-                        custom_agent_prompt=setup.custom_agent_prompt,
-                        context_files=setup.extracted_context_files,
-                        persona=setup.persona,
-                        user_memory_context=setup.user_memory_context,
-                        llm=model_llm,
-                        token_counter=get_llm_token_counter(model_llm),
-                        db_session=thread_db_session,
-                        forced_tool_id=setup.forced_tool_id,
-                        user_identity=setup.user_identity,
-                        chat_session_id=str(setup.chat_session.id),
-                        chat_files=setup.chat_files_for_tools,
-                        include_citations=setup.new_msg_req.include_citations,
-                        all_injected_file_metadata=setup.all_injected_file_metadata,
-                        inject_memories_in_prompt=user.use_memories,
-                    )
+            # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
+            if n_models == 1 and setup.new_msg_req.deep_research:
+                if setup.chat_session.project_id:
+                    raise RuntimeError("Deep research is not supported for projects")
+                run_deep_research_llm_loop(
+                    emitter=model_emitter,
+                    state_container=sc,
+                    simple_chat_history=list(setup.simple_chat_history),
+                    tools=model_tools,
+                    custom_agent_prompt=setup.custom_agent_prompt,
+                    llm=model_llm,
+                    token_counter=get_llm_token_counter(model_llm),
+                    skip_clarification=setup.skip_clarification,
+                    user_identity=setup.user_identity,
+                    chat_session_id=str(setup.chat_session.id),
+                    all_injected_file_metadata=setup.all_injected_file_metadata,
+                )
+            else:
+                run_llm_loop(
+                    emitter=model_emitter,
+                    state_container=sc,
+                    simple_chat_history=list(setup.simple_chat_history),
+                    tools=model_tools,
+                    custom_agent_prompt=setup.custom_agent_prompt,
+                    context_files=setup.extracted_context_files,
+                    persona=setup.persona,
+                    user_memory_context=setup.user_memory_context,
+                    llm=model_llm,
+                    token_counter=get_llm_token_counter(model_llm),
+                    forced_tool_id=setup.forced_tool_id,
+                    user_identity=setup.user_identity,
+                    chat_session_id=str(setup.chat_session.id),
+                    chat_files=setup.chat_files_for_tools,
+                    include_citations=setup.new_msg_req.include_citations,
+                    all_injected_file_metadata=setup.all_injected_file_metadata,
+                    inject_memories_in_prompt=user.use_memories,
+                )
 
             model_succeeded[model_idx] = True
 

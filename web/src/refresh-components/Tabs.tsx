@@ -564,7 +564,7 @@ interface TabsTriggerProps
   tooltip?: string;
 
   /** Side where tooltip appears. @default "top" */
-  side?: "top" | "bottom" | "left" | "right";
+  tooltipSide?: "top" | "bottom" | "left" | "right";
 
   /** Optional icon component to render before the label */
   icon?: React.FunctionComponent<IconProps>;
@@ -596,7 +596,7 @@ const TabsTrigger = React.forwardRef<
     {
       variant: variantProp,
       tooltip,
-      side = "top",
+      tooltipSide = "top",
       icon: Icon,
       children,
       disabled,
@@ -663,7 +663,7 @@ const TabsTrigger = React.forwardRef<
         {...props}
       >
         {tooltip && !disabled ? (
-          <Tooltip tooltip={tooltip} side={side}>
+          <Tooltip tooltip={tooltip} side={tooltipSide}>
             <span className="inline-flex items-center gap-inherit">
               {inner}
             </span>
@@ -679,7 +679,7 @@ const TabsTrigger = React.forwardRef<
     // only when disabled so layout stays unchanged for the enabled case.
     if (tooltip && disabled) {
       return (
-        <Tooltip tooltip={tooltip} side={side}>
+        <Tooltip tooltip={tooltip} side={tooltipSide}>
           <span className="flex-1 inline-flex align-middle justify-center">
             {trigger}
           </span>

@@ -244,15 +244,9 @@ const QueryText = ({
 
   return (
     <OpalTooltip
+      tooltip={isTruncated ? tooltipText ?? displayName : undefined}
       side="top"
       delayDuration={300}
-      tooltip={
-        isTruncated ? (
-          <Text as="p" textLight05>
-            {tooltipText ?? displayName}
-          </Text>
-        ) : undefined
-      }
     >
       <span ref={textRef} className="max-w-[10rem] truncate block">
         <Text
