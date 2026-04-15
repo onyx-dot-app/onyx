@@ -51,7 +51,6 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
@@ -641,16 +640,6 @@ def connector_pruning_generator_task(
                 redis_client=redis_client,
                 source=source,
                 raw_id_to_parent=all_connector_doc_ids,
-            )
-
-            # Link hierarchy nodes to documents for sources where pages can be
-            # both hierarchy nodes AND documents (e.g. Notion, Confluence)
-            all_doc_id_list = list(all_connector_doc_ids.keys())
-            link_hierarchy_nodes_to_documents(
-                db_session=db_session,
-                document_ids=all_doc_id_list,
-                source=source,
-                commit=True,
             )
 
             diff_start = time.monotonic()
