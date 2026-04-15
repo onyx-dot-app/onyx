@@ -1,6 +1,5 @@
 import "@opal/components/cards/message-card/styles.css";
-import type { RichStr } from "@opal/types";
-import type { IconFunctionComponent } from "@opal/types";
+import type { RichStr, IconFunctionComponent } from "@opal/types";
 import { Content } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
@@ -18,11 +17,8 @@ import {
 type MessageCardVariant = "default" | "info" | "success" | "warning" | "error";
 
 interface MessageCardProps {
-  /** Visual variant controlling background and border colors. @default "default" */
+  /** Visual variant controlling background, border, and icon. @default "default" */
   variant?: MessageCardVariant;
-
-  /** Icon displayed beside the title. When omitted, a default icon is chosen based on `variant`. */
-  icon?: IconFunctionComponent;
 
   /** Main title text. */
   title: string | RichStr;
@@ -89,14 +85,13 @@ const DEFAULT_ICONS: Record<MessageCardVariant, IconFunctionComponent> = {
  */
 function MessageCard({
   variant = "default",
-  icon,
   title,
   description,
   bottomChildren,
   onClose,
   ref,
 }: MessageCardProps) {
-  const Icon = icon ?? DEFAULT_ICONS[variant];
+  const Icon = DEFAULT_ICONS[variant];
 
   return (
     <div ref={ref} className="opal-message-card" data-variant={variant}>
