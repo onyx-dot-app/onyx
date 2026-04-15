@@ -19,7 +19,7 @@ import {
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import Message from "@/refresh-components/messages/Message";
+import { MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -484,19 +484,14 @@ export default function BillingPage() {
       <SettingsLayouts.Body>
         <div className="flex flex-col items-center gap-6">
           {isActivating && (
-            <Message
-              static
-              warning
-              large
-              text="Your license is still activating"
+            <MessageCard
+              variant="warning"
+              title="Your license is still activating"
               description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
-              icon
-              close
               onClose={() => {
                 sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
                 setIsActivating(false);
               }}
-              className="w-full"
             />
           )}
           {renderContent()}

@@ -6,9 +6,8 @@ import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Message from "@/refresh-components/messages/Message";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import {
@@ -637,35 +636,27 @@ export default function BillingDetailsView({
     <Section gap={1} height="auto" width="full">
       {/* Stripe connection error banner */}
       {hasStripeError && (
-        <Message
-          static
-          warning
-          text="Unable to connect to Stripe payment portal."
+        <MessageCard
+          variant="warning"
+          title="Unable to connect to Stripe payment portal."
           description="Check your internet connection or manually provide a license."
-          close={false}
-          className="w-full"
         />
       )}
 
       {/* Air-gapped mode info banner */}
       {isAirGapped && !hasStripeError && !isManualLicenseOnly && (
-        <Message
-          static
-          info
-          text="Air-gapped deployment"
+        <MessageCard
+          variant="info"
+          title="Air-gapped deployment"
           description="Online billing management is disabled. Contact support to update your subscription."
-          close={false}
-          className="w-full"
         />
       )}
 
       {/* Expiration banner */}
       {expirationState && (
-        <Message
-          static
-          warning={expirationState.variant === "warning"}
-          error={expirationState.variant === "error"}
-          text={
+        <MessageCard
+          variant={expirationState.variant}
+          title={
             expirationState.variant === "error"
               ? expirationState.daysUntilDeletion
                 ? `Your subscription has expired. Data will be deleted in ${expirationState.daysUntilDeletion} days.`
@@ -679,8 +670,6 @@ export default function BillingDetailsView({
                 : "Renew your subscription to restore access to paid features."
               : `Renew your subscription by ${expirationState.expirationDate} to avoid disruption.`
           }
-          close={false}
-          className="w-full"
         />
       )}
 

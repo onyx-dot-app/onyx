@@ -83,6 +83,13 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* MessageCard */
+export {
+  MessageCard,
+  type MessageCardProps,
+  type MessageCardVariant,
+} from "@opal/components/cards/message-card/components";
+
 /* Pagination */
 export {
   Pagination,

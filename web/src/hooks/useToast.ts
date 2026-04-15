@@ -12,8 +12,6 @@ export interface ToastOptions {
   description?: string;
   duration?: number; // ms – default 4000, Infinity = persistent
   dismissible?: boolean; // default true (shows close button)
-  actionLabel?: string;
-  onAction?: () => void;
 }
 
 export interface Toast extends ToastOptions {

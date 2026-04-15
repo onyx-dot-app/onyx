@@ -19,10 +19,9 @@ import {
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
 import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
-import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, SelectCard, Text } from "@opal/components";
+import { Button, MessageCard, SelectCard, Text } from "@opal/components";
 import { Content, Card } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
@@ -222,13 +221,9 @@ export default function ImageGenerationContent() {
         />
 
         {connectedProviderIds.size === 0 && (
-          <Message
-            info
-            static
-            large
-            close={false}
-            text="Connect an image generation model to use in chat."
-            className="w-full"
+          <MessageCard
+            variant="info"
+            title="Connect an image generation model to use in chat."
           />
         )}
 
