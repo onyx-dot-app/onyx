@@ -416,6 +416,7 @@ export default function MultiModelResponseView({
       isRetryable: response.isRetryable,
       errorStackTrace: response.errorStackTrace,
       errorDetails: response.errorDetails,
+      isGenerating,
     }),
     [
       preferredIndex,
@@ -429,6 +430,7 @@ export default function MultiModelResponseView({
       onMessageSelection,
       onRegenerate,
       parentMessage,
+      isGenerating,
     ]
   );
 
