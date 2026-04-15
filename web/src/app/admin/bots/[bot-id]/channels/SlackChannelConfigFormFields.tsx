@@ -23,12 +23,7 @@ import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -570,14 +565,10 @@ export function SlackChannelConfigFormFields({
 
       <div className="flex mt-8 gap-x-2 w-full justify-end">
         {shouldShowPrivacyAlert && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex hover:bg-background-150 cursor-pointer p-2 rounded-lg items-center">
-                  <AlertCircle className="h-5 w-5 text-alert" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="bg-background p-4 w-80">
+          <Tooltip
+            side="top"
+            tooltip={
+              <div className="space-y-2">
                 <Label className="text-text mb-2 font-semibold">
                   Privacy Alert
                 </Label>
@@ -615,9 +606,13 @@ export function SlackChannelConfigFormFields({
                     ))}
                   </div>
                 </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+              </div>
+            }
+          >
+            <div className="flex hover:bg-background-150 cursor-pointer p-2 rounded-lg items-center">
+              <AlertCircle className="h-5 w-5 text-alert" />
+            </div>
+          </Tooltip>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
         <Button prominence="secondary" onClick={() => router.back()}>

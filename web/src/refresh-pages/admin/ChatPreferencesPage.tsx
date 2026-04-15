@@ -11,7 +11,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -110,13 +110,13 @@ function MCPServerCard({
         description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
-          <SimpleTooltip tooltip={authTooltip} side="top">
+          <Tooltip tooltip={authTooltip} side="top">
             <Switch
               checked={serverEnabled}
               onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
               disabled={needsAuth}
             />
-          </SimpleTooltip>
+          </Tooltip>
         }
       >
         {tools.length > 0 && (
@@ -149,7 +149,7 @@ function MCPServerCard({
                 description={tool.description}
                 icon={tool.icon}
                 rightChildren={
-                  <SimpleTooltip tooltip={authTooltip} side="top">
+                  <Tooltip tooltip={authTooltip} side="top">
                     <Switch
                       checked={isToolEnabled(tool.id)}
                       onCheckedChange={(checked) =>
@@ -157,7 +157,7 @@ function MCPServerCard({
                       }
                       disabled={needsAuth}
                     />
-                  </SimpleTooltip>
+                  </Tooltip>
                 }
               />
             ))}
@@ -524,7 +524,7 @@ function ChatPreferencesForm() {
         <SettingsLayouts.Body>
           {/* Features */}
           <Card>
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 uniqueSources.length === 0
                   ? "Set up connectors to use Search Mode"
@@ -551,7 +551,7 @@ function ChatPreferencesForm() {
                   </InputHorizontal>
                 </div>
               </Disabled>
-            </SimpleTooltip>
+            </Tooltip>
             <InputHorizontal
               title="Multi-Model Generation"
               tag={{ title: "beta", color: "blue" }}
@@ -736,7 +736,7 @@ function ChatPreferencesForm() {
                         </Card>
                       )}
 
-                      <SimpleTooltip
+                      <Tooltip
                         tooltip={
                           imageGenTool
                             ? undefined
@@ -765,7 +765,7 @@ function ChatPreferencesForm() {
                             />
                           </InputHorizontal>
                         </Card>
-                      </SimpleTooltip>
+                      </Tooltip>
 
                       <Card variant={webSearchTool ? undefined : "disabled"}>
                         <InputHorizontal

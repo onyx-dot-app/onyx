@@ -8,7 +8,7 @@ import type { TooltipSide } from "@opal/components";
 import type { DistributiveOmit } from "@opal/types";
 import type { ContentActionProps } from "@opal/layouts/content-action/components";
 import { ContentAction } from "@opal/layouts";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { Tooltip } from "@opal/components/tooltip/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,21 +98,10 @@ function LineItemButton({
     </Interactive.Stateful>
   );
 
-  if (!tooltip) return item;
-
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{item}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          {tooltip}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {item}
+    </Tooltip>
   );
 }
 

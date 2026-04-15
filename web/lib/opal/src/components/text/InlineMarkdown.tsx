@@ -64,7 +64,7 @@ export default function InlineMarkdown({ content }: InlineMarkdownProps) {
 // RichStr helpers
 // ---------------------------------------------------------------------------
 
-function isRichStr(value: unknown): value is RichStr {
+export function isRichStr(value: unknown): value is RichStr {
   return (
     typeof value === "object" &&
     value !== null &&

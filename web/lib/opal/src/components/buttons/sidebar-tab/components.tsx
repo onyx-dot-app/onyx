@@ -7,8 +7,7 @@ import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import { Text } from "@opal/components";
 import Link from "next/link";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import "@opal/components/tooltip.css";
+import { Tooltip } from "@opal/components/tooltip/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,18 +144,9 @@ function SidebarTab({
   if (typeof children !== "string") return content;
   if (folded) {
     return (
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{content}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            className="opal-tooltip"
-            side="right"
-            sideOffset={4}
-          >
-            {children}
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
+      <Tooltip tooltip={children} side="right">
+        {content}
+      </Tooltip>
     );
   }
   return content;

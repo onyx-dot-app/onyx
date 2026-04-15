@@ -34,12 +34,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip } from "@opal/components";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
@@ -123,36 +118,29 @@ const EditRow = ({
 
   return (
     <div className="relative flex">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className={`
+      <Tooltip
+        tooltip={
+          !documentSet.is_up_to_date
+            ? "Cannot update while syncing! Wait for the sync to finish, then try again."
+            : undefined
+        }
+      >
+        <div
+          className={`
               text-text-darker font-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
             `}
-              style={{ wordBreak: "normal", overflowWrap: "break-word" }}
-              onClick={() => {
-                if (documentSet.is_up_to_date) {
-                  router.push(`/admin/documents/sets/${documentSet.id}`);
-                }
-              }}
-            >
-              <FiEdit2 className="mr-2 flex-shrink-0" />
-              <span className="font-medium">{documentSet.name}</span>
-            </div>
-          </TooltipTrigger>
-          {!documentSet.is_up_to_date && (
-            <TooltipContent width="max-w-sm">
-              <div className="flex break-words break-keep whitespace-pre-wrap items-start">
-                <InfoIcon className="mr-2 mt-0.5" />
-                Cannot update while syncing! Wait for the sync to finish, then
-                try again.
-              </div>
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+          style={{ wordBreak: "normal", overflowWrap: "break-word" }}
+          onClick={() => {
+            if (documentSet.is_up_to_date) {
+              router.push(`/admin/documents/sets/${documentSet.id}`);
+            }
+          }}
+        >
+          <FiEdit2 className="mr-2 flex-shrink-0" />
+          <span className="font-medium">{documentSet.name}</span>
+        </div>
+      </Tooltip>
     </div>
   );
 };
