@@ -41,6 +41,10 @@ from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -62,10 +66,6 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    is_tabular_file,
-    tabular_file_to_sections,
-)
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images
