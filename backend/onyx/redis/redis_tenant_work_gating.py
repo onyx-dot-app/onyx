@@ -5,8 +5,6 @@ time each tenant was observed doing work. The fanout generator reads the set
 (filtered to entries within a TTL window) and skips tenants that haven't been
 active recently.
 
-See `plans/tenant-work-gating-redis-sets.md` for the full design.
-
 All public functions no-op in single-tenant mode (`MULTI_TENANT=False`).
 """
 
