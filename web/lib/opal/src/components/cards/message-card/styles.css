@@ -1,9 +1,9 @@
 .opal-message-card {
-  @apply flex flex-col self-stretch rounded-12 border p-3;
+  @apply flex flex-col self-stretch rounded-12 border p-2;
 }
 
 .opal-message-card-header {
-  @apply flex flex-row items-start gap-1;
+  @apply flex flex-row items-start gap-1 p-2;
 }
 
 .opal-message-card-content {
