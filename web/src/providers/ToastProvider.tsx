@@ -2,8 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { MessageCard } from "@opal/components";
-import type { MessageCardVariant } from "@opal/components/cards/message-card/components";
+import { MessageCard, type MessageCardVariant } from "@opal/components";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";

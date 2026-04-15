@@ -1,4 +1,5 @@
 import "@opal/components/cards/message-card/styles.css";
+import { cn } from "@opal/utils";
 import type { RichStr, IconFunctionComponent } from "@opal/types";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
@@ -137,7 +138,9 @@ function MessageCard({
   return (
     <div className="opal-message-card" data-variant={variant} ref={ref}>
       <ContentAction
-        icon={(props) => <Icon {...props} className={iconClass} />}
+        icon={(props) => (
+          <Icon {...props} className={cn(props.className, iconClass)} />
+        )}
         title={title}
         description={description}
         sizePreset="main-ui"
