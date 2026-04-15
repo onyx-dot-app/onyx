@@ -80,11 +80,7 @@ export default function Truncated({
     [showTooltip]
   );
 
-  const tooltipContent = showTooltip
-    ? typeof children === "string"
-      ? children
-      : children
-    : undefined;
+  const tooltipContent = showTooltip ? children : undefined;
 
   return (
     <>
