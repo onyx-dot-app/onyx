@@ -87,6 +87,7 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.notification import create_notification
+from onyx.db.notification import get_notifications
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -552,6 +553,21 @@ def check_indexing_completion(
             # Clear repeated error state on success
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
+
+                # Delete any existing error notification for this CC pair so a
+                # fresh one is created if the connector fails again later.
+                for notif in get_notifications(
+                    user=None,
+                    db_session=db_session,
+                    notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                    include_dismissed=True,
+                ):
+                    if (
+                        notif.additional_data
+                        and notif.additional_data.get("cc_pair_id") == cc_pair.id
+                    ):
+                        db_session.delete(notif)
+
                 db_session.commit()
 
             if attempt.status == IndexingStatus.SUCCESS:
@@ -856,6 +872,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         or f"CC pair {cc_pair.id}"
                     )
                     source = cc_pair.connector.source.value
+                    connector_url = f"/admin/connector/{cc_pair.id}"
                     create_notification(
                         user_id=None,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
@@ -863,8 +880,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         title=f"Connector '{connector_name}' has entered repeated error state",
                         description=(
                             f"The {source} connector has failed repeatedly and "
-                            f"has been flagged. Check the connector's indexing "
-                            f"history for details."
+                            f"has been flagged. View indexing history in the "
+                            f"Advanced section: {connector_url}"
                         ),
                         additional_data={"cc_pair_id": cc_pair.id},
                     )
