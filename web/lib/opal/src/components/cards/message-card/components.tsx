@@ -95,8 +95,8 @@ function MessageCard({
 
   return (
     <div ref={ref} className="opal-message-card" data-variant={variant}>
-      <div className="flex flex-row items-start gap-1">
-        <div className="flex-1 min-w-0">
+      <div className="opal-message-card-header">
+        <div className="opal-message-card-content">
           <Content
             icon={Icon}
             title={title}
