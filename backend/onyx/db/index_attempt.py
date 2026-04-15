@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from typing import TYPE_CHECKING
 from typing import TypeVarTuple
 
 from sqlalchemy import and_
@@ -28,17 +27,6 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
-
-if TYPE_CHECKING:
-    pass
-
-# from sqlalchemy.sql.selectable import Select
-
-# Comment out unused imports that cause mypy errors
-# from onyx.auth.models import UserRole
-# from onyx.configs.constants import MAX_LAST_VALID_CHECKPOINT_AGE_SECONDS
-# from onyx.db.connector_credential_pair import ConnectorCredentialPairIdentifier
-# from onyx.db.engine import async_query_for_dms
 
 logger = setup_logger()
 
@@ -978,6 +966,3 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
-
-
-# ── Metrics query helpers ──────────────────────────────────────────────

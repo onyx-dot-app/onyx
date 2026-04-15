@@ -1,15 +1,13 @@
-"""Push-based Prometheus metrics for connector health and index attempts.
+"""Prometheus metrics for connector health and index attempts.
 
-Emitted by workers at the point where state changes occur, rather than
-pulled by scraping every tenant schema. This scales to any number of
-tenants because each metric emission is O(1) — no schema iteration.
+Emitted by docfetching and docprocessing workers when connector or
+index attempt state changes. All functions silently catch exceptions
+to avoid disrupting the caller's business logic.
 
-Metrics are emitted from:
-- index_attempt.py mark_attempt_* functions (attempt status transitions)
-- docprocessing/tasks.py _run_indexing (connector health updates)
-
-All functions are safe to call from any context — they silently return
-on failure to avoid disrupting the caller's business logic.
+Gauge metrics (error state, last success timestamp) are per-process.
+With multiple worker pods, use max() aggregation in PromQL to get the
+correct value across instances, e.g.:
+    max by (cc_pair_id) (onyx_connector_in_error_state)
 """
 
 from prometheus_client import Counter
@@ -60,13 +58,7 @@ def on_index_attempt_status_change(
     cc_pair_id: int,
     status: str,
 ) -> None:
-    """Called on any index attempt status transition.
-
-    Active attempt count can be derived in PromQL from the transitions
-    counter rather than using a Gauge with inc/dec, because inc and dec
-    happen in different worker processes (docfetching vs docprocessing)
-    which have separate prometheus_client state.
-    """
+    """Called on any index attempt status transition."""
     try:
         labels = {
             "tenant_id": tenant_id,

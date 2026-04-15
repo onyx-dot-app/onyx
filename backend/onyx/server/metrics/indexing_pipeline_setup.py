@@ -31,9 +31,8 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
         celery_app: The Celery application instance. Used to obtain a
             broker Redis client on each scrape for queue depth metrics.
 
-    Note: connector health and index attempt metrics are now push-based
-    (emitted by workers at state-change time via connector_health_metrics.py)
-    and do not need collector registration here.
+    Note: connector health and index attempt metrics are push-based
+    (see connector_health_metrics.py) and do not use collectors.
     """
     _queue_collector.set_celery_app(celery_app)
     _redis_health_collector.set_celery_app(celery_app)

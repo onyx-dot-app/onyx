@@ -750,6 +750,3 @@ def resync_cc_pair(
     )
 
     db_session.commit()
-
-
-# ── Metrics query helpers ──────────────────────────────────────────────
