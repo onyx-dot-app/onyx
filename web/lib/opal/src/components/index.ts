@@ -1,7 +1,10 @@
-import "@opal/components/tooltip.css";
-
-/* Shared types */
-export type TooltipSide = "top" | "bottom" | "left" | "right";
+/* Tooltip */
+export {
+  Tooltip,
+  type TooltipProps,
+  type TooltipSide,
+  type TooltipAlign,
+} from "@opal/components/tooltip/components";
 
 /* Button */
 export {

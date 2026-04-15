@@ -22,7 +22,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
-import { listSourceMetadata } from "@/lib/sources";
+import { getSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -121,31 +121,26 @@ const getAdminConfigureInfo = (
 function getConfiguredSources(
   availableSources: ValidSources[]
 ): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
-  const allSources = listSourceMetadata();
-
-  const seenSources = new Set<string>();
-  const configuredSources: Array<
+  const seen = new Set<string>();
+  const result: Array<
     SourceMetadata & { originalName: string; uniqueKey: string }
   > = [];
 
-  availableSources.forEach((sourceName) => {
-    // Handle federated connectors by removing the federated_ prefix
-    const cleanName = sourceName.replace("federated_", "");
-    // Skip if we've already seen this source type
-    if (seenSources.has(cleanName)) return;
-    seenSources.add(cleanName);
-    const source = allSources.find(
-      (source) => source.internalName === cleanName
-    );
-    if (source) {
-      configuredSources.push({
-        ...source,
-        originalName: sourceName,
-        uniqueKey: cleanName,
-      });
-    }
-  });
-  return configuredSources;
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
+    });
+  }
+  return result;
 }
 
 type SecondaryViewState =
@@ -184,6 +179,37 @@ export default function ActionsPopover({
     selectedAgent.id
   );
 
+  const isDefaultAgent = selectedAgent.id === 0;
+
+  const hasSearchTool = selectedAgent.tools.some(
+    (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+  );
+
+  // knowledge_sources from the backend is the complete set of source types this agent
+  // can search over (doc sets, federated, hierarchy nodes, attached docs, user files).
+  // Default agent is special-cased to show everything available.
+  const agentAccessibleSources = useMemo(() => {
+    if (isDefaultAgent) {
+      return null; // null means "all accessible"
+    }
+
+    const sources = selectedAgent.knowledge_sources ?? [];
+    if (sources.length === 0 && hasSearchTool) {
+      return null;
+    }
+
+    return new Set<string>(sources);
+  }, [isDefaultAgent, selectedAgent.knowledge_sources, hasSearchTool]);
+
+  // Scope availableSources to only what this agent can access. This ensures
+  // that (a) agent-only sources like user_file appear in the toggle list and
+  // (b) stale sources from localStorage (e.g. Web on an agent with only Notion)
+  // don't leak into selectedSources / the YQL query.
+  const effectiveAvailableSources = useMemo(() => {
+    if (agentAccessibleSources === null) return availableSources;
+    return Array.from(agentAccessibleSources) as ValidSources[];
+  }, [agentAccessibleSources, availableSources]);
+
   const {
     sourcesInitialized,
     enableSources,
@@ -192,76 +218,13 @@ export default function ActionsPopover({
     toggleSource: baseToggleSource,
     isSourceEnabled,
   } = useSourcePreferences({
-    availableSources,
+    availableSources: effectiveAvailableSources,
     selectedSources,
     setSelectedSources,
   });
 
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
-
-  const isDefaultAgent = selectedAgent.id === 0;
-
-  // Check if the search tool is explicitly enabled on this persona (admin enabled "Use Knowledge")
-  const hasSearchTool = selectedAgent.tools.some(
-    (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-  );
-
-  // Get sources the agent has access to via document sets, hierarchy nodes, and attached documents
-  // Default agent has access to all sources
-  const agentAccessibleSources = useMemo(() => {
-    if (isDefaultAgent) {
-      return null; // null means "all accessible"
-    }
-
-    const sourceSet = new Set<string>();
-
-    // Add sources from document sets
-    selectedAgent.document_sets.forEach((docSet) => {
-      // Check cc_pair_summaries (regular connectors)
-      docSet.cc_pair_summaries?.forEach((ccPair) => {
-        // Normalize by removing federated_ prefix
-        const normalized = ccPair.source.replace("federated_", "");
-        sourceSet.add(normalized);
-      });
-
-      // Check federated_connector_summaries (federated connectors)
-      docSet.federated_connector_summaries?.forEach((fedConnector) => {
-        // Normalize by removing federated_ prefix
-        const normalized = fedConnector.source.replace("federated_", "");
-        sourceSet.add(normalized);
-      });
-    });
-
-    // Add sources from hierarchy nodes and attached documents (via knowledge_sources)
-    selectedAgent.knowledge_sources?.forEach((source) => {
-      // Normalize by removing federated_ prefix
-      const normalized = source.replace("federated_", "");
-      sourceSet.add(normalized);
-    });
-
-    // If agent has search tool but no specific sources, it can search everything
-    if (sourceSet.size === 0 && hasSearchTool) {
-      return null;
-    }
-
-    return sourceSet;
-  }, [
-    isDefaultAgent,
-    selectedAgent.document_sets,
-    selectedAgent.knowledge_sources,
-    hasSearchTool,
-  ]);
-
-  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
-  // Knowledge sources include document sets, hierarchy nodes, and attached documents
-  // If the search tool is present, the admin intentionally enabled knowledge search
-  const hasNoKnowledgeSources =
-    !isDefaultAgent &&
-    !hasSearchTool &&
-    selectedAgent.document_sets.length === 0 &&
-    (selectedAgent.hierarchy_node_count ?? 0) === 0 &&
-    (selectedAgent.attached_document_count ?? 0) === 0;
 
   // Store MCP server auth/loading state (tools are part of selectedAgent.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -347,48 +310,31 @@ export default function ActionsPopover({
   // Handle explicit force toggle from ActionLineItem
   const handleForceToggleWithTracking = useCallback(
     (toolId: number, wasForced: boolean) => {
-      // If pinning internal search, enable all accessible sources
       if (
         !wasForced &&
         internalSearchTool &&
         toolId === internalSearchTool.id
       ) {
-        const sources = getConfiguredSources(availableSources);
-        const accessibleSources = sources.filter(
-          (s) =>
-            agentAccessibleSources === null ||
-            agentAccessibleSources.has(s.uniqueKey)
-        );
-        setSelectedSources(accessibleSources);
+        setSelectedSources(getConfiguredSources(effectiveAvailableSources));
       }
       toggleForcedTool(toolId);
     },
     [
       toggleForcedTool,
       internalSearchTool,
-      availableSources,
-      agentAccessibleSources,
+      effectiveAvailableSources,
       setSelectedSources,
     ]
   );
 
-  // Wrapped source functions that auto-pin internal search when sources change
   const enableAllSources = useCallback(() => {
-    // Only enable sources the agent has access to
-    const allConfiguredSources = getConfiguredSources(availableSources);
-    const accessibleSources = allConfiguredSources.filter(
-      (s) =>
-        agentAccessibleSources === null ||
-        agentAccessibleSources.has(s.uniqueKey)
-    );
-    setSelectedSources(accessibleSources);
+    setSelectedSources(getConfiguredSources(effectiveAvailableSources));
 
     if (internalSearchTool) {
       setForcedToolIds([internalSearchTool.id]);
     }
   }, [
-    agentAccessibleSources,
-    availableSources,
+    effectiveAvailableSources,
     setSelectedSources,
     internalSearchTool,
     setForcedToolIds,
@@ -413,15 +359,12 @@ export default function ActionsPopover({
       const wasEnabled = isSourceEnabled(sourceUniqueKey);
       baseToggleSource(sourceUniqueKey);
 
-      const configuredSources = getConfiguredSources(availableSources);
-
       if (internalSearchTool) {
         if (!wasEnabled) {
-          // Enabling a source - auto-pin internal search
           setForcedToolIds([internalSearchTool.id]);
         } else {
-          // Disabling a source - check if all sources will be disabled
-          const remainingEnabled = configuredSources.filter(
+          const allSources = getConfiguredSources(effectiveAvailableSources);
+          const remainingEnabled = allSources.filter(
             (s) =>
               s.uniqueKey !== sourceUniqueKey && isSourceEnabled(s.uniqueKey)
           );
@@ -429,7 +372,6 @@ export default function ActionsPopover({
             remainingEnabled.length === 0 &&
             forcedToolIds.includes(internalSearchTool.id)
           ) {
-            // All sources disabled - unpin
             setForcedToolIds([]);
           }
         }
@@ -439,7 +381,7 @@ export default function ActionsPopover({
       baseToggleSource,
       internalSearchTool,
       isSourceEnabled,
-      availableSources,
+      effectiveAvailableSources,
       forcedToolIds,
       setForcedToolIds,
     ]
@@ -780,7 +722,7 @@ export default function ActionsPopover({
     </LineItem>
   ) : undefined;
 
-  const configuredSources = getConfiguredSources(availableSources);
+  const configuredSources = getConfiguredSources(effectiveAvailableSources);
 
   const numSourcesEnabled = configuredSources.filter((source) =>
     isSourceEnabled(source.uniqueKey)
@@ -859,14 +801,7 @@ export default function ActionsPopover({
     }
   };
 
-  // Only show sources the agent has access to
-  const accessibleConfiguredSources = configuredSources.filter(
-    (source) =>
-      agentAccessibleSources === null ||
-      agentAccessibleSources.has(source.uniqueKey)
-  );
-
-  const sourceToggleItems: SwitchListItem[] = accessibleConfiguredSources.map(
+  const sourceToggleItems: SwitchListItem[] = configuredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
@@ -880,11 +815,10 @@ export default function ActionsPopover({
     (source) => !isSourceEnabled(source.uniqueKey)
   );
 
-  // Count enabled sources for display (only accessible sources)
-  const enabledSourceCount = accessibleConfiguredSources.filter((source) =>
+  const enabledSourceCount = configuredSources.filter((source) =>
     isSourceEnabled(source.uniqueKey)
   ).length;
-  const totalSourceCount = accessibleConfiguredSources.length;
+  const totalSourceCount = configuredSources.length;
 
   const primaryView = (
     <PopoverMenu>

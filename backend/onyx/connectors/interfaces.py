@@ -123,6 +123,9 @@ class SlimConnector(BaseConnector):
     @abc.abstractmethod
     def retrieve_all_slim_docs(
         self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
 

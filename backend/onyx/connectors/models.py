@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -39,6 +40,7 @@ class SectionType(str, Enum):
 
     TEXT = "text"
     IMAGE = "image"
+    TABULAR = "tabular"
 
 
 class Section(BaseModel):
@@ -68,6 +70,18 @@ class ImageSection(Section):
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.image_file_id) + sys.getsizeof(self.link)
+
+
+class TabularSection(Section):
+    """Section containing tabular data (csv/tsv content, or one sheet of
+    an xlsx workbook rendered as CSV)."""
+
+    type: Literal[SectionType.TABULAR] = SectionType.TABULAR
+    text: str  # CSV representation in a string
+    link: str
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
@@ -171,7 +185,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection]
+    sections: Sequence[TextSection | ImageSection | TabularSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a
@@ -381,12 +395,9 @@ class IndexingDocument(Document):
             )
         else:
             section_len = sum(
-                (
-                    len(section.text)
-                    if isinstance(section, TextSection) and section.text is not None
-                    else 0
-                )
+                len(section.text) if section.text is not None else 0
                 for section in self.sections
+                if isinstance(section, (TextSection, TabularSection))
             )
 
         return title_len + section_len

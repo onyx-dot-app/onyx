@@ -12,6 +12,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 
 _ITERATION_LIMIT = 100_000
@@ -141,13 +142,15 @@ def load_all_from_connector(
 
 def to_sections(
     documents: list[Document],
-) -> Iterator[TextSection | ImageSection]:
+) -> Iterator[TextSection | ImageSection | TabularSection]:
     for doc in documents:
         for section in doc.sections:
             yield section
 
 
-def to_text_sections(sections: Iterator[TextSection | ImageSection]) -> Iterator[str]:
+def to_text_sections(
+    sections: Iterator[TextSection | ImageSection | TabularSection],
+) -> Iterator[str]:
     for section in sections:
         if isinstance(section, TextSection):
             yield section.text

@@ -3,7 +3,7 @@
 import React from "react";
 import { useField } from "formik";
 import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 interface CheckboxFieldProps {
@@ -85,9 +85,9 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   );
 
   return (
-    <SimpleTooltip tooltip={tooltip} side="top" sideOffset={25}>
+    <Tooltip tooltip={tooltip} side="top" sideOffset={25}>
       {checkboxContent}
-    </SimpleTooltip>
+    </Tooltip>
   );
 };
 

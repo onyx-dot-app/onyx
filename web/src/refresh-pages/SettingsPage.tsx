@@ -65,7 +65,7 @@ import { cn } from "@/lib/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 
 interface PAT {
@@ -861,7 +861,7 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           {isPaidEnterpriseFeaturesEnabled && (
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 searchUiEnabled
                   ? undefined
@@ -890,7 +890,7 @@ function ChatPreferencesSettings() {
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
-            </SimpleTooltip>
+            </Tooltip>
           )}
         </Card>
       </Section>

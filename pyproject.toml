@@ -84,7 +84,7 @@ backend = [
     "openpyxl==3.0.10",
     "opensearch-py==3.0.0",
     "passlib==1.7.4",
-    "playwright==1.55.0",
+    "playwright==1.58.0",
     "psutil==7.1.3",
     "psycopg2-binary==2.9.9",
     "puremagic==1.28",

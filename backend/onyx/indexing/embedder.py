@@ -3,6 +3,8 @@ from abc import ABC
 from abc import abstractmethod
 from collections import defaultdict
 
+import sentry_sdk
+
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import DocumentFailure
@@ -291,6 +293,13 @@ def embed_chunks_with_failure_handling(
             )
             embedded_chunks.extend(doc_embedded_chunks)
         except Exception as e:
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("stage", "embedding")
+                scope.set_tag("doc_id", doc_id)
+                if tenant_id:
+                    scope.set_tag("tenant_id", tenant_id)
+                scope.fingerprint = ["embedding-failure", type(e).__name__]
+                sentry_sdk.capture_exception(e)
             logger.exception(f"Failed to embed chunks for document '{doc_id}'")
             failures.append(
                 ConnectorFailure(

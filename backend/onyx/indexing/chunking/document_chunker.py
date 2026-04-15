@@ -99,7 +99,9 @@ class DocumentChunker:
             payloads.extend(result.payloads)
             accumulator = result.accumulator
 
+        # Final flush — any leftover buffered text becomes one last payload.
         payloads.extend(accumulator.flush_to_list())
+
         return payloads
 
     def _select_chunker(self, section: Section) -> SectionChunker:

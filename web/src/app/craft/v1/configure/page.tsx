@@ -42,7 +42,7 @@ import {
   setDemoDataCookie,
 } from "@/app/craft/v1/constants";
 import Switch from "@/refresh-components/inputs/Switch";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
@@ -418,13 +418,12 @@ export default function BuildConfigPage() {
                     }
                     center
                   >
-                    <SimpleTooltip
+                    <Tooltip
                       tooltip={
                         !hasLlmProvider
                           ? "Configure an LLM provider first"
                           : undefined
                       }
-                      disabled={hasLlmProvider}
                     >
                       <button
                         type="button"
@@ -434,7 +433,7 @@ export default function BuildConfigPage() {
                       >
                         <SvgSettings className="w-5 h-5" />
                       </button>
-                    </SimpleTooltip>
+                    </Tooltip>
                   </InputHorizontal>
                 </Card>
                 <Card
@@ -498,18 +497,13 @@ export default function BuildConfigPage() {
                     </Text>
                   </div>
                   <div className="w-fit flex-shrink-0">
-                    <SimpleTooltip
+                    <Tooltip
                       tooltip={
                         isUpdating || isPreProvisioning
                           ? "Please wait while your session is being provisioned"
                           : !hasConnectorEverSucceeded
                             ? "Connect and sync a data source to disable demo data"
                             : undefined
-                      }
-                      disabled={
-                        hasConnectorEverSucceeded &&
-                        !isUpdating &&
-                        !isPreProvisioning
                       }
                     >
                       <Card
@@ -532,14 +526,14 @@ export default function BuildConfigPage() {
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <SimpleTooltip tooltip="The demo dataset contains 1000 files across various connectors">
+                            <Tooltip tooltip="The demo dataset contains 1000 files across various connectors">
                               <span className="inline-flex items-center cursor-help">
                                 <SvgInfoSmall
                                   size={16}
                                   className="text-text-03"
                                 />
                               </span>
-                            </SimpleTooltip>
+                            </Tooltip>
                             <Text mainUiAction>Use Demo Dataset</Text>
                           </div>
                           <Switch
@@ -556,7 +550,7 @@ export default function BuildConfigPage() {
                           />
                         </div>
                       </Card>
-                    </SimpleTooltip>
+                    </Tooltip>
                   </div>
                 </div>
                 <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">

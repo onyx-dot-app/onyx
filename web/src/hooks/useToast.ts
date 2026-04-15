@@ -28,6 +28,16 @@ export interface Toast extends ToastOptions {
 
 export const MAX_VISIBLE_TOASTS = 3;
 const DEFAULT_DURATION = 4000;
+const TOAST_CONSOLE_METHOD: Record<
+  ToastLevel,
+  "log" | "warn" | "error" | "info"
+> = {
+  error: "error",
+  warning: "warn",
+  info: "info",
+  success: "log",
+  default: "log",
+};
 
 // ---------------------------------------------------------------------------
 // Module‑level store (external to React)
@@ -47,13 +57,24 @@ function addToast(options: ToastOptions): string {
   const id = `toast-${++nextId}-${Date.now()}`;
   const duration = options.duration ?? DEFAULT_DURATION;
 
+  const level = options.level ?? "info";
+
   const entry: Toast = {
     ...options,
     id,
-    level: options.level ?? "info",
+    level,
     dismissible: options.dismissible ?? true,
     createdAt: Date.now(),
   };
+
+  if (process.env.NODE_ENV === "development") {
+    const method = TOAST_CONSOLE_METHOD[level];
+    if (entry.description) {
+      console[method](`[Toast] ${entry.message}`, entry.description);
+    } else {
+      console[method](`[Toast] ${entry.message}`);
+    }
+  }
 
   toasts = [...toasts, entry];
   notify();

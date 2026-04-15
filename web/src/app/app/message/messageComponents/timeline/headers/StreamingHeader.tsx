@@ -40,12 +40,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   return (
     <>
       <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
-        <Text
-          as="p"
-          mainUiAction
-          text03
-          className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
-        >
+        <Text as="p" mainUiAction text03 className="shimmer-text">
           {headerText}
         </Text>
       </div>

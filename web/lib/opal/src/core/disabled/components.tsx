@@ -1,11 +1,8 @@
 import "@opal/core/disabled/styles.css";
-import "@opal/components/tooltip.css";
 import React from "react";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { Slot } from "@radix-ui/react-slot";
-import type { TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipSide } from "@opal/components";
 import type { RichStr } from "@opal/types";
-import { Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,21 +85,10 @@ function Disabled({
 
   if (!showTooltip) return wrapper;
 
-  // TODO(@raunakab): Replace this raw Radix tooltip with the opalified
-  // Tooltip component once it lands.
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{wrapper}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          <Text font="secondary-body">{tooltip}</Text>
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {wrapper}
+    </Tooltip>
   );
 }
 

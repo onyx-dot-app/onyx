@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { Tooltip as OpalTooltip } from "@opal/components";
 import {
   Tooltip,
   TooltipContent,
@@ -242,31 +243,21 @@ const QueryText = ({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span ref={textRef} className="max-w-[10rem] truncate block">
-            <Text
-              as="span"
-              {...textStyleProps}
-              className="transition-colors duration-150"
-            >
-              {displayName}
-            </Text>
-          </span>
-        </TooltipTrigger>
-        {isTruncated && (
-          <TooltipContent
-            side="top"
-            className="max-w-[400px] break-words whitespace-normal"
-          >
-            <Text as="p" textLight05>
-              {tooltipText ?? displayName}
-            </Text>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+    <OpalTooltip
+      tooltip={isTruncated ? tooltipText ?? displayName : undefined}
+      side="top"
+      delayDuration={300}
+    >
+      <span ref={textRef} className="max-w-[10rem] truncate block">
+        <Text
+          as="span"
+          {...textStyleProps}
+          className="transition-colors duration-150"
+        >
+          {displayName}
+        </Text>
+      </span>
+    </OpalTooltip>
   );
 };
 

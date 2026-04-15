@@ -37,7 +37,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -1224,7 +1224,7 @@ export default function AgentEditorPage({
                           >
                             Cancel
                           </OpalButton>
-                          <SimpleTooltip
+                          <Tooltip
                             tooltip={
                               isSubmitting
                                 ? "Saving changes..."
@@ -1249,7 +1249,7 @@ export default function AgentEditorPage({
                             >
                               {existingAgent ? "Save" : "Create"}
                             </OpalButton>
-                          </SimpleTooltip>
+                          </Tooltip>
                         </div>
                       }
                       backButton
@@ -1381,7 +1381,7 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section gap={0.5}>
-                            <SimpleTooltip
+                            <Tooltip
                               tooltip={imageGenerationDisabledTooltip}
                               side="top"
                             >
@@ -1404,7 +1404,7 @@ export default function AgentEditorPage({
                                   />
                                 </InputHorizontal>
                               </Card>
-                            </SimpleTooltip>
+                            </Tooltip>
 
                             <Card
                               variant={!!webSearchTool ? undefined : "disabled"}
