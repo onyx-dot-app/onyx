@@ -19,10 +19,10 @@ const LEVEL_TO_VARIANT: Record<ToastLevel, MessageCardVariant> = {
   info: "info",
 };
 
-function buildDescription(t: Toast): string | undefined {
+function buildDescription(toast: Toast): string | undefined {
   const parts: string[] = [];
-  if (t.description) parts.push(t.description);
-  if (t.level === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK) {
+  if (toast.description) parts.push(toast.description);
+  if (toast.level === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK) {
     parts.push(
       "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
     );
@@ -51,31 +51,29 @@ function ToastContainer() {
   return (
     <div
       data-testid="toast-container"
-      className={cn(
-        "fixed bottom-4 right-4 z-[10000]",
-        "flex flex-col gap-2 items-end",
-        "max-w-[420px]"
-      )}
+      className="fixed bottom-4 right-4 z-[10000] flex flex-col gap-2 items-end w-[420px]"
     >
-      {visible.map((t) => {
+      {visible.map((toast) => {
         const text =
-          t.message.length > MAX_TOAST_MESSAGE_LENGTH
-            ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
-            : t.message;
+          toast.message.length > MAX_TOAST_MESSAGE_LENGTH
+            ? toast.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
+            : toast.message;
 
         return (
           <div
-            key={t.id}
+            key={toast.id}
             className={cn(
-              "shadow-02 rounded-12",
-              t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
+              "w-full",
+              toast.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
             <MessageCard
-              variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
+              variant={LEVEL_TO_VARIANT[toast.level ?? "info"]}
               title={text}
-              description={buildDescription(t)}
-              onClose={t.dismissible ? () => handleClose(t.id) : undefined}
+              description={buildDescription(toast)}
+              onClose={
+                toast.dismissible ? () => handleClose(toast.id) : undefined
+              }
             />
           </div>
         );
