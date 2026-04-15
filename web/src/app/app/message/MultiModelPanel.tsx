@@ -88,7 +88,7 @@ export default function MultiModelPanel({
   const header = (
     <div
       className={cn(
-        "rounded-12",
+        "rounded-12 transition-colors",
         isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
         canSelect && "cursor-pointer hover:bg-background-tint-02"
       )}
