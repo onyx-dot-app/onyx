@@ -29,6 +29,8 @@ jobs:
         "extras=s3-cache",
       ]
     timeout-minutes: 15
+    container:
+      image: onyxdotapp/onyx-devcontainer@sha256:0f02d9299928849c7b15f3b348dcfdcdcb64411ff7a4580cbc026a6ee7aa1554
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
