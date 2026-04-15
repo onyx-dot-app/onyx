@@ -158,7 +158,7 @@
       "pluginVersion": "10.4.1",
       "targets": [
         {
-          "expr": "sum(onyx_connector_in_error_state{tenant_id=~\"$tenant_id\"} == 1)",
+          "expr": "count(max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_in_error_state{tenant_id=~\"$tenant_id\"}) == 1)",
           "legendFormat": "Connectors in error",
           "refId": "A"
         }
@@ -699,7 +699,7 @@
       },
       "targets": [
         {
-          "expr": "topk(20, time() - onyx_connector_last_success_timestamp_seconds{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"})",
+          "expr": "topk(20, time() - max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_last_success_timestamp_seconds{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}))",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -809,7 +809,7 @@
       },
       "targets": [
         {
-          "expr": "onyx_connector_in_error_state{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"} == 1",
+          "expr": "max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_in_error_state{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}) == 1",
           "format": "table",
           "instant": true,
           "refId": "A"
