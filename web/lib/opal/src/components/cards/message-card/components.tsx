@@ -32,6 +32,9 @@ interface MessageCardProps {
    */
   bottomChildren?: React.ReactNode;
 
+  /** Content rendered on the right side, below the close button. */
+  rightChildren?: React.ReactNode;
+
   /**
    * Called when the close button is clicked. When omitted, no close button
    * is rendered.
@@ -92,13 +95,14 @@ function MessageCard({
   title,
   description,
   bottomChildren,
+  rightChildren,
   onClose,
   ref,
 }: MessageCardProps) {
   const { icon: Icon, iconClass } = VARIANT_CONFIG[variant];
 
   return (
-    <div className="opal-message-card" data-variant={variant}>
+    <div className="opal-message-card" data-variant={variant} ref={ref}>
       <div className="opal-message-card-header">
         <div className="opal-message-card-content">
           <Content
@@ -110,14 +114,19 @@ function MessageCard({
           />
         </div>
 
-        {onClose && (
-          <Button
-            icon={SvgX}
-            prominence="internal"
-            size="sm"
-            onClick={onClose}
-            aria-label="Close"
-          />
+        {(onClose || rightChildren) && (
+          <div className="opal-message-card-right">
+            {onClose && (
+              <Button
+                icon={SvgX}
+                prominence="internal"
+                size="sm"
+                onClick={onClose}
+                aria-label="Close"
+              />
+            )}
+            {rightChildren}
+          </div>
         )}
       </div>
 

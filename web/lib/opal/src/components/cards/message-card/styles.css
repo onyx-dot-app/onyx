@@ -1,5 +1,5 @@
 .opal-message-card {
-  @apply flex flex-col self-stretch rounded-12 border p-2;
+  @apply flex flex-col self-stretch rounded-16 border p-2;
 }
 
 .opal-message-card-header {
@@ -8,6 +8,10 @@
 
 .opal-message-card-content {
   @apply flex-1 min-w-0;
+}
+
+.opal-message-card-right {
+  @apply flex flex-col items-end gap-1 shrink-0;
 }
 
 /* Variant colors */
