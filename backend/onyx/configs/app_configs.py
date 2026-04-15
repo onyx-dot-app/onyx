@@ -1125,6 +1125,29 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 
+# Master switch for the tenant work-gating feature (see
+# plans/tenant-work-gating-redis-sets.md). Acts as a feature-level off-switch:
+# when False, the gate is neither computed nor enforced regardless of the
+# runtime Redis toggles. Default off.
+ENABLE_TENANT_WORK_GATING = (
+    os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
+)
+
+# Membership TTL for the `active_tenants` sorted set. Members older than this
+# are treated as inactive by the gate read path. Must be > (full-fanout
+# cadence × base task schedule) so self-healing re-adds a genuinely-working
+# tenant before their membership expires. Default 30 min.
+TENANT_WORK_GATING_TTL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_TTL_SECONDS", str(30 * 60))
+)
+
+# Every Nth fanout cycle the generator bypasses the gate and dispatches to
+# every non-gated tenant, letting consumers re-populate the active set. This
+# is the self-healing path that replaces the earlier hourly reconcile task.
+TENANT_WORK_GATING_FULL_FANOUT_EVERY_N = int(
+    os.environ.get("TENANT_WORK_GATING_FULL_FANOUT_EVERY_N", "10")
+)
+
 
 # Image summarization configuration
 IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(

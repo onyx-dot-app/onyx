@@ -7,6 +7,9 @@ from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEF
 from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
+from onyx.configs.app_configs import ENABLE_TENANT_WORK_GATING
+from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_EVERY_N
+from onyx.configs.app_configs import TENANT_WORK_GATING_TTL_SECONDS
 from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
@@ -138,6 +141,77 @@ class OnyxRuntime:
             return 1.0
 
         return value
+
+    @staticmethod
+    def _get_tenant_work_gating_flag(axis: str) -> bool:
+        """Shared helper for the two-axis tenant work gating toggle. Reads
+        `runtime:tenant_work_gating:{axis}` from Redis; falls back to the
+        `ENABLE_TENANT_WORK_GATING` env var master switch when no override is
+        set. `axis` is either `enabled` (compute the gate) or `enforce`
+        (actually skip).
+        """
+        default = ENABLE_TENANT_WORK_GATING
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:{axis}")
+        if raw is None:
+            return default
+
+        try:
+            return cast(bytes, raw).decode().strip().lower() == "true"
+        except Exception:
+            return default
+
+    @staticmethod
+    def get_tenant_work_gating_enabled() -> bool:
+        """Should we *compute* the work gate? (read the Redis set, log how
+        many tenants would be skipped). Orthogonal to `enforce`."""
+        return OnyxRuntime._get_tenant_work_gating_flag("enabled")
+
+    @staticmethod
+    def get_tenant_work_gating_enforce() -> bool:
+        """Should we *actually skip* tenants not in the work set? Only takes
+        effect when `get_tenant_work_gating_enabled()` is also True."""
+        return OnyxRuntime._get_tenant_work_gating_flag("enforce")
+
+    @staticmethod
+    def get_tenant_work_gating_ttl_seconds() -> int:
+        """Membership TTL for the `active_tenants` sorted set. Members older
+        than this are treated as "no recent work" by the gate read path.
+        Must be > (full-fanout cadence × base task schedule) so self-healing
+        has time to refresh memberships before they expire."""
+        default = TENANT_WORK_GATING_TTL_SECONDS
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:ttl_seconds")
+        if raw is None:
+            return default
+
+        try:
+            value = int(cast(bytes, raw).decode())
+            return value if value > 0 else default
+        except ValueError:
+            return default
+
+    @staticmethod
+    def get_tenant_work_gating_full_fanout_every_n() -> int:
+        """Every Nth fanout cycle the generator bypasses the gate and
+        dispatches to all tenants, letting consumers re-populate the active
+        set. Self-healing path — see plan for cadence rationale."""
+        default = TENANT_WORK_GATING_FULL_FANOUT_EVERY_N
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(
+            f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_every_n"
+        )
+        if raw is None:
+            return default
+
+        try:
+            value = int(cast(bytes, raw).decode())
+            return value if value > 0 else default
+        except ValueError:
+            return default
 
     @staticmethod
     def get_build_fence_lookup_table_interval() -> int:
