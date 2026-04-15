@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { Message } from "@/app/app/interfaces";
 import { LlmManager } from "@/lib/hooks";
@@ -110,10 +117,26 @@ export default function MultiModelResponseView({
   // Refs to each panel wrapper for height animation on deselect
   const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  // Tracks which non-preferred panels overflow the preferred height cap
+  // Tracks which non-preferred panels overflow the preferred height cap.
+  // Measured via useLayoutEffect after maxHeight is applied to the DOM —
+  // ref callbacks fire before layout and can't reliably detect overflow.
   const [overflowingPanels, setOverflowingPanels] = useState<Set<number>>(
     new Set()
   );
+
+  useLayoutEffect(() => {
+    if (preferredPanelHeight == null || preferredIndex === null) return;
+    const next = new Set<number>();
+    panelElsRef.current.forEach((el, idx) => {
+      if (idx === preferredIndex || hiddenPanels.has(idx)) return;
+      if (el.scrollHeight > el.clientHeight) next.add(idx);
+    });
+    setOverflowingPanels((prev) => {
+      if (prev.size === next.size && Array.from(prev).every((v) => next.has(v)))
+        return prev;
+      return next;
+    });
+  }, [preferredPanelHeight, preferredIndex, hiddenPanels, responses]);
 
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
@@ -515,17 +538,6 @@ export default function MultiModelResponseView({
                     panelElsRef.current.delete(r.modelIndex);
                   }
                   if (isPref) preferredPanelRef(el);
-                  if (capped && el) {
-                    const doesOverflow = el.scrollHeight > el.clientHeight;
-                    setOverflowingPanels((prev) => {
-                      const had = prev.has(r.modelIndex);
-                      if (doesOverflow === had) return prev;
-                      const next = new Set(prev);
-                      if (doesOverflow) next.add(r.modelIndex);
-                      else next.delete(r.modelIndex);
-                      return next;
-                    });
-                  }
                 }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,
@@ -536,21 +548,19 @@ export default function MultiModelResponseView({
                       : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,
                   overflow: capped ? "hidden" : undefined,
-                  position: capped ? "relative" : undefined,
+                  ...(overflows
+                    ? {
+                        maskImage:
+                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
+                        WebkitMaskImage:
+                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
+                      }
+                    : {}),
                 }}
               >
                 <div className={cn(isNonPref && "opacity-50")}>
                   <MultiModelPanel {...buildPanelProps(r, isNonPref)} />
                 </div>
-                {overflows && (
-                  <div
-                    className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
-                    style={{
-                      background:
-                        "linear-gradient(to top, var(--background-tint-01) 0%, transparent 100%)",
-                    }}
-                  />
-                )}
               </div>
             );
           })}
