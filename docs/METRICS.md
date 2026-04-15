@@ -217,19 +217,29 @@ Enriches docfetching and docprocessing tasks with connector-level labels. Silent
 | `onyx_indexing_task_completed_total`  | Counter   | `task_name`, `source`, `tenant_id`, `cc_pair_id`, `outcome` | Indexing tasks completed per connector   |
 | `onyx_indexing_task_duration_seconds` | Histogram | `task_name`, `source`, `tenant_id`                          | Indexing task duration by connector type |
 
-`connector_name` is intentionally excluded from these push-based counters to avoid unbounded cardinality (it's a free-form user string). The pull-based collectors on the monitoring worker include it since they have bounded cardinality (one series per connector).
+`connector_name` is intentionally excluded from these push-based counters to avoid unbounded cardinality (it's a free-form user string).
+
+### Connector Health Metrics (`onyx.server.metrics.connector_health_metrics`)
+
+Push-based metrics emitted by docfetching and docprocessing workers at the point where connector state changes occur. Scales to any number of tenants (no schema iteration).
+
+| Metric                                          | Type    | Labels                                        | Description                                                   |
+| ----------------------------------------------- | ------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `onyx_index_attempt_transitions_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`, `status` | Index attempt status transitions (in_progress, success, etc.) |
+| `onyx_connector_in_error_state`                 | Gauge   | `tenant_id`, `source`, `cc_pair_id`           | Whether connector is in repeated error state (1=yes, 0=no)    |
+| `onyx_connector_last_success_timestamp_seconds` | Gauge   | `tenant_id`, `source`, `cc_pair_id`           | Unix timestamp of last successful indexing                    |
+| `onyx_connector_docs_indexed_total`             | Counter | `tenant_id`, `source`, `cc_pair_id`           | Total documents indexed per connector (monotonic)             |
+| `onyx_connector_indexing_errors_total`          | Counter | `tenant_id`, `source`, `cc_pair_id`           | Total failed index attempts per connector (monotonic)         |
 
 ### Pull-Based Collectors (`onyx.server.metrics.indexing_pipeline`)
 
-Registered only in the **Monitoring** worker. Collectors query Redis/Postgres at scrape time with a 30-second TTL cache.
+Registered only in the **Monitoring** worker. Collectors query Redis at scrape time with a 30-second TTL cache and a 120-second timeout to prevent the `/metrics` endpoint from hanging.
 
 | Metric                               | Type  | Labels  | Description                         |
 | ------------------------------------ | ----- | ------- | ----------------------------------- |
 | `onyx_queue_depth`                   | Gauge | `queue` | Celery queue length                 |
 | `onyx_queue_unacked`                 | Gauge | `queue` | Unacknowledged messages per queue   |
 | `onyx_queue_oldest_task_age_seconds` | Gauge | `queue` | Age of the oldest task in the queue |
-
-Plus additional connector health, index attempt, and worker heartbeat metrics — see `indexing_pipeline.py` for the full list.
 
 ### Adding Metrics to a Worker
 
