@@ -1216,7 +1216,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "95th percentile indexing task duration per individual connector.",
+      "description": "95th percentile indexing task duration per source type.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1267,12 +1267,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (source, cc_pair_id, le) (rate(onyx_indexing_task_duration_seconds_bucket{source=~\"$source\", tenant_id=~\"$tenant_id\", cc_pair_id=~\"$cc_pair_id\"}[5m])))",
-          "legendFormat": "p95 {{source}} / {{cc_pair_id}}",
+          "expr": "histogram_quantile(0.95, sum by (source, le) (rate(onyx_indexing_task_duration_seconds_bucket{source=~\"$source\", tenant_id=~\"$tenant_id\"}[5m])))",
+          "legendFormat": "p95 {{source}}",
           "refId": "A"
         }
       ],
-      "title": "p95 duration by connector",
+      "title": "p95 duration by source",
       "type": "timeseries"
     },
     {
