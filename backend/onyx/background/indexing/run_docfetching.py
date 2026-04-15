@@ -273,6 +273,7 @@ def run_docfetching_entrypoint(
             tenant_id=tenant_id,
             source=attempt.connector_credential_pair.connector.source.value,
             cc_pair_id=connector_credential_pair_id,
+            connector_name=connector_name,
             status="in_progress",
         )
 
