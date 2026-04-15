@@ -365,7 +365,7 @@
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="hover"]:not(
     [data-disabled]
   ) {
-  @apply bg-background-neutral-03 border border-border-01;
+  @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-04);
   --interactive-foreground-icon: var(--text-03);
 }
@@ -375,7 +375,7 @@
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="active"]:not(
     [data-disabled]
   ) {
-  @apply bg-background-neutral-03 border border-border-01;
+  @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
