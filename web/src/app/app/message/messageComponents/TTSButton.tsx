@@ -59,7 +59,6 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
   // Surface streaming voice playback errors to the user via toast
   useEffect(() => {
     if (error) {
-      console.error("Voice playback error:", error);
       toast.error(error);
     }
   }, [error]);
