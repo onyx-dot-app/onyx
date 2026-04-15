@@ -283,6 +283,7 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
 
 
 class BlobType(str, Enum):
