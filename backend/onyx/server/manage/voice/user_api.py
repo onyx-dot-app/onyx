@@ -8,6 +8,7 @@ from fastapi import File
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -139,9 +140,9 @@ def _extract_provider_error(exc: Exception) -> str:
 
 
 class SynthesizeRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1)
     voice: str | None = None
-    speed: float | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=2.0)
 
 
 @router.post("/synthesize")
