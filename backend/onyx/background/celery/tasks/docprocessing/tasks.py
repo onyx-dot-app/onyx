@@ -107,7 +107,7 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
 from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
-from onyx.server.metrics.connector_health_metrics import on_index_attempt_terminal
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
@@ -533,7 +533,7 @@ def check_indexing_completion(
             )
 
         source = cc_pair.connector.source.value
-        on_index_attempt_terminal(
+        on_index_attempt_status_change(
             tenant_id=tenant_id,
             source=source,
             cc_pair_id=cc_pair.id,

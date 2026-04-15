@@ -27,12 +27,6 @@ INDEX_ATTEMPT_STATUS = Counter(
     ["tenant_id", "source", "cc_pair_id", "status"],
 )
 
-INDEX_ATTEMPTS_ACTIVE = Gauge(
-    "onyx_index_attempts_active",
-    "Number of currently non-terminal index attempts",
-    ["tenant_id", "source", "cc_pair_id"],
-)
-
 # --- Connector health ---
 
 CONNECTOR_IN_ERROR_STATE = Gauge(
@@ -60,31 +54,19 @@ CONNECTOR_INDEXING_ERRORS = Counter(
 )
 
 
-def on_index_attempt_start(
-    tenant_id: str,
-    source: str,
-    cc_pair_id: int,
-) -> None:
-    """Called when an index attempt transitions to IN_PROGRESS."""
-    try:
-        labels = {
-            "tenant_id": tenant_id,
-            "source": source,
-            "cc_pair_id": str(cc_pair_id),
-        }
-        INDEX_ATTEMPT_STATUS.labels(**labels, status="in_progress").inc()
-        INDEX_ATTEMPTS_ACTIVE.labels(**labels).inc()
-    except Exception:
-        logger.debug("Failed to record index attempt start metric", exc_info=True)
-
-
-def on_index_attempt_terminal(
+def on_index_attempt_status_change(
     tenant_id: str,
     source: str,
     cc_pair_id: int,
     status: str,
 ) -> None:
-    """Called when an index attempt reaches a terminal state."""
+    """Called on any index attempt status transition.
+
+    Active attempt count can be derived in PromQL from the transitions
+    counter rather than using a Gauge with inc/dec, because inc and dec
+    happen in different worker processes (docfetching vs docprocessing)
+    which have separate prometheus_client state.
+    """
     try:
         labels = {
             "tenant_id": tenant_id,
@@ -92,13 +74,10 @@ def on_index_attempt_terminal(
             "cc_pair_id": str(cc_pair_id),
         }
         INDEX_ATTEMPT_STATUS.labels(**labels, status=status).inc()
-        active = INDEX_ATTEMPTS_ACTIVE.labels(**labels)
-        if active._value.get() > 0:
-            active.dec()
         if status == "failed":
             CONNECTOR_INDEXING_ERRORS.labels(**labels).inc()
     except Exception:
-        logger.debug("Failed to record index attempt terminal metric", exc_info=True)
+        logger.debug("Failed to record index attempt status metric", exc_info=True)
 
 
 def on_connector_error_state_change(
