@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/llmConfig";
-import { Button, SelectButton, OpenButton } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
@@ -109,7 +109,10 @@ export default function ModelSelector({
       onRemove(existingIndex);
     } else if (!atMax) {
       onAdd(model);
-      setOpen(false);
+      // Close the popover only when we've reached the max model count
+      if (selectedModels.length + 1 >= MAX_MODELS) {
+        setOpen(false);
+      }
     }
   };
 
@@ -163,26 +166,13 @@ export default function ModelSelector({
                   model.modelName
                 );
 
-                if (!isMultiModel) {
-                  // Stable key — keying on model would unmount the pill
-                  // on change and leave Radix's anchorRef detached,
-                  // flashing the closing popover at (0,0).
-                  return (
-                    <OpenButton
-                      key="single-model-pill"
-                      icon={ProviderIcon}
-                      onClick={(e: React.MouseEvent) =>
-                        handlePillClick(index, e.currentTarget as HTMLElement)
-                      }
-                    >
-                      {model.displayName}
-                    </OpenButton>
-                  );
-                }
-
                 return (
                   <div
-                    key={modelKey(model.provider, model.modelName)}
+                    key={
+                      isMultiModel
+                        ? modelKey(model.provider, model.modelName)
+                        : "single-model-pill"
+                    }
                     className="flex items-center"
                   >
                     {index > 0 && (
@@ -194,23 +184,24 @@ export default function ModelSelector({
                     )}
                     <SelectButton
                       icon={ProviderIcon}
-                      rightIcon={SvgX}
+                      rightIcon={isMultiModel ? SvgX : undefined}
                       state="empty"
-                      variant="select-tinted"
-                      interaction="hover"
+                      variant="select-input"
                       size="lg"
                       onClick={(e: React.MouseEvent) => {
-                        const target = e.target as HTMLElement;
-                        const btn = e.currentTarget as HTMLElement;
-                        const icons = btn.querySelectorAll(
-                          ".interactive-foreground-icon"
-                        );
-                        const lastIcon = icons[icons.length - 1];
-                        if (lastIcon && lastIcon.contains(target)) {
-                          onRemove(index);
-                        } else {
-                          handlePillClick(index, btn);
+                        if (isMultiModel) {
+                          const target = e.target as HTMLElement;
+                          const btn = e.currentTarget as HTMLElement;
+                          const icons = btn.querySelectorAll(
+                            ".interactive-foreground-icon"
+                          );
+                          const lastIcon = icons[icons.length - 1];
+                          if (lastIcon && lastIcon.contains(target)) {
+                            onRemove(index);
+                            return;
+                          }
                         }
+                        handlePillClick(index, e.currentTarget as HTMLElement);
                       }}
                     >
                       {model.displayName}
@@ -224,7 +215,7 @@ export default function ModelSelector({
       </div>
 
       {!(atMax && replacingIndex === null) && (
-        <Popover.Content side="top" align="end" width="lg">
+        <Popover.Content side="top" align="end" width="xl">
           <ModelListContent
             llmProviders={llmManager.llmProviders}
             isLoading={llmManager.isLoadingProviders}
