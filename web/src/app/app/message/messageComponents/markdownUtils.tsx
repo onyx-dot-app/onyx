@@ -86,9 +86,9 @@ export const processContent = (content: string): string => {
   // ReactMarkdown can't parse an incomplete link and renders it as raw text.
   // This regex removes any trailing partial citation pattern so only complete
   // links are passed to the markdown parser.
-  content = content.replace(/\[\[\d+\]\]\([^)]*$/g, "");
+  content = content.replace(/\[\[\d+\]\]\([^)]*$/, "");
   // Also strip a lone [[ or [[N] or [[N]] at the very end (before the URL part arrives)
-  content = content.replace(/\[\[(?:\d+\]?\]?)?$/g, "");
+  content = content.replace(/\[\[(?:\d+\]?\]?)?$/, "");
 
   const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
   const matches = content.match(codeBlockRegex);
