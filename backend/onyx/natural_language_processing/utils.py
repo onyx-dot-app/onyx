@@ -217,7 +217,11 @@ def split_text_by_tokens(
     """
     if not text:
         return []
-    token_ids = tokenizer.encode(text)
+
+    token_ids: list[int] = []
+    for start in range(0, len(text), _ENCODE_CHUNK_SIZE):
+        token_ids.extend(tokenizer.encode(text[start : start + _ENCODE_CHUNK_SIZE]))
+
     return [
         tokenizer.decode(token_ids[start : start + max_tokens])
         for start in range(0, len(token_ids), max_tokens)
