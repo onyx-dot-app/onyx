@@ -21,7 +21,6 @@ import { IndexingStatusRequest } from "@/lib/types";
 function Main() {
   const vectorDbEnabled = useVectorDbEnabled();
 
-  // State for filter management
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     accessType: null,
     docsCountFilter: {
@@ -31,10 +30,8 @@ function Main() {
     lastStatus: null,
   });
 
-  // State for search
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // State for collapse/expand functionality
   const [connectorsToggled, setConnectorsToggled] = useState<
     Record<ValidSources, boolean>
   >(() => {
@@ -42,12 +39,10 @@ function Main() {
     return savedState ? JSON.parse(savedState) : {};
   });
 
-  // Reference to the FilterComponent for resetting its state
   const filterComponentRef = useRef<{
     resetFilters: () => void;
   }>(null);
 
-  // Convert filter options to API request format
   const request: IndexingStatusRequest = useMemo(() => {
     return {
       secondary_index: false,
@@ -59,7 +54,6 @@ function Main() {
     };
   }, [filterOptions, searchQuery]);
 
-  // Use the paginated hook with filter request and 30-second refresh
   const {
     data: ccPairsIndexingStatuses,
     isLoading: isLoadingCcPairsIndexingStatuses,
@@ -67,10 +61,10 @@ function Main() {
     handlePageChange,
     sourcePages,
     sourceLoadingStates,
+    refreshAllData,
     resetPagination,
   } = useConnectorIndexingStatusWithPagination(request, 30000, vectorDbEnabled);
 
-  // Check if filters are active
   const hasActiveFilters = useMemo(() => {
     return (
       (filterOptions.accessType && filterOptions.accessType.length > 0) ||
@@ -79,14 +73,15 @@ function Main() {
     );
   }, [filterOptions]);
 
-  // Handle filter changes
+  const bulkActionsEnabled = useMemo(() => {
+    return Boolean(searchQuery.trim()) || hasActiveFilters;
+  }, [searchQuery, hasActiveFilters]);
+
   const handleFilterChange = (newFilterOptions: FilterOptions) => {
     setFilterOptions(newFilterOptions);
-    // Reset pagination when filters change
     resetPagination();
   };
 
-  // Toggle source expand/collapse functions
   const toggleSource = (
     source: ValidSources,
     toggled: boolean | null = null
@@ -128,13 +123,11 @@ function Main() {
     );
   };
 
-  // Check if any sources are expanded
   const hasExpandedSources =
     ccPairsIndexingStatuses?.some(
       (ccPairStatus) => connectorsToggled[ccPairStatus.source]
     ) || false;
 
-  // Handler functions for the search and filter controls
   const handleClearFilters = () => {
     if (filterComponentRef.current) {
       filterComponentRef.current.resetFilters();
@@ -160,7 +153,6 @@ function Main() {
 
   return (
     <div>
-      {/* Search bar and controls */}
       <SearchAndFilterControls
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -172,12 +164,14 @@ function Main() {
         resetPagination={resetPagination}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
+        bulkFilters={request}
+        bulkActionsEnabled={bulkActionsEnabled}
+        onBulkActionSuccess={refreshAllData}
         filterComponentRef={
           filterComponentRef as RefObject<{ resetFilters: () => void }>
         }
       />
 
-      {/* Table component */}
       {isLoadingCcPairsIndexingStatuses ? (
         <div className="mt-12">
           <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
