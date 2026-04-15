@@ -7,7 +7,7 @@ to avoid disrupting the caller's business logic.
 Gauge metrics (error state, last success timestamp) are per-process.
 With multiple worker pods, use max() aggregation in PromQL to get the
 correct value across instances, e.g.:
-    max by (cc_pair_id) (onyx_connector_in_error_state)
+    max by (cc_pair_id, connector_name) (onyx_connector_in_error_state)
 
 Unlike the per-task counters in indexing_task_metrics.py, these metrics
 include connector_name because their cardinality is bounded by the number
