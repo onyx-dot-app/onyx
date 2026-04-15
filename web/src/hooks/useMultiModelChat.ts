@@ -108,22 +108,20 @@ export default function useMultiModelChat(
 
   const removeModel = useCallback(
     (index: number) => {
-      setSelectedModels((prev) => {
-        const next = prev.filter((_, i) => i !== index);
-        // When dropping to single-model, switch llmManager to the surviving
-        // model so it becomes the active model instead of reverting to the
-        // user's default.
-        if (next.length === 1 && next[0]) {
-          llmManager.updateCurrentLlm({
-            name: next[0].name,
-            provider: next[0].provider,
-            modelName: next[0].modelName,
-          });
-        }
-        return next;
-      });
+      const next = selectedModels.filter((_, i) => i !== index);
+      // When dropping to single-model, switch llmManager to the surviving
+      // model so it becomes the active model instead of reverting to the
+      // user's default.
+      if (next.length === 1 && next[0]) {
+        llmManager.updateCurrentLlm({
+          name: next[0].name,
+          provider: next[0].provider,
+          modelName: next[0].modelName,
+        });
+      }
+      setSelectedModels(next);
     },
-    [llmManager]
+    [selectedModels, llmManager]
   );
 
   const replaceModel = useCallback(
