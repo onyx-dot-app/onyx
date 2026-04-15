@@ -10,7 +10,7 @@ import { Content, Card as CardLayout } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
-import { Button, Card } from "@opal/components";
+import { Button, Card, Divider } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -210,6 +210,8 @@ export default function IndexSettingsPage() {
           )}
         </GeneralLayouts.Section>
 
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
         {/* ── Retrieval Optimization ── */}
         <GeneralLayouts.Section
           gap={0.75}
@@ -225,18 +227,22 @@ export default function IndexSettingsPage() {
           />
 
           <Card border="solid" rounding="lg">
-            <InputHorizontal
-              title="Multipass Indexing"
-              description="Index documents as chunks of varying sizes to better identify relevant sources."
-              withLabel
-            >
-              <Switch
-                checked={searchSettings?.multipass_indexing ?? true}
-                onCheckedChange={(checked) => {
-                  void saveSearchSettings({ multipass_indexing: checked });
+            <Disabled disabled>
+              <InputHorizontal
+                title="Multipass Indexing"
+                description="Index documents as chunks of varying sizes to better identify relevant sources."
+                tag={{
+                  title: "temporarily unavailable",
+                  color: "gray",
                 }}
-              />
-            </InputHorizontal>
+                withLabel
+              >
+                <Switch
+                  checked={searchSettings?.multipass_indexing ?? false}
+                  disabled
+                />
+              </InputHorizontal>
+            </Disabled>
           </Card>
 
           <Card border="solid" rounding="lg">
@@ -292,6 +298,8 @@ export default function IndexSettingsPage() {
             </GeneralLayouts.Section>
           </Card>
         </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
         {/* ── Image Processing ── */}
         <GeneralLayouts.Section
