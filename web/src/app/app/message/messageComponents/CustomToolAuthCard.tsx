@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import Message from "@/refresh-components/messages/Message";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import { SvgArrowExchange } from "@opal/icons";
+import { Button, MessageCard } from "@opal/components";
 
 interface CustomToolAuthCardProps {
   toolName: string;
@@ -47,18 +47,14 @@ function CustomToolAuthCard({
   };
 
   return (
-    <Message
-      static
-      large
-      icon
-      close={false}
-      text={`${toolName} not connected`}
+    <MessageCard
+      title={`${toolName} not connected`}
       description={`Connect to ${toolName} to enable this tool`}
-      actions="Connect"
-      actionPrimary
-      actionIcon={SvgArrowExchange}
-      onAction={handleAuthenticate}
-      className="w-full"
+      rightChildren={
+        <Button icon={SvgArrowExchange} onClick={handleAuthenticate}>
+          Connect
+        </Button>
+      }
     />
   );
 }

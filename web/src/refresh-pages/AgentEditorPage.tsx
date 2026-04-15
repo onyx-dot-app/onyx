@@ -4,8 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton, Divider } from "@opal/components";
+import { Button as OpalButton, Divider, MessageCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -15,7 +14,6 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
-import Message from "@/refresh-components/messages/Message";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
@@ -223,9 +221,9 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
                 <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
-                  <Button className="h-[1.75rem]" secondary>
+                  <OpalButton prominence="secondary" size="md">
                     Edit
-                  </Button>
+                  </OpalButton>
                 </Hoverable.Item>
               </div>
             </InputAvatar>
@@ -1535,12 +1533,7 @@ export default function AgentEditorPage({
                                     <SwitchField name="is_featured" />
                                   </InputHorizontal>
                                   {values.is_featured && !isShared && (
-                                    <Message
-                                      static
-                                      close={false}
-                                      className="w-full"
-                                      text="This agent is private to you and will only be featured for yourself."
-                                    />
+                                    <MessageCard title="This agent is private to you and will only be featured for yourself." />
                                   )}
                                 </>
                               )}
