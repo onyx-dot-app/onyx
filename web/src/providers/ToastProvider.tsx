@@ -2,9 +2,8 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { Button, MessageCard } from "@opal/components";
+import { MessageCard } from "@opal/components";
 import type { MessageCardVariant } from "@opal/components/cards/message-card/components";
-import { SvgX } from "@opal/icons";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";
@@ -64,27 +63,6 @@ function ToastContainer() {
             ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
             : t.message;
 
-        const variant = LEVEL_TO_VARIANT[t.level ?? "info"] ?? "info";
-
-        const rightActions = (
-          <div className="flex flex-row items-center gap-1">
-            {t.actionLabel && t.onAction && (
-              <Button prominence="secondary" size="sm" onClick={t.onAction}>
-                {t.actionLabel}
-              </Button>
-            )}
-            {t.dismissible && (
-              <Button
-                icon={SvgX}
-                prominence="internal"
-                size="sm"
-                onClick={() => handleClose(t.id)}
-                aria-label="Close"
-              />
-            )}
-          </div>
-        );
-
         return (
           <div
             key={t.id}
@@ -94,10 +72,10 @@ function ToastContainer() {
             )}
           >
             <MessageCard
-              variant={variant}
+              variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
               title={text}
               description={buildDescription(t)}
-              rightChildren={rightActions}
+              onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             />
           </div>
         );
