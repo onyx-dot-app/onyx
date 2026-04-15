@@ -100,6 +100,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
@@ -1277,6 +1278,32 @@ def _run_models(
             else:
                 if item is _MODEL_DONE:
                     models_remaining -= 1
+                elif isinstance(item, LLMTimeoutError):
+                    model_llm = setup.llms[model_idx]
+                    error_msg = (
+                        "The LLM took too long to respond. "
+                        "If you're running a local model, try increasing the "
+                        "LLM_SOCKET_READ_TIMEOUT environment variable "
+                        "(current default: 120 seconds)."
+                    )
+                    stack_trace = "".join(
+                        traceback.format_exception(type(item), item, item.__traceback__)
+                    )
+                    if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
+                        stack_trace = stack_trace.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
+                    yield StreamingError(
+                        error=error_msg,
+                        stack_trace=stack_trace,
+                        error_code="CONNECTION_ERROR",
+                        is_retryable=True,
+                        details={
+                            "model": model_llm.config.model_name,
+                            "provider": model_llm.config.model_provider,
+                            "model_index": model_idx,
+                        },
+                    )
                 elif isinstance(item, Exception):
                     # Yield a tagged error for this model but keep the other models running.
                     # Do NOT decrement models_remaining — _run_model's finally always posts
