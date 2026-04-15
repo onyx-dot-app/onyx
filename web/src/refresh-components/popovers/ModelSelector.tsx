@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/llmConfig";
-import { Button, OpenButton } from "@opal/components";
+import { Button, SelectButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
@@ -175,29 +175,38 @@ export default function ModelSelector({
                     }
                     className="flex items-center"
                   >
-                    {isMultiModel && index > 0 && (
+                    {index > 0 && (
                       <Separator
                         orientation="vertical"
                         paddingXRem={0.5}
                         className="h-5"
                       />
                     )}
-                    <OpenButton
+                    <SelectButton
                       icon={ProviderIcon}
-                      onClick={(e: React.MouseEvent) =>
-                        handlePillClick(index, e.currentTarget as HTMLElement)
-                      }
+                      rightIcon={isMultiModel ? SvgX : undefined}
+                      state="empty"
+                      variant="select-tinted"
+                      interaction="hover"
+                      size="lg"
+                      onClick={(e: React.MouseEvent) => {
+                        if (isMultiModel) {
+                          const target = e.target as HTMLElement;
+                          const btn = e.currentTarget as HTMLElement;
+                          const icons = btn.querySelectorAll(
+                            ".interactive-foreground-icon"
+                          );
+                          const lastIcon = icons[icons.length - 1];
+                          if (lastIcon && lastIcon.contains(target)) {
+                            onRemove(index);
+                            return;
+                          }
+                        }
+                        handlePillClick(index, e.currentTarget as HTMLElement);
+                      }}
                     >
                       {model.displayName}
-                    </OpenButton>
-                    {isMultiModel && (
-                      <Button
-                        prominence="tertiary"
-                        icon={SvgX}
-                        size="sm"
-                        onClick={() => onRemove(index)}
-                      />
-                    )}
+                    </SelectButton>
                   </div>
                 );
               })}
