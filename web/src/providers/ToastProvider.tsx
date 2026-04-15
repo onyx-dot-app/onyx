@@ -2,7 +2,9 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import Message from "@/refresh-components/messages/Message";
+import { Button, MessageCard } from "@opal/components";
+import type { MessageCardVariant } from "@opal/components/cards/message-card/components";
+import { SvgX } from "@opal/icons";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";
@@ -10,20 +12,13 @@ import type { Toast, ToastLevel } from "@/hooks/useToast";
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 
-function levelProps(level: ToastLevel): Record<string, boolean> {
-  switch (level) {
-    case "success":
-      return { success: true };
-    case "error":
-      return { error: true };
-    case "warning":
-      return { warning: true };
-    case "info":
-      return { info: true };
-    default:
-      return { default: true };
-  }
-}
+const LEVEL_TO_VARIANT: Record<ToastLevel, MessageCardVariant> = {
+  default: "default",
+  success: "success",
+  error: "error",
+  warning: "warning",
+  info: "info",
+};
 
 function buildDescription(t: Toast): string | undefined {
   const parts: string[] = [];
@@ -68,23 +63,41 @@ function ToastContainer() {
           t.message.length > MAX_TOAST_MESSAGE_LENGTH
             ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
             : t.message;
+
+        const variant = LEVEL_TO_VARIANT[t.level ?? "info"] ?? "info";
+
+        const rightActions = (
+          <div className="flex flex-row items-center gap-1">
+            {t.actionLabel && t.onAction && (
+              <Button prominence="secondary" size="sm" onClick={t.onAction}>
+                {t.actionLabel}
+              </Button>
+            )}
+            {t.dismissible && (
+              <Button
+                icon={SvgX}
+                prominence="internal"
+                size="sm"
+                onClick={() => handleClose(t.id)}
+                aria-label="Close"
+              />
+            )}
+          </div>
+        );
+
         return (
           <div
             key={t.id}
             className={cn(
+              "shadow-02 rounded-12",
               t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
-            <Message
-              flash
-              medium
-              {...levelProps(t.level ?? "info")}
-              text={text}
+            <MessageCard
+              variant={variant}
+              title={text}
               description={buildDescription(t)}
-              close={t.dismissible}
-              onClose={() => handleClose(t.id)}
-              actions={t.actionLabel ? t.actionLabel : undefined}
-              onAction={t.onAction}
+              rightChildren={rightActions}
             />
           </div>
         );
