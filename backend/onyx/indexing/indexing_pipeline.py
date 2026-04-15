@@ -551,7 +551,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 processed_sections=[
                     Section(
                         type=section.type,
-                        text=section.text if isinstance(section, TextSection) else "",
+                        text="" if isinstance(section, ImageSection) else section.text,
                         link=section.link,
                         image_file_id=(
                             section.image_file_id
@@ -617,7 +617,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 processed_sections.append(processed_section)
 
             # For TextSection, create a base Section with text and link
-            elif isinstance(section, TextSection):
+            else:
                 processed_section = Section(
                     type=section.type,
                     text=section.text or "",  # Ensure text is always a string, not None

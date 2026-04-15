@@ -289,9 +289,9 @@ class DrupalWikiConnector(
                             link=download_url,
                         )
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to extract tabular sections from {file_name}: {e}"
+                except Exception:
+                    logger.exception(
+                        f"Failed to extract tabular sections from {file_name}"
                     )
                 if not sections:
                     return [], f"No content extracted from tabular file {file_name}"
