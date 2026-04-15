@@ -20,7 +20,11 @@ import {
   HostedEmbeddingModel,
   CloudEmbeddingModel,
 } from "@/components/embedding/interfaces";
-import { SavedSearchSettings } from "@/app/admin/embeddings/interfaces";
+import {
+  SavedSearchSettings,
+  LLMContextualCost,
+} from "@/app/admin/embeddings/interfaces";
+import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { getEmbeddingProvider } from "@/lib/embedding";
 import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -92,6 +96,39 @@ export default function IndexSettingsPage() {
     SWR_KEYS.secondarySearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 }
+  );
+
+  const { data: contextualCosts } = useSWR<LLMContextualCost[]>(
+    LLM_CONTEXTUAL_COST_ADMIN_URL,
+    errorHandlingFetcher
+  );
+
+  const saveSearchSettings = useCallback(
+    async (updates: Partial<SavedSearchSettings>) => {
+      if (!searchSettings) return;
+
+      try {
+        const response = await fetch(
+          "/api/search-settings/update-inference-settings",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...searchSettings, ...updates }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorMsg = (await response.json()).detail;
+          throw new Error(errorMsg);
+        }
+
+        await mutate(SWR_KEYS.currentSearchSettings);
+        toast.success("Search settings updated");
+      } catch {
+        toast.error("Failed to update search settings");
+      }
+    },
+    [searchSettings]
   );
 
   if (
@@ -187,8 +224,72 @@ export default function IndexSettingsPage() {
             variant="section"
           />
 
-          <Card border="solid" rounding="lg" padding="fit">
-            {/* Fields TBD */}
+          <Card border="solid" rounding="lg">
+            <InputHorizontal
+              title="Multipass Indexing"
+              description="Index documents as chunks of varying sizes to better identify relevant sources."
+              withLabel
+            >
+              <Switch
+                checked={searchSettings?.multipass_indexing ?? true}
+                onCheckedChange={(checked) => {
+                  void saveSearchSettings({ multipass_indexing: checked });
+                }}
+              />
+            </InputHorizontal>
+          </Card>
+
+          <Card border="solid" rounding="lg">
+            <GeneralLayouts.Section width="full">
+              <InputHorizontal
+                title="Contextual Retrieval"
+                description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
+                withLabel
+              >
+                <Switch
+                  checked={searchSettings?.enable_contextual_rag ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSearchSettings({ enable_contextual_rag: checked });
+                  }}
+                />
+              </InputHorizontal>
+
+              <Disabled disabled={!searchSettings?.enable_contextual_rag}>
+                <InputHorizontal
+                  title="Contextual Retrieval LLM"
+                  description="This model will be used to generate context for chunks."
+                  disabled={!searchSettings?.enable_contextual_rag}
+                  withLabel
+                >
+                  <InputSelect
+                    value={searchSettings?.contextual_rag_llm_name ?? ""}
+                    onValueChange={(value) => {
+                      const selectedModel = contextualCosts?.find(
+                        (cost) => cost.model_name === value
+                      );
+                      void saveSearchSettings({
+                        contextual_rag_llm_name: value,
+                        contextual_rag_llm_provider:
+                          selectedModel?.provider ?? null,
+                      });
+                    }}
+                    disabled={!searchSettings?.enable_contextual_rag}
+                  >
+                    <InputSelect.Trigger placeholder="Select a model" />
+                    <InputSelect.Content>
+                      {(contextualCosts ?? []).map((cost) => (
+                        <InputSelect.Item
+                          key={cost.model_name}
+                          value={cost.model_name}
+                        >
+                          {cost.model_name}
+                        </InputSelect.Item>
+                      ))}
+                    </InputSelect.Content>
+                  </InputSelect>
+                </InputHorizontal>
+              </Disabled>
+            </GeneralLayouts.Section>
           </Card>
         </GeneralLayouts.Section>
 
