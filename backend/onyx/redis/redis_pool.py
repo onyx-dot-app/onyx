@@ -126,6 +126,8 @@ class TenantRedis(redis.Redis):
             "srem",
             "scard",
             "zadd",
+            "zrange",
+            "zrevrange",
             "zrangebyscore",
             "zremrangebyscore",
             "zscore",
