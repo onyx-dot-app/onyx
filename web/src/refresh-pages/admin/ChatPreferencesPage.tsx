@@ -49,7 +49,6 @@ import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -103,8 +102,44 @@ function MCPServerCard({
     ? "Authenticate this MCP server before enabling its tools."
     : undefined;
 
+  const expanded = !isFolded;
+  const hasContent = tools.length > 0 && filteredTools.length > 0;
+
   return (
-    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+    <OpalCard
+      expandable
+      expanded={expanded}
+      border="solid"
+      rounding="lg"
+      padding="fit"
+      content={
+        hasContent ? (
+          <ActionsLayouts.Content>
+            <div className="flex flex-col gap-2">
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon}
+                  rightChildren={
+                    <Tooltip tooltip={authTooltip} side="top">
+                      <Switch
+                        checked={isToolEnabled(tool.id)}
+                        onCheckedChange={(checked) =>
+                          onToggleTool(tool.id, checked)
+                        }
+                        disabled={needsAuth}
+                      />
+                    </Tooltip>
+                  }
+                />
+              ))}
+            </div>
+          </ActionsLayouts.Content>
+        ) : undefined
+      }
+    >
       <ActionsLayouts.Header
         title={server.name}
         description={server.description}
@@ -139,32 +174,7 @@ function MCPServerCard({
           </Section>
         )}
       </ActionsLayouts.Header>
-      {tools.length > 0 && filteredTools.length > 0 && (
-        <ActionsLayouts.Content>
-          <div className="flex flex-col gap-2">
-            {filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon}
-                rightChildren={
-                  <Tooltip tooltip={authTooltip} side="top">
-                    <Switch
-                      checked={isToolEnabled(tool.id)}
-                      onCheckedChange={(checked) =>
-                        onToggleTool(tool.id, checked)
-                      }
-                      disabled={needsAuth}
-                    />
-                  </Tooltip>
-                }
-              />
-            ))}
-          </div>
-        </ActionsLayouts.Content>
-      )}
-    </ExpandableCard.Root>
+    </OpalCard>
   );
 }
 
@@ -858,7 +868,12 @@ function ChatPreferencesForm() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <ExpandableCard.Root key={tool.id} defaultFolded>
+                        <OpalCard
+                          key={tool.id}
+                          border="solid"
+                          rounding="lg"
+                          padding="fit"
+                        >
                           <ActionsLayouts.Header
                             title={tool.display_name || tool.name}
                             description={tool.description}
@@ -872,7 +887,7 @@ function ChatPreferencesForm() {
                               />
                             }
                           />
-                        </ExpandableCard.Root>
+                        </OpalCard>
                       ))}
                     </Section>
                   </SimpleCollapsible.Content>

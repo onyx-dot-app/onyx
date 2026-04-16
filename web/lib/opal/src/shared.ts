@@ -134,6 +134,20 @@ const cardRoundingVariants: Record<RoundingVariants, string> = {
   xs: "rounded-04",
 };
 
+const cardTopRoundingVariants: Record<RoundingVariants, string> = {
+  lg: "rounded-t-16",
+  md: "rounded-t-12",
+  sm: "rounded-t-08",
+  xs: "rounded-t-04",
+};
+
+const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
+  lg: "rounded-b-16",
+  md: "rounded-b-12",
+  sm: "rounded-b-08",
+  xs: "rounded-b-04",
+};
+
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
@@ -144,6 +158,8 @@ export {
   paddingXVariants,
   paddingYVariants,
   cardRoundingVariants,
+  cardTopRoundingVariants,
+  cardBottomRoundingVariants,
   widthVariants,
   heightVariants,
 };

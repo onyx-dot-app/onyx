@@ -4,7 +4,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Button, Divider, MessageCard } from "@opal/components";
+import {
+  Button,
+  Card as OpalCard,
+  Divider,
+  MessageCard,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -277,14 +282,14 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <ExpandableCard.Root defaultFolded>
+    <OpalCard border="solid" rounding="lg" padding="fit">
       <ActionsLayouts.Header
         title={tool.display_name || tool.name}
         description={tool.description}
         icon={SvgActions}
         rightChildren={<SwitchField name={toolFieldName} />}
       />
-    </ExpandableCard.Root>
+    </OpalCard>
   );
 }
 
@@ -317,82 +322,91 @@ function MCPServerCard({
 
   return (
     <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description}
-        icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={
-          <GeneralLayouts.Section
-            flexDirection="row"
-            gap={0.5}
-            alignItems="start"
-          >
-            <EnabledCount
-              enabledCount={enabledCount}
-              totalCount={enabledTools.length}
-            />
-            <SwitchField
-              name={`${serverFieldName}.enabled`}
-              onCheckedChange={(checked) => {
-                enabledTools.forEach((tool) => {
-                  setFieldValue(`${serverFieldName}.tool_${tool.id}`, checked);
-                });
-                if (!checked) return;
-                setIsFolded(false);
-              }}
-            />
-          </GeneralLayouts.Section>
-        }
-      >
-        <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-          <InputTypeIn
-            placeholder="Search tools..."
-            variant="internal"
-            leftSearchIcon
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {enabledTools.length > 0 && (
-            <Button
-              prominence="internal"
-              rightIcon={isFolded ? SvgExpand : SvgFold}
-              onClick={() => setIsFolded((prev) => !prev)}
+      <ExpandableCard.Header>
+        <ActionsLayouts.Header
+          title={server.name}
+          description={server.description}
+          icon={getActionIcon(server.server_url, server.name)}
+          rightChildren={
+            <GeneralLayouts.Section
+              flexDirection="row"
+              gap={0.5}
+              alignItems="start"
             >
-              {isFolded ? "Expand" : "Fold"}
-            </Button>
-          )}
-        </GeneralLayouts.Section>
-      </ActionsLayouts.Header>
-      {isLoading ? (
-        <ActionsLayouts.Content>
-          <GeneralLayouts.Section padding={1}>
-            <SimpleLoader />
+              <EnabledCount
+                enabledCount={enabledCount}
+                totalCount={enabledTools.length}
+              />
+              <SwitchField
+                name={`${serverFieldName}.enabled`}
+                onCheckedChange={(checked) => {
+                  enabledTools.forEach((tool) => {
+                    setFieldValue(
+                      `${serverFieldName}.tool_${tool.id}`,
+                      checked
+                    );
+                  });
+                  if (!checked) return;
+                  setIsFolded(false);
+                }}
+              />
+            </GeneralLayouts.Section>
+          }
+        >
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search tools..."
+              variant="internal"
+              leftSearchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {enabledTools.length > 0 && (
+              <Button
+                prominence="internal"
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
           </GeneralLayouts.Section>
-        </ActionsLayouts.Content>
+        </ActionsLayouts.Header>
+      </ExpandableCard.Header>
+      {isLoading ? (
+        <ExpandableCard.Content>
+          <ActionsLayouts.Content>
+            <GeneralLayouts.Section padding={1}>
+              <SimpleLoader />
+            </GeneralLayouts.Section>
+          </ActionsLayouts.Content>
+        </ExpandableCard.Content>
       ) : (
         enabledTools.length > 0 &&
         filteredTools.length > 0 && (
-          <ActionsLayouts.Content>
-            {filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                name={`${serverFieldName}.tool_${tool.id}`}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon ?? SvgSliders}
-                disabled={
-                  !tool.isAvailable ||
-                  !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
-                }
-                rightChildren={
-                  <SwitchField
-                    name={`${serverFieldName}.tool_${tool.id}`}
-                    disabled={!isServerEnabled}
-                  />
-                }
-              />
-            ))}
-          </ActionsLayouts.Content>
+          <ExpandableCard.Content>
+            <ActionsLayouts.Content>
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  name={`${serverFieldName}.tool_${tool.id}`}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon ?? SvgSliders}
+                  disabled={
+                    !tool.isAvailable ||
+                    !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
+                  }
+                  rightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              ))}
+            </ActionsLayouts.Content>
+          </ExpandableCard.Content>
         )
       )}
     </ExpandableCard.Root>

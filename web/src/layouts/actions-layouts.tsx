@@ -1,51 +1,51 @@
 /**
  * Actions Layout Components
  *
- * A namespaced collection of components for building consistent action cards
- * (MCP servers, OpenAPI tools, etc.). These components provide a standardized
- * layout that separates presentation from business logic, making it easier to
- * build and maintain action-related UIs.
- *
- * Built on top of ExpandableCard layouts for the underlying card structure.
+ * A namespaced collection of layout primitives for building consistent action
+ * cards (MCP servers, OpenAPI tools, etc.). These render the inner layout of
+ * an action card (title row + optional search/controls row for `Header`; list
+ * of tools for `Content`) and do NOT provide any outer card chrome
+ * themselves — callers wrap these with an Opal `Card` (plain or `expandable`)
+ * to supply border, background, rounding, and fold animation.
  *
  * @example
  * ```tsx
  * import * as ActionsLayouts from "@/layouts/actions-layouts";
- * import * as ExpandableCard from "@/layouts/expandable-card-layouts";
+ * import { Card } from "@opal/components";
  * import { SvgServer } from "@opal/icons";
  * import Switch from "@/components/ui/switch";
  *
  * function MyActionCard() {
+ *   const [expanded, setExpanded] = useState(false);
  *   return (
- *     <ExpandableCard.Root>
+ *     <Card
+ *       expandable
+ *       expanded={expanded}
+ *       border="solid"
+ *       rounding="lg"
+ *       padding="fit"
+ *       content={
+ *         <ActionsLayouts.Content>
+ *           <ActionsLayouts.Tool
+ *             title="File Reader"
+ *             description="Read files from the filesystem"
+ *             icon={SvgFile}
+ *             rightChildren={
+ *               <Switch checked={enabled} onCheckedChange={setEnabled} />
+ *             }
+ *           />
+ *         </ActionsLayouts.Content>
+ *       }
+ *     >
  *       <ActionsLayouts.Header
  *         title="My MCP Server"
  *         description="A powerful MCP server for automation"
  *         icon={SvgServer}
  *         rightChildren={
- *           <Button onClick={handleDisconnect}>Disconnect</Button>
+ *           <Button onClick={() => setExpanded((v) => !v)}>Toggle</Button>
  *         }
  *       />
- *       <ActionsLayouts.Content>
- *         <ActionsLayouts.Tool
- *           title="File Reader"
- *           description="Read files from the filesystem"
- *           icon={SvgFile}
- *           rightChildren={
- *             <Switch checked={enabled} onCheckedChange={setEnabled} />
- *           }
- *         />
- *         <ActionsLayouts.Tool
- *           title="Web Search"
- *           description="Search the web"
- *           icon={SvgGlobe}
- *           disabled={true}
- *           rightChildren={
- *             <Switch checked={false} disabled />
- *           }
- *         />
- *       </ActionsLayouts.Content>
- *     </ExpandableCard.Root>
+ *     </Card>
  *   );
  * }
  * ```
@@ -57,7 +57,6 @@ import React, { HtmlHTMLAttributes } from "react";
 import type { IconProps } from "@opal/types";
 import { WithoutStyles } from "@/types";
 import { ContentAction } from "@opal/layouts";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { Card } from "@/refresh-components/cards";
 import { Label } from "@opal/layouts";
 
@@ -115,24 +114,22 @@ function ActionsHeader({
   ...props
 }: ActionsHeaderProps) {
   return (
-    <ExpandableCard.Header>
-      <div className="flex flex-col gap-2 pt-4 pb-2">
-        <div className="px-4">
-          <Label label={name}>
-            <ContentAction
-              icon={Icon}
-              title={title}
-              description={description}
-              sizePreset="section"
-              variant="section"
-              rightChildren={rightChildren}
-              paddingVariant="fit"
-            />
-          </Label>
-        </div>
-        <div {...props} className="px-2" />
+    <div className="flex flex-col gap-2 pt-4 pb-2">
+      <div className="px-4">
+        <Label label={name}>
+          <ContentAction
+            icon={Icon}
+            title={title}
+            description={description}
+            sizePreset="section"
+            variant="section"
+            rightChildren={rightChildren}
+            paddingVariant="fit"
+          />
+        </Label>
       </div>
-    </ExpandableCard.Header>
+      <div {...props} className="px-2" />
+    </div>
   );
 }
 
@@ -141,14 +138,6 @@ function ActionsHeader({
  *
  * A container for the content area of an action card.
  * Use this to wrap tools, settings, or other expandable content.
- * Features a maximum height with scrollable overflow.
- *
- * IMPORTANT: Only ONE ActionsContent should be used within a single ExpandableCard.Root.
- * This component self-registers with the ActionsLayout context to inform
- * ActionsHeader whether content exists (for border-radius styling). Using
- * multiple ActionsContent components will cause incorrect unmount behavior -
- * when any one unmounts, it will incorrectly signal that no content exists,
- * even if other ActionsContent components remain mounted.
  *
  * @example
  * ```tsx
@@ -163,9 +152,9 @@ function ActionsContent({
   ...props
 }: WithoutStyles<React.HTMLAttributes<HTMLDivElement>>) {
   return (
-    <ExpandableCard.Content {...props}>
-      <div className="flex flex-col gap-2 p-2">{children}</div>
-    </ExpandableCard.Content>
+    <div {...props} className="flex flex-col gap-2 p-2">
+      {children}
+    </div>
   );
 }
 

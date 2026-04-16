@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
+import { useState } from "react";
 import { Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
@@ -99,4 +100,84 @@ export const AllCombinations: Story = {
       ))}
     </div>
   ),
+};
+
+// ─── Expandable mode ─────────────────────────────────────────────────────────
+
+export const Expandable: Story = {
+  render: function ExpandableStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="w-96">
+        <Card
+          expandable
+          expanded={open}
+          border="solid"
+          content={
+            <div className="flex flex-col gap-2">
+              <p>First model</p>
+              <p>Second model</p>
+              <p>Third model</p>
+            </div>
+          }
+        >
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="w-full text-left"
+          >
+            Toggle (expanded={String(open)})
+          </button>
+        </Card>
+      </div>
+    );
+  },
+};
+
+export const ExpandableNoContent: Story = {
+  render: function ExpandableNoContentStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="w-96">
+        <Card expandable expanded={open} border="solid" content={undefined}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="w-full text-left"
+          >
+            Toggle (no content — renders like a plain card)
+          </button>
+        </Card>
+      </div>
+    );
+  },
+};
+
+export const ExpandableRoundingVariants: Story = {
+  render: function ExpandableRoundingStory() {
+    const [openKey, setOpenKey] =
+      useState<(typeof ROUNDING_VARIANTS)[number]>("md");
+    return (
+      <div className="flex flex-col gap-4 w-96">
+        {ROUNDING_VARIANTS.map((rounding) => (
+          <Card
+            key={rounding}
+            expandable
+            expanded={openKey === rounding}
+            rounding={rounding}
+            border="solid"
+            content={<p>content for rounding={rounding}</p>}
+          >
+            <button
+              type="button"
+              onClick={() => setOpenKey(rounding)}
+              className="w-full text-left"
+            >
+              rounding={rounding} (click to expand)
+            </button>
+          </Card>
+        ))}
+      </div>
+    );
+  },
 };
