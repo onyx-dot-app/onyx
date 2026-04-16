@@ -352,6 +352,7 @@ def main() -> None:
         help="Bearer token (onyx_pat_...). Or use --token-file / $ONYX_ACCESS_TOKEN.",
     )
     parser.add_argument(
+        "-f",
         "--token-file",
         help="Path to a file containing a bearer token. Or use --token / $ONYX_ACCESS_TOKEN.",
     )
