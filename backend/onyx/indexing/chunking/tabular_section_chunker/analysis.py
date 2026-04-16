@@ -6,12 +6,13 @@ or categorical. Result is consumed by both ``sheet_descriptor`` and
 """
 
 from collections import Counter
-from dataclasses import dataclass
-from dataclasses import field
 from datetime import date
 from itertools import zip_longest
 
 from dateutil.parser import parse as parse_dt
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 from onyx.utils.csv_utils import ParsedRow
 
@@ -20,14 +21,15 @@ CATEGORICAL_DISTINCT_THRESHOLD = 20
 ID_NAME_TOKENS = {"id", "uuid", "uid", "guid", "key"}
 
 
-@dataclass
-class SheetAnalysis:
+class SheetAnalysis(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     row_count: int
     num_cols: int
-    numeric_cols: list[int] = field(default_factory=list)
-    categorical_cols: list[int] = field(default_factory=list)
-    numeric_values: dict[int, list[float]] = field(default_factory=dict)
-    categorical_counts: dict[int, Counter[str]] = field(default_factory=dict)
+    numeric_cols: list[int] = Field(default_factory=list)
+    categorical_cols: list[int] = Field(default_factory=list)
+    numeric_values: dict[int, list[float]] = Field(default_factory=dict)
+    categorical_counts: dict[int, Counter[str]] = Field(default_factory=dict)
     id_col: int | None = None
     date_min: date | None = None
     date_max: date | None = None
