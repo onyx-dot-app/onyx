@@ -55,7 +55,7 @@ def build_sheet_descriptor_chunks(
         Values seen in {col}: {v1}, {v2}, ...                                 # optional, repeated
     """
     headers, rows = _parse_csv(section.text or "")
-    if not headers or not rows:
+    if not headers:
         return []
 
     a = _analyze(headers, rows)

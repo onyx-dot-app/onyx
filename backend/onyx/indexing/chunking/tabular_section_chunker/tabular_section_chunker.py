@@ -253,30 +253,35 @@ class TabularChunker(SectionChunker):
         payloads = accumulator.flush_to_list()
 
         parsed_rows = parse_section(section)
-        if not parsed_rows:
+        sheet_header = section.heading or ""
+
+        chunk_texts: list[str] = []
+        if parsed_rows:
+            chunk_texts.extend(
+                parse_to_chunks(
+                    rows=parsed_rows,
+                    sheet_header=sheet_header,
+                    tokenizer=self.tokenizer,
+                    max_tokens=content_token_limit,
+                )
+            )
+
+        if not self.ignore_metadata_chunks:
+            chunk_texts.extend(
+                build_sheet_descriptor_chunks(
+                    section=section,
+                    tokenizer=self.tokenizer,
+                    max_tokens=content_token_limit,
+                )
+            )
+
+        if not chunk_texts:
             logger.warning(
                 f"TabularChunker: skipping unparseable section (link={section.link})"
             )
             return SectionChunkerOutput(
                 payloads=payloads, accumulator=AccumulatorState()
             )
-
-        sheet_header = section.heading or ""
-        chunk_texts = parse_to_chunks(
-            rows=parsed_rows,
-            sheet_header=sheet_header,
-            tokenizer=self.tokenizer,
-            max_tokens=content_token_limit,
-        )
-
-        if not self.ignore_metadata_chunks:
-            metadata_chunks = build_sheet_descriptor_chunks(
-                section=section,
-                tokenizer=self.tokenizer,
-                max_tokens=content_token_limit,
-            )
-
-            chunk_texts.extend(metadata_chunks)
 
         for i, text in enumerate(chunk_texts):
             payloads.append(
