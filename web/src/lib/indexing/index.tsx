@@ -1,4 +1,5 @@
 import { OpenSourceIcon } from "@/components/icons/icons";
+import { SvgCpu } from "@opal/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -9,6 +10,7 @@ import {
   SvgOpenai,
   SvgVoyage,
 } from "@opal/logos";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
@@ -16,8 +18,19 @@ import {
   HostedEmbeddingModel,
   RerankerProvider,
   RerankingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+
+// ─── Backend URLs ────────────────────────────────────────────────────────────
+
+export const EMBEDDING_PROVIDERS_ADMIN_URL =
+  "/api/admin/embedding/embedding-provider";
+
+export const EMBEDDING_MODELS_ADMIN_URL = "/api/admin/embedding";
+
+// ─── UI options ──────────────────────────────────────────────────────────────
+
+export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
 
 // ─── Hosted (self-hosted) embedding models ───────────────────────────────────
 
@@ -404,5 +417,62 @@ export function getCurrentModelCopy(
       (model) => model.model_name === currentModelName
     ) ||
     null
+  );
+}
+
+// ─── Provider lookup (icon + display name) ───────────────────────────────────
+
+export interface EmbeddingProviderEntry {
+  icon: IconFunctionComponent;
+  displayName: string;
+}
+
+const PROVIDERS: Record<string, EmbeddingProviderEntry> = {
+  [EmbeddingProvider.OPENAI]: { icon: SvgOpenai, displayName: "OpenAI" },
+  [EmbeddingProvider.COHERE]: { icon: SvgCohere, displayName: "Cohere" },
+  [EmbeddingProvider.VOYAGE]: { icon: SvgVoyage, displayName: "Voyage AI" },
+  [EmbeddingProvider.GOOGLE]: { icon: SvgGoogle, displayName: "Google" },
+  [EmbeddingProvider.LITELLM]: { icon: SvgLitellm, displayName: "LiteLLM" },
+  [EmbeddingProvider.AZURE]: { icon: SvgAzure, displayName: "Azure" },
+};
+
+const SELF_HOSTED_ENTRY: EmbeddingProviderEntry = {
+  icon: SvgNomic,
+  displayName: "Self-hosted",
+};
+
+const DEFAULT_ENTRY: EmbeddingProviderEntry = {
+  icon: SvgCpu,
+  displayName: "Self-hosted",
+};
+
+export function getEmbeddingProvider(
+  providerType: string | null
+): EmbeddingProviderEntry {
+  if (!providerType) return SELF_HOSTED_ENTRY;
+  return (
+    PROVIDERS[providerType] ?? {
+      ...DEFAULT_ENTRY,
+      displayName: providerType.charAt(0).toUpperCase() + providerType.slice(1),
+    }
+  );
+}
+
+const ALL_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
+  ...AVAILABLE_CLOUD_PROVIDERS,
+  LITELLM_CLOUD_PROVIDER,
+  AZURE_CLOUD_PROVIDER,
+];
+
+/**
+ * Find the {@link CloudEmbeddingProvider} entry matching `providerType`, or
+ * `null` if none matches (e.g. self-hosted models).
+ */
+export function findCloudProvider(
+  providerType: string | null
+): CloudEmbeddingProvider | null {
+  if (!providerType) return null;
+  return (
+    ALL_CLOUD_PROVIDERS.find((p) => p.provider_type === providerType) ?? null
   );
 }

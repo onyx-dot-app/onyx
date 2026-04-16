@@ -6,7 +6,7 @@ import {
   HostedEmbeddingModel,
   LLMContextualCost,
   SavedSearchSettings,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 type EmbeddingModel = CloudEmbeddingModel | HostedEmbeddingModel;

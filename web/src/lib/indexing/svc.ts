@@ -6,7 +6,7 @@ import {
   RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 
 export async function deleteSearchSettings(search_settings_id: number) {
   return await fetch(`/api/search-settings/delete-search-settings`, {

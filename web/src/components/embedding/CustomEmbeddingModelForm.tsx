@@ -1,4 +1,7 @@
-import { CloudEmbeddingModel, EmbeddingProvider } from "@/interfaces/indexing";
+import {
+  CloudEmbeddingModel,
+  EmbeddingProvider,
+} from "@/lib/indexing/interfaces";
 import { getFormattedProviderName } from "@/lib/indexing";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";

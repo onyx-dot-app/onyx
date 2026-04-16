@@ -11,7 +11,7 @@ import {
   CloudEmbeddingProviderFull,
   EmbeddingModelDescriptor,
   EmbeddingProvider,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import {
   AVAILABLE_CLOUD_PROVIDERS,
   AZURE_CLOUD_PROVIDER,

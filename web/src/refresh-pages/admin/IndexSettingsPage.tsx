@@ -10,14 +10,24 @@ import { Content, Card as CardLayout } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
-import { Button, Card, Divider, MessageCard } from "@opal/components";
-import { SvgSettings } from "@opal/icons";
+import {
+  Button,
+  Card,
+  Divider,
+  LinkButton,
+  MessageCard,
+} from "@opal/components";
+import { SvgCloud, SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { SavedSearchSettings } from "@/interfaces/indexing";
-import { getEmbeddingProvider } from "@/lib/embedding";
+import { SavedSearchSettings } from "@/lib/indexing/interfaces";
+import {
+  findCloudProvider,
+  getEmbeddingProvider,
+  MAX_IMAGE_SIZE_OPTIONS,
+} from "@/lib/indexing";
 import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
@@ -31,7 +41,35 @@ import {
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
-const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
+interface CloudProviderInfoProps {
+  providerType: string | null;
+}
+
+function CloudProviderInfo({ providerType }: CloudProviderInfoProps) {
+  const cloudProvider = findCloudProvider(providerType);
+  if (!cloudProvider) return null;
+
+  return (
+    <div className="flex flex-row items-center gap-2 p-2">
+      <Content
+        icon={SvgCloud}
+        title="Cloud Provider"
+        sizePreset="secondary"
+        variant="section"
+      />
+      {cloudProvider.costslink && (
+        <LinkButton href={cloudProvider.costslink} target="_blank">
+          Pricing
+        </LinkButton>
+      )}
+      {cloudProvider.docsLink && (
+        <LinkButton href={cloudProvider.docsLink} target="_blank">
+          Docs
+        </LinkButton>
+      )}
+    </div>
+  );
+}
 
 export default function IndexSettingsPage() {
   const router = useRouter();
@@ -195,7 +233,11 @@ export default function IndexSettingsPage() {
                     </div>
                   </div>
                 }
-              />
+              >
+                <CloudProviderInfo
+                  providerType={currentEmbeddingModel.provider_type}
+                />
+              </CardLayout.Header>
             </Card>
           )}
         </GeneralLayouts.Section>

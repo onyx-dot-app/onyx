@@ -11,7 +11,7 @@ import {
   RerankerProvider,
   RerankingDetails,
   RerankingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import { rerankingModels } from "@/lib/indexing";
 import { FiExternalLink } from "react-icons/fi";
 import {

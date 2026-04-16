@@ -8,9 +8,11 @@ import { Label, TextFormField } from "@/components/Field";
 import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
-} from "@/interfaces/indexing";
-import { getFormattedProviderName } from "@/lib/indexing";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+} from "@/lib/indexing/interfaces";
+import {
+  EMBEDDING_PROVIDERS_ADMIN_URL,
+  getFormattedProviderName,
+} from "@/lib/indexing";
 import Modal from "@/refresh-components/Modal";
 import { markdown } from "@opal/utils";
 import { SvgSettings } from "@opal/icons";

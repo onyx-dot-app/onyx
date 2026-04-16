@@ -18,7 +18,7 @@ import {
   RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import {
   combineSearchSettings,
   updateSearchSettings,

@@ -2,7 +2,7 @@ import { BooleanFormField, TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { HostedEmbeddingModel } from "@/interfaces/indexing";
+import { HostedEmbeddingModel } from "@/lib/indexing/interfaces";
 
 export function CustomModelForm({
   onSubmit,

@@ -9,7 +9,7 @@ import { ModelSelector } from "@/components/embedding/ModelSelector";
 import {
   CloudEmbeddingModel,
   HostedEmbeddingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import { AVAILABLE_MODELS } from "@/lib/indexing";
 import { CustomModelForm } from "../../../../components/embedding/CustomModelForm";
 import { useState } from "react";

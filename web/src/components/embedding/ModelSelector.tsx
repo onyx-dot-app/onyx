@@ -2,7 +2,7 @@ import {
   CloudEmbeddingModel,
   EmbeddingModelDescriptor,
   HostedEmbeddingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import {
   getCurrentModelCopy,
   getFormattedProviderName,

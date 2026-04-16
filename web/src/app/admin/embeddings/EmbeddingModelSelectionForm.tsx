@@ -9,11 +9,13 @@ import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
   HostedEmbeddingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import {
   AVAILABLE_CLOUD_PROVIDERS,
   AVAILABLE_MODELS,
   AZURE_CLOUD_PROVIDER,
+  EMBEDDING_MODELS_ADMIN_URL,
+  EMBEDDING_PROVIDERS_ADMIN_URL,
   LITELLM_CLOUD_PROVIDER,
 } from "@/lib/indexing";
 import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
@@ -25,10 +27,6 @@ import ChangeCredentialsModal from "@/app/admin/embeddings/modals/ChangeCredenti
 import ModelSelectionConfirmationModal from "@/app/admin/embeddings/modals/ModelSelectionModal";
 import AlreadyPickedModal from "@/app/admin/embeddings/modals/AlreadyPickedModal";
 import { ModelOption } from "@/components/embedding/ModelSelector";
-import {
-  EMBEDDING_MODELS_ADMIN_URL,
-  EMBEDDING_PROVIDERS_ADMIN_URL,
-} from "@/lib/llmConfig/constants";
 import { Button } from "@opal/components";
 
 export interface EmbeddingDetails {

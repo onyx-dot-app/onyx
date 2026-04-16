@@ -21,7 +21,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import {
   CloudEmbeddingModel,
   HostedEmbeddingModel,
-} from "@/interfaces/indexing";
+} from "@/lib/indexing/interfaces";
 import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
