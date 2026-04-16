@@ -43,10 +43,10 @@ class Result(BaseModel):
 class Queries(BaseModel):
     model_config = {"frozen": True}
 
-    _queries: list[str]
+    queries: list[str]
 
     def get_random_query(self) -> str:
-        return random.choice(self._queries)
+        return random.choice(self.queries)
 
 
 class StopCondition:
@@ -73,9 +73,9 @@ class StopCondition:
 
     def __str__(self) -> str:
         if self._num_requests_to_make is not None and self._duration_s is not None:
-            return f"Stop condition: make {self._num_requests_to_make} requests or make requests for {self._duration_s}s."
+            return f"Stop condition: make {self._num_requests_to_make} request(s) or make requests for {self._duration_s}s."
         if self._num_requests_to_make is not None:
-            return f"Stop condition: make {self._num_requests_to_make} requests."
+            return f"Stop condition: make {self._num_requests_to_make} request(s)."
         if self._duration_s is not None:
             return f"Stop condition: make requests for {self._duration_s}s."
         raise ValueError("Bug: Invalid stop condition.")
@@ -105,7 +105,7 @@ def make_one_search_request(
             error=(
                 None
                 if resp.status_code == 200
-                else body[:200].decode("utf-8", "replace")
+                else body[:1000].decode("utf-8", "replace")
             ),
         )
     except httpx.TimeoutException:
@@ -170,15 +170,15 @@ def summarize(results: list[Result], wall_time_s: float) -> None:
     print(f"Failed:             {len(fails)}")
     if lats:
         print(f"Throughput (ok):    {len(oks) / wall_time_s:.3f} req/s")
-        print(f"Latency mean:       {statistics.mean(lats):.3f}s")
+        print(f"Round trip latency mean:       {statistics.mean(lats):.3f}s")
         if len(lats) >= 100:
             # quantiles(n=100) returns 99 cut points: indices 0..98 => p1..p99.
             percentiles = statistics.quantiles(lats, n=100)
-            print(f"Latency p50:        {percentiles[49]:.3f}s")
-            print(f"Latency p90:        {percentiles[89]:.3f}s")
-            print(f"Latency p95:        {percentiles[94]:.3f}s")
-            print(f"Latency p99:        {percentiles[98]:.3f}s")
-        print(f"Latency max:        {max(lats):.3f}s")
+            print(f"Round trip latency p50:        {percentiles[49]:.3f}s")
+            print(f"Round trip latency p90:        {percentiles[89]:.3f}s")
+            print(f"Round trip latency p95:        {percentiles[94]:.3f}s")
+            print(f"Round trip latency p99:        {percentiles[98]:.3f}s")
+        print(f"Round trip latency max:        {max(lats):.3f}s")
     if fails:
         err_counts = Counter((r.status, (r.error or "")[:80]) for r in fails)
         print()
@@ -193,10 +193,10 @@ def load_queries(args: argparse.Namespace) -> Queries:
         queries = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
         if not queries:
             raise SystemExit(f"No queries found in {path}")
-        return Queries(_queries=queries)
+        return Queries(queries=queries)
     if args.query:
-        return Queries(_queries=[args.query])
-    return Queries(_queries=DEFAULT_QUERIES)
+        return Queries(queries=[args.query])
+    return Queries(queries=DEFAULT_QUERIES)
 
 
 def load_token(args: argparse.Namespace) -> str:
@@ -287,9 +287,12 @@ def run(args: argparse.Namespace) -> None:
                 f"  status={resp.status_code}  latency={latency:.3f}s  bytes={len(resp.content)}."
             )
             if resp.status_code != 200:
-                print(f"  error: {resp.content[:200].decode('utf-8', 'replace')}")
+                print(f"  error: {resp.content[:1000].decode('utf-8', 'replace')}")
                 raise SystemExit(f"Preflight '{label}' failed; aborting load test.")
+            else:
+                print(f"  success: {resp.content[:1000].decode('utf-8', 'replace')}")
 
+    print()
     print(f"Load test: concurrency={args.concurrency}.")
     print(str(stop_condition))
     results: list[Result] = []
