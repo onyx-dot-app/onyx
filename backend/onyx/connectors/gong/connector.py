@@ -1,6 +1,7 @@
 import base64
 import copy
 import time
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -37,6 +38,8 @@ class GongConnectorCheckpoint(ConnectorCheckpoint):
     workspace_index: int = 0
     # Gong API cursor for current workspace's transcript pagination
     cursor: str | None = None
+    # Cached time range — computed once, reused across checkpoint calls
+    time_range: tuple[str, str] | None = None
 
 
 class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
@@ -164,6 +167,50 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         return call_to_metadata
 
+    def _fetch_call_details_with_retry(self, call_ids: list[str]) -> dict[str, Any]:
+        """Fetch call details with retry for the Gong API race condition.
+
+        The Gong API has a known race where transcript call IDs don't immediately
+        appear in /v2/calls/extensive. Retries with exponential backoff, only
+        re-requesting the missing IDs on each attempt.
+        """
+        call_details_map = self._get_call_details_by_ids(call_ids)
+        if set(call_ids) == set(call_details_map.keys()):
+            return call_details_map
+
+        for attempt in range(2, self.MAX_CALL_DETAILS_ATTEMPTS + 1):
+            missing_ids = list(set(call_ids) - set(call_details_map.keys()))
+            logger.warning(
+                f"_get_call_details_by_ids is missing call id's: current_attempt={attempt - 1} missing_call_ids={missing_ids}"
+            )
+
+            wait_seconds = self.CALL_DETAILS_DELAY * pow(2, attempt - 2)
+            logger.warning(
+                f"_get_call_details_by_ids waiting to retry: "
+                f"wait={wait_seconds}s "
+                f"current_attempt={attempt - 1} "
+                f"next_attempt={attempt} "
+                f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
+            )
+            time.sleep(wait_seconds)
+
+            # Only re-fetch the missing IDs, merge into existing results
+            new_details = self._get_call_details_by_ids(missing_ids)
+            call_details_map.update(new_details)
+
+            if set(call_ids) == set(call_details_map.keys()):
+                return call_details_map
+
+        missing_ids = list(set(call_ids) - set(call_details_map.keys()))
+        logger.error(
+            f"Giving up on missing call id's after "
+            f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
+            f"missing_call_ids={missing_ids} — "
+            f"proceeding with {len(call_details_map)} of "
+            f"{len(call_ids)} calls"
+        )
+        return call_details_map
+
     @staticmethod
     def _parse_parties(parties: list[dict]) -> dict[str, str]:
         id_mapping = {}
@@ -244,6 +291,88 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         return start_time, end_time
 
+    def _process_transcripts(
+        self,
+        transcripts: list[dict[str, Any]],
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Process a batch of transcripts into Documents or ConnectorFailures."""
+        transcript_call_ids = cast(
+            list[str],
+            [t.get("callId") for t in transcripts if t.get("callId")],
+        )
+
+        call_details_map = self._fetch_call_details_with_retry(transcript_call_ids)
+
+        for transcript in transcripts:
+            call_id = transcript.get("callId")
+
+            if not call_id or call_id not in call_details_map:
+                logger.error(f"Couldn't get call information for Call ID: {call_id}")
+                if call_id:
+                    logger.error(
+                        f"Call debug info: call_id={call_id} "
+                        f"call_ids={transcript_call_ids} "
+                        f"call_details_map={call_details_map.keys()}"
+                    )
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=call_id or "unknown",
+                    ),
+                    failure_message=f"Couldn't get call information for Call ID: {call_id}",
+                )
+                continue
+
+            call_details = call_details_map[call_id]
+            call_metadata = call_details["metaData"]
+
+            call_time_str = call_metadata["started"]
+            call_title = call_metadata["title"]
+            logger.info(
+                f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+            )
+
+            call_parties = cast(list[dict] | None, call_details.get("parties"))
+            if call_parties is None:
+                logger.error(f"Couldn't get parties for Call ID: {call_id}")
+                call_parties = []
+
+            id_to_name_map = self._parse_parties(call_parties)
+
+            speaker_to_name: dict[str, str] = {}
+
+            transcript_text = ""
+            call_purpose = call_metadata["purpose"]
+            if call_purpose:
+                transcript_text += f"Call Description: {call_purpose}\n\n"
+
+            contents = transcript["transcript"]
+            for segment in contents:
+                speaker_id = segment.get("speakerId", "")
+                if speaker_id not in speaker_to_name:
+                    if self.hide_user_info:
+                        speaker_to_name[speaker_id] = f"User {len(speaker_to_name) + 1}"
+                    else:
+                        speaker_to_name[speaker_id] = id_to_name_map.get(
+                            speaker_id, "Unknown"
+                        )
+
+                speaker_name = speaker_to_name[speaker_id]
+
+                sentences = segment.get("sentences", {})
+                monolog = " ".join([sentence.get("text", "") for sentence in sentences])
+                transcript_text += f"{speaker_name}: {monolog}\n\n"
+
+            yield Document(
+                id=call_id,
+                sections=[TextSection(link=call_metadata["url"], text=transcript_text)],
+                source=DocumentSource.GONG,
+                semantic_identifier=call_title or "Untitled",
+                doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
+                    timezone.utc
+                ),
+                metadata={"client": call_metadata.get("system")},
+            )
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         combined = (
             f"{credentials['gong_access_key']}:{credentials['gong_access_key_secret']}"
@@ -277,6 +406,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         # Step 1: Resolve workspace IDs on first call
         if checkpoint.workspace_ids is None:
             checkpoint.workspace_ids = self._resolve_workspace_ids()
+            checkpoint.time_range = self._compute_time_range(start, end)
             checkpoint.has_more = True
             return checkpoint
 
@@ -287,7 +417,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             checkpoint.has_more = False
             return checkpoint
 
-        start_time, end_time = self._compute_time_range(start, end)
+        # Use cached time range, falling back to computation if not cached
+        start_time, end_time = checkpoint.time_range or self._compute_time_range(
+            start, end
+        )
         logger.info(
             f"Fetching Gong calls between {start_time} and {end_time} "
             f"(workspace {checkpoint.workspace_index + 1}/{len(workspace_ids)})"
@@ -305,130 +438,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         # Step 3: Process transcripts into documents
         if transcripts:
-            transcript_call_ids = cast(
-                list[str],
-                [t.get("callId") for t in transcripts if t.get("callId")],
-            )
-
-            call_details_map: dict[str, Any] = {}
-
-            # There's a likely race condition in the API where a transcript will have a
-            # call id but the call to v2/calls/extensive will not return all of the id's
-            # retry with exponential backoff has been observed to mitigate this
-            # in ~2 minutes. After max attempts, proceed with whatever we have —
-            # the per-call loop below will yield failures for missing IDs.
-            current_attempt = 0
-            while True:
-                current_attempt += 1
-                call_details_map = self._get_call_details_by_ids(transcript_call_ids)
-                if set(transcript_call_ids) == set(call_details_map.keys()):
-                    break
-
-                missing_call_ids = set(transcript_call_ids) - set(
-                    call_details_map.keys()
-                )
-                logger.warning(
-                    f"_get_call_details_by_ids is missing call id's: "
-                    f"current_attempt={current_attempt} "
-                    f"missing_call_ids={missing_call_ids}"
-                )
-                if current_attempt >= self.MAX_CALL_DETAILS_ATTEMPTS:
-                    logger.error(
-                        f"Giving up on missing call id's after "
-                        f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
-                        f"missing_call_ids={missing_call_ids} — "
-                        f"proceeding with {len(call_details_map)} of "
-                        f"{len(transcript_call_ids)} calls"
-                    )
-                    break
-
-                wait_seconds = self.CALL_DETAILS_DELAY * pow(2, current_attempt - 1)
-                logger.warning(
-                    f"_get_call_details_by_ids waiting to retry: "
-                    f"wait={wait_seconds}s "
-                    f"current_attempt={current_attempt} "
-                    f"next_attempt={current_attempt + 1} "
-                    f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
-                )
-                time.sleep(wait_seconds)
-
-            for transcript in transcripts:
-                call_id = transcript.get("callId")
-
-                if not call_id or call_id not in call_details_map:
-                    logger.error(
-                        f"Couldn't get call information for Call ID: {call_id}"
-                    )
-                    if call_id:
-                        logger.error(
-                            f"Call debug info: call_id={call_id} "
-                            f"call_ids={transcript_call_ids} "
-                            f"call_details_map={call_details_map.keys()}"
-                        )
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=call_id or "unknown",
-                        ),
-                        failure_message=f"Couldn't get call information for Call ID: {call_id}",
-                    )
-                    continue
-
-                call_details = call_details_map[call_id]
-                call_metadata = call_details["metaData"]
-
-                call_time_str = call_metadata["started"]
-                call_title = call_metadata["title"]
-                logger.info(
-                    f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
-                )
-
-                call_parties = cast(list[dict] | None, call_details.get("parties"))
-                if call_parties is None:
-                    logger.error(f"Couldn't get parties for Call ID: {call_id}")
-                    call_parties = []
-
-                id_to_name_map = self._parse_parties(call_parties)
-
-                speaker_to_name: dict[str, str] = {}
-
-                transcript_text = ""
-                call_purpose = call_metadata["purpose"]
-                if call_purpose:
-                    transcript_text += f"Call Description: {call_purpose}\n\n"
-
-                contents = transcript["transcript"]
-                for segment in contents:
-                    speaker_id = segment.get("speakerId", "")
-                    if speaker_id not in speaker_to_name:
-                        if self.hide_user_info:
-                            speaker_to_name[speaker_id] = (
-                                f"User {len(speaker_to_name) + 1}"
-                            )
-                        else:
-                            speaker_to_name[speaker_id] = id_to_name_map.get(
-                                speaker_id, "Unknown"
-                            )
-
-                    speaker_name = speaker_to_name[speaker_id]
-
-                    sentences = segment.get("sentences", {})
-                    monolog = " ".join(
-                        [sentence.get("text", "") for sentence in sentences]
-                    )
-                    transcript_text += f"{speaker_name}: {monolog}\n\n"
-
-                yield Document(
-                    id=call_id,
-                    sections=[
-                        TextSection(link=call_metadata["url"], text=transcript_text)
-                    ],
-                    source=DocumentSource.GONG,
-                    semantic_identifier=call_title or "Untitled",
-                    doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
-                        timezone.utc
-                    ),
-                    metadata={"client": call_metadata.get("system")},
-                )
+            yield from self._process_transcripts(transcripts)
 
         # Step 4: Update checkpoint state
         if next_cursor:

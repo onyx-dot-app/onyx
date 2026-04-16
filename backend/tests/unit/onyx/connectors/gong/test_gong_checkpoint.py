@@ -371,10 +371,6 @@ class TestGongConnectorCheckpoint:
         )
 
         generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
-        list(generator)
-        # generator.return value not accessible via list() — use the loop
-        # Re-run properly:
-        generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
         try:
             while True:
                 next(generator)
@@ -383,3 +379,67 @@ class TestGongConnectorCheckpoint:
 
         assert checkpoint.has_more is False
         assert checkpoint.workspace_index == 1
+
+    @patch.object(GongConnector, "_throttled_request")
+    def test_retry_only_fetches_missing_ids(
+        self,
+        mock_request: MagicMock,
+        connector: GongConnector,
+    ) -> None:
+        """Retry for missing call details should only re-request the missing IDs."""
+        transcript_response = MagicMock()
+        transcript_response.status_code = 200
+        transcript_response.json.return_value = {
+            "callTranscripts": [
+                _make_transcript("call1"),
+                _make_transcript("call2"),
+            ],
+            "records": {},
+        }
+
+        # First fetch: returns call1 but not call2
+        partial_details = MagicMock()
+        partial_details.status_code = 200
+        partial_details.json.return_value = {
+            "calls": [_make_call_detail("call1", "Call One")]
+        }
+
+        # Second fetch (retry): returns call2
+        missing_details = MagicMock()
+        missing_details.status_code = 200
+        missing_details.json.return_value = {
+            "calls": [_make_call_detail("call2", "Call Two")]
+        }
+
+        mock_request.side_effect = [
+            transcript_response,
+            partial_details,
+            missing_details,
+        ]
+
+        checkpoint = GongConnectorCheckpoint(
+            has_more=True,
+            workspace_ids=[None],
+            workspace_index=0,
+        )
+
+        docs: list[Document] = []
+        with patch("onyx.connectors.gong.connector.time.sleep"):
+            generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+            try:
+                while True:
+                    item = next(generator)
+                    if isinstance(item, Document):
+                        docs.append(item)
+            except StopIteration:
+                pass
+
+        assert len(docs) == 2
+        assert docs[0].semantic_identifier == "Call One"
+        assert docs[1].semantic_identifier == "Call Two"
+
+        # Verify: 3 API calls total (1 transcript + 1 full details + 1 retry for missing only)
+        assert mock_request.call_count == 3
+        # The retry call should only request call2, not both
+        retry_call_body = mock_request.call_args_list[2][1]["json"]
+        assert retry_call_body["filter"]["callIds"] == ["call2"]
