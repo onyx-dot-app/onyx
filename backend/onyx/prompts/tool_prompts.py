@@ -64,20 +64,10 @@ IMPORTANT: each call to this tool is independent. Variables from previous calls 
 
 GENERATE_IMAGE_GUIDANCE = """
 ## generate_image
-NEVER use generate_image unless the user specifically requests an image or asks to
-edit/modify an existing image in the conversation.
-To edit, modify, restyle, or create a variation of an image already in the
-conversation, put that image's file_id in `reference_image_file_ids`. File IDs come
-from two places, and both can be passed the same way:
-  - Images the user attached to a message carry a `[attached image — file_id: <id>]`
-    tag immediately before the image content. Copy the id out of that tag.
-  - Images produced by previous `generate_image` calls have their file_id in that
-    call's tool response JSON.
-Only pass file_ids that actually appear in the conversation — never invent or guess
-one. Leave `reference_image_file_ids` unset for a brand-new generation that doesn't
-edit any existing image (for example when the user attached an image for context but
-asked for a completely unrelated new picture). The first file_id in the list is the
-primary edit source; any later file_ids are additional reference context.
+NEVER use generate_image unless the user specifically requests an image.
+To edit, restyle, or vary an existing image, pass its file_id in `reference_image_file_ids`. \
+File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior `generate_image` tool results — never invent one. \
+Leave `reference_image_file_ids` unset for a fresh generation.
 """.lstrip()
 
 MEMORY_GUIDANCE = """

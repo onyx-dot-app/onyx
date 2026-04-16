@@ -49,14 +49,7 @@ REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
 
 class ImageGenerationTool(Tool[None]):
     NAME = "generate_image"
-    DESCRIPTION = (
-        "Generate a new image from a prompt, or edit/modify existing images"
-        " from this conversation. To edit existing images — whether the user"
-        " attached them or they were produced by a previous generate_image"
-        " call — pass their file_id values in `reference_image_file_ids`."
-        " Do not use unless the user specifically requests an image or asks"
-        " to edit an image."
-    )
+    DESCRIPTION = "Generate an image based on a prompt. Do not use unless the user specifically requests an image."
     DISPLAY_NAME = "Image Generation"
 
     def __init__(
@@ -148,14 +141,11 @@ class ImageGenerationTool(Tool[None]):
                         REFERENCE_IMAGE_FILE_IDS_FIELD: {
                             "type": "array",
                             "description": (
-                                "Optional list of image file_id values to edit/modify/use as reference."
-                                " Accepts file_ids from two sources, with the same mechanics for both:"
-                                " (1) images the user attached to a user message — their file_id appears"
-                                " in the tag `[attached image — file_id: <id>]` right before the image"
-                                " in that message; (2) images returned by previous generate_image tool"
-                                " calls — their file_id appears in that call's response JSON. Leave"
-                                " unset/empty for a brand-new generation unrelated to any existing image."
-                                " The first file_id in the list is treated as the primary edit source."
+                                "Optional file_ids of existing images to edit or use as reference;"
+                                " the first is the primary edit source."
+                                " Get file_ids from `[attached image — file_id: <id>]` tags on"
+                                " user-attached images or from prior generate_image tool responses."
+                                " Omit for a fresh, unrelated generation."
                             ),
                             "items": {
                                 "type": "string",

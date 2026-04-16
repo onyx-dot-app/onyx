@@ -818,10 +818,7 @@ def translate_history_to_llm_format(
                     )
                 ]
 
-                # Add image parts. Each image is preceded by a text tag
-                # carrying its file_id so the LLM can reference the image by
-                # ID when calling tools like generate_image (which expects
-                # reference_image_file_ids to edit a specific image).
+                # Add image parts
                 for img_file in msg.image_files:
                     if img_file.file_type == ChatFileType.IMAGE:
                         try:
