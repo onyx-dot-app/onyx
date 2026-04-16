@@ -1,10 +1,3 @@
-"""Shared per-sheet column type inference.
-
-Walks each column once and classifies it as numeric, date, identifier,
-or categorical. Result is consumed by both ``sheet_descriptor`` and
-``total_descriptor`` so the analysis only runs once per analysis call.
-"""
-
 from collections import Counter
 from datetime import date
 from itertools import zip_longest

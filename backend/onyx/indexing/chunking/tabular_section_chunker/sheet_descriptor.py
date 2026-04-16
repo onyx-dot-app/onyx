@@ -1,5 +1,3 @@
-"""Per-section sheet descriptor chunk builder."""
-
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
