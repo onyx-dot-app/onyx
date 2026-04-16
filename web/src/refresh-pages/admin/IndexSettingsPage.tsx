@@ -29,14 +29,15 @@ import {
   getEmbeddingProvider,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
-import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
+
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
-  useFutureEmbeddingModel,
   useLLMContextualCosts,
 } from "@/hooks/useSearchSettings";
 
@@ -86,14 +87,13 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
-  const s = settings.settings;
+  const editEmbeddingModelModal = useCreateModal();
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const currentSettings = s;
-      if (!currentSettings) return;
+      if (!settings.settings) return;
 
-      const newSettings = { ...currentSettings, ...updates };
+      const newSettings = { ...settings.settings, ...updates };
 
       try {
         const response = await fetch("/api/admin/settings", {
@@ -114,20 +114,21 @@ export default function IndexSettingsPage() {
         toast.error("Failed to update settings");
       }
     },
-    [s, router]
+    [settings.settings, router]
   );
 
   const imageProcessingEnabled =
-    s.image_extraction_and_analysis_enabled ?? false;
+    settings.settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
     useCurrentEmbeddingModel();
 
+  const currentCloudProvider = findCloudProvider(
+    currentEmbeddingModel?.provider_type ?? null
+  );
+
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings();
-
-  const { data: futureEmbeddingModel, isLoading: isLoadingFutureModel } =
-    useFutureEmbeddingModel();
 
   const { data: contextualCosts } = useLLMContextualCosts();
 
@@ -159,11 +160,7 @@ export default function IndexSettingsPage() {
     [searchSettings]
   );
 
-  if (
-    isLoadingCurrentModel ||
-    isLoadingFutureModel ||
-    isLoadingSearchSettings
-  ) {
+  if (isLoadingCurrentModel || isLoadingSearchSettings) {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
@@ -173,23 +170,6 @@ export default function IndexSettingsPage() {
         />
         <SettingsLayouts.Body>
           <ThreeDotsLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  // While an embedding model upgrade is in progress, show the legacy
-  // UpgradingPage (will be reskinned in a follow-up PR).
-  if (futureEmbeddingModel) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={route.title}
-          separator
-        />
-        <SettingsLayouts.Body>
-          <UpgradingPage futureEmbeddingModel={futureEmbeddingModel} />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
@@ -227,46 +207,57 @@ export default function IndexSettingsPage() {
           />
 
           {currentEmbeddingModel && (
-            <Card border="solid" rounding="lg" padding="sm">
-              <CardLayout.Header
-                headerChildren={
-                  <GeneralLayouts.Section alignItems="start" gap={0}>
-                    <Content
-                      icon={
-                        getEmbeddingProvider(
-                          currentEmbeddingModel.provider_type
-                        ).icon
-                      }
-                      title={currentEmbeddingModel.model_name}
-                      description={
-                        getCurrentModelCopy(currentEmbeddingModel.model_name)
-                          ?.description
-                      }
-                      sizePreset="main-ui"
-                      variant="section"
-                    />
-                    <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                      <EmbeddingProviderInfo
-                        providerType={currentEmbeddingModel.provider_type}
+            <>
+              {currentCloudProvider && (
+                <editEmbeddingModelModal.Provider>
+                  <EditEmbeddingModelModal provider={currentCloudProvider} />
+                </editEmbeddingModelModal.Provider>
+              )}
+
+              <Card border="solid" rounding="lg" padding="sm">
+                <CardLayout.Header
+                  headerChildren={
+                    <GeneralLayouts.Section alignItems="start" gap={0}>
+                      <Content
+                        icon={
+                          getEmbeddingProvider(
+                            currentEmbeddingModel.provider_type
+                          ).icon
+                        }
+                        title={currentEmbeddingModel.model_name}
+                        description={
+                          getCurrentModelCopy(currentEmbeddingModel.model_name)
+                            ?.description
+                        }
+                        sizePreset="main-ui"
+                        variant="section"
                       />
+                      <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                        <EmbeddingProviderInfo
+                          providerType={currentEmbeddingModel.provider_type}
+                        />
+                      </div>
+                    </GeneralLayouts.Section>
+                  }
+                  topRightChildren={
+                    // TODO(@raunakab): Wire up "View All Models" later.
+                    <div className="flex flex-col items-end justify-between p-2 gap-1">
+                      <Button prominence="secondary">View All Models</Button>
+                      {currentCloudProvider && (
+                        <div className="p-1">
+                          <Button
+                            icon={SvgSettings}
+                            prominence="tertiary"
+                            size="md"
+                            onClick={() => editEmbeddingModelModal.toggle(true)}
+                          />
+                        </div>
+                      )}
                     </div>
-                  </GeneralLayouts.Section>
-                }
-                topRightChildren={
-                  // TODO(@raunakab): Wire up later.
-                  <div className="flex flex-col items-end justify-between p-2 gap-1">
-                    <Button prominence="secondary">View All Models</Button>
-                    <div className="p-1">
-                      <Button
-                        icon={SvgSettings}
-                        prominence="tertiary"
-                        size="md"
-                      />
-                    </div>
-                  </div>
-                }
-              />
-            </Card>
+                  }
+                />
+              </Card>
+            </>
           )}
         </GeneralLayouts.Section>
 
@@ -421,7 +412,9 @@ export default function IndexSettingsPage() {
                   withLabel
                 >
                   <InputSelect
-                    value={String(s.image_analysis_max_size_mb ?? 20)}
+                    value={String(
+                      settings.settings.image_analysis_max_size_mb ?? 20
+                    )}
                     onValueChange={(value) => {
                       void saveSettings({
                         image_analysis_max_size_mb: parseInt(value, 10),

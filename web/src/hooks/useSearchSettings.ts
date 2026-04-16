@@ -40,18 +40,6 @@ export function useCurrentEmbeddingModel() {
 }
 
 /**
- * Fetches the embedding model for an in-progress migration. Non-null while
- * an embedding model switchover is running.
- */
-export function useFutureEmbeddingModel() {
-  return useSWR<EmbeddingModelDescriptor | null>(
-    SWR_KEYS.secondarySearchSettings,
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
-}
-
-/**
  * Fetches the list of LLM models available for contextual RAG, including
  * per-model token cost.
  */

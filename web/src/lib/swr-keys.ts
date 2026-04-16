@@ -67,7 +67,6 @@ export const SWR_KEYS = {
 
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
-  secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
