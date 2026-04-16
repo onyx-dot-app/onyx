@@ -13,7 +13,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from onyx.configs.app_configs import GONG_CONNECTOR_START_TIME
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
@@ -52,11 +51,9 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
     def __init__(
         self,
         workspaces: list[str] | None = None,
-        batch_size: int = INDEX_BATCH_SIZE,
         hide_user_info: bool = False,
     ) -> None:
         self.workspaces = workspaces
-        self.batch_size: int = batch_size
         self.auth_token_basic: str | None = None
         self.hide_user_info = hide_user_info
         self._last_request_time: float = 0.0
