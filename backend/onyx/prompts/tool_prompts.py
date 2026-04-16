@@ -65,8 +65,9 @@ IMPORTANT: each call to this tool is independent. Variables from previous calls 
 GENERATE_IMAGE_GUIDANCE = """
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
-For edits/variations of a previously generated image, pass `reference_image_file_ids` with
-the `file_id` values returned by earlier `generate_image` tool results.
+To edit, restyle, or vary an existing image, pass its file_id in `reference_image_file_ids`. \
+File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior `generate_image` tool results — never invent one. \
+Leave `reference_image_file_ids` unset for a fresh generation.
 """.lstrip()
 
 MEMORY_GUIDANCE = """

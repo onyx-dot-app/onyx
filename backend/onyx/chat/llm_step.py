@@ -826,6 +826,12 @@ def translate_history_to_llm_format(
                             base64_data = img_file.to_base64()
                             image_url = f"data:{image_type};base64,{base64_data}"
 
+                            content_parts.append(
+                                TextContentPart(
+                                    type="text",
+                                    text=f"[attached image — file_id: {img_file.file_id}]",
+                                )
+                            )
                             image_part = ImageContentPart(
                                 type="image_url",
                                 image_url=ImageUrlDetail(

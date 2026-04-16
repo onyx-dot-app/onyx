@@ -1,83 +1,115 @@
-import { Interactive, type InteractiveStatelessProps } from "@opal/core";
-import { Text, Tooltip, type TooltipSide } from "@opal/components";
+import "@opal/components/buttons/link-button/styles.css";
+import type { RichStr } from "@opal/types";
+import type { TooltipSide } from "@opal/components/tooltip/components";
+
+// Direct file imports to avoid circular resolution through the @opal/components
+// and @opal/icons barrels, which break CJS-based test runners (jest).
+import { Tooltip } from "@opal/components/tooltip/components";
 import SvgExternalLink from "@opal/icons/external-link";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type LinkButtonProps = Pick<
-  InteractiveStatelessProps,
-  "onClick" | "href" | "target" | "ref" | "group" | "disabled"
-> & {
-  /** Visible label rendered as underlined link text. */
+interface LinkButtonProps {
+  /** Visible label. Always rendered as underlined link text. */
   children: string;
 
-  /** Tooltip text shown on hover. */
-  tooltip?: string;
+  /** Destination URL. When provided, the component renders as an `<a>`. */
+  href?: string;
+
+  /** Anchor `target` attribute (e.g. `"_blank"`). Only meaningful with `href`. */
+  target?: string;
+
+  /** Click handler. When provided without `href`, the component renders as a `<button>`. */
+  onClick?: () => void;
+
+  /** Applies disabled styling + suppresses navigation/clicks. */
+  disabled?: boolean;
+
+  /** Tooltip text shown on hover. Pass `markdown(...)` for inline markdown. */
+  tooltip?: string | RichStr;
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
-};
+}
 
 // ---------------------------------------------------------------------------
 // LinkButton
 // ---------------------------------------------------------------------------
 
 /**
- * A compact, link-style button with an external-link icon.
+ * A bare, anchor-styled link with a trailing external-link glyph. Renders
+ * as `<a>` when given `href`, or `<button>` when given `onClick`. Intended
+ * for inline references — "Pricing", "Docs", etc. — not for interactive
+ * surfaces that need hover backgrounds or prominence tiers (use `Button`
+ * for those).
  *
- * Renders as `text` + external-link icon, both in `text-03`. The text is
- * always underlined. Backed by `Interactive.Stateless` (`internal` prominence)
- * so it picks up the standard hover/active background tints.
- *
- * Use `href` (with optional `target="_blank"`) to render as a link, or
- * `onClick` for a button.
+ * Deliberately does NOT use `Interactive.Stateless` / `Interactive.Container`
+ * — those come with height/rounding/padding and a colour matrix that are
+ * wrong for an inline text link. Styling is kept to: underlined label,
+ * small external-link icon, a subtle color shift on hover, and disabled
+ * opacity.
  */
 function LinkButton({
   children,
-  onClick,
   href,
   target,
-  ref,
-  group,
+  onClick,
   disabled,
   tooltip,
   tooltipSide = "top",
 }: LinkButtonProps) {
-  const button = (
-    <Interactive.Stateless
-      prominence="internal"
-      onClick={onClick}
-      href={href}
+  const inner = (
+    <>
+      <span className="opal-link-button-label font-secondary-body">
+        {children}
+      </span>
+      <SvgExternalLink size={12} />
+    </>
+  );
+
+  // Always stop propagation so clicks don't bubble to interactive ancestors
+  // (cards, list rows, etc. that commonly wrap a LinkButton). If disabled,
+  // also preventDefault on anchors so the browser doesn't navigate.
+  const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+    if (disabled) e.preventDefault();
+  };
+
+  const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (disabled) return;
+    onClick?.();
+  };
+
+  const element = href ? (
+    <a
+      className="opal-link-button"
+      href={disabled ? undefined : href}
       target={target}
-      ref={ref}
-      group={group}
-      disabled={disabled}
-      type={href ? undefined : "button"}
+      rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      aria-disabled={disabled || undefined}
+      data-disabled={disabled || undefined}
+      onClick={handleAnchorClick}
     >
-      <Interactive.Container
-        type={href ? undefined : "button"}
-        heightVariant="fit"
-        roundingVariant="xs"
-      >
-        <div className="flex flex-row items-center gap-0.5">
-          <span className="underline">
-            <Text font="secondary-body" color="text-03">
-              {children}
-            </Text>
-          </span>
-          <div className="p-0.5">
-            <SvgExternalLink size={12} className="text-text-03" />
-          </div>
-        </div>
-      </Interactive.Container>
-    </Interactive.Stateless>
+      {inner}
+    </a>
+  ) : (
+    <button
+      type="button"
+      className="opal-link-button"
+      onClick={handleButtonClick}
+      disabled={disabled}
+      data-disabled={disabled || undefined}
+    >
+      {inner}
+    </button>
   );
 
   return (
     <Tooltip tooltip={tooltip} side={tooltipSide}>
-      {button}
+      {element}
     </Tooltip>
   );
 }

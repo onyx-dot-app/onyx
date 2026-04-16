@@ -897,11 +897,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                 secondary_cc_pair_ids = standard_cc_pair_ids
 
-        # Tenant-work-gating hook: refresh this tenant's active-set membership
-        # whenever indexing actually has work to dispatch.
-        if primary_cc_pair_ids or secondary_cc_pair_ids:
-            maybe_mark_tenant_active(tenant_id)
-
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
             for cc_pair_id in primary_cc_pair_ids:
@@ -1018,6 +1013,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 task_logger.info(
                     f"Skipping secondary indexing: switchover_type=INSTANT for search_settings={secondary_search_settings.id}"
                 )
+
+        # Tenant-work-gating hook: refresh membership only when indexing
+        # actually dispatched at least one docfetching task. `_kickoff_indexing_tasks`
+        # internally calls `should_index()` to decide per-cc_pair; using
+        # `tasks_created > 0` here gives us a "real work was done" signal
+        # rather than just "tenant has a cc_pair somewhere."
+        if tasks_created > 0:
+            maybe_mark_tenant_active(tenant_id)
 
         # 2/3: VALIDATE
         # Check for inconsistent index attempts - active attempts without task IDs

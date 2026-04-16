@@ -7,7 +7,6 @@ import pytest
 
 from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -32,18 +31,20 @@ def test_gong_basic(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     gong_connector: GongConnector,
 ) -> None:
-    doc_batch_generator = gong_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
-
-    assert len(doc_batch) == 2
+    checkpoint = gong_connector.build_dummy_checkpoint()
 
     docs: list[Document] = []
-    for doc in doc_batch:
-        if not isinstance(doc, HierarchyNode):
-            docs.append(doc)
+    while checkpoint.has_more:
+        generator = gong_connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(generator)
+                if isinstance(item, Document):
+                    docs.append(item)
+        except StopIteration as e:
+            checkpoint = e.value
+
+    assert len(docs) == 2
 
     assert docs[0].semantic_identifier == "test with chris"
     assert docs[1].semantic_identifier == "Testing Gong"

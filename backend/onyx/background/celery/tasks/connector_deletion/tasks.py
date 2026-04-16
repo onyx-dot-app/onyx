@@ -166,16 +166,21 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
 
             r.set(OnyxRedisSignals.BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES, 1, ex=300)
 
-        # collect cc_pair_ids
+        # collect cc_pair_ids and note whether any are in DELETING status
         cc_pair_ids: list[int] = []
+        has_deleting_cc_pair = False
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_connector_credential_pairs(db_session)
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
+                if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+                    has_deleting_cc_pair = True
 
-        # Tenant-work-gating hook: any cc_pair means deletion could have
-        # cleanup work to do for this tenant on some cycle.
-        if cc_pair_ids:
+        # Tenant-work-gating hook: mark only when at least one cc_pair is in
+        # DELETING status. Marking on bare cc_pair existence would keep
+        # nearly every tenant in the active set since most have cc_pairs
+        # but almost none are actively being deleted on any given cycle.
+        if has_deleting_cc_pair:
             maybe_mark_tenant_active(tenant_id)
 
         # try running cleanup on the cc_pair_ids
