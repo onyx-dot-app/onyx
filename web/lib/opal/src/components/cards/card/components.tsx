@@ -36,8 +36,9 @@ type CardBaseProps = {
    * | `"2xs"` | `p-0.5` |
    * | `"fit"` | `p-0`   |
    *
-   * In expandable mode, applied to both the header region and the content
-   * body (so both slots share the same inner padding).
+   * In expandable mode, applied **only** to the header region. The
+   * `content` slot has no intrinsic padding — callers own any padding
+   * inside the content they pass in.
    *
    * @default "md"
    */
@@ -228,7 +229,6 @@ function Card(props: CardProps) {
             <div
               className={cn(
                 "opal-card-expandable-body",
-                padding,
                 cardBottomRoundingVariants[roundingProp]
               )}
               data-border={border}
