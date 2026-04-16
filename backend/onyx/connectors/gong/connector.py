@@ -1,6 +1,6 @@
 import base64
+import copy
 import time
-from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -11,24 +11,35 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import GONG_CONNECTOR_START_TIME
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class GongConnector(LoadConnector, PollConnector):
+class GongConnectorCheckpoint(ConnectorCheckpoint):
+    # Resolved workspace IDs to iterate through.
+    # None means "not yet resolved" — first checkpoint call resolves them.
+    # Inner None means "no workspace filter" (fetch all).
+    workspace_ids: list[str | None] | None = None
+    # Index into workspace_ids for current workspace
+    workspace_index: int = 0
+    # Gong API cursor for current workspace's transcript pagination
+    cursor: str | None = None
+
+
+class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
     BASE_URL = "https://api.gong.io"
     MAX_CALL_DETAILS_ATTEMPTS = 6
     CALL_DETAILS_DELAY = 30  # in seconds
@@ -39,12 +50,10 @@ class GongConnector(LoadConnector, PollConnector):
         self,
         workspaces: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
-        continue_on_fail: bool = CONTINUE_ON_CONNECTOR_FAILURE,
         hide_user_info: bool = False,
     ) -> None:
         self.workspaces = workspaces
         self.batch_size: int = batch_size
-        self.continue_on_fail = continue_on_fail
         self.auth_token_basic: str | None = None
         self.hide_user_info = hide_user_info
         self._last_request_time: float = 0.0
@@ -98,65 +107,44 @@ class GongConnector(LoadConnector, PollConnector):
         # Then the user input is treated as the name
         return {**id_id_map, **name_id_map}
 
-    def _get_transcript_batches(
-        self, start_datetime: str | None = None, end_datetime: str | None = None
-    ) -> Generator[list[dict[str, Any]], None, None]:
-        body: dict[str, dict] = {"filter": {}}
+    def _fetch_transcript_page(
+        self,
+        start_datetime: str | None,
+        end_datetime: str | None,
+        workspace_id: str | None,
+        cursor: str | None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Fetch one page of transcripts from the Gong API.
+
+        Returns (transcripts, next_cursor). next_cursor is None when no more pages.
+        """
+        body: dict[str, Any] = {"filter": {}}
         if start_datetime:
             body["filter"]["fromDateTime"] = start_datetime
         if end_datetime:
             body["filter"]["toDateTime"] = end_datetime
+        if workspace_id:
+            body["filter"]["workspaceId"] = workspace_id
+        if cursor:
+            body["cursor"] = cursor
 
-        # The batch_ids in the previous method appears to be batches of call_ids to process
-        # In this method, we will retrieve transcripts for them in batches.
-        transcripts: list[dict[str, Any]] = []
-        workspace_list = self.workspaces or [None]
-        workspace_map = self._get_workspace_id_map() if self.workspaces else {}
+        response = self._throttled_request(
+            "POST", GongConnector.make_url("/v2/calls/transcript"), json=body
+        )
+        # If no calls in the range, return empty
+        if response.status_code == 404:
+            return [], None
 
-        for workspace in workspace_list:
-            if workspace:
-                logger.info(f"Updating Gong workspace: {workspace}")
-                workspace_id = workspace_map.get(workspace)
-                if not workspace_id:
-                    logger.error(f"Invalid Gong workspace: {workspace}")
-                    if not self.continue_on_fail:
-                        raise ValueError(f"Invalid workspace: {workspace}")
-                    continue
-                body["filter"]["workspaceId"] = workspace_id
-            else:
-                if "workspaceId" in body["filter"]:
-                    del body["filter"]["workspaceId"]
+        try:
+            response.raise_for_status()
+        except Exception:
+            logger.error(f"Error fetching transcripts: {response.text}")
+            raise
 
-            while True:
-                response = self._throttled_request(
-                    "POST", GongConnector.make_url("/v2/calls/transcript"), json=body
-                )
-                # If no calls in the range, just break out
-                if response.status_code == 404:
-                    break
-
-                try:
-                    response.raise_for_status()
-                except Exception:
-                    logger.error(f"Error fetching transcripts: {response.text}")
-                    raise
-
-                data = response.json()
-                call_transcripts = data.get("callTranscripts", [])
-                transcripts.extend(call_transcripts)
-
-                while len(transcripts) >= self.batch_size:
-                    yield transcripts[: self.batch_size]
-                    transcripts = transcripts[self.batch_size :]
-
-                cursor = data.get("records", {}).get("cursor")
-                if cursor:
-                    body["cursor"] = cursor
-                else:
-                    break
-
-        if transcripts:
-            yield transcripts
+        data = response.json()
+        transcripts = data.get("callTranscripts", [])
+        next_cursor = data.get("records", {}).get("cursor")
+        return transcripts, next_cursor
 
     def _get_call_details_by_ids(self, call_ids: list[str]) -> dict:
         body = {
@@ -196,19 +184,128 @@ class GongConnector(LoadConnector, PollConnector):
 
         return id_mapping
 
-    def _fetch_calls(
-        self, start_datetime: str | None = None, end_datetime: str | None = None
-    ) -> GenerateDocumentsOutput:
-        num_calls = 0
+    def _resolve_workspace_ids(self) -> list[str | None]:
+        """Resolve configured workspace names/IDs to actual workspace IDs.
 
-        for transcript_batch in self._get_transcript_batches(
-            start_datetime, end_datetime
-        ):
-            doc_batch: list[Document | HierarchyNode] = []
+        Returns a list of workspace IDs. If no workspaces are configured,
+        returns [None] to indicate "fetch all workspaces".
+        """
+        if not self.workspaces:
+            return [None]
 
+        workspace_map = self._get_workspace_id_map()
+        resolved: list[str | None] = []
+        for workspace in self.workspaces:
+            workspace_id = workspace_map.get(workspace)
+            if not workspace_id:
+                logger.error(f"Invalid Gong workspace: {workspace}")
+                continue
+            resolved.append(workspace_id)
+
+        # If all workspaces were invalid, fall back to fetching all
+        if not resolved:
+            logger.warning(
+                "No valid workspaces found, falling back to fetching all workspaces"
+            )
+            return [None]
+
+        return resolved
+
+    @staticmethod
+    def _compute_time_range(
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> tuple[str, str]:
+        """Compute the start/end datetime strings for the Gong API filter,
+        applying GONG_CONNECTOR_START_TIME and the 1-day offset."""
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
+
+        # if this env variable is set, don't start from a timestamp before the specified
+        # start time
+        if GONG_CONNECTOR_START_TIME:
+            special_start_datetime = datetime.fromisoformat(GONG_CONNECTOR_START_TIME)
+            special_start_datetime = special_start_datetime.replace(tzinfo=timezone.utc)
+        else:
+            special_start_datetime = datetime.fromtimestamp(0, tz=timezone.utc)
+
+        # don't let the special start dt be past the end time, this causes issues when
+        # the Gong API (`filter.fromDateTime: must be before toDateTime`)
+        special_start_datetime = min(special_start_datetime, end_datetime)
+
+        start_datetime = max(
+            datetime.fromtimestamp(start, tz=timezone.utc), special_start_datetime
+        )
+
+        # Because these are meeting start times, the meeting needs to end and be processed
+        # so adding a 1 day buffer and fetching by default till current time
+        start_one_day_offset = start_datetime - timedelta(days=1)
+        start_time = start_one_day_offset.isoformat()
+        end_time = end_datetime.isoformat()
+
+        return start_time, end_time
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        combined = (
+            f"{credentials['gong_access_key']}:{credentials['gong_access_key_secret']}"
+        )
+        self.auth_token_basic = base64.b64encode(combined.encode("utf-8")).decode(
+            "utf-8"
+        )
+
+        if self.auth_token_basic is None:
+            raise ConnectorMissingCredentialError("Gong")
+
+        self._session.headers.update(
+            {"Authorization": f"Basic {self.auth_token_basic}"}
+        )
+        return None
+
+    def build_dummy_checkpoint(self) -> GongConnectorCheckpoint:
+        return GongConnectorCheckpoint(has_more=True)
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> GongConnectorCheckpoint:
+        return GongConnectorCheckpoint.model_validate_json(checkpoint_json)
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GongConnectorCheckpoint,
+    ) -> CheckpointOutput[GongConnectorCheckpoint]:
+        checkpoint = copy.deepcopy(checkpoint)
+
+        # Step 1: Resolve workspace IDs on first call
+        if checkpoint.workspace_ids is None:
+            checkpoint.workspace_ids = self._resolve_workspace_ids()
+            checkpoint.has_more = True
+            return checkpoint
+
+        # If we've exhausted all workspaces, we're done
+        if checkpoint.workspace_index >= len(checkpoint.workspace_ids):
+            checkpoint.has_more = False
+            return checkpoint
+
+        start_time, end_time = self._compute_time_range(start, end)
+        logger.info(
+            f"Fetching Gong calls between {start_time} and {end_time} "
+            f"(workspace {checkpoint.workspace_index + 1}/{len(checkpoint.workspace_ids)})"
+        )
+
+        workspace_id = checkpoint.workspace_ids[checkpoint.workspace_index]
+
+        # Step 2: Fetch one page of transcripts
+        transcripts, next_cursor = self._fetch_transcript_page(
+            start_datetime=start_time,
+            end_datetime=end_time,
+            workspace_id=workspace_id,
+            cursor=checkpoint.cursor,
+        )
+
+        # Step 3: Process transcripts into documents
+        if transcripts:
             transcript_call_ids = cast(
                 list[str],
-                [t.get("callId") for t in transcript_batch if t.get("callId")],
+                [t.get("callId") for t in transcripts if t.get("callId")],
             )
 
             call_details_map: dict[str, Any] = {}
@@ -217,16 +314,14 @@ class GongConnector(LoadConnector, PollConnector):
             # call id but the call to v2/calls/extensive will not return all of the id's
             # retry with exponential backoff has been observed to mitigate this
             # in ~2 minutes. After max attempts, proceed with whatever we have —
-            # the per-call loop below will skip missing IDs gracefully.
+            # the per-call loop below will yield failures for missing IDs.
             current_attempt = 0
             while True:
                 current_attempt += 1
                 call_details_map = self._get_call_details_by_ids(transcript_call_ids)
                 if set(transcript_call_ids) == set(call_details_map.keys()):
-                    # we got all the id's we were expecting ... break and continue
                     break
 
-                # we are missing some id's. Log and retry with exponential backoff
                 missing_call_ids = set(transcript_call_ids) - set(
                     call_details_map.keys()
                 )
@@ -255,13 +350,10 @@ class GongConnector(LoadConnector, PollConnector):
                 )
                 time.sleep(wait_seconds)
 
-            # now we can iterate per call/transcript
-            for transcript in transcript_batch:
+            for transcript in transcripts:
                 call_id = transcript.get("callId")
 
                 if not call_id or call_id not in call_details_map:
-                    # NOTE(rkuo): seeing odd behavior where call_ids from the transcript
-                    # don't have call details. adding error debugging logs to trace.
                     logger.error(
                         f"Couldn't get call information for Call ID: {call_id}"
                     )
@@ -271,10 +363,12 @@ class GongConnector(LoadConnector, PollConnector):
                             f"call_ids={transcript_call_ids} "
                             f"call_details_map={call_details_map.keys()}"
                         )
-                    if not self.continue_on_fail:
-                        raise RuntimeError(
-                            f"Couldn't get call information for Call ID: {call_id}"
-                        )
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=call_id or "unknown",
+                        ),
+                        failure_message=f"Couldn't get call information for Call ID: {call_id}",
+                    )
                     continue
 
                 call_details = call_details_map[call_id]
@@ -283,7 +377,7 @@ class GongConnector(LoadConnector, PollConnector):
                 call_time_str = call_metadata["started"]
                 call_title = call_metadata["title"]
                 logger.info(
-                    f"{num_calls + 1}: Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+                    f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
                 )
 
                 call_parties = cast(list[dict] | None, call_details.get("parties"))
@@ -293,7 +387,6 @@ class GongConnector(LoadConnector, PollConnector):
 
                 id_to_name_map = self._parse_parties(call_parties)
 
-                # Keeping a separate dict here in case the parties info is incomplete
                 speaker_to_name: dict[str, str] = {}
 
                 transcript_text = ""
@@ -322,83 +415,33 @@ class GongConnector(LoadConnector, PollConnector):
                     )
                     transcript_text += f"{speaker_name}: {monolog}\n\n"
 
-                metadata = {}
-                if call_metadata.get("system"):
-                    metadata["client"] = call_metadata.get("system")
-                # TODO calls have a clientUniqueId field, can pull that in later
-
-                doc_batch.append(
-                    Document(
-                        id=call_id,
-                        sections=[
-                            TextSection(link=call_metadata["url"], text=transcript_text)
-                        ],
-                        source=DocumentSource.GONG,
-                        # Should not ever be Untitled as a call cannot be made without a Title
-                        semantic_identifier=call_title or "Untitled",
-                        doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
-                            timezone.utc
-                        ),
-                        metadata={"client": call_metadata.get("system")},
-                    )
+                yield Document(
+                    id=call_id,
+                    sections=[
+                        TextSection(link=call_metadata["url"], text=transcript_text)
+                    ],
+                    source=DocumentSource.GONG,
+                    semantic_identifier=call_title or "Untitled",
+                    doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
+                        timezone.utc
+                    ),
+                    metadata={"client": call_metadata.get("system")},
                 )
 
-                num_calls += 1
-
-            yield doc_batch
-
-        logger.info(f"_fetch_calls finished: num_calls={num_calls}")
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        combined = (
-            f"{credentials['gong_access_key']}:{credentials['gong_access_key_secret']}"
-        )
-        self.auth_token_basic = base64.b64encode(combined.encode("utf-8")).decode(
-            "utf-8"
-        )
-
-        if self.auth_token_basic is None:
-            raise ConnectorMissingCredentialError("Gong")
-
-        self._session.headers.update(
-            {"Authorization": f"Basic {self.auth_token_basic}"}
-        )
-        return None
-
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._fetch_calls()
-
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
-
-        # if this env variable is set, don't start from a timestamp before the specified
-        # start time
-        # TODO: remove this once this is globally available
-        if GONG_CONNECTOR_START_TIME:
-            special_start_datetime = datetime.fromisoformat(GONG_CONNECTOR_START_TIME)
-            special_start_datetime = special_start_datetime.replace(tzinfo=timezone.utc)
+        # Step 4: Update checkpoint state
+        if next_cursor:
+            # More pages in this workspace
+            checkpoint.cursor = next_cursor
+            checkpoint.has_more = True
         else:
-            special_start_datetime = datetime.fromtimestamp(0, tz=timezone.utc)
+            # This workspace is exhausted — advance to next
+            checkpoint.workspace_index += 1
+            checkpoint.cursor = None
+            checkpoint.has_more = checkpoint.workspace_index < len(
+                checkpoint.workspace_ids
+            )
 
-        # don't let the special start dt be past the end time, this causes issues when
-        # the Gong API (`filter.fromDateTime: must be before toDateTime`)
-        special_start_datetime = min(special_start_datetime, end_datetime)
-
-        start_datetime = max(
-            datetime.fromtimestamp(start, tz=timezone.utc), special_start_datetime
-        )
-
-        # Because these are meeting start times, the meeting needs to end and be processed
-        # so adding a 1 day buffer and fetching by default till current time
-        start_one_day_offset = start_datetime - timedelta(days=1)
-        start_time = start_one_day_offset.isoformat()
-
-        end_time = datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
-
-        logger.info(f"Fetching Gong calls between {start_time} and {end_time}")
-        return self._fetch_calls(start_time, end_time)
+        return checkpoint
 
 
 if __name__ == "__main__":
@@ -412,5 +455,13 @@ if __name__ == "__main__":
         }
     )
 
-    latest_docs = connector.load_from_state()
-    print(next(latest_docs))
+    checkpoint = connector.build_dummy_checkpoint()
+    while checkpoint.has_more:
+        doc_generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(doc_generator)
+                print(item)
+        except StopIteration as e:
+            checkpoint = e.value
+            print(f"Checkpoint: {checkpoint}")
