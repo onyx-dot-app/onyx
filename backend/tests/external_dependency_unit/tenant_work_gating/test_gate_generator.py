@@ -28,7 +28,7 @@ _TENANT_A = "tenant_aaaa0000-0000-0000-0000-000000000001"
 _TENANT_B = "tenant_bbbb0000-0000-0000-0000-000000000002"
 _TENANT_C = "tenant_cccc0000-0000-0000-0000-000000000003"
 _ALL_TEST_TENANTS = [_TENANT_A, _TENANT_B, _TENANT_C]
-_FANOUT_KEY_PREFIX = "tenant_work_gating_last_full_fanout_ms"
+_FANOUT_KEY_PREFIX = cloud_tasks._FULL_FANOUT_TIMESTAMP_KEY_PREFIX
 
 
 @pytest.fixture(autouse=True)

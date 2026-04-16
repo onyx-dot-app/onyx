@@ -109,42 +109,48 @@ def cloud_beat_task_generator(
     gate_enforce = False
     full_fanout_cycle = False
     active_tenants: set[str] | None = None
-    if work_gated:
-        try:
-            gate_enabled = OnyxRuntime.get_tenant_work_gating_enabled()
-            gate_enforce = OnyxRuntime.get_tenant_work_gating_enforce()
-        except Exception:
-            task_logger.exception("tenant work gating: runtime flag read failed")
-            gate_enabled = False
-
-        if gate_enabled:
-            interval_s = (
-                OnyxRuntime.get_tenant_work_gating_full_fanout_interval_seconds()
-            )
-            full_fanout_cycle = _should_bypass_gate_for_full_fanout(
-                redis_client, task_name, interval_s
-            )
-            if full_fanout_cycle:
-                record_full_fanout_cycle(task_name)
-                # Piggyback memory hygiene on the full-fanout invocation.
-                try:
-                    ttl_s = OnyxRuntime.get_tenant_work_gating_ttl_seconds()
-                    cleanup_expired(ttl_s)
-                except Exception:
-                    task_logger.exception("tenant work gating: cleanup_expired failed")
-            else:
-                ttl_s = OnyxRuntime.get_tenant_work_gating_ttl_seconds()
-                active_tenants = get_active_tenants(ttl_s)
-                if active_tenants is None:
-                    # Redis error or single-tenant mode — fail open for this
-                    # invocation (treat as full-fanout so no tenant is skipped).
-                    full_fanout_cycle = True
-                    record_full_fanout_cycle(task_name)
-
-            # Refresh the size gauge whenever the gate runs.
-            observe_active_set_size()
 
     try:
+        # Gating setup is inside the try block so any exception still
+        # reaches the finally that releases the beat lock.
+        if work_gated:
+            try:
+                gate_enabled = OnyxRuntime.get_tenant_work_gating_enabled()
+                gate_enforce = OnyxRuntime.get_tenant_work_gating_enforce()
+            except Exception:
+                task_logger.exception("tenant work gating: runtime flag read failed")
+                gate_enabled = False
+
+            if gate_enabled:
+                redis_failed = False
+                interval_s = (
+                    OnyxRuntime.get_tenant_work_gating_full_fanout_interval_seconds()
+                )
+                full_fanout_cycle = _should_bypass_gate_for_full_fanout(
+                    redis_client, task_name, interval_s
+                )
+                if full_fanout_cycle:
+                    record_full_fanout_cycle(task_name)
+                    try:
+                        ttl_s = OnyxRuntime.get_tenant_work_gating_ttl_seconds()
+                        cleanup_expired(ttl_s)
+                    except Exception:
+                        task_logger.exception(
+                            "tenant work gating: cleanup_expired failed"
+                        )
+                else:
+                    ttl_s = OnyxRuntime.get_tenant_work_gating_ttl_seconds()
+                    active_tenants = get_active_tenants(ttl_s)
+                    if active_tenants is None:
+                        full_fanout_cycle = True
+                        record_full_fanout_cycle(task_name)
+                        redis_failed = True
+
+                # Only refresh the gauge when Redis is known-reachable —
+                # skip the ZCARD if we just failed open due to a Redis error.
+                if not redis_failed:
+                    observe_active_set_size()
+
         tenant_ids = get_all_tenant_ids()
 
         # Per-task control over whether gated tenants are included. Most periodic tasks
@@ -179,9 +185,9 @@ def cloud_beat_task_generator(
                     num_would_skip_work_gate += 1
                     if gate_enforce:
                         num_skipped_work_gate += 1
-                        record_gate_decision(task_name, would_skip=True, skipped=True)
+                        record_gate_decision(task_name, skipped=True)
                         continue
-                    record_gate_decision(task_name, would_skip=True, skipped=False)
+                    record_gate_decision(task_name, skipped=False)
 
             self.app.send_task(
                 task_name,

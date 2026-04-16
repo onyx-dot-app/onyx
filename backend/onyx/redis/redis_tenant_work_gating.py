@@ -130,16 +130,11 @@ def observe_active_set_size() -> int | None:
         return None
 
 
-def record_gate_decision(task_name: str, would_skip: bool, skipped: bool) -> None:
-    """Increment shadow / enforced skip counters from the gate generator.
-
-    `would_skip`: the tenant was missing from the set, i.e. the gate would
-    skip them if enforcing.
-    `skipped`: the tenant was actually skipped (would_skip AND enforce=True
-    AND not a full-fanout cycle).
-    """
-    if would_skip:
-        _would_skip_total.labels(task=task_name).inc()
+def record_gate_decision(task_name: str, skipped: bool) -> None:
+    """Increment skip counters from the gate generator. Called once per
+    tenant that the gate would skip. Always increments the shadow counter;
+    increments the enforced counter only when `skipped=True`."""
+    _would_skip_total.labels(task=task_name).inc()
     if skipped:
         _skipped_total.labels(task=task_name).inc()
 
