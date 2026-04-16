@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -11,6 +10,8 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
 from onyx.db.persona import update_default_assistant_configuration
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.server.features.default_assistant.models import DefaultAssistantConfiguration
 from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
@@ -33,7 +34,7 @@ def get_default_assistant_configuration(
     """
     persona = get_default_assistant(db_session)
     if not persona:
-        raise HTTPException(status_code=404, detail="Default assistant not found")
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Default assistant not found")
 
     # Extract DB tool IDs from the persona's tools
     tool_ids = [tool.id for tool in persona.tools]
@@ -87,5 +88,5 @@ def update_default_assistant(
 
     except ValueError as e:
         if "Default assistant not found" in str(e):
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+            raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))

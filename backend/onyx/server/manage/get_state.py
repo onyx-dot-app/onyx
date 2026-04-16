@@ -3,7 +3,6 @@ import re
 
 import requests
 from fastapi import APIRouter
-from fastapi import HTTPException
 
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
@@ -16,6 +15,8 @@ from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.db.auth import get_user_count
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -104,14 +105,14 @@ def get_versions() -> AllVersions:
 
     # Ensure we have at least one tag of each type
     if not dev_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
         )
     if not stable_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid stable versions found matching pattern v(number).(number).(number)",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid stable versions found matching pattern v(number).(number).(number)",
         )
 
     # Sort common tags and get the latest one

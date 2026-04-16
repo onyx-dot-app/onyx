@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -12,6 +11,8 @@ from onyx.db.models import User
 from onyx.db.pat import create_pat
 from onyx.db.pat import list_user_pats
 from onyx.db.pat import revoke_pat
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.pat.models import CreatedTokenResponse
 from onyx.server.pat.models import CreateTokenRequest
 from onyx.server.pat.models import TokenResponse
@@ -58,7 +59,7 @@ def create_token(
             expiration_days=request.expiration_days,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     logger.info(f"User {user.email} created PAT '{request.name}'")
 
@@ -82,9 +83,7 @@ def delete_token(
     """Delete (revoke) personal access token. Only owner can revoke their own tokens."""
     success = revoke_pat(db_session, token_id, user.id)
     if not success:
-        raise HTTPException(
-            status_code=404, detail="Token not found or not owned by user"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Token not found or not owned by user")
 
     logger.info(f"User {user.email} revoked token {token_id}")
     return {"message": "Token deleted successfully"}

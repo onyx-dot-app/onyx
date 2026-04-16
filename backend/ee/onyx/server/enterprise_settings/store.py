@@ -4,7 +4,6 @@ from typing import Any
 from typing import cast
 from typing import IO
 
-from fastapi import HTTPException
 from fastapi import UploadFile
 
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
@@ -13,6 +12,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import KV_CUSTOM_ANALYTICS_SCRIPT_KEY
 from onyx.configs.constants import KV_ENTERPRISE_SETTINGS_KEY
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -118,9 +119,9 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
     else:
         logger.notice("Uploading logo from uploaded file")
         if not file.filename or not is_valid_file_type(file.filename):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type- only .png, .jpg, and .jpeg files are allowed",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Invalid file type- only .png, .jpg, and .jpeg files are allowed",
             )
         content = file.file
         display_name = file.filename
