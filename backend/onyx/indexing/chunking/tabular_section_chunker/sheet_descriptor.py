@@ -1,11 +1,11 @@
 """Per-section sheet descriptor chunk builder."""
 
-from dataclasses import dataclass
-from dataclasses import field
 from datetime import date
 from itertools import zip_longest
 
 from dateutil.parser import parse as parse_dt
+from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.connectors.models import Section
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -23,13 +23,12 @@ CATEGORICAL_DISTINCT_THRESHOLD = 20
 ID_NAME_TOKENS = {"id", "uuid", "uid", "guid", "key"}
 
 
-@dataclass
-class SheetAnalysis:
+class SheetAnalysis(BaseModel):
     row_count: int
     num_cols: int
-    numeric_cols: list[int] = field(default_factory=list)
-    categorical_cols: list[int] = field(default_factory=list)
-    categorical_values: dict[int, list[str]] = field(default_factory=dict)
+    numeric_cols: list[int] = Field(default_factory=list)
+    categorical_cols: list[int] = Field(default_factory=list)
+    categorical_values: dict[int, list[str]] = Field(default_factory=dict)
     id_col: int | None = None
     date_min: date | None = None
     date_max: date | None = None
