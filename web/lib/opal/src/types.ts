@@ -82,6 +82,22 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
 
 // ---------------------------------------------------------------------------
+// Status Variants
+// ---------------------------------------------------------------------------
+
+/**
+ * Severity / status variants used by alert-style components (e.g. {@link
+ * MessageCard}, {@link Card}'s `borderColor`). Each variant maps to a
+ * dedicated background/border/icon palette in the design system.
+ */
+export type StatusVariants =
+  | "default"
+  | "info"
+  | "success"
+  | "warning"
+  | "error";
+
+// ---------------------------------------------------------------------------
 // Icon Props
 // ---------------------------------------------------------------------------
 
