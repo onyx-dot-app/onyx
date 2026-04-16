@@ -34,6 +34,7 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
@@ -468,6 +469,15 @@ def docfetching_proxy_task(
 
             result.connector_source = (
                 index_attempt.connector_credential_pair.connector.source.value
+            )
+
+            cc_pair = index_attempt.connector_credential_pair
+            on_index_attempt_status_change(
+                tenant_id=tenant_id,
+                source=result.connector_source,
+                cc_pair_id=cc_pair_id,
+                connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
+                status="in_progress",
             )
 
         while True:
