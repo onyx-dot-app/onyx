@@ -290,8 +290,10 @@ def run(args: argparse.Namespace) -> None:
     if args.num_hits:
         base_request.num_hits = args.num_hits
     stop_condition = StopCondition(
-        num_requests_to_make=args.total if args.total else None,
-        duration_s=args.duration if args.duration else None,
+        num_requests_to_make=(
+            args.requests_per_worker if args.requests_per_worker else None
+        ),
+        duration_s=args.duration_per_worker if args.duration_per_worker else None,
     )
     timeout_s = args.timeout
 
@@ -354,25 +356,28 @@ def main() -> None:
         help="Path to a file containing a bearer token. Or use --token / $ONYX_ACCESS_TOKEN.",
     )
     parser.add_argument(
+        "-c",
         "--concurrency",
         type=int,
         default=1,
-        help="Number of requesting threads to run concurrently.",
+        help="Number of concurrent workers making requests.",
     )
     parser.add_argument(
-        "--total",
+        "-r",
+        "--requests-per-worker",
         type=int,
         help=(
-            "Total number of requests to make per requesting thread. If specified along with --duration, the thread "
+            "Total number of requests to make per worker. If specified along with --duration-per-worker, the worker "
             "will stop on whichever condition is met first."
         ),
     )
     parser.add_argument(
-        "--duration",
+        "-d",
+        "--duration-per-worker",
         type=float,
         help=(
-            "Duration in seconds each requesting thread will run for. If specified along with --total, the thread will "
-            "stop on whichever condition is met first."
+            "Duration in seconds each worker will run for. If specified along with --requests-per-worker, the worker "
+            "will stop on whichever condition is met first."
         ),
     )
     parser.add_argument(
@@ -381,7 +386,9 @@ def main() -> None:
     parser.add_argument(
         "--queries-file", help="File with one query per line. Or use --query."
     )
-    parser.add_argument("--query", help="Single literal query used for every request.")
+    parser.add_argument(
+        "-q", "--query", help="Single literal query used for every request."
+    )
     parser.add_argument(
         "--num-hits",
         type=int,
@@ -398,9 +405,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.total and not args.duration:
+    if not args.requests_per_worker and not args.duration_per_worker:
         parser.error(
-            "No stop condition specified. Must specify either --total or --duration."
+            "No stop condition specified. Must specify either --requests-per-worker or --duration-per-worker."
         )
     if args.concurrency <= 0:
         parser.error("Concurrency must be greater than 0.")
