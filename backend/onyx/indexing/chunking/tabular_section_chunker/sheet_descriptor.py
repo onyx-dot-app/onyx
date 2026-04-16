@@ -1,7 +1,5 @@
 """Per-section sheet descriptor chunk builder."""
 
-import csv
-import io
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import date
@@ -12,6 +10,9 @@ from dateutil.parser import parse as parse_dt
 from onyx.connectors.models import Section
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
+from onyx.utils.csv_utils import parse_csv_string
+from onyx.utils.csv_utils import ParsedRow
+from onyx.utils.csv_utils import read_csv_header
 
 
 MAX_NUMERIC_COLS = 12
@@ -55,11 +56,13 @@ def build_sheet_descriptor_chunks(
         Identifier column: {col}.                                             # optional
         Values seen in {col}: {v1}, {v2}, ...                                 # optional, repeated
     """
-    headers, rows = _parse_csv(section.text or "")
+    text = section.text or ""
+    parsed_rows = list(parse_csv_string(text))
+    headers = parsed_rows[0].header if parsed_rows else read_csv_header(text)
     if not headers:
         return []
 
-    a = _analyze(headers, rows)
+    a = _analyze(headers, parsed_rows)
     lines = [
         _overview_line(a),
         _columns_line(headers),
@@ -125,13 +128,6 @@ def _values_seen_line(headers: list[str], a: SheetAnalysis) -> str:
     return "\n".join(rows)
 
 
-def _parse_csv(text: str) -> tuple[list[str], list[list[str]]]:
-    if not text.strip():
-        return [], []
-    rows = [r for r in csv.reader(io.StringIO(text)) if any(c.strip() for c in r)]
-    return (rows[0], rows[1:]) if rows else ([], [])
-
-
 def _label(name: str) -> str:
     return f"{name} ({name.replace('_', ' ')})" if "_" in name else name
 
@@ -160,9 +156,9 @@ def _is_id_name(name: str) -> bool:
     )
 
 
-def _analyze(headers: list[str], rows: list[list[str]]) -> SheetAnalysis:
-    a = SheetAnalysis(row_count=len(rows), num_cols=len(headers))
-    columns = zip_longest(*rows, fillvalue="")
+def _analyze(headers: list[str], parsed_rows: list[ParsedRow]) -> SheetAnalysis:
+    a = SheetAnalysis(row_count=len(parsed_rows), num_cols=len(headers))
+    columns = zip_longest(*(pr.row for pr in parsed_rows), fillvalue="")
     for idx, (header, raw_values) in enumerate(zip(headers, columns)):
         # Pull the column's non-empty values; skip if the column is blank.
         values = [v.strip() for v in raw_values if v.strip()]
