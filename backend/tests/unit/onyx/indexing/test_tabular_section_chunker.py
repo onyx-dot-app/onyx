@@ -15,6 +15,7 @@ from onyx.connectors.models import Section
 from onyx.connectors.models import TabularSection
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
+from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
@@ -25,6 +26,8 @@ from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     TOTALS_HEADER,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.utils.csv_utils import parse_csv_string
+from onyx.utils.csv_utils import read_csv_header
 
 
 class CharTokenizer(BaseTokenizer):
@@ -643,9 +646,14 @@ class TestBuildSheetDescriptorChunks:
         heading: str | None = "sheet:T",
         max_tokens: int = 500,
     ) -> list[str]:
-        section = TabularSection(text=csv_text, link=_DEFAULT_LINK, heading=heading)
+        parsed_rows = list(parse_csv_string(csv_text))
+        headers = parsed_rows[0].header if parsed_rows else read_csv_header(csv_text)
+        if not headers:
+            return []
         return build_sheet_descriptor_chunks(
-            section=section,
+            headers=headers,
+            analysis=analyze_sheet(headers, parsed_rows),
+            heading=heading or "",
             tokenizer=CharTokenizer(),
             max_tokens=max_tokens,
         )
@@ -868,9 +876,14 @@ class TestBuildTotalDescriptorChunks:
         heading: str | None = "sheet:T",
         max_tokens: int = 1000,
     ) -> list[str]:
-        section = TabularSection(text=csv_text, link=_DEFAULT_LINK, heading=heading)
+        parsed_rows = list(parse_csv_string(csv_text))
+        headers = parsed_rows[0].header if parsed_rows else read_csv_header(csv_text)
+        if not headers:
+            return []
         return build_total_descriptor_chunks(
-            section=section,
+            headers=headers,
+            analysis=analyze_sheet(headers, parsed_rows),
+            heading=heading or "",
             tokenizer=CharTokenizer(),
             max_tokens=max_tokens,
         )

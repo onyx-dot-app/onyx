@@ -1,10 +1,8 @@
 from collections import Counter
 
-from onyx.connectors.models import Section
-from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
+from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.utils.csv_utils import parse_csv_string
 
 
 TOTALS_HEADER = (
@@ -15,30 +13,25 @@ TOTALS_HEADER = (
 
 
 def build_total_descriptor_chunks(
-    section: Section,
+    headers: list[str],
+    analysis: SheetAnalysis,
+    heading: str,
     tokenizer: BaseTokenizer,
     max_tokens: int,
 ) -> list[str]:
-    parsed_rows = list(parse_csv_string(section.text or ""))
-    if not parsed_rows:
+    if analysis.row_count == 0:
         return []
-    headers = parsed_rows[0].header
-
-    a = analyze_sheet(headers, parsed_rows)
 
     lines: list[str] = []
-    for idx in a.numeric_cols:
-        lines.append(_numeric_totals_line(headers[idx], a.numeric_values[idx]))
-    for idx in a.categorical_cols:
-        line = _categorical_top_line(headers[idx], a.categorical_counts[idx])
+    for idx in analysis.numeric_cols:
+        lines.append(_numeric_totals_line(headers[idx], analysis.numeric_values[idx]))
+    for idx in analysis.categorical_cols:
+        line = _categorical_top_line(headers[idx], analysis.categorical_counts[idx])
         if line:
             lines.append(line)
-    lines.append(f"Total row count: {a.row_count}.")
+    lines.append(f"Total row count: {analysis.row_count}.")
 
-    if not lines:
-        return []
-
-    prefix = (f"{section.heading}\n" if section.heading else "") + TOTALS_HEADER
+    prefix = (f"{heading}\n" if heading else "") + TOTALS_HEADER
     return pack_lines(
         lines=lines,
         prefix=prefix,

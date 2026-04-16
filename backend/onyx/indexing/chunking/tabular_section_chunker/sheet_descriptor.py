@@ -1,12 +1,8 @@
 """Per-section sheet descriptor chunk builder."""
 
-from onyx.connectors.models import Section
-from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.utils.csv_utils import parse_csv_string
-from onyx.utils.csv_utils import read_csv_header
 
 
 MAX_NUMERIC_COLS = 12
@@ -16,17 +12,19 @@ MAX_DISTINCT_SAMPLES = 8
 
 
 def build_sheet_descriptor_chunks(
-    section: Section,
+    headers: list[str],
+    analysis: SheetAnalysis,
+    heading: str,
     tokenizer: BaseTokenizer,
     max_tokens: int,
 ) -> list[str]:
-    """Build sheet descriptor chunk(s) from a parsed CSV section.
+    """Build sheet descriptor chunk(s) from a pre-parsed sheet.
 
     Output (lines joined by "\\n"; lines that overflow ``max_tokens`` on
-    their own are skipped; ``section.heading`` is prepended to every
-    emitted chunk so retrieval keeps sheet context after a split):
+    their own are skipped; ``heading`` is prepended to every emitted
+    chunk so retrieval keeps sheet context after a split):
 
-        {section.heading}                                                     # optional
+        {heading}                                                             # optional
         Sheet overview.
         This sheet has {N} rows and {M} columns.
         Columns: {col1}, {col2}, ...
@@ -36,25 +34,21 @@ def build_sheet_descriptor_chunks(
         Identifier column: {col}.                                             # optional
         Values seen in {col}: {v1}, {v2}, ...                                 # optional, repeated
     """
-    text = section.text or ""
-    parsed_rows = list(parse_csv_string(text))
-    headers = parsed_rows[0].header if parsed_rows else read_csv_header(text)
     if not headers:
         return []
 
-    a = analyze_sheet(headers, parsed_rows)
     lines = [
-        _overview_line(a),
+        _overview_line(analysis),
         _columns_line(headers),
-        _time_range_line(a),
-        _numeric_cols_line(headers, a),
-        _categorical_cols_line(headers, a),
-        _id_col_line(headers, a),
-        _values_seen_line(headers, a),
+        _time_range_line(analysis),
+        _numeric_cols_line(headers, analysis),
+        _categorical_cols_line(headers, analysis),
+        _id_col_line(headers, analysis),
+        _values_seen_line(headers, analysis),
     ]
     return pack_lines(
         [line for line in lines if line],
-        prefix=section.heading or "",
+        prefix=heading,
         tokenizer=tokenizer,
         max_tokens=max_tokens,
     )
