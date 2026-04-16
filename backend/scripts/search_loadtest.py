@@ -202,16 +202,17 @@ def summarize(results: list[Result], wall_time_s: float) -> None:
             print(f"  [{status}] x{n}  {err}")
 
 
-def load_queries(args: argparse.Namespace) -> Queries:
+def load_queries_and_source_types(args: argparse.Namespace) -> Queries:
+    source_types = load_source_types(args)
     if args.queries_file:
         path = Path(os.path.expanduser(args.queries_file))
         queries = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
         if not queries:
             raise SystemExit(f"No queries found in {path}")
-        return Queries(queries=queries)
+        return Queries(queries=queries, source_types=source_types)
     if args.query:
-        return Queries(queries=[args.query])
-    return Queries(queries=DEFAULT_QUERIES)
+        return Queries(queries=[args.query], source_types=source_types)
+    return Queries(queries=DEFAULT_QUERIES, source_types=source_types)
 
 
 def load_token(args: argparse.Namespace) -> str:
@@ -223,6 +224,12 @@ def load_token(args: argparse.Namespace) -> str:
     if env:
         return env.strip()
     raise SystemExit("Provide --token, --token-file, or ONYX_ACCESS_TOKEN env var.")
+
+
+def load_source_types(args: argparse.Namespace) -> set[DocumentSource] | None:
+    if args.source_types:
+        return {DocumentSource(s) for s in args.source_types.split(",")}
+    return None
 
 
 def run_load_test(
@@ -262,7 +269,7 @@ def run_load_test(
 
 def run(args: argparse.Namespace) -> None:
     token = load_token(args)
-    queries = load_queries(args)
+    queries = load_queries_and_source_types(args)
     base_url = args.url.rstrip("/")
     # Accept either the bare host (https://st-dev.onyx.app) or one ending in
     # /api.
@@ -372,6 +379,10 @@ def main() -> None:
         type=int,
         default=10,
         help="Number of hits to retrieve per request.",
+    )
+    parser.add_argument(
+        "--source-types",
+        help="Comma-separated list of source types to filter by. The specific source types to filter by will be randomly selected per request from this list. If not specified, there will be no source type filter for all requests.",
     )
     args = parser.parse_args()
 
