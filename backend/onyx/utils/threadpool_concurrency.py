@@ -1,12 +1,12 @@
 import asyncio
 import collections.abc
-import concurrent
+import concurrent.futures
 import contextvars
 import copy
 import threading
 import uuid
-from collections.abc import Awaitable
 from collections.abc import Callable
+from collections.abc import Coroutine
 from collections.abc import Iterator
 from collections.abc import MutableMapping
 from collections.abc import Sequence
@@ -445,18 +445,18 @@ def run_functions_in_parallel(
     return results
 
 
-def run_async_sync_no_cancel(coro: Awaitable[T]) -> T:
+def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
     """
     async-to-sync converter. Basically just executes asyncio.run in a separate thread.
     Which is probably somehow inefficient or not ideal but fine for now.
     """
     context = contextvars.copy_context()
+
+    def _run() -> T:
+        return cast(T, context.run(asyncio.run, coro))
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future: concurrent.futures.Future[T] = executor.submit(
-            context.run,
-            asyncio.run,
-            coro,
-        )
+        future = executor.submit(_run)
         return future.result()
 
 

@@ -486,5 +486,5 @@ class ImageGenerationTool(Tool[ImageGenerationToolOverrideKwargs | None]):
 
         return ToolResponse(
             rich_response=final_image_generation_response,
-            llm_facing_response=cast(str, llm_facing_response),
+            llm_facing_response=llm_facing_response,
         )

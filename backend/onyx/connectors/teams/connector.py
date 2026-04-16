@@ -4,7 +4,6 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import cast
 
 import msal
 from office365.graph_client import GraphClient
@@ -205,7 +204,7 @@ class TeamsConnector(
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams")
 
-        checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
+        checkpoint = copy.deepcopy(checkpoint)
 
         todos = checkpoint.todo_team_ids
 

@@ -8,6 +8,7 @@ from typing import Any
 from typing import cast
 from typing import ClassVar
 
+import pywikibot.config
 import pywikibot.time
 from pywikibot import pagegenerators
 from pywikibot import textlib

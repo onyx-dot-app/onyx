@@ -5,7 +5,7 @@ import tempfile
 from collections.abc import Iterable
 
 import pytest
-import pywikibot
+import pywikibot.config
 from pytest_mock import MockFixture
 
 from onyx.connectors.mediawiki import wiki

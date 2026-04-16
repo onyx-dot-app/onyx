@@ -159,7 +159,7 @@ def build_service_account_creds(
     service_account_key = get_service_account_key(source=source)
 
     credential_dict = {
-        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.json(),
+        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.model_dump_json(),
     }
     if primary_admin_email:
         credential_dict[DB_CREDENTIALS_PRIMARY_ADMIN_KEY] = primary_admin_email

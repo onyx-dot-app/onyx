@@ -290,8 +290,8 @@ class AxeroConnector(PollConnector):
         if not self.axero_key or not self.base_url:
             raise ConnectorMissingCredentialError("Axero")
 
-        start_datetime = datetime.utcfromtimestamp(start).replace(tzinfo=timezone.utc)
-        end_datetime = datetime.utcfromtimestamp(end).replace(tzinfo=timezone.utc)
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
         entity_types = []
         if self.include_article:

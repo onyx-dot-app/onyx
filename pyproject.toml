@@ -216,17 +216,6 @@ exclude = [
 # fail CI.
 all = "error"
 
-# Track stale suppression comments as ty improves and false positives are resolved.
-unused-type-ignore-comment = "warn"
-
-# TODO: 28x datetime.utcnow() + 7x datetime.utcfromtimestamp() are real Python 3.12+
-# deprecations worth cleaning up. Set to "warn" so they show but don't block CI.
-deprecated = "warn"
-
-# Low-priority warnings -- show but don't block CI
-redundant-cast = "warn"
-possibly-missing-submodule = "warn"
-
 [tool.uv.workspace]
 members = ["tools/ods"]
 

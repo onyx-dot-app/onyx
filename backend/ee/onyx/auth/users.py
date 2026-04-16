@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from datetime import timezone
 
 import jwt
 from fastapi import Depends
@@ -58,7 +59,7 @@ def generate_anonymous_user_jwt_token(tenant_id: str) -> str:
     payload = {
         "tenant_id": tenant_id,
         # Token does not expire
-        "iat": datetime.utcnow(),  # Issued at time
+        "iat": datetime.now(timezone.utc),  # Issued at time
     }
 
     return jwt.encode(payload, USER_AUTH_SECRET, algorithm="HS256")

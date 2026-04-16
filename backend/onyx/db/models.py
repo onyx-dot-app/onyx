@@ -4508,7 +4508,7 @@ class UserFile(Base):
     file_id: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        default=datetime.datetime.utcnow
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
     user: Mapped["User"] = relationship(back_populates="files")
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

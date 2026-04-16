@@ -193,7 +193,7 @@ def update_search_settings(
     updated_settings: SavedSearchSettings,
     preserved_fields: list[str],
 ) -> None:
-    for field, value in updated_settings.dict().items():
+    for field, value in updated_settings.model_dump().items():
         if field not in preserved_fields:
             setattr(current_settings, field, value)
 

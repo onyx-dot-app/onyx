@@ -1621,7 +1621,7 @@ def create_connector_with_mock_credential(
         )
 
         # Store the created connector and credential IDs
-        connector_id = cast(int, connector_response.id)
+        connector_id = connector_response.id
         credential_id = credential.id
 
         validate_ccpair_for_user(
