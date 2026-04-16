@@ -2,10 +2,8 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { Callout } from "@/components/ui/callout";
-import {
-  CloudEmbeddingProvider,
-  getFormattedProviderName,
-} from "../../../../components/embedding/interfaces";
+import { CloudEmbeddingProvider } from "@/interfaces/indexing";
+import { getFormattedProviderName } from "@/lib/indexing";
 import { SvgTrash } from "@opal/icons";
 import { markdown } from "@opal/utils";
 

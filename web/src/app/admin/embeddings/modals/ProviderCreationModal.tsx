@@ -8,8 +8,8 @@ import { Label, TextFormField } from "@/components/Field";
 import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
-  getFormattedProviderName,
-} from "@/components/embedding/interfaces";
+} from "@/interfaces/indexing";
+import { getFormattedProviderName } from "@/lib/indexing";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import Modal from "@/refresh-components/Modal";
 import { markdown } from "@opal/utils";

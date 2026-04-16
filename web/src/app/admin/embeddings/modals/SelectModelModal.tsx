@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { CloudEmbeddingModel } from "@/components/embedding/interfaces";
+import { CloudEmbeddingModel } from "@/interfaces/indexing";
 import { markdown } from "@opal/utils";
 import { SvgServer } from "@opal/icons";
 

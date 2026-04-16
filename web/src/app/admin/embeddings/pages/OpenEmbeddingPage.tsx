@@ -5,12 +5,12 @@ import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
-import { ModelSelector } from "../../../../components/embedding/ModelSelector";
+import { ModelSelector } from "@/components/embedding/ModelSelector";
 import {
-  AVAILABLE_MODELS,
   CloudEmbeddingModel,
   HostedEmbeddingModel,
-} from "../../../../components/embedding/interfaces";
+} from "@/interfaces/indexing";
+import { AVAILABLE_MODELS } from "@/lib/indexing";
 import { CustomModelForm } from "../../../../components/embedding/CustomModelForm";
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";

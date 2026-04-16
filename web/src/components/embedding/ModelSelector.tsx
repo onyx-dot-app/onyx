@@ -1,12 +1,14 @@
-import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
+  CloudEmbeddingModel,
   EmbeddingModelDescriptor,
+  HostedEmbeddingModel,
+} from "@/interfaces/indexing";
+import {
+  getCurrentModelCopy,
+  getFormattedProviderName,
   getIconForRerankType,
   getTitleForRerankType,
-  getFormattedProviderName,
-  HostedEmbeddingModel,
-  CloudEmbeddingModel,
-} from "./interfaces";
+} from "@/lib/indexing";
 import { FiExternalLink } from "react-icons/fi";
 import CardSection from "../admin/CardSection";
 

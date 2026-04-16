@@ -16,7 +16,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { SavedSearchSettings } from "@/app/admin/embeddings/interfaces";
+import { SavedSearchSettings } from "@/interfaces/indexing";
 import { getEmbeddingProvider } from "@/lib/embedding";
 import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -70,20 +70,14 @@ export default function IndexSettingsPage() {
   const imageProcessingEnabled =
     s.image_extraction_and_analysis_enabled ?? false;
 
-  const {
-    data: currentEmbeddingModel,
-    isLoading: isLoadingCurrentModel,
-    error: currentEmbeddingModelError,
-  } = useCurrentEmbeddingModel();
+  const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
+    useCurrentEmbeddingModel();
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings();
 
-  const {
-    data: futureEmbeddingModel,
-    isLoading: isLoadingFutureModel,
-    error: futureEmbeddingModelError,
-  } = useFutureEmbeddingModel();
+  const { data: futureEmbeddingModel, isLoading: isLoadingFutureModel } =
+    useFutureEmbeddingModel();
 
   const { data: contextualCosts } = useLLMContextualCosts();
 

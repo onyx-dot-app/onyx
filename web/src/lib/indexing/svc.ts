@@ -1,47 +1,44 @@
 import {
-  CloudEmbeddingProvider,
-  HostedEmbeddingModel,
-} from "@/components/embedding/interfaces";
-
-import {
   AdvancedSearchConfiguration,
+  CloudEmbeddingProvider,
+  EmbeddingProvider,
+  HostedEmbeddingModel,
+  RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
-} from "../interfaces";
+} from "@/interfaces/indexing";
 
-import { EmbeddingProvider } from "@/components/embedding/interfaces";
-import { RerankingDetails } from "../interfaces";
-
-export const deleteSearchSettings = async (search_settings_id: number) => {
-  const response = await fetch(`/api/search-settings/delete-search-settings`, {
+export async function deleteSearchSettings(search_settings_id: number) {
+  return await fetch(`/api/search-settings/delete-search-settings`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ search_settings_id }),
   });
-  return response;
-};
+}
 
-export const testEmbedding = async ({
-  provider_type,
-  modelName,
-  apiKey,
-  apiUrl,
-  apiVersion,
-  deploymentName,
-}: {
+interface TestEmbeddingArgs {
   provider_type: string;
   modelName: string;
   apiKey: string | null;
   apiUrl: string | null;
   apiVersion: string | null;
   deploymentName: string | null;
-}) => {
+}
+
+export async function testEmbedding({
+  provider_type,
+  modelName,
+  apiKey,
+  apiUrl,
+  apiVersion,
+  deploymentName,
+}: TestEmbeddingArgs) {
   const testModelName =
     provider_type === "openai" ? "text-embedding-3-small" : modelName;
 
-  const testResponse = await fetch("/api/admin/embedding/test-embedding", {
+  return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -53,20 +50,32 @@ export const testEmbedding = async ({
       deployment_name: deploymentName,
     }),
   });
+}
 
-  return testResponse;
-};
+export async function updateSearchSettings(
+  searchSettings: SavedSearchSettings
+) {
+  return await fetch("/api/search-settings/update-inference-settings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...searchSettings,
+    }),
+  });
+}
 
 // We use a spread operation to merge properties from multiple objects into a single object.
 // Advanced embedding details may update default values.
 // Do NOT modify the order unless you are positive the new hierarchy is correct.
-export const combineSearchSettings = (
+export function combineSearchSettings(
   selectedProvider: CloudEmbeddingProvider | HostedEmbeddingModel,
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
   provider_type: EmbeddingProvider | null,
   switchover_type?: SwitchoverType
-): SavedSearchSettings => {
+): SavedSearchSettings {
   return {
     ...selectedProvider,
     ...advancedEmbeddingDetails,
@@ -74,4 +83,4 @@ export const combineSearchSettings = (
     provider_type: provider_type,
     switchover_type,
   };
-};
+}

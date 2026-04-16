@@ -2,13 +2,11 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  HostedEmbeddingModel,
   CloudEmbeddingModel,
-} from "@/components/embedding/interfaces";
-import {
-  SavedSearchSettings,
+  HostedEmbeddingModel,
   LLMContextualCost,
-} from "@/app/admin/embeddings/interfaces";
+  SavedSearchSettings,
+} from "@/interfaces/indexing";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 type EmbeddingModel = CloudEmbeddingModel | HostedEmbeddingModel;

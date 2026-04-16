@@ -5,25 +5,27 @@ import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
 import {
-  CloudEmbeddingProvider,
+  AdvancedSearchConfiguration,
   CloudEmbeddingModel,
-  AVAILABLE_CLOUD_PROVIDERS,
+  CloudEmbeddingProvider,
   CloudEmbeddingProviderFull,
   EmbeddingModelDescriptor,
   EmbeddingProvider,
-  LITELLM_CLOUD_PROVIDER,
+} from "@/interfaces/indexing";
+import {
+  AVAILABLE_CLOUD_PROVIDERS,
   AZURE_CLOUD_PROVIDER,
   getFormattedProviderName,
-} from "../../../../components/embedding/interfaces";
+  LITELLM_CLOUD_PROVIDER,
+} from "@/lib/indexing";
+import { deleteSearchSettings } from "@/lib/indexing/svc";
 import { EmbeddingDetails } from "../EmbeddingModelSelectionForm";
 import { FiExternalLink, FiInfo, FiTrash } from "react-icons/fi";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { CustomEmbeddingModelForm } from "@/components/embedding/CustomEmbeddingModelForm";
-import { deleteSearchSettings } from "./utils";
 import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { AdvancedSearchConfiguration } from "../interfaces";
 import CardSection from "@/components/admin/CardSection";
 
 export default function CloudEmbeddingPage({

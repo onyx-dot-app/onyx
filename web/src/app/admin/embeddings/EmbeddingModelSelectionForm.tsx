@@ -4,15 +4,18 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { Dispatch, SetStateAction, useState } from "react";
 import {
-  CloudEmbeddingProvider,
+  AdvancedSearchConfiguration,
   CloudEmbeddingModel,
-  AVAILABLE_MODELS,
-  AVAILABLE_CLOUD_PROVIDERS,
-  LITELLM_CLOUD_PROVIDER,
-  AZURE_CLOUD_PROVIDER,
-  HostedEmbeddingModel,
+  CloudEmbeddingProvider,
   EmbeddingProvider,
-} from "@/components/embedding/interfaces";
+  HostedEmbeddingModel,
+} from "@/interfaces/indexing";
+import {
+  AVAILABLE_CLOUD_PROVIDERS,
+  AVAILABLE_MODELS,
+  AZURE_CLOUD_PROVIDER,
+  LITELLM_CLOUD_PROVIDER,
+} from "@/lib/indexing";
 import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "@/app/admin/embeddings/pages/CloudEmbeddingPage";
 import ProviderCreationModal from "@/app/admin/embeddings/modals/ProviderCreationModal";
@@ -26,7 +29,6 @@ import {
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
-import { AdvancedSearchConfiguration } from "@/app/admin/embeddings/interfaces";
 import { Button } from "@opal/components";
 
 export interface EmbeddingDetails {

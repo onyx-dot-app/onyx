@@ -10,30 +10,31 @@ import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
+  AdvancedSearchConfiguration,
   CloudEmbeddingModel,
+  EmbeddingPrecision,
   EmbeddingProvider,
   HostedEmbeddingModel,
-} from "@/components/embedding/interfaces";
+  RerankingDetails,
+  SavedSearchSettings,
+  SwitchoverType,
+} from "@/interfaces/indexing";
+import {
+  combineSearchSettings,
+  updateSearchSettings,
+} from "@/lib/indexing/svc";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
-import {
-  AdvancedSearchConfiguration,
-  EmbeddingPrecision,
-  RerankingDetails,
-  SavedSearchSettings,
-  SwitchoverType,
-} from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import Modal from "@/refresh-components/Modal";
 import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
-import { combineSearchSettings } from "./utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,22 +88,6 @@ export default function EmbeddingForm() {
   ) => {
     setAdvancedEmbeddingDetails((values) => ({ ...values, [key]: value }));
   };
-
-  async function updateSearchSettings(searchSettings: SavedSearchSettings) {
-    const response = await fetch(
-      "/api/search-settings/update-inference-settings",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...searchSettings,
-        }),
-      }
-    );
-    return response;
-  }
 
   const updateSelectedProvider = (
     model: CloudEmbeddingModel | HostedEmbeddingModel

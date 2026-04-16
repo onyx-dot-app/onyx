@@ -7,15 +7,13 @@ import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { Label } from "@/components/Field";
-import {
-  CloudEmbeddingProvider,
-  getFormattedProviderName,
-} from "@/components/embedding/interfaces";
+import { CloudEmbeddingProvider } from "@/interfaces/indexing";
+import { getFormattedProviderName } from "@/lib/indexing";
+import { testEmbedding } from "@/lib/indexing/svc";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { markdown } from "@opal/utils";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
 import { SvgSettings } from "@opal/icons";
 
 export interface ChangeCredentialsModalProps {

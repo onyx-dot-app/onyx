@@ -5,7 +5,7 @@ import {
   AdvancedSearchConfiguration,
   EmbeddingPrecision,
   LLMContextualCost,
-} from "../interfaces";
+} from "@/interfaces/indexing";
 import {
   BooleanFormField,
   Label,
