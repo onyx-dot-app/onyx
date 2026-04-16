@@ -1,7 +1,7 @@
 import html
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -61,9 +61,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             ).strftime("%Y-%m-%d")
 
         if end:
-            params["filter[updated_at:lte]"] = datetime.utcfromtimestamp(end).strftime(
-                "%Y-%m-%d"
-            )
+            # Add one day to include the full end date
+            # Bookstack treats dates without times as the start of that day
+            end_date = datetime.utcfromtimestamp(end) + timedelta(days=1)
+            params["filter[updated_at:lte]"] = end_date.strftime("%Y-%m-%d")
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
         doc_batch: list[Document | HierarchyNode] = [
