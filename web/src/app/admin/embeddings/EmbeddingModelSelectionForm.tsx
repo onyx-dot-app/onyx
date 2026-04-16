@@ -19,12 +19,11 @@ import {
 } from "@/lib/indexing";
 import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "@/app/admin/embeddings/pages/CloudEmbeddingPage";
-import ProviderCreationModal from "@/app/admin/embeddings/modals/ProviderCreationModal";
-import DeleteCredentialsModal from "@/app/admin/embeddings/modals/DeleteCredentialsModal";
-import SelectModelModal from "@/app/admin/embeddings/modals/SelectModelModal";
-import ChangeCredentialsModal from "@/app/admin/embeddings/modals/ChangeCredentialsModal";
-import ModelSelectionConfirmationModal from "@/app/admin/embeddings/modals/ModelSelectionModal";
-import AlreadyPickedModal from "@/app/admin/embeddings/modals/AlreadyPickedModal";
+import ProviderCreationModal from "@/sections/modals/indexing/ProviderCreationModal";
+import SelectModelModal from "@/sections/modals/indexing/SelectModelModal";
+import ChangeCredentialsModal from "@/sections/modals/indexing/ChangeCredentialsModal";
+import ModelSelectionConfirmationModal from "@/sections/modals/indexing/ModelSelectionModal";
+import AlreadyPickedModal from "@/sections/modals/indexing/AlreadyPickedModal";
 import { ModelOption } from "@/components/embedding/ModelSelector";
 import { Button } from "@opal/components";
 
@@ -63,8 +62,6 @@ export default function EmbeddingModelSelection({
   const [showTentativeProvider, setShowTentativeProvider] =
     useState<CloudEmbeddingProvider | null>(null);
 
-  const [showUnconfiguredProvider, setShowUnconfiguredProvider] =
-    useState<CloudEmbeddingProvider | null>(null);
   const [changeCredentialsProvider, setChangeCredentialsProvider] =
     useState<CloudEmbeddingProvider | null>(null);
 
@@ -80,12 +77,6 @@ export default function EmbeddingModelSelection({
   // Open Model based modals
   const [showTentativeOpenProvider, setShowTentativeOpenProvider] =
     useState<EmbeddingModelDescriptor | null>(null);
-
-  const [showDeleteCredentialsModal, setShowDeleteCredentialsModal] =
-    useState<boolean>(false);
-
-  const [showAddConnectorPopup, setShowAddConnectorPopup] =
-    useState<boolean>(false);
 
   const { data: embeddingModelDetails } = useSWR<EmbeddingModelDescriptor[]>(
     EMBEDDING_MODELS_ADMIN_URL,
@@ -139,7 +130,7 @@ export default function EmbeddingModelSelection({
           }
           selectedProvider={showTentativeProvider}
           onConfirm={() => {
-            setShowTentativeProvider(showUnconfiguredProvider);
+            setShowTentativeProvider(null);
             if (showModelInQueue) {
               setShowTentativeModel(showModelInQueue);
             }
@@ -185,17 +176,6 @@ export default function EmbeddingModelSelection({
             setShowModelInQueue(null);
             setShowTentativeModel(null);
           }}
-        />
-      )}
-
-      {showDeleteCredentialsModal && (
-        <DeleteCredentialsModal
-          modelProvider={showTentativeProvider!}
-          onConfirm={() => {
-            setShowDeleteCredentialsModal(false);
-            mutateEmbeddingProviderDetails();
-          }}
-          onCancel={() => setShowDeleteCredentialsModal(false)}
         />
       )}
 

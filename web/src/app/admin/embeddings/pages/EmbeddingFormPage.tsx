@@ -32,7 +32,7 @@ import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import Modal from "@/refresh-components/Modal";
-import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
+import InstantSwitchConfirmModal from "@/sections/modals/indexing/InstantSwitchConfirmModal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import {
@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@opal/components";
 import { SvgAlertTriangle, SvgArrowLeft, SvgArrowRight } from "@opal/icons";
+
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
   const router = useRouter();
