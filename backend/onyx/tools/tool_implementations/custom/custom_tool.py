@@ -378,7 +378,9 @@ if __name__ == "__main__":
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Can you fetch assistant with ID 10"},
         ],
-        tools=[tool.tool_definition() for tool in tools],  # type: ignore
+        tools=[  # ty: ignore[invalid-argument-type]
+            tool.tool_definition() for tool in tools
+        ],
     )
     choice = response.choices[0]
     if choice.message.tool_calls:

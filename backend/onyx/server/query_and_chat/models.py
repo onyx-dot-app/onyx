@@ -232,8 +232,12 @@ class ChatMessageDetail(BaseModel):
     preferred_response_id: int | None = None
     model_display_name: str | None = None
 
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
+    def model_dump(  # ty: ignore[invalid-method-override]
+        self, *args: list, **kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        initial_dict = super().model_dump(
+            mode="json", *args, **kwargs  # ty: ignore[invalid-argument-type]
+        )
         initial_dict["time_sent"] = self.time_sent.isoformat()
         return initial_dict
 

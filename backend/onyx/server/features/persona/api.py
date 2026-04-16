@@ -9,16 +9,16 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -150,7 +150,7 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -187,7 +187,7 @@ def patch_persona_featured_status(
 @admin_agents_router.patch("/display-priorities")
 def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -265,7 +265,7 @@ def get_agents_admin_paginated(
 @admin_router.patch("/{persona_id}/undelete", tags=PUBLIC_API_TAGS)
 def undelete_persona(
     persona_id: int,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_not_deleted(
@@ -279,7 +279,7 @@ def undelete_persona(
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
     file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
@@ -298,7 +298,7 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
@@ -328,7 +328,7 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -350,7 +350,7 @@ class PersonaLabelPatchRequest(BaseModel):
 @basic_router.get("/labels")
 def get_labels(
     db: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[PersonaLabelResponse]:
     return [
         PersonaLabelResponse.from_model(label)
@@ -362,7 +362,7 @@ def get_labels(
 def create_label(
     label: PersonaLabelCreate,
     db: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> PersonaLabelResponse:
     """Create a new assistant label"""
     try:
@@ -379,7 +379,7 @@ def create_label(
 def patch_persona_label(
     label_id: int,
     persona_label_patch_request: PersonaLabelPatchRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_label(
@@ -392,7 +392,7 @@ def patch_persona_label(
 @admin_router.delete("/label/{label_id}")
 def delete_label(
     label_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     delete_persona_label(label_id=label_id, db_session=db_session)
@@ -410,7 +410,7 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -434,7 +434,7 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_deleted(

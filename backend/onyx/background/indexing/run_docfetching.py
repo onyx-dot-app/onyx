@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import sentry_sdk
 from celery import Celery
 from sqlalchemy.orm import Session
 
@@ -68,6 +69,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
     get_persistent_document_writer,
 )
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
@@ -266,6 +268,14 @@ def run_docfetching_entrypoint(
             attempt.connector_credential_pair.connector.connector_specific_config
         )
         credential_id = attempt.connector_credential_pair.credential_id
+
+        on_index_attempt_status_change(
+            tenant_id=tenant_id,
+            source=attempt.connector_credential_pair.connector.source.value,
+            cc_pair_id=connector_credential_pair_id,
+            connector_name=connector_name or f"cc_pair_{connector_credential_pair_id}",
+            status="in_progress",
+        )
 
     logger.info(
         f"Docfetching starting{tenant_str}: "
@@ -556,6 +566,27 @@ def connector_document_extraction(
 
                 # save record of any failures at the connector level
                 if failure is not None:
+                    if failure.exception is not None:
+                        with sentry_sdk.new_scope() as scope:
+                            scope.set_tag("stage", "connector_fetch")
+                            scope.set_tag("connector_source", db_connector.source.value)
+                            scope.set_tag("cc_pair_id", str(cc_pair_id))
+                            scope.set_tag("index_attempt_id", str(index_attempt_id))
+                            scope.set_tag("tenant_id", tenant_id)
+                            if failure.failed_document:
+                                scope.set_tag(
+                                    "doc_id", failure.failed_document.document_id
+                                )
+                            if failure.failed_entity:
+                                scope.set_tag(
+                                    "entity_id", failure.failed_entity.entity_id
+                                )
+                            scope.fingerprint = [
+                                "connector-fetch-failure",
+                                db_connector.source.value,
+                                type(failure.exception).__name__,
+                            ]
+                            sentry_sdk.capture_exception(failure.exception)
                     total_failures += 1
                     with get_session_with_current_tenant() as db_session:
                         create_index_attempt_error(

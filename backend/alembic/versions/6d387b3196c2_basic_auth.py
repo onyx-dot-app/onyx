@@ -63,7 +63,7 @@ def upgrade() -> None:
         "time_created",
         existing_type=postgresql.TIMESTAMP(timezone=True),
         nullable=False,
-        existing_server_default=sa.text("now()"),  # type: ignore
+        existing_server_default=sa.text("now()"),
     )
     op.alter_column(
         "index_attempt",
@@ -85,7 +85,7 @@ def downgrade() -> None:
         "time_created",
         existing_type=postgresql.TIMESTAMP(timezone=True),
         nullable=True,
-        existing_server_default=sa.text("now()"),  # type: ignore
+        existing_server_default=sa.text("now()"),
     )
     op.drop_index(op.f("ix_accesstoken_created_at"), table_name="accesstoken")
     op.drop_table("accesstoken")

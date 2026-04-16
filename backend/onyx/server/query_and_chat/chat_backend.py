@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_user
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
@@ -53,6 +53,7 @@ from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import ChatSessionSharedStatus
@@ -149,7 +150,7 @@ def _get_available_tokens_for_persona(
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
@@ -206,7 +207,7 @@ def get_user_chat_sessions(
 @router.put("/update-chat-session-temperature")
 def update_chat_session_temperature(
     update_thread_req: UpdateChatSessionTemperatureRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
@@ -246,7 +247,7 @@ def update_chat_session_temperature(
 @router.put("/update-chat-session-model")
 def update_chat_session_model(
     update_thread_req: UpdateChatSessionThreadRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
@@ -401,7 +402,7 @@ def create_new_chat_session(
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
@@ -470,7 +471,7 @@ def rename_chat_session(
 def patch_chat_session(
     session_id: UUID,
     chat_session_update_req: ChatSessionUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -485,7 +486,7 @@ def patch_chat_session(
 
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -498,7 +499,7 @@ def delete_all_chat_sessions(
 def delete_chat_session_by_id(
     session_id: UUID,
     hard_delete: bool | None = None,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -687,7 +688,7 @@ def handle_send_chat_message(
 @router.put("/set-message-as-latest")
 def set_message_as_latest(
     message_identifier: ChatMessageIdentifier,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -708,7 +709,7 @@ def set_message_as_latest(
 @router.put("/set-preferred-response")
 def set_preferred_response_endpoint(
     request_body: SetPreferredResponseRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Set the preferred assistant response for a multi-model turn."""
@@ -717,7 +718,7 @@ def set_preferred_response_endpoint(
         # doesn't belong to this user, preventing cross-user mutation.
         get_chat_message(
             chat_message_id=request_body.user_message_id,
-            user_id=user.id if user else None,
+            user_id=user.id,
             db_session=db_session,
         )
         set_preferred_response(
@@ -769,7 +770,7 @@ class MaxSelectedDocumentTokens(BaseModel):
 @router.get("/max-selected-document-tokens")
 def get_max_document_tokens(
     persona_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MaxSelectedDocumentTokens:
     try:
@@ -840,7 +841,7 @@ class SeedChatFromSlackResponse(BaseModel):
 @router.post("/seed-chat-session-from-slack")
 def seed_chat_from_slack(
     chat_seed_request: SeedChatFromSlackRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeedChatFromSlackResponse:
     slack_chat_session_id = chat_seed_request.chat_session_id
@@ -865,7 +866,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
 
@@ -902,7 +903,7 @@ async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChatSearchResponse:
     """
@@ -980,7 +981,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(current_user),  # noqa: ARG001
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
 ) -> dict[str, str]:
     """
     Stop a chat session by setting a stop signal.

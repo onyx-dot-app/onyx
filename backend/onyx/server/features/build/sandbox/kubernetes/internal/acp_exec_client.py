@@ -40,10 +40,10 @@ from acp.schema import Error
 from acp.schema import PromptResponse
 from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
-from kubernetes import client  # type: ignore
+from kubernetes import client
 from kubernetes import config
-from kubernetes.stream import stream as k8s_stream  # type: ignore
-from kubernetes.stream.ws_client import WSClient  # type: ignore
+from kubernetes.stream import stream as k8s_stream
+from kubernetes.stream.ws_client import WSClient
 from pydantic import BaseModel
 from pydantic import ValidationError
 

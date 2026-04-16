@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 from datetime import timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import IO
@@ -12,11 +13,16 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -179,8 +185,32 @@ def _process_file(
         link = onyx_metadata.link or link
 
     # Build sections: first the text as a single Section
-    sections: list[TextSection | ImageSection] = []
-    if extraction_result.text_content.strip():
+    sections: list[TextSection | ImageSection | TabularSection] = []
+    if is_tabular_file(file_name):
+        # Produce TabularSections
+        lowered_name = file_name.lower()
+        if lowered_name.endswith(".xlsx"):
+            file.seek(0)
+            tabular_source: IO[bytes] = file
+        else:
+            tabular_source = BytesIO(
+                extraction_result.text_content.encode("utf-8", errors="replace")
+            )
+        try:
+            sections.extend(
+                tabular_file_to_sections(
+                    file=tabular_source,
+                    file_name=file_name,
+                    link=link or "",
+                )
+            )
+        except Exception as e:
+            logger.error(f"Failed to process tabular file {file_name}: {e}")
+            return []
+        if not sections:
+            logger.warning(f"No content extracted from tabular file {file_name}")
+            return []
+    elif extraction_result.text_content.strip():
         logger.debug(f"Creating TextSection for {file_name} with link: {link}")
         sections.append(
             TextSection(link=link, text=extraction_result.text_content.strip())

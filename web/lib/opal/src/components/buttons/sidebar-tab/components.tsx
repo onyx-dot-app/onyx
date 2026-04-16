@@ -5,10 +5,8 @@ import type { ButtonType, IconFunctionComponent } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
-import { Text } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
 import Link from "next/link";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import "@opal/components/tooltip.css";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,7 +125,7 @@ function SidebarTab({
               rightChildren={truncationSpacer}
             />
           ) : (
-            <div className="flex flex-row items-center gap-2 flex-1">
+            <div className="flex flex-row items-center gap-2 w-full">
               {Icon && (
                 <div className="flex items-center justify-center p-0.5">
                   <Icon className="h-[1rem] w-[1rem] text-text-03" />
@@ -145,18 +143,9 @@ function SidebarTab({
   if (typeof children !== "string") return content;
   if (folded) {
     return (
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{content}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            className="opal-tooltip"
-            side="right"
-            sideOffset={4}
-          >
-            <Text>{children}</Text>
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
+      <Tooltip tooltip={children} side="right">
+        {content}
+      </Tooltip>
     );
   }
   return content;

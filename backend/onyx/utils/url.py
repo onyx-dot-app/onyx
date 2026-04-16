@@ -137,7 +137,7 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     if validated_ip is None:
         raise SSRFException(f"Could not resolve hostname '{hostname}'")
 
-    return validated_ip, hostname, port
+    return validated_ip, hostname, port  # ty: ignore[invalid-return-type]
 
 
 def validate_outbound_http_url(

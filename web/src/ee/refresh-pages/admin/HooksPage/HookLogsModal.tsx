@@ -5,6 +5,7 @@ import { SvgDownload, SvgTextLines } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
@@ -40,33 +41,40 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-function LogRow({ log }: { log: HookExecutionRecord }) {
+function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
   return (
-    <Section
-      flexDirection="row"
-      justifyContent="start"
-      alignItems="start"
-      gap={0.5}
-      height="fit"
-      className="py-2"
-    >
-      {/* 1. Timestamp */}
-      <span className="shrink-0 text-code-code">
-        <Text font="secondary-mono-label" color="inherit" nowrap>
-          {formatDateTimeLog(log.created_at)}
-        </Text>
-      </span>
-      {/* 2. Error message */}
-      <span className="flex-1 min-w-0 break-all whitespace-pre-wrap text-code-code">
-        <Text font="secondary-mono" color="inherit">
-          {log.error_message ?? "Unknown error"}
-        </Text>
-      </span>
-      {/* 3. Copy button */}
-      <Section width="fit" height="fit" alignItems="center">
-        <CopyIconButton size="xs" getCopyText={() => log.error_message ?? ""} />
+    <Hoverable.Root group={group}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="start"
+        gap={0.5}
+        height="fit"
+        className="py-2"
+      >
+        {/* 1. Timestamp */}
+        <span className="shrink-0 text-code-code">
+          <Text font="secondary-mono-label" color="inherit" nowrap>
+            {formatDateTimeLog(log.created_at)}
+          </Text>
+        </span>
+        {/* 2. Error message */}
+        <span className="flex-1 min-w-0 break-all whitespace-pre-wrap text-code-code">
+          <Text font="secondary-mono" color="inherit">
+            {log.error_message ?? "Unknown error"}
+          </Text>
+        </span>
+        {/* 3. Copy button */}
+        <Section width="fit" height="fit" alignItems="center">
+          <Hoverable.Item group={group} variant="opacity-on-hover">
+            <CopyIconButton
+              size="xs"
+              getCopyText={() => log.error_message ?? ""}
+            />
+          </Hoverable.Item>
+        </Section>
       </Section>
-    </Section>
+    </Hoverable.Root>
   );
 }
 
@@ -126,7 +134,11 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
                 <>
                   <SectionHeader label="Past Hour" />
                   {recentErrors.map((log, idx) => (
-                    <LogRow key={log.created_at + String(idx)} log={log} />
+                    <LogRow
+                      key={log.created_at + String(idx)}
+                      log={log}
+                      group={log.created_at + String(idx)}
+                    />
                   ))}
                 </>
               )}
@@ -134,7 +146,11 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
                 <>
                   <SectionHeader label="Older" />
                   {olderErrors.map((log, idx) => (
-                    <LogRow key={log.created_at + String(idx)} log={log} />
+                    <LogRow
+                      key={log.created_at + String(idx)}
+                      log={log}
+                      group={log.created_at + String(idx)}
+                    />
                   ))}
                 </>
               )}

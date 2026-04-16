@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { mutate } from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
@@ -16,8 +17,9 @@ import {
   claimLicense,
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import Message from "@/refresh-components/messages/Message";
+import { MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -203,8 +205,10 @@ export default function BillingPage() {
             await claimLicense(sessionId ?? undefined);
             if (cancelled) return;
             refreshLicense();
-            // Refresh the page to update settings (including ee_features_enabled)
+            // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
             router.refresh();
+            mutate(SWR_KEYS.settings);
+            mutate(SWR_KEYS.enterpriseSettings);
             // Navigate to billing details now that the license is active
             changeView("details");
             lastError = null;
@@ -265,7 +269,10 @@ export default function BillingPage() {
         setIsActivating(false);
         refreshLicense();
         refreshBilling();
+        // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
         router.refresh();
+        mutate(SWR_KEYS.settings);
+        mutate(SWR_KEYS.enterpriseSettings);
         changeView("details");
       } catch (err) {
         // License not ready yet — keep polling. Log so unexpected failures
@@ -312,8 +319,10 @@ export default function BillingPage() {
   const handleLicenseActivated = () => {
     refreshLicense();
     refreshBilling();
-    // Refresh the page to update settings (including ee_features_enabled)
+    // Refresh settings so EE-gated UI (e.g. sidebar) updates immediately.
     router.refresh();
+    mutate(SWR_KEYS.settings);
+    mutate(SWR_KEYS.enterpriseSettings);
     // Navigate to billing details now that the license is active
     changeView("details");
   };
@@ -475,19 +484,14 @@ export default function BillingPage() {
       <SettingsLayouts.Body>
         <div className="flex flex-col items-center gap-6">
           {isActivating && (
-            <Message
-              static
-              warning
-              large
-              text="Your license is still activating"
+            <MessageCard
+              variant="warning"
+              title="Your license is still activating"
               description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
-              icon
-              close
               onClose={() => {
                 sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
                 setIsActivating(false);
               }}
-              className="w-full"
             />
           )}
           {renderContent()}

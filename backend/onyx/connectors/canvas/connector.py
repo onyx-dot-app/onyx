@@ -1,10 +1,9 @@
 from datetime import datetime
 from datetime import timezone
+from enum import StrEnum
 from typing import Any
 from typing import cast
-from typing import Literal
 from typing import NoReturn
-from typing import TypeAlias
 
 from pydantic import BaseModel
 from retry import retry
@@ -25,8 +24,11 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.error_handling.exceptions import OnyxError
@@ -47,10 +49,6 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
         raise InsufficientPermissionsError(
             "Canvas API token does not have sufficient permissions (HTTP 403)."
         )
-    elif e.status_code == 429:
-        raise ConnectorValidationError(
-            "Canvas rate-limit exceeded (HTTP 429). Please try again later."
-        )
     elif e.status_code >= 500:
         raise UnexpectedValidationError(
             f"Unexpected Canvas HTTP error (status={e.status_code}): {e}"
@@ -59,6 +57,60 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
         raise ConnectorValidationError(
             f"Canvas API error (status={e.status_code}): {e}"
         )
+
+
+class CanvasStage(StrEnum):
+    PAGES = "pages"
+    ASSIGNMENTS = "assignments"
+    ANNOUNCEMENTS = "announcements"
+
+
+_STAGE_CONFIG: dict[CanvasStage, dict[str, Any]] = {
+    CanvasStage.PAGES: {
+        "endpoint": "courses/{course_id}/pages",
+        "params": {
+            "per_page": "100",
+            "include[]": "body",
+            "published": "true",
+            "sort": "updated_at",
+            "order": "desc",
+        },
+    },
+    CanvasStage.ASSIGNMENTS: {
+        "endpoint": "courses/{course_id}/assignments",
+        "params": {"per_page": "100", "published": "true"},
+    },
+    CanvasStage.ANNOUNCEMENTS: {
+        "endpoint": "announcements",
+        "params": {
+            "per_page": "100",
+            "context_codes[]": "course_{course_id}",
+            "active_only": "true",
+        },
+    },
+}
+
+
+def _parse_canvas_dt(timestamp_str: str) -> datetime:
+    """Parse a Canvas ISO-8601 timestamp (e.g. '2025-06-15T12:00:00Z')
+    into a timezone-aware UTC datetime.
+
+    Canvas returns timestamps with a trailing 'Z' instead of '+00:00',
+    so we normalise before parsing.
+    """
+    return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).astimezone(
+        timezone.utc
+    )
+
+
+def _unix_to_canvas_time(epoch: float) -> str:
+    """Convert a Unix timestamp to Canvas ISO-8601 format (e.g. '2025-06-15T12:00:00Z')."""
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _in_time_window(timestamp_str: str, start: float, end: float) -> bool:
+    """Check whether a Canvas ISO-8601 timestamp falls within (start, end]."""
+    return start < _parse_canvas_dt(timestamp_str).timestamp() <= end
 
 
 class CanvasCourse(BaseModel):
@@ -145,9 +197,6 @@ class CanvasAnnouncement(BaseModel):
         )
 
 
-CanvasStage: TypeAlias = Literal["pages", "assignments", "announcements"]
-
-
 class CanvasConnectorCheckpoint(ConnectorCheckpoint):
     """Checkpoint state for resumable Canvas indexing.
 
@@ -165,14 +214,29 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
 
     course_ids: list[int] = []
     current_course_index: int = 0
-    stage: CanvasStage = "pages"
+    stage: CanvasStage = CanvasStage.PAGES
     next_url: str | None = None
 
     def advance_course(self) -> None:
         """Move to the next course and reset within-course state."""
         self.current_course_index += 1
-        self.stage = "pages"
+        self.stage = CanvasStage.PAGES
         self.next_url = None
+
+    def advance_stage(self) -> None:
+        """Advance past the current stage.
+
+        Moves to the next stage within the same course, or to the next
+        course if the current stage is the last one. Resets next_url so
+        the next call starts fresh on the new stage.
+        """
+        self.next_url = None
+        stages: list[CanvasStage] = list(CanvasStage)
+        next_idx = stages.index(self.stage) + 1
+        if next_idx < len(stages):
+            self.stage = stages[next_idx]
+        else:
+            self.advance_course()
 
 
 class CanvasConnector(
@@ -295,13 +359,7 @@ class CanvasConnector(
         if body_text:
             text_parts.append(body_text)
 
-        doc_updated_at = (
-            datetime.fromisoformat(page.updated_at.replace("Z", "+00:00")).astimezone(
-                timezone.utc
-            )
-            if page.updated_at
-            else None
-        )
+        doc_updated_at = _parse_canvas_dt(page.updated_at) if page.updated_at else None
 
         document = self._build_document(
             doc_id=f"canvas-page-{page.course_id}-{page.page_id}",
@@ -325,17 +383,11 @@ class CanvasConnector(
         if desc_text:
             text_parts.append(desc_text)
         if assignment.due_at:
-            due_dt = datetime.fromisoformat(
-                assignment.due_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
+            due_dt = _parse_canvas_dt(assignment.due_at)
             text_parts.append(f"Due: {due_dt.strftime('%B %d, %Y %H:%M UTC')}")
 
         doc_updated_at = (
-            datetime.fromisoformat(
-                assignment.updated_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            if assignment.updated_at
-            else None
+            _parse_canvas_dt(assignment.updated_at) if assignment.updated_at else None
         )
 
         document = self._build_document(
@@ -361,11 +413,7 @@ class CanvasConnector(
             text_parts.append(msg_text)
 
         doc_updated_at = (
-            datetime.fromisoformat(
-                announcement.posted_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            if announcement.posted_at
-            else None
+            _parse_canvas_dt(announcement.posted_at) if announcement.posted_at else None
         )
 
         document = self._build_document(
@@ -400,6 +448,314 @@ class CanvasConnector(
         self._canvas_client = client
         return None
 
+    def _fetch_stage_page(
+        self,
+        next_url: str | None,
+        endpoint: str,
+        params: dict[str, Any],
+    ) -> tuple[list[Any], str | None]:
+        """Fetch one page of API results for the current stage.
+
+        Returns (items, next_url).  All error handling is done by the
+        caller (_load_from_checkpoint).
+        """
+        if next_url:
+            # Resuming mid-pagination: the next_url from Canvas's
+            # Link header already contains endpoint + query params.
+            response, result_next_url = self.canvas_client.get(full_url=next_url)
+        else:
+            # First request for this stage: build from endpoint + params.
+            response, result_next_url = self.canvas_client.get(
+                endpoint=endpoint, params=params
+            )
+        return response or [], result_next_url
+
+    def _process_items(
+        self,
+        response: list[Any],
+        stage: CanvasStage,
+        course_id: int,
+        start: float,
+        end: float,
+        include_permissions: bool,
+    ) -> tuple[list[Document | ConnectorFailure], bool]:
+        """Process a page of API results into documents.
+
+        Returns (docs, early_exit). early_exit is True when pages
+        (sorted desc by updated_at) hit an item older than start,
+        signaling that pagination should stop.
+        """
+        results: list[Document | ConnectorFailure] = []
+        early_exit = False
+
+        for item in response:
+            try:
+                if stage == CanvasStage.PAGES:
+                    page = CanvasPage.from_api(item, course_id=course_id)
+                    if not page.updated_at:
+                        continue
+                    # Pages are sorted by updated_at desc — once we see
+                    # an item at or before `start`, all remaining items
+                    # on this and subsequent pages are older too.
+                    if not _in_time_window(page.updated_at, start, end):
+                        if _parse_canvas_dt(page.updated_at).timestamp() <= start:
+                            early_exit = True
+                            break
+                        # ts > end: page is newer than our window, skip it
+                        continue
+                    doc = self._convert_page_to_document(page)
+                    results.append(
+                        self._maybe_attach_permissions(
+                            doc, course_id, include_permissions
+                        )
+                    )
+
+                elif stage == CanvasStage.ASSIGNMENTS:
+                    assignment = CanvasAssignment.from_api(item, course_id=course_id)
+                    if not assignment.updated_at or not _in_time_window(
+                        assignment.updated_at, start, end
+                    ):
+                        continue
+                    doc = self._convert_assignment_to_document(assignment)
+                    results.append(
+                        self._maybe_attach_permissions(
+                            doc, course_id, include_permissions
+                        )
+                    )
+
+                elif stage == CanvasStage.ANNOUNCEMENTS:
+                    announcement = CanvasAnnouncement.from_api(
+                        item, course_id=course_id
+                    )
+                    if not announcement.posted_at:
+                        logger.debug(
+                            f"Skipping announcement {announcement.id} in "
+                            f"course {course_id}: no posted_at"
+                        )
+                        continue
+                    if not _in_time_window(announcement.posted_at, start, end):
+                        continue
+                    doc = self._convert_announcement_to_document(announcement)
+                    results.append(
+                        self._maybe_attach_permissions(
+                            doc, course_id, include_permissions
+                        )
+                    )
+
+            except Exception as e:
+                item_id = item.get("id") or item.get("page_id", "unknown")
+                if stage == CanvasStage.PAGES:
+                    doc_link = (
+                        f"{self.canvas_base_url}/courses/{course_id}"
+                        f"/pages/{item.get('url', '')}"
+                    )
+                else:
+                    doc_link = item.get("html_url", "")
+                results.append(
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"canvas-{stage.removesuffix('s')}-{course_id}-{item_id}",
+                            document_link=doc_link,
+                        ),
+                        failure_message=f"Failed to process {stage.removesuffix('s')}: {e}",
+                        exception=e,
+                    )
+                )
+
+        return results, early_exit
+
+    def _maybe_attach_permissions(
+        self,
+        document: Document,
+        course_id: int,
+        include_permissions: bool,
+    ) -> Document:
+        if include_permissions:
+            document.external_access = self._get_course_permissions(course_id)
+        return document
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        """Shared implementation for load_from_checkpoint and load_from_checkpoint_with_perm_sync."""
+        new_checkpoint = checkpoint.model_copy(deep=True)
+
+        # First call: materialize the list of course IDs.
+        # On failure, let the exception propagate so the framework fails the
+        # attempt cleanly. Swallowing errors here would leave the checkpoint
+        # state unchanged and cause an infinite retry loop.
+        if not new_checkpoint.course_ids:
+            try:
+                courses = self._list_courses()
+            except OnyxError as e:
+                if e.status_code in (401, 403):
+                    _handle_canvas_api_error(e)  # NoReturn — always raises
+                raise
+            new_checkpoint.course_ids = [c.id for c in courses]
+            logger.info(f"Found {len(courses)} Canvas courses to process")
+            new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
+            return new_checkpoint
+
+        # All courses done.
+        if new_checkpoint.current_course_index >= len(new_checkpoint.course_ids):
+            new_checkpoint.has_more = False
+            return new_checkpoint
+
+        course_id = new_checkpoint.course_ids[new_checkpoint.current_course_index]
+        try:
+            stage = CanvasStage(new_checkpoint.stage)
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid checkpoint stage: {new_checkpoint.stage!r}. "
+                f"Valid stages: {[s.value for s in CanvasStage]}"
+            ) from e
+
+        # Build endpoint + params from the static template.
+        config = _STAGE_CONFIG[stage]
+        endpoint = config["endpoint"].format(course_id=course_id)
+        params = {k: v.format(course_id=course_id) for k, v in config["params"].items()}
+        # Only the announcements API supports server-side date filtering
+        # (start_date/end_date). Pages support server-side sorting
+        # (sort=updated_at desc) enabling early exit, but not date
+        # filtering. Assignments support neither. Both are filtered
+        # client-side via _in_time_window after fetching.
+        if stage == CanvasStage.ANNOUNCEMENTS:
+            params["start_date"] = _unix_to_canvas_time(start)
+            params["end_date"] = _unix_to_canvas_time(end)
+
+        try:
+            response, result_next_url = self._fetch_stage_page(
+                next_url=new_checkpoint.next_url,
+                endpoint=endpoint,
+                params=params,
+            )
+        except OnyxError as oe:
+            # Security errors from _parse_next_link (host/scheme
+            # mismatch on pagination URLs) have no status code override
+            # and must not be silenced.
+            is_api_error = oe._status_code_override is not None
+            if not is_api_error:
+                raise
+            if oe.status_code in (401, 403):
+                _handle_canvas_api_error(oe)  # NoReturn — always raises
+
+            # 404 means the course itself is gone or inaccessible. The
+            # other stages on this course will hit the same 404, so skip
+            # the whole course rather than burning API calls on each stage.
+            if oe.status_code == 404:
+                logger.warning(
+                    f"Canvas course {course_id} not found while fetching "
+                    f"{stage} (HTTP 404). Skipping course."
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=f"canvas-course-{course_id}",
+                    ),
+                    failure_message=(f"Canvas course {course_id} not found: {oe}"),
+                    exception=oe,
+                )
+                new_checkpoint.advance_course()
+            else:
+                logger.warning(
+                    f"Failed to fetch {stage} for course {course_id}: {oe}. "
+                    f"Skipping remainder of this stage."
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=f"canvas-{stage}-{course_id}",
+                    ),
+                    failure_message=(
+                        f"Failed to fetch {stage} for course {course_id}: {oe}"
+                    ),
+                    exception=oe,
+                )
+                new_checkpoint.advance_stage()
+            new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+                new_checkpoint.course_ids
+            )
+            return new_checkpoint
+        except Exception as e:
+            # Unknown error — skip the stage and try to continue.
+            logger.warning(
+                f"Failed to fetch {stage} for course {course_id}: {e}. "
+                f"Skipping remainder of this stage."
+            )
+            yield ConnectorFailure(
+                failed_entity=EntityFailure(
+                    entity_id=f"canvas-{stage}-{course_id}",
+                ),
+                failure_message=(
+                    f"Failed to fetch {stage} for course {course_id}: {e}"
+                ),
+                exception=e,
+            )
+            new_checkpoint.advance_stage()
+            new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+                new_checkpoint.course_ids
+            )
+            return new_checkpoint
+
+        # Process fetched items
+        results, early_exit = self._process_items(
+            response, stage, course_id, start, end, include_permissions
+        )
+        for result in results:
+            yield result
+
+        # If we hit an item older than our window (pages sorted desc),
+        # skip remaining pagination and advance to the next stage.
+        if early_exit:
+            result_next_url = None
+
+        # If there are more pages, save the cursor and return
+        if result_next_url:
+            new_checkpoint.next_url = result_next_url
+        else:
+            # Stage complete — advance to next stage (or next course if last).
+            new_checkpoint.advance_stage()
+
+        new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+            new_checkpoint.course_ids
+        )
+        return new_checkpoint
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        """Load documents from checkpoint with permission information included."""
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    @override
+    def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
+        return CanvasConnectorCheckpoint(has_more=True)
+
+    @override
+    def validate_checkpoint_json(
+        self, checkpoint_json: str
+    ) -> CanvasConnectorCheckpoint:
+        return CanvasConnectorCheckpoint.model_validate_json(checkpoint_json)
+
     @override
     def validate_connector_settings(self) -> None:
         """Validate Canvas connector settings by testing API access."""
@@ -414,38 +770,6 @@ class CanvasConnector(
             raise UnexpectedValidationError(
                 f"Unexpected error during Canvas settings validation: {exc}"
             )
-
-    @override
-    def load_from_checkpoint(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: CanvasConnectorCheckpoint,
-    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        # TODO(benwu408): implemented in PR3 (checkpoint)
-        raise NotImplementedError
-
-    @override
-    def load_from_checkpoint_with_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: CanvasConnectorCheckpoint,
-    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        # TODO(benwu408): implemented in PR3 (checkpoint)
-        raise NotImplementedError
-
-    @override
-    def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
-        # TODO(benwu408): implemented in PR3 (checkpoint)
-        raise NotImplementedError
-
-    @override
-    def validate_checkpoint_json(
-        self, checkpoint_json: str
-    ) -> CanvasConnectorCheckpoint:
-        # TODO(benwu408): implemented in PR3 (checkpoint)
-        raise NotImplementedError
 
     @override
     def retrieve_all_slim_docs_perm_sync(

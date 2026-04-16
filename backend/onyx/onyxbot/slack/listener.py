@@ -90,6 +90,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
+from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
@@ -519,7 +520,9 @@ class SlackbotHandler:
 
         # Append the event handler
         process_slack_event = create_process_slack_event()
-        socket_client.socket_mode_request_listeners.append(process_slack_event)  # type: ignore
+        socket_client.socket_mode_request_listeners.append(
+            process_slack_event  # ty: ignore[invalid-argument-type]
+        )
 
         # Establish a WebSocket connection to the Socket Mode servers
         # logger.debug(
@@ -1206,6 +1209,7 @@ if __name__ == "__main__":
     tenant_handler = SlackbotHandler()
 
     set_is_ee_based_on_env_variable()
+    setup_tracing()
 
     try:
         # Keep the main thread alive

@@ -98,8 +98,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
         return NormalizationResult(normalized_url=None, use_default=True)
 
     def build_dummy_checkpoint(self) -> CT:
-        # TODO: find a way to make this work without type: ignore
-        return ConnectorCheckpoint(has_more=True)  # type: ignore
+        return ConnectorCheckpoint(has_more=True)  # ty: ignore[invalid-return-type]
 
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
@@ -123,6 +122,9 @@ class SlimConnector(BaseConnector):
     @abc.abstractmethod
     def retrieve_all_slim_docs(
         self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
 
@@ -295,6 +297,22 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
     ) -> CheckpointOutput[CT]:
+        raise NotImplementedError
+
+
+class Resolver(BaseConnector):
+    @abc.abstractmethod
+    def resolve_errors(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Attempts to yield back ALL the documents described by the errors, no checkpointing.
+
+        Caller's responsibility is to delete the old ConnectorFailures and replace with the new ones.
+        If include_permissions is True, the documents will have permissions synced.
+        May also yield HierarchyNode objects for ancestor folders of resolved documents.
+        """
         raise NotImplementedError
 
 

@@ -26,6 +26,8 @@ _DEFAULT_PORTS: dict[str, int] = {
     "monitoring": 9096,
     "docfetching": 9092,
     "docprocessing": 9093,
+    "heavy": 9094,
+    "light": 9095,
 }
 
 _server_started = False

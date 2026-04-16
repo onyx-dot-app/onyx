@@ -41,7 +41,7 @@ async def fetch_user_for_pat(
         select(User)
         .join(PersonalAccessToken, PersonalAccessToken.user_id == User.id)
         .where(PersonalAccessToken.hashed_token == hashed_token)
-        .where(User.is_active)  # type: ignore
+        .where(User.is_active)  # ty: ignore[invalid-argument-type]
         .where(
             (PersonalAccessToken.expires_at.is_(None))
             | (PersonalAccessToken.expires_at > now)
@@ -95,7 +95,9 @@ def create_pat(
 
     Raises ValueError if user is inactive or not found.
     """
-    user = db_session.scalar(select(User).where(User.id == user_id))  # type: ignore
+    user = db_session.scalar(
+        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+    )
     if not user or not user.is_active:
         raise ValueError("Cannot create PAT for inactive or non-existent user")
 

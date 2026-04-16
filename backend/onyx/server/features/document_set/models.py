@@ -63,6 +63,7 @@ class DocumentSetCreationRequest(BaseModel):
 
 class DocumentSetUpdateRequest(BaseModel):
     id: int
+    name: str
     description: str
     cc_pair_ids: list[int]
     is_public: bool

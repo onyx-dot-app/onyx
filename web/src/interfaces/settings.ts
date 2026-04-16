@@ -27,6 +27,7 @@ export interface Settings {
   query_history_type: QueryHistoryType;
 
   deep_research_enabled?: boolean;
+  multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
 
   // Image processing settings

@@ -35,7 +35,7 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { cn } from "@/lib/utils";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import { WithoutStyles } from "@/types";
 import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
@@ -252,7 +252,7 @@ function SettingsHeader({
       {separator ? (
         <>
           <Spacer vertical rem={1.5} />
-          <Separator noPadding className="px-4" />
+          <Divider paddingParallel="md" paddingPerpendicular="fit" />
         </>
       ) : (
         <Spacer vertical rem={0.5} />

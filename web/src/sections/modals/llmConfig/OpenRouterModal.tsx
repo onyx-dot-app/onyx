@@ -1,79 +1,56 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { useFormikContext } from "formik";
+import { InputDivider } from "@opal/layouts";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
-import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
-import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { fetchOpenRouterModels } from "@/lib/llmConfig/svc";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
-  buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
+  useInitialValues,
+  buildValidationSchema,
   BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
-  ModelsField,
+  APIBaseField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  FieldWrapper,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
-const OPENROUTER_PROVIDER_NAME = "openrouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
+
 interface OpenRouterModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
 }
 
 interface OpenRouterModalInternalsProps {
-  formikProps: FormikProps<OpenRouterModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
-  fetchedModels: ModelConfiguration[];
-  setFetchedModels: (models: ModelConfiguration[]) => void;
-  modelConfigurations: ModelConfiguration[];
-  isTesting: boolean;
-  onClose: () => void;
   isOnboarding: boolean;
 }
 
 function OpenRouterModalInternals({
-  formikProps,
   existingLlmProvider,
-  fetchedModels,
-  setFetchedModels,
-  modelConfigurations,
-  isTesting,
-  onClose,
   isOnboarding,
 }: OpenRouterModalInternalsProps) {
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || modelConfigurations;
+  const formikProps = useFormikContext<OpenRouterModalValues>();
 
   const isFetchDisabled =
     !formikProps.values.api_base || !formikProps.values.api_key;
 
   const handleFetchModels = async () => {
-    const { models, error } = await fetchOpenRouterModels({
+    const { models: fetched, error } = await fetchOpenRouterModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
       provider_name: existingLlmProvider?.name,
@@ -81,74 +58,44 @@ function OpenRouterModalInternals({
     if (error) {
       throw new Error(error);
     }
-    setFetchedModels(models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        fetched,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
-  // Auto-fetch models on initial load when editing an existing provider
-  useEffect(() => {
-    if (existingLlmProvider && !isFetchDisabled) {
-      handleFetchModels().catch((err) => {
-        toast.error(
-          err instanceof Error ? err.message : "Failed to fetch models"
-        );
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
-    <LLMConfigurationModalWrapper
-      providerEndpoint={OPENROUTER_PROVIDER_NAME}
-      existingProviderName={existingLlmProvider?.name}
-      onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
-    >
-      <FieldWrapper>
-        <InputLayouts.Vertical
-          name="api_base"
-          title="API Base URL"
-          subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
-        >
-          <InputTypeInField
-            name="api_base"
-            placeholder="Your OpenRouter base URL"
-          />
-        </InputLayouts.Vertical>
-      </FieldWrapper>
+    <>
+      <APIBaseField
+        subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
+        placeholder="Your OpenRouter base URL"
+      />
 
       <APIKeyField providerName="OpenRouter" />
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <FieldSeparator />
-
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        />
-      )}
+      <InputDivider />
+      <ModelSelectionField
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <InputDivider />
+          <ModelAccessField />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </>
   );
 }
 
@@ -156,111 +103,67 @@ export default function OpenRouterModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
-  defaultModelName,
-  onboardingState,
-  onboardingActions,
-  llmDescriptor,
+  onSuccess,
 }: LLMProviderFormProps) {
-  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
-  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    OPENROUTER_PROVIDER_NAME
-  );
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
+  const initialValues: OpenRouterModalValues = {
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.OPENROUTER,
+      existingLlmProvider
+    ),
+    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+  } as OpenRouterModalValues;
 
-  const initialValues: OpenRouterModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: OPENROUTER_PROVIDER_NAME,
-        provider: OPENROUTER_PROVIDER_NAME,
-        api_key: "",
-        api_base: DEFAULT_API_BASE,
-        default_model_name: "",
-      } as OpenRouterModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-      };
-
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_key: Yup.string().required("API Key is required"),
-        api_base: Yup.string().required("API Base URL is required"),
-        default_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildDefaultValidationSchema().shape({
-        api_key: Yup.string().required("API Key is required"),
-        api_base: Yup.string().required("API Base URL is required"),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
+    apiBase: true,
+  });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.OPENROUTER}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
-      onSubmit={async (values, { setSubmitting }) => {
-        if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
-
-          await submitOnboardingProvider({
-            providerName: OPENROUTER_PROVIDER_NAME,
-            payload: {
-              ...values,
-              model_configurations: modelConfigsToUse,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: OPENROUTER_PROVIDER_NAME,
-            values,
-            initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setIsTesting,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
+        await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          providerName: LLMProviderName.OPENROUTER,
+          values,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          onSuccess: async () => {
+            if (onSuccess) {
+              await onSuccess();
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              toast.success(
+                existingLlmProvider
+                  ? "Provider updated successfully!"
+                  : "Provider enabled successfully!"
+              );
+            }
+          },
+        });
       }}
     >
-      {(formikProps) => (
-        <OpenRouterModalInternals
-          formikProps={formikProps}
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          isTesting={isTesting}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+      <OpenRouterModalInternals
+        existingLlmProvider={existingLlmProvider}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

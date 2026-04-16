@@ -2,6 +2,7 @@ import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { CloudEmbeddingModel } from "@/components/embedding/interfaces";
+import { markdown } from "@opal/utils";
 import { SvgServer } from "@opal/icons";
 
 export interface SelectModelModalProps {
@@ -20,7 +21,7 @@ export default function SelectModelModal({
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgServer}
-          title={`Select ${model.model_name}`}
+          title={markdown(`Select *${model.model_name}*`)}
           onClose={onCancel}
         />
         <Modal.Body>

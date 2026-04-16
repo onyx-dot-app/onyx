@@ -179,7 +179,7 @@ async function getModelCountInChatSelector(
     await dialog.waitFor({ state: "hidden", timeout: 5000 });
   }
 
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await page.getByTestId("model-selector").locator("button").first().click();
   await dialog.waitFor({ state: "visible", timeout: 10000 });
 
   await dialog.getByPlaceholder("Search models...").fill(modelName);

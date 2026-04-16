@@ -7,7 +7,7 @@ import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
@@ -340,7 +340,7 @@ function SharedGroupResources({
               )}
             </Section>
 
-            <Separator noPadding />
+            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
             {/* Agents */}
             <Section

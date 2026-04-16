@@ -49,7 +49,7 @@ def upgrade() -> None:
             "time_updated",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
-            server_onupdate=sa.text("now()"),  # type: ignore
+            server_onupdate=sa.text("now()"),  # ty: ignore[invalid-argument-type]
             nullable=True,
         ),
         sa.Column(

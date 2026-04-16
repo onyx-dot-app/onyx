@@ -149,7 +149,7 @@ def file_store(
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             s3_client.delete_objects(
                 Bucket=actual_bucket_name,
-                Delete={"Objects": objects_to_delete},  # type: ignore[typeddict-item]
+                Delete={"Objects": objects_to_delete},
             )
             logger.info(
                 f"Cleaned up {len(objects_to_delete)} test objects from {backend_config['backend_name']}"

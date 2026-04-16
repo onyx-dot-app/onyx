@@ -4,7 +4,7 @@ import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 import { Content } from "@opal/layouts";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import RequestConnectorModal from "@/app/craft/v1/configure/components/RequestConnectorModal";
@@ -66,7 +66,7 @@ export default function ComingSoonConnectors() {
 
   return (
     <>
-      <Separator />
+      <Divider />
       <div className="w-full flex items-center justify-between pb-2">
         <div className="flex flex-col gap-0.25">
           <Text mainContentEmphasis text04>

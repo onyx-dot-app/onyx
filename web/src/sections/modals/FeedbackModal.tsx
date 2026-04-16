@@ -8,7 +8,7 @@ import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Formik } from "formik";
 import * as Yup from "yup";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 
 export interface FeedbackModalProps {
@@ -76,8 +76,8 @@ export default function FeedbackModal({
             }) => (
               <>
                 <Modal.Body>
-                  <InputLayouts.Vertical
-                    name="additional_feedback"
+                  <InputVertical
+                    withLabel="additional_feedback"
                     title="Provide Additional Details"
                     suffix={feedbackType === "like" ? "optional" : undefined}
                   >
@@ -85,7 +85,7 @@ export default function FeedbackModal({
                       name="additional_feedback"
                       placeholder={`What did you ${feedbackType} about this response?`}
                     />
-                  </InputLayouts.Vertical>
+                  </InputVertical>
                 </Modal.Body>
 
                 <Modal.Footer>

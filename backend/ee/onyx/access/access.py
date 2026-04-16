@@ -112,7 +112,7 @@ def _get_access_for_documents(
         access_map[document_id] = DocumentAccess.build(
             user_emails=list(non_ee_access.user_emails),
             user_groups=user_group_info.get(document_id, []),
-            is_public=is_public_anywhere,
+            is_public=is_public_anywhere,  # ty: ignore[invalid-argument-type]
             external_user_emails=list(ext_u_emails),
             external_user_group_ids=list(ext_u_groups),
         )

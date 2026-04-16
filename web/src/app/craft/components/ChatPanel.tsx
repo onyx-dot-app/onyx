@@ -41,7 +41,7 @@ import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -444,7 +444,7 @@ export default function BuildChatPanel({
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                  <SimpleTooltip tooltip="Scroll to bottom" delayDuration={200}>
+                  <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
                     <button
                       onClick={scrollToBottom}
                       className={cn(
@@ -462,7 +462,7 @@ export default function BuildChatPanel({
                         className="stroke-background-neutral-00"
                       />
                     </button>
-                  </SimpleTooltip>
+                  </Tooltip>
                 </div>
               )}
               {/* Follow-up suggestion bubbles - show after first agent message */}

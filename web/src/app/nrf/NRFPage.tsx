@@ -45,6 +45,9 @@ import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { eeGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
+import useMultiModelChat from "@/hooks/useMultiModelChat";
+import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import { Section } from "@/layouts/general-layouts";
 
 const SearchUI = eeGated(EESearchUI);
 
@@ -105,6 +108,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
   const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
+  const multiModel = useMultiModelChat(llmManager);
+
+  // Sync single-model selection to llmManager so the submission path
+  // uses the correct provider/version (mirrors AppPage behaviour).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      llmManager.updateCurrentLlm({
+        name: model.name,
+        provider: model.provider,
+        modelName: model.modelName,
+      });
+    }
+  }, [multiModel.selectedModels]);
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -295,12 +312,17 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
+      const selectedModels = multiModel.isMultiModelActive
+        ? multiModel.selectedModels
+        : undefined;
+
       if (hasMessages) {
         onSubmit({
           message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
+          selectedModels,
         });
         return;
       }
@@ -310,8 +332,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         onSubmit({
           message: chatMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
+          selectedModels,
         });
       };
 
@@ -328,6 +351,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       submitQuery,
       tabReadingEnabled,
       currentTabUrl,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
     ]
   );
 
@@ -345,10 +370,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    messageHistory,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    multiModel.isMultiModelActive,
+  ]);
 
   // Start a new chat session in the side panel
   const handleNewChat = useCallback(() => {
@@ -456,6 +487,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
+                    selectedModels={multiModel.selectedModels}
                   />
                 </ChatScrollContainer>
               </>
@@ -464,7 +496,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             {/* Welcome message - centered when no messages and not in search mode */}
             {!hasMessages && !isSearch && (
               <div className="relative w-full flex-1 flex flex-col items-center justify-end">
-                <WelcomeMessage isDefaultAgent />
+                <Section
+                  flexDirection="row"
+                  justifyContent="between"
+                  alignItems="end"
+                  className="max-w-[var(--app-page-main-content-width)]"
+                >
+                  <WelcomeMessage isDefaultAgent />
+                  {liveAgent && !llmManager.isLoadingProviders && (
+                    <ModelSelector
+                      llmManager={llmManager}
+                      selectedModels={multiModel.selectedModels}
+                      onAdd={multiModel.addModel}
+                      onRemove={multiModel.removeModel}
+                      onReplace={multiModel.replaceModel}
+                    />
+                  )}
+                </Section>
                 <Spacer rem={1.5} />
               </div>
             )}
@@ -474,14 +522,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ref={inputRef}
               className={cn(
                 "w-full flex flex-col",
-                !isSidePanel &&
-                  "max-w-[var(--app-page-main-content-width)] px-4"
+                !isSidePanel && "max-w-[var(--app-page-main-content-width)]"
               )}
             >
+              {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
+                <div className="pb-1">
+                  <ModelSelector
+                    llmManager={llmManager}
+                    selectedModels={multiModel.selectedModels}
+                    onAdd={multiModel.addModel}
+                    onRemove={multiModel.removeModel}
+                    onReplace={multiModel.replaceModel}
+                  />
+                </div>
+              )}
               <AppInputBar
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
+                isMultiModelActive={multiModel.isMultiModelActive}
                 filterManager={filterManager}
                 llmManager={llmManager}
                 initialMessage={message}

@@ -212,7 +212,7 @@ class TestUpsertVoiceProvider:
         self, mock_db_session: MagicMock
     ) -> None:
         existing_provider = _make_voice_provider(id=1)
-        existing_provider.api_key = "original-key"  # type: ignore[assignment]
+        existing_provider.api_key = "original-key"  # ty: ignore[invalid-assignment]
         original_api_key = existing_provider.api_key
         mock_db_session.scalar.return_value = existing_provider
         mock_db_session.flush.return_value = None

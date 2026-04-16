@@ -1,6 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
+import { markdown } from "@opal/utils";
 import { SvgCheck } from "@opal/icons";
 
 export interface AlreadyPickedModalProps {
@@ -17,7 +18,7 @@ export default function AlreadyPickedModal({
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgCheck}
-          title={`${model.model_name} already chosen`}
+          title={markdown(`*${model.model_name}* already chosen`)}
           description="You can select a different one if you want!"
           onClose={onClose}
         />

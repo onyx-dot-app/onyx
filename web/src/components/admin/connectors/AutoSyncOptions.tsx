@@ -1,6 +1,6 @@
 import { TextFormField } from "@/components/Field";
 import { ValidAutoSyncSource } from "@/lib/types";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
 
 export function AutoSyncOptions({
@@ -16,7 +16,7 @@ export function AutoSyncOptions({
 
   return (
     <div>
-      <Separator />
+      <Divider />
       {Object.entries(autoSyncConfig).map(([key, config]) => (
         <div key={key} className="mb-4">
           <TextFormField

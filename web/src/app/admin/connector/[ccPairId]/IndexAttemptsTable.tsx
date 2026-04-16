@@ -19,7 +19,7 @@ import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { SvgClock } from "@opal/icons";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -72,7 +72,7 @@ export function IndexAttemptsTable({
             <TableHead>Status</TableHead>
             <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
-              <SimpleTooltip
+              <Tooltip
                 tooltip="Total number of documents replaced in the index during this indexing attempt"
                 side="top"
               >
@@ -80,7 +80,7 @@ export function IndexAttemptsTable({
                   Total Docs
                   <InfoIcon className="ml-1 w-4 h-4" />
                 </span>
-              </SimpleTooltip>
+              </Tooltip>
             </TableHead>
             <TableHead>Error Message</TableHead>
           </TableRow>
@@ -144,11 +144,11 @@ export function IndexAttemptsTable({
                   <div className="flex items-center">
                     {indexAttempt.total_docs_indexed}
                     {indexAttempt.from_beginning && (
-                      <SimpleTooltip side="top" tooltip={reindexTooltip}>
+                      <Tooltip side="top" tooltip={reindexTooltip}>
                         <span className="cursor-help flex items-center">
                           <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
                         </span>
-                      </SimpleTooltip>
+                      </Tooltip>
                     )}
                   </div>
                 </TableCell>

@@ -55,10 +55,15 @@ export async function sendMessage(page: Page, message: string) {
   );
 }
 
+/** Get the model selector trigger (the pill showing the current model name). */
+function getModelSelectorTrigger(page: Page) {
+  // Target the model pill (last button), not the "+" add button (first button).
+  // The pill shows the current model name and opens in replace mode on click.
+  return page.getByTestId("model-selector").locator("button").last();
+}
+
 export async function verifyCurrentModel(page: Page, modelName: string) {
-  const text = await page
-    .getByTestId("AppInputBar/llm-popover-trigger")
-    .textContent();
+  const text = await getModelSelectorTrigger(page).textContent();
   expect(text).toContain(modelName);
 }
 
@@ -66,12 +71,10 @@ export async function selectModelFromInputPopover(
   page: Page,
   preferredModels: string[]
 ): Promise<string> {
-  const currentModelText =
-    (
-      await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-    )?.trim() ?? "";
+  const trigger = getModelSelectorTrigger(page);
+  const currentModelText = (await trigger.textContent())?.trim() ?? "";
 
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await trigger.click();
   await page.waitForSelector('[role="dialog"]', {
     state: "visible",
     timeout: 10000,
@@ -94,14 +97,10 @@ export async function selectModelFromInputPopover(
       await candidate.click();
       await page.waitForSelector('[role="dialog"]', { state: "hidden" });
       const selectedText =
-        (
-          await page
-            .getByTestId("AppInputBar/llm-popover-trigger")
-            .textContent()
-        )?.trim() ?? "";
+        (await getModelSelectorTrigger(page).textContent())?.trim() ?? "";
       if (!selectedText) {
         throw new Error(
-          "Failed to read selected model text from input trigger"
+          "Failed to read selected model text from model selector"
         );
       }
       return selectedText;
@@ -119,11 +118,9 @@ export async function selectModelFromInputPopover(
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
     const selectedText =
-      (
-        await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-      )?.trim() ?? "";
+      (await getModelSelectorTrigger(page).textContent())?.trim() ?? "";
     if (!selectedText) {
-      throw new Error("Failed to read selected model text from input trigger");
+      throw new Error("Failed to read selected model text from model selector");
     }
     return selectedText;
   }
@@ -141,7 +138,7 @@ export async function selectModelFromInputPopover(
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await getModelSelectorTrigger(page).click();
 
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', { state: "visible" });

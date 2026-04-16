@@ -19,16 +19,16 @@ permissions:
 jobs:
   mypy-check:
     # See https://runs-on.com/runners/linux/
-    # Note: Mypy seems quite optimized for x64 compared to arm64.
-    # Similarly, mypy is single-threaded and incremental, so 2cpu is sufficient.
+    # NOTE: This job is named mypy-check for branch protection compatibility,
+    # but it actually runs ty (astral-sh's Rust type checker).
     runs-on:
       [
         runs-on,
-        runner=2cpu-linux-x64,
+        runner=2cpu-linux-arm64,
         "run-id=${{ github.run_id }}-mypy-check",
         "extras=s3-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -46,26 +46,7 @@ jobs:
             backend/requirements/model_server.txt
             backend/requirements/ee.txt
 
-      - name: Generate OpenAPI schema and Python client
-        shell: bash
-        # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+      - name: Run ty
         env:
-          LICENSE_ENFORCEMENT_ENABLED: "false"
-        run: |
-          ods openapi all
-
-      - name: Cache mypy cache
-        if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
-        with:
-          path: .mypy_cache
-          key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'pyproject.toml') }}
-          restore-keys: |
-            mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-
-            mypy-${{ runner.os }}-
-
-      - name: Run MyPy
-        env:
-          MYPY_FORCE_COLOR: 1
           TERM: xterm-256color
-        run: mypy .
+        run: ty check --output-format github

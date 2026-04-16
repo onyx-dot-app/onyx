@@ -9,10 +9,11 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
@@ -30,7 +31,7 @@ router = APIRouter()
 
 
 def check_build_rate_limits(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """
@@ -53,7 +54,7 @@ def check_build_rate_limits(
 @router.get("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
 def list_messages(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
@@ -73,7 +74,7 @@ def list_messages(
 def send_message(
     session_id: UUID,
     request: MessageRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     _rate_limit_check: None = Depends(check_build_rate_limits),
 ) -> StreamingResponse:
     """

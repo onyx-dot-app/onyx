@@ -1,0 +1,30 @@
+{{- if and .Values.ingress.enabled .Values.mcpServer.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "onyx.fullname" . }}-ingress-mcp-oauth-callback
+  annotations:
+    {{- if not .Values.ingress.className }}
+    kubernetes.io/ingress.class: nginx
+    {{- end }}
+    cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.api.host }}
+      http:
+        paths:
+          - path: /mcp/oauth/callback
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "onyx.fullname" . }}-webserver
+                port:
+                  number: {{ .Values.webserver.service.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.api.host }}
+      secretName: {{ include "onyx.fullname" . }}-ingress-mcp-oauth-callback-tls
+{{- end }}

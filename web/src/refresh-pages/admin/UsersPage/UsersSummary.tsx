@@ -44,7 +44,6 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
                 icon={SvgFilterPlus}
                 tooltip="Add Filter"
                 toolTipPosition="left"
-                tooltipSize="sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onFilter();

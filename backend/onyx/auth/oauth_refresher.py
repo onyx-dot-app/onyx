@@ -46,8 +46,10 @@ async def _test_expire_oauth_token(
 
         updated_data: Dict[str, Any] = {"expires_at": new_expires_at}
 
-        await user_manager.user_db.update_oauth_account(
-            user, cast(Any, oauth_account), updated_data
+        await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
+            user,  # ty: ignore[invalid-argument-type]
+            cast(Any, oauth_account),
+            updated_data,
         )
 
         return True
@@ -132,8 +134,10 @@ async def refresh_oauth_token(
                     )
 
             # Update the OAuth account
-            await user_manager.user_db.update_oauth_account(
-                user, cast(Any, oauth_account), updated_data
+            await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
+                user,  # ty: ignore[invalid-argument-type]
+                cast(Any, oauth_account),
+                updated_data,
             )
 
             logger.info(f"Successfully refreshed OAuth token for {user.email}")

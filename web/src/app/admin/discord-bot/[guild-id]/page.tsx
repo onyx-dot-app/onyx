@@ -11,8 +11,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
-import Message from "@/refresh-components/messages/Message";
-import { Button } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -402,11 +401,10 @@ export default function Page({ params }: Props) {
               : "opacity-0 translate-y-4 pointer-events-none"
           )}
         >
-          <Message
-            warning
-            text="You have unsaved changes"
+          <MessageCard
+            variant="warning"
+            title="You have unsaved changes"
             description="Click Update to save them."
-            close={false}
           />
         </div>
       </SettingsLayouts.Body>

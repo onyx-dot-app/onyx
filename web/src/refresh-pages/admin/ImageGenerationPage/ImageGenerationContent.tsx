@@ -18,12 +18,11 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
-import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
-import Message from "@/refresh-components/messages/Message";
+import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, SelectCard, Text } from "@opal/components";
-import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Button, MessageCard, SelectCard, Text } from "@opal/components";
+import { Content, Card } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -222,13 +221,9 @@ export default function ImageGenerationContent() {
         />
 
         {connectedProviderIds.size === 0 && (
-          <Message
-            info
-            static
-            large
-            close={false}
-            text="Connect an image generation model to use in chat."
-            className="w-full"
+          <MessageCard
+            variant="info"
+            title="Connect an image generation model to use in chat."
           />
         )}
 
@@ -260,11 +255,11 @@ export default function ImageGenerationContent() {
                           : undefined
                     }
                   >
-                    <CardHeaderLayout
+                    <Card.Header
                       sizePreset="main-ui"
                       variant="section"
                       icon={() => (
-                        <ProviderIcon
+                        <ModelIcon
                           provider={provider.provider_name}
                           size={16}
                         />
@@ -347,7 +342,7 @@ export default function ImageGenerationContent() {
       {disconnectProvider && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={`Disconnect ${disconnectProvider.title}`}
+          title={markdown(`Disconnect *${disconnectProvider.title}*`)}
           description="This will remove the stored credentials for this provider."
           onClose={() => {
             setDisconnectProvider(null);
@@ -391,7 +386,7 @@ export default function ImageGenerationContent() {
                               key={p.image_provider_id}
                               value={p.image_provider_id}
                               icon={() => (
-                                <ProviderIcon
+                                <ModelIcon
                                   provider={p.provider_name}
                                   size={16}
                                 />

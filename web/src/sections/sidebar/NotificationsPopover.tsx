@@ -11,10 +11,9 @@ import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
-import Separator from "@/refresh-components/Separator";
 
 function getNotificationIcon(
   notifType: string
@@ -108,7 +107,7 @@ export default function NotificationsPopover({
         <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
       </Section>
 
-      <Separator noPadding className="px-2" />
+      <Divider paddingPerpendicular="fit" />
 
       <Section>
         {isLoading ? (

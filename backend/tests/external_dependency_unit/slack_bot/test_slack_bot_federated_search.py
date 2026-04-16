@@ -377,7 +377,7 @@ class TestSlackBotFederatedSearch:
             available_channels: list | None = None,  # noqa: ARG001
             channel_metadata_dict: dict | None = None,  # noqa: ARG001
         ) -> SlackQueryResult:
-            self._captured_filtering_params = {
+            self._captured_filtering_params = {  # ty: ignore[unresolved-attribute]
                 "allowed_private_channel": allowed_private_channel,
                 "include_dm": include_dm,
                 "channel_name": channel_name,
@@ -500,13 +500,14 @@ class TestSlackBotFederatedSearch:
             params = self._captured_filtering_params
 
             assert (
-                params["allowed_private_channel"] is None
+                params["allowed_private_channel"]  # ty: ignore[not-subscriptable]
+                is None
             ), "Public channels should not have private channel access"
             assert (
-                params["include_dm"] is False
+                params["include_dm"] is False  # ty: ignore[not-subscriptable]
             ), "Public channels should not include DMs"
             assert (
-                params["channel_name"] == "general"
+                params["channel_name"] == "general"  # ty: ignore[not-subscriptable]
             ), "Should be testing general channel"
 
         finally:
@@ -558,13 +559,14 @@ class TestSlackBotFederatedSearch:
             params = self._captured_filtering_params
 
             assert (
-                params["allowed_private_channel"] == "C9999999999"
+                params["allowed_private_channel"]  # ty: ignore[not-subscriptable]
+                == "C9999999999"
             ), "Private channels should have access to their specific private channel"
             assert (
-                params["include_dm"] is False
+                params["include_dm"] is False  # ty: ignore[not-subscriptable]
             ), "Private channels should not include DMs"
             assert (
-                params["channel_name"] == "dev-team"
+                params["channel_name"] == "dev-team"  # ty: ignore[not-subscriptable]
             ), "Should be testing dev-team channel"
 
         finally:
@@ -616,11 +618,15 @@ class TestSlackBotFederatedSearch:
             params = self._captured_filtering_params
 
             assert (
-                params["allowed_private_channel"] is None
+                params["allowed_private_channel"]  # ty: ignore[not-subscriptable]
+                is None
             ), "DMs should not have private channel access"
-            assert params["include_dm"] is True, "DMs should include DM messages"
             assert (
-                params["channel_name"] == "directmessage"
+                params["include_dm"] is True  # ty: ignore[not-subscriptable]
+            ), "DMs should include DM messages"
+            assert (
+                params["channel_name"]  # ty: ignore[not-subscriptable]
+                == "directmessage"
             ), "Should be testing directmessage channel"
 
         finally:

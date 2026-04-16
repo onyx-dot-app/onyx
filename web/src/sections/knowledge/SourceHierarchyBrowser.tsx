@@ -9,10 +9,9 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button } from "@opal/components";
+import { Button, Divider as OpalDivider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import Separator from "@/refresh-components/Separator";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Popover from "@/refresh-components/Popover";
@@ -826,7 +825,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 
-      <Separator noPadding />
+      <OpalDivider paddingParallel="fit" paddingPerpendicular="fit" />
 
       {/* Scrollable table body */}
       <div

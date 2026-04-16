@@ -26,7 +26,7 @@ import Link from "next/link";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import Popover from "@/refresh-components/Popover";
 import Calendar from "@/refresh-components/Calendar";
@@ -442,7 +442,7 @@ export default function UsageReports() {
             </div>
           </div>
         )}
-        <Separator />
+        <Divider />
         <UsageReportsTable
           refreshTrigger={refreshTrigger}
           isWaitingForReport={isWaitingForReport}

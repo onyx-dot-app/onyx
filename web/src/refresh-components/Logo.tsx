@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/icons";
+import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 
 export interface LogoProps {
   folded?: boolean;

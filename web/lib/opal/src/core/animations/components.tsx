@@ -1,41 +1,16 @@
 "use client";
 
 import "@opal/core/animations/styles.css";
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles, ExtremaSizeVariants } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
-// Context-per-group registry
-// ---------------------------------------------------------------------------
-
-/**
- * Lazily-created map of group names to React contexts.
- *
- * Each group gets its own `React.Context<boolean | null>` so that a
- * `Hoverable.Item` only re-renders when its *own* group's hover state
- * changes — not when any unrelated group changes.
- *
- * The default value is `null` (no provider found), which lets
- * `Hoverable.Item` distinguish "no Root ancestor" from "Root says
- * not hovered" and throw when `group` was explicitly specified.
- */
-const contextMap = new Map<string, React.Context<boolean | null>>();
-
-function getOrCreateContext(group: string): React.Context<boolean | null> {
-  let ctx = contextMap.get(group);
-  if (!ctx) {
-    ctx = createContext<boolean | null>(null);
-    ctx.displayName = `HoverableContext(${group})`;
-    contextMap.set(group, ctx);
-  }
-  return ctx;
-}
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type HoverableInteraction = "rest" | "hover";
 
 interface HoverableRootProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
@@ -43,6 +18,17 @@ interface HoverableRootProps
   group: string;
   /** Width preset. @default "auto" */
   widthVariant?: ExtremaSizeVariants;
+  /**
+   * JS-controllable interaction state override.
+   *
+   * - `"rest"` (default): items are shown/hidden by CSS `:hover`.
+   * - `"hover"`: forces items visible regardless of hover state. Useful when
+   *   a hoverable action opens a modal — set `interaction="hover"` while the
+   *   modal is open so the user can see which element they're interacting with.
+   *
+   * @default "rest"
+   */
+  interaction?: HoverableInteraction;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -65,12 +51,10 @@ interface HoverableItemProps
 /**
  * Hover-tracking container for a named group.
  *
- * Wraps children in a `<div>` that tracks mouse-enter / mouse-leave and
- * provides the hover state via a per-group React context.
- *
- * Nesting works because each `Hoverable.Root` creates a **new** context
- * provider that shadows the parent — so an inner `Hoverable.Item group="b"`
- * reads from the inner provider, not the outer `group="a"` provider.
+ * Uses a `data-hover-group` attribute and CSS `:hover` to control
+ * descendant `Hoverable.Item` visibility. No React state or context —
+ * the browser natively removes `:hover` when modals/portals steal
+ * pointer events, preventing stale hover state.
  *
  * @example
  * ```tsx
@@ -87,70 +71,20 @@ function HoverableRoot({
   group,
   children,
   widthVariant = "full",
+  interaction = "rest",
   ref,
-  onMouseEnter: consumerMouseEnter,
-  onMouseLeave: consumerMouseLeave,
-  onFocusCapture: consumerFocusCapture,
-  onBlurCapture: consumerBlurCapture,
   ...props
 }: HoverableRootProps) {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-
-  const onMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      setHovered(true);
-      consumerMouseEnter?.(e);
-    },
-    [consumerMouseEnter]
-  );
-
-  const onMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      setHovered(false);
-      consumerMouseLeave?.(e);
-    },
-    [consumerMouseLeave]
-  );
-
-  const onFocusCapture = useCallback(
-    (e: React.FocusEvent<HTMLDivElement>) => {
-      setFocused(true);
-      consumerFocusCapture?.(e);
-    },
-    [consumerFocusCapture]
-  );
-
-  const onBlurCapture = useCallback(
-    (e: React.FocusEvent<HTMLDivElement>) => {
-      if (
-        !(e.relatedTarget instanceof Node) ||
-        !e.currentTarget.contains(e.relatedTarget)
-      ) {
-        setFocused(false);
-      }
-      consumerBlurCapture?.(e);
-    },
-    [consumerBlurCapture]
-  );
-
-  const active = hovered || focused;
-  const GroupContext = getOrCreateContext(group);
-
   return (
-    <GroupContext.Provider value={active}>
-      <div
-        {...props}
-        ref={ref}
-        className={cn(widthVariants[widthVariant])}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        onFocusCapture={onFocusCapture}
-        onBlurCapture={onBlurCapture}
-      >
-        {children}
-      </div>
-    </GroupContext.Provider>
+    <div
+      {...props}
+      ref={ref}
+      className={cn(widthVariants[widthVariant])}
+      data-hover-group={group}
+      data-interaction={interaction !== "rest" ? interaction : undefined}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -162,13 +96,10 @@ function HoverableRoot({
  * An element whose visibility is controlled by hover state.
  *
  * **Local mode** (`group` omitted): the item handles hover on its own
- * element via CSS `:hover`. This is the core abstraction.
+ * element via CSS `:hover`.
  *
- * **Group mode** (`group` provided): visibility is driven by a matching
- * `Hoverable.Root` ancestor's hover state via React context. If no
- * matching Root is found, an error is thrown.
- *
- * Uses data-attributes for variant styling (see `styles.css`).
+ * **Group mode** (`group` provided): visibility is driven by CSS `:hover`
+ * on the nearest `Hoverable.Root` ancestor via `[data-hover-group]:hover`.
  *
  * @example
  * ```tsx
@@ -184,8 +115,6 @@ function HoverableRoot({
  *   </Hoverable.Item>
  * </Hoverable.Root>
  * ```
- *
- * @throws If `group` is specified but no matching `Hoverable.Root` ancestor exists.
  */
 function HoverableItem({
   group,
@@ -194,17 +123,6 @@ function HoverableItem({
   ref,
   ...props
 }: HoverableItemProps) {
-  const contextValue = useContext(
-    group ? getOrCreateContext(group) : NOOP_CONTEXT
-  );
-
-  if (group && contextValue === null) {
-    throw new Error(
-      `Hoverable.Item group="${group}" has no matching Hoverable.Root ancestor. ` +
-        `Either wrap it in <Hoverable.Root group="${group}"> or remove the group prop for local hover.`
-    );
-  }
-
   const isLocal = group === undefined;
 
   return (
@@ -213,18 +131,12 @@ function HoverableItem({
       ref={ref}
       className={cn("hoverable-item")}
       data-hoverable-variant={variant}
-      data-hoverable-active={
-        isLocal ? undefined : contextValue ? "true" : undefined
-      }
       data-hoverable-local={isLocal ? "true" : undefined}
     >
       {children}
     </div>
   );
 }
-
-/** Stable context used when no group is specified (local mode). */
-const NOOP_CONTEXT = createContext<boolean | null>(null);
 
 // ---------------------------------------------------------------------------
 // Compound export
@@ -233,18 +145,16 @@ const NOOP_CONTEXT = createContext<boolean | null>(null);
 /**
  * Hoverable compound component for hover-to-reveal patterns.
  *
- * Provides two sub-components:
+ * Entirely CSS-driven — no React state or context. The browser's native
+ * `:hover` pseudo-class handles all state, which means hover is
+ * automatically cleared when modals/portals steal pointer events.
  *
- * - `Hoverable.Root` — A container that tracks hover state for a named group
- *   and provides it via React context.
+ * - `Hoverable.Root` — Container with `data-hover-group`. CSS `:hover`
+ *   on this element reveals descendant `Hoverable.Item` elements.
  *
- * - `Hoverable.Item` — The core abstraction. On its own (no `group`), it
- *   applies local CSS `:hover` for the variant effect. When `group` is
- *   specified, it reads hover state from the nearest matching
- *   `Hoverable.Root` — and throws if no matching Root is found.
- *
- * Supports nesting: a child `Hoverable.Root` shadows the parent's context,
- * so each group's items only respond to their own root's hover.
+ * - `Hoverable.Item` — Hidden by default. In group mode, revealed when
+ *   the ancestor Root is hovered. In local mode (no `group`), revealed
+ *   when the item itself is hovered.
  *
  * @example
  * ```tsx
@@ -276,4 +186,5 @@ export {
   type HoverableRootProps,
   type HoverableItemProps,
   type HoverableItemVariant,
+  type HoverableInteraction,
 };

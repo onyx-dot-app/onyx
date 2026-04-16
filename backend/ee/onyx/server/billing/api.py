@@ -29,7 +29,6 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.auth.users import current_admin_user
 from ee.onyx.db.license import get_license
 from ee.onyx.db.license import get_used_seats
 from ee.onyx.server.billing.models import BillingInformationResponse
@@ -51,11 +50,13 @@ from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_shared_redis_client
@@ -147,7 +148,7 @@ def _get_tenant_id() -> str | None:
 @router.post("/create-checkout-session")
 async def create_checkout_session(
     request: CreateCheckoutSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CreateCheckoutSessionResponse:
     """Create a Stripe checkout session for new subscription or renewal.
@@ -191,7 +192,7 @@ async def create_checkout_session(
 @router.post("/create-customer-portal-session")
 async def create_customer_portal_session(
     request: CreateCustomerPortalSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CreateCustomerPortalSessionResponse:
     """Create a Stripe customer portal session for managing subscription.
@@ -216,7 +217,7 @@ async def create_customer_portal_session(
 
 @router.get("/billing-information")
 async def get_billing_information(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> BillingInformationResponse | SubscriptionStatusResponse:
     """Get billing information for the current subscription.
@@ -258,7 +259,7 @@ async def get_billing_information(
 @router.post("/seats/update")
 async def update_seats(
     request: SeatUpdateRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeatUpdateResponse:
     """Update the seat count for the current subscription.
@@ -364,7 +365,7 @@ class ResetConnectionResponse(BaseModel):
 
 @router.post("/reset-connection")
 async def reset_stripe_connection(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> ResetConnectionResponse:
     """Reset the Stripe connection circuit breaker.
 

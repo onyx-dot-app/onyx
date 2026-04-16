@@ -38,6 +38,7 @@ from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import instantiate_connector
+from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -50,7 +51,6 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
@@ -72,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
@@ -217,7 +218,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     try:
         # the entire task needs to run frequently in order to finalize pruning
 
-        # but pruning only kicks off once per hour
+        # but pruning only kicks off once per min
         if not r.exists(OnyxRedisSignals.BLOCK_PRUNING):
             task_logger.info("Checking for pruning due")
 
@@ -524,6 +525,14 @@ def connector_pruning_generator_task(
         return None
 
     try:
+        # Session 1: pre-enumeration — load cc_pair and instantiate the connector.
+        # The session is closed before enumeration so the DB connection is not held
+        # open during the 10–30+ minute connector crawl.
+        connector_source: DocumentSource | None = None
+        connector_type: str = ""
+        is_connector_public: bool = False
+        runnable_connector: BaseConnector | None = None
+
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
                 db_session=db_session,
@@ -549,48 +558,51 @@ def connector_pruning_generator_task(
             )
             redis_connector.prune.set_fence(new_payload)
 
+            connector_source = cc_pair.connector.source
+            connector_type = connector_source.value
+            is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+
             task_logger.info(
-                f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={cc_pair.connector.source}"
+                f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
             )
 
             runnable_connector = instantiate_connector(
                 db_session,
-                cc_pair.connector.source,
+                connector_source,
                 InputType.SLIM_RETRIEVAL,
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
             )
+        # Session 1 closed here — connection released before enumeration.
 
-            callback = PruneCallback(
-                0,
-                redis_connector,
-                lock,
-                r,
-                timeout_seconds=JOB_TIMEOUT,
-            )
+        callback = PruneCallback(
+            0,
+            redis_connector,
+            lock,
+            r,
+            timeout_seconds=JOB_TIMEOUT,
+        )
 
-            # Extract docs and hierarchy nodes from the source
-            extraction_result = extract_ids_from_runnable_connector(
-                runnable_connector, callback
-            )
-            all_connector_doc_ids = extraction_result.raw_id_to_parent
+        # Extract docs and hierarchy nodes from the source (no DB session held).
+        extraction_result = extract_ids_from_runnable_connector(
+            runnable_connector, callback, connector_type=connector_type
+        )
+        all_connector_doc_ids = extraction_result.raw_id_to_parent
 
-            # Process hierarchy nodes (same as docfetching):
-            # upsert to Postgres and cache in Redis
-            source = cc_pair.connector.source
+        # Session 2: post-enumeration — hierarchy upserts, diff computation, task dispatch.
+        with get_session_with_current_tenant() as db_session:
+            source = connector_source
             redis_client = get_redis_client(tenant_id=tenant_id)
 
             ensure_source_node_exists(redis_client, db_session, source)
 
             upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
-                is_connector_public = cc_pair.access_type == AccessType.PUBLIC
-
                 upserted_nodes = upsert_hierarchy_nodes_batch(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
                     source=source,
-                    commit=True,
+                    commit=False,
                     is_connector_public=is_connector_public,
                 )
 
@@ -599,8 +611,12 @@ def connector_pruning_generator_task(
                     hierarchy_node_ids=[n.id for n in upserted_nodes],
                     connector_id=connector_id,
                     credential_id=credential_id,
-                    commit=True,
+                    commit=False,
                 )
+
+                # Single commit so the FK reference in the join table can never
+                # outrun the parent hierarchy_node insert.
+                db_session.commit()
 
                 cache_entries = [
                     HierarchyNodeCacheEntry.from_db_model(node)
@@ -626,50 +642,46 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
-            # Link hierarchy nodes to documents for sources where pages can be
-            # both hierarchy nodes AND documents (e.g. Notion, Confluence)
-            all_doc_id_list = list(all_connector_doc_ids.keys())
-            link_hierarchy_nodes_to_documents(
-                db_session=db_session,
-                document_ids=all_doc_id_list,
-                source=source,
-                commit=True,
-            )
+            diff_start = time.monotonic()
+            try:
+                # a list of docs in our local index
+                all_indexed_document_ids = {
+                    doc.id
+                    for doc in get_documents_for_connector_credential_pair(
+                        db_session=db_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    )
+                }
 
-            # a list of docs in our local index
-            all_indexed_document_ids = {
-                doc.id
-                for doc in get_documents_for_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
+                # generate list of docs to remove (no longer in the source)
+                doc_ids_to_remove = list(
+                    all_indexed_document_ids - all_connector_doc_ids.keys()
                 )
-            }
 
-            # generate list of docs to remove (no longer in the source)
-            doc_ids_to_remove = list(
-                all_indexed_document_ids - all_connector_doc_ids.keys()
-            )
+                task_logger.info(
+                    "Pruning set collected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"connector_source={connector_source} "
+                    f"docs_to_remove={len(doc_ids_to_remove)}"
+                )
 
-            task_logger.info(
-                "Pruning set collected: "
-                f"cc_pair={cc_pair_id} "
-                f"connector_source={cc_pair.connector.source} "
-                f"docs_to_remove={len(doc_ids_to_remove)}"
-            )
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
+                )
+                tasks_generated = redis_connector.prune.generate_tasks(
+                    set(doc_ids_to_remove), self.app, db_session, None
+                )
+                if tasks_generated is None:
+                    return None
 
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
-            tasks_generated = redis_connector.prune.generate_tasks(
-                set(doc_ids_to_remove), self.app, db_session, None
-            )
-            if tasks_generated is None:
-                return None
-
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
-            )
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                )
+            finally:
+                observe_pruning_diff_duration(
+                    time.monotonic() - diff_start, connector_type
+                )
 
             redis_connector.prune.generator_complete = tasks_generated
 

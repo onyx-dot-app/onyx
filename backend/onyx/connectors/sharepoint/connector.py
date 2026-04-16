@@ -18,20 +18,20 @@ from urllib.parse import quote
 from urllib.parse import unquote
 from urllib.parse import urlsplit
 
-import msal  # type: ignore[import-untyped]
+import msal
 import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-from office365.graph_client import GraphClient  # type: ignore[import-untyped]
-from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
-from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
-from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
-from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
-from office365.runtime.client_request import ClientRequestException  # type: ignore
-from office365.runtime.paths.resource_path import ResourcePath  # type: ignore[import-untyped]
-from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
-from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
+from office365.graph_client import GraphClient
+from office365.onedrive.driveitems.driveItem import DriveItem
+from office365.onedrive.sites.site import Site
+from office365.onedrive.sites.sites_with_root import SitesWithRoot
+from office365.runtime.auth.token_response import TokenResponse
+from office365.runtime.client_request import ClientRequestException
+from office365.runtime.paths.resource_path import ResourcePath
+from office365.runtime.queries.client_query import ClientQuery
+from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel
 from pydantic import Field
 from requests.exceptions import HTTPError
@@ -41,6 +41,10 @@ from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -60,6 +64,7 @@ from onyx.connectors.models import ExternalAccess
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.db.enums import HierarchyNodeType
@@ -258,7 +263,11 @@ def sleep_and_retry(
                 logger.warning(
                     f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
                 )
-                retry_after = e.response.headers.get("Retry-After")
+                retry_after = (
+                    e.response.headers.get(  # ty: ignore[unresolved-attribute]
+                        "Retry-After"
+                    )
+                )
                 if retry_after:
                     sleep_time = int(retry_after)
                 else:
@@ -586,7 +595,7 @@ def _convert_driveitem_to_document_with_permissions(
                 driveitem, f"Failed to download via graph api: {e}", e
             )
 
-    sections: list[TextSection | ImageSection] = []
+    sections: list[TextSection | ImageSection | TabularSection] = []
     file_ext = get_file_ext(driveitem.name)
 
     if not content_bytes:
@@ -602,6 +611,19 @@ def _convert_driveitem_to_document_with_permissions(
         )
         image_section.link = driveitem.web_url
         sections.append(image_section)
+    elif is_tabular_file(driveitem.name):
+        try:
+            sections.extend(
+                tabular_file_to_sections(
+                    file=io.BytesIO(content_bytes),
+                    file_name=driveitem.name,
+                    link=driveitem.web_url or "",
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract tabular sections for '{driveitem.name}': {e}"
+            )
     else:
 
         def _store_embedded_image(img_data: bytes, img_name: str) -> None:
@@ -811,7 +833,7 @@ def _convert_sitepage_to_document(
 
     if include_permissions:
         external_access = get_sharepoint_external_access(
-            ctx=ctx,
+            ctx=ctx,  # ty: ignore[invalid-argument-type]
             graph_client=graph_client,
             site_page=site_page,
             add_prefix=True,
@@ -879,7 +901,7 @@ def _convert_sitepage_to_slim_document(
         raise ValueError("Site page ID is required")
 
     external_access = get_sharepoint_external_access(
-        ctx=ctx,
+        ctx=ctx,  # ty: ignore[invalid-argument-type]
         graph_client=graph_client,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,

@@ -34,9 +34,27 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 
+def is_limited_user(user: User) -> bool:
+    """Check if a user is effectively limited — i.e. should be denied
+    access by ``current_user`` and should not receive default-group
+    membership.
+
+    A user is limited when they are:
+    * an anonymous user, or
+    * a service account with no effective permissions (no group membership).
+    """
+    if user.account_type == AccountType.ANONYMOUS:
+        return True
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        return True
+    return False
+
+
 def validate_user_role_update(
     requested_role: UserRole,
-    current_role: UserRole,
     current_account_type: AccountType,
     explicit_override: bool = False,
 ) -> None:
@@ -50,7 +68,7 @@ def validate_user_role_update(
     - requested role is a limited user
     - current account type is BOT (slack user)
     - current account type is EXT_PERM_USER
-    - current role is a limited user
+    - current account type is ANONYMOUS or SERVICE_ACCOUNT
     """
 
     if current_account_type == AccountType.BOT:
@@ -65,10 +83,10 @@ def validate_user_role_update(
             detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
         )
 
-    if current_role == UserRole.LIMITED:
+    if current_account_type in (AccountType.ANONYMOUS, AccountType.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+            detail="Cannot change the role of an anonymous or service account user.",
         )
 
     if explicit_override:
@@ -123,14 +141,23 @@ def get_all_users(
     stmt = select(User)
 
     # Exclude system users (anonymous user, no-auth placeholder)
-    stmt = stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
-    stmt = stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
+    stmt = stmt.where(
+        User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
+    stmt = stmt.where(
+        User.email
+        != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
 
     if not include_external:
         stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        stmt = stmt.where(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
+        stmt = stmt.where(
+            User.email.ilike(  # ty: ignore[unresolved-attribute]
+                f"%{email_filter_string}%"
+            )
+        )
 
     return db_session.scalars(stmt).unique().all()
 
@@ -293,7 +320,11 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
 
 
 def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
-    return db_session.query(User).filter(User.id == user_id).first()  # type: ignore
+    return (
+        db_session.query(User)
+        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .first()
+    )
 
 
 def _generate_slack_user(email: str) -> User:

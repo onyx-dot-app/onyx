@@ -18,7 +18,7 @@ from urllib.parse import urlunparse
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -42,6 +42,9 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_in_my_drive_and_shared,
 )
 from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
+from onyx.connectors.google_drive.file_retrieval import (
+    get_files_by_web_view_links_batch,
+)
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
@@ -70,11 +73,14 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import NormalizationResult
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
@@ -202,7 +208,10 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
-    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+    SlimConnector,
+    SlimConnectorWithPermSync,
+    CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
+    Resolver,
 ):
     def __init__(
         self,
@@ -425,7 +434,7 @@ class GoogleDriveConnector(
         for is_admin in [True, False]:
             query = "isAdmin=true" if is_admin else "isAdmin=false"
             for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,
+                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
                 list_key="users",
                 fields=USER_FIELDS,
                 domain=self.google_domain,
@@ -710,7 +719,7 @@ class GoogleDriveConnector(
         )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
-            retrieval_function=drive_service.drives().list,
+            retrieval_function=drive_service.drives().list,  # ty: ignore[unresolved-attribute]
             list_key="drives",
             useDomainAdminAccess=is_service_account,
             fields="drives(id),nextPageToken",
@@ -898,7 +907,9 @@ class GoogleDriveConnector(
             # resume from a checkpoint
             if resuming and (drive_id := curr_stage.current_folder_or_drive_id):
                 resume_start = curr_stage.completed_until
-                for file_or_token in _yield_from_drive(drive_id, resume_start):
+                for file_or_token in _yield_from_drive(
+                    drive_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                ):
                     if isinstance(file_or_token, str):
                         checkpoint.completion_map[user_email].next_page_token = (
                             file_or_token
@@ -1293,7 +1304,9 @@ class GoogleDriveConnector(
             resume_start = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until
-            yield from _yield_from_folder_crawl(folder_id, resume_start)
+            yield from _yield_from_folder_crawl(
+                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+            )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
         # instead, the traversed_parent_ids are used to determine what we have left to retrieve
@@ -1665,12 +1678,89 @@ class GoogleDriveConnector(
             start, end, checkpoint, include_permissions=True
         )
 
+    @override
+    def resolve_errors(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        if self._creds is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+
+        logger.info(f"Resolving {len(errors)} errors")
+        doc_ids = [
+            failure.failed_document.document_id
+            for failure in errors
+            if failure.failed_document
+        ]
+        service = get_drive_service(self.creds, self.primary_admin_email)
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if include_permissions or self.exclude_domain_link_only
+            else DriveFileFieldType.STANDARD
+        )
+        batch_result = get_files_by_web_view_links_batch(service, doc_ids, field_type)
+
+        for doc_id, error in batch_result.errors.items():
+            yield ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=doc_id,
+                ),
+                failure_message=f"Failed to retrieve file during error resolution: {error}",
+                exception=error,
+            )
+
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
+
+        retrieved_files = [
+            RetrievedDriveFile(
+                drive_file=file,
+                user_email=self.primary_admin_email,
+                completion_stage=DriveRetrievalStage.DONE,
+            )
+            for file in batch_result.files.values()
+        ]
+
+        yield from self._get_new_ancestors_for_files(
+            files=retrieved_files,
+            seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+            fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+            permission_sync_context=permission_sync_context,
+            add_prefix=True,
+        )
+
+        func_with_args = [
+            (
+                self._convert_retrieved_file_to_document,
+                (rf, permission_sync_context),
+            )
+            for rf in retrieved_files
+        ]
+        results = cast(
+            list[Document | ConnectorFailure | None],
+            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+        )
+        for result in results:
+            if result is not None:
+                yield result
+
     def _extract_slim_docs_from_google_drive(
         self,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         files_batch: list[RetrievedDriveFile] = []
         slim_batch: list[SlimDocument | HierarchyNode] = []
@@ -1680,9 +1770,13 @@ class GoogleDriveConnector(
             nonlocal files_batch, slim_batch
 
             # Get new ancestor hierarchy nodes first
-            permission_sync_context = PermissionSyncContext(
-                primary_admin_email=self.primary_admin_email,
-                google_domain=self.google_domain,
+            permission_sync_context = (
+                PermissionSyncContext(
+                    primary_admin_email=self.primary_admin_email,
+                    google_domain=self.google_domain,
+                )
+                if include_permissions
+                else None
             )
             new_ancestors = self._get_new_ancestors_for_files(
                 files=files_batch,
@@ -1696,10 +1790,7 @@ class GoogleDriveConnector(
                 if doc := build_slim_document(
                     self.creds,
                     file.drive_file,
-                    PermissionSyncContext(
-                        primary_admin_email=self.primary_admin_email,
-                        google_domain=self.google_domain,
-                    ),
+                    permission_sync_context,
                     retriever_email=file.user_email,
                 ):
                     slim_batch.append(doc)
@@ -1739,11 +1830,12 @@ class GoogleDriveConnector(
         if files_batch:
             yield _yield_slim_batch()
 
-    def retrieve_all_slim_docs_perm_sync(
+    def _retrieve_all_slim_docs_impl(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         try:
             checkpoint = self.build_dummy_checkpoint()
@@ -1753,13 +1845,34 @@ class GoogleDriveConnector(
                     start=start,
                     end=end,
                     callback=callback,
+                    include_permissions=include_permissions,
                 )
-            logger.info("Drive perm sync: Slim doc retrieval complete")
-
+            logger.info("Drive slim doc retrieval complete")
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise e
+            raise
+
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=False
+        )
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=True
+        )
 
     def validate_connector_settings(self) -> None:
         if self._creds is None:
@@ -1774,7 +1887,9 @@ class GoogleDriveConnector(
 
         try:
             drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            drive_service.files().list(pageSize=1, fields="files(id)").execute()
+            drive_service.files().list(  # ty: ignore[unresolved-attribute]
+                pageSize=1, fields="files(id)"
+            ).execute()
 
             if isinstance(self._creds, ServiceAccountCredentials):
                 # default is ~17mins of retries, don't do that here since this is called from

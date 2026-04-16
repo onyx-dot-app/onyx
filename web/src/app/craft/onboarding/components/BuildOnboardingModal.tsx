@@ -24,7 +24,6 @@ import {
 } from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
-import { buildOnboardingInitialValues as buildInitialValues } from "@/sections/modals/llmConfig/utils";
 import { testApiKeyHelper } from "@/sections/modals/llmConfig/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
@@ -221,10 +220,8 @@ export default function BuildOnboardingModal({
     setConnectionStatus("testing");
     setErrorMessage("");
 
-    const baseValues = buildInitialValues();
     const providerName = `build-mode-${currentProviderConfig.providerName}`;
     const payload = {
-      ...baseValues,
       name: providerName,
       provider: currentProviderConfig.providerName,
       api_key: apiKey,

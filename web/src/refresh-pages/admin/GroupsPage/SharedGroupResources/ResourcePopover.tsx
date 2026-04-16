@@ -5,7 +5,7 @@ import { SvgEmpty } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Popover from "@/refresh-components/Popover";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
@@ -68,7 +68,10 @@ function ResourcePopover({
                         <Text secondaryBody text03 className="shrink-0">
                           {section.label}
                         </Text>
-                        <Separator noPadding className="flex-1" />
+                        <Divider
+                          paddingParallel="fit"
+                          paddingPerpendicular="fit"
+                        />
                       </Section>
                     )}
                     <Section

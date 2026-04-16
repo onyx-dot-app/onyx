@@ -2,10 +2,10 @@ from datetime import timezone
 from io import BytesIO
 from typing import Any
 
-from dropbox import Dropbox  # type: ignore[import-untyped]
-from dropbox.exceptions import ApiError  # type: ignore[import-untyped]
+from dropbox import Dropbox
+from dropbox.exceptions import ApiError
 from dropbox.exceptions import AuthError
-from dropbox.files import FileMetadata  # type: ignore[import-untyped]
+from dropbox.files import FileMetadata
 from dropbox.files import FolderMetadata
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE

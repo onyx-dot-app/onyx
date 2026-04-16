@@ -34,7 +34,7 @@ def _prepare_connector(exclude: bool) -> GoogleDriveConnector:
         include_shared_drives=True,
         exclude_domain_link_only=exclude,
     )
-    connector._creds = object()  # type: ignore[assignment]
+    connector._creds = object()  # ty: ignore[invalid-assignment]
     connector._primary_admin_email = "admin@example.com"
     return connector
 

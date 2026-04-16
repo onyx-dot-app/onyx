@@ -39,14 +39,20 @@ def perform_ttl_management_task(
             )
 
         for user_id, session_id in old_chat_sessions:
-            # one session per delete so that we don't blow up if a deletion fails.
-            with get_session_with_current_tenant() as db_session:
-                delete_chat_session(
-                    user_id,
-                    session_id,
-                    db_session,
-                    include_deleted=True,
-                    hard_delete=True,
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    delete_chat_session(
+                        user_id,
+                        session_id,
+                        db_session,
+                        include_deleted=True,
+                        hard_delete=True,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to delete chat session "
+                    f"user_id={user_id} session_id={session_id}, "
+                    "continuing with remaining sessions"
                 )
 
     except Exception:

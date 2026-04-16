@@ -8,7 +8,7 @@ from typing import cast
 from typing import TypeVar
 
 import requests
-from hubspot import HubSpot  # type: ignore
+from hubspot import HubSpot
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource

@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import Message from "@/refresh-components/messages/Message";
+import { MessageCard, type MessageCardVariant } from "@opal/components";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";
@@ -10,20 +10,13 @@ import type { Toast, ToastLevel } from "@/hooks/useToast";
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 
-function levelProps(level: ToastLevel): Record<string, boolean> {
-  switch (level) {
-    case "success":
-      return { success: true };
-    case "error":
-      return { error: true };
-    case "warning":
-      return { warning: true };
-    case "info":
-      return { info: true };
-    default:
-      return { default: true };
-  }
-}
+const LEVEL_TO_VARIANT: Record<ToastLevel, MessageCardVariant> = {
+  success: "success",
+  error: "error",
+  warning: "warning",
+  info: "info",
+  default: "default",
+};
 
 function buildDescription(t: Toast): string | undefined {
   const parts: string[] = [];
@@ -66,25 +59,21 @@ function ToastContainer() {
       {visible.map((t) => {
         const text =
           t.message.length > MAX_TOAST_MESSAGE_LENGTH
-            ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
+            ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "\u2026"
             : t.message;
         return (
           <div
             key={t.id}
             className={cn(
+              "shadow-02 rounded-12",
               t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
-            <Message
-              flash
-              medium
-              {...levelProps(t.level ?? "info")}
-              text={text}
+            <MessageCard
+              variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
+              title={text}
               description={buildDescription(t)}
-              close={t.dismissible}
-              onClose={() => handleClose(t.id)}
-              actions={t.actionLabel ? t.actionLabel : undefined}
-              onAction={t.onAction}
+              onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             />
           </div>
         );

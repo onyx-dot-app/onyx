@@ -4,7 +4,7 @@ import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";
 
 // Provider configurations
@@ -115,7 +115,7 @@ function SelectableButton({
   );
 
   if (tooltip) {
-    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
+    return <Tooltip tooltip={tooltip}>{button}</Tooltip>;
   }
 
   return button;

@@ -2,12 +2,7 @@
 
 import React, { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { TextProps } from "@/refresh-components/texts/Text";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+import { Tooltip } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
@@ -85,47 +80,29 @@ export default function Truncated({
     [showTooltip]
   );
 
+  const tooltipContent = showTooltip ? children : undefined;
+
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <div
-            ref={visibleRef}
-            className="flex-grow overflow-hidden text-left w-full"
-          >
-            <TooltipTrigger asChild>
-              <div onPointerMove={blockPointerWhenInert}>{text}</div>
-            </TooltipTrigger>
-          </div>
-
-          {showTooltip && (
-            <TooltipContent
-              side={side}
-              sideOffset={sideOffset}
-              className="max-w-[400px] break-words whitespace-normal"
-            >
-              {typeof children === "string" ? (
-                <Text as="p" textLight05>
-                  {children}
-                </Text>
-              ) : (
-                children
-              )}
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip tooltip={tooltipContent} side={side} sideOffset={sideOffset}>
+        <div
+          ref={visibleRef}
+          className="flex-grow overflow-hidden text-left w-full"
+        >
+          <div onPointerMove={blockPointerWhenInert}>{text}</div>
+        </div>
+      </Tooltip>
 
       {/*
         Hide offscreen to measure full text width
 
         # Note
 
-        The placement of this `div` *after* the above `TooltipProvider` is *VERY* important to our tests!
+        The placement of this `div` *after* the above Tooltip is *VERY* important to our tests!
         If the bottom `div` were placed first, any tests that try locating the string that the `Truncated` component is trying to render would find the bottom div first.
         This can break expectations (since it's supposed to be hidden in the first place).
 
-        All in all, keep the below `div` *below* the above `TooltipProvider`.
+        All in all, keep the below `div` *below* the above Tooltip.
 
         - @raunakab
       */}

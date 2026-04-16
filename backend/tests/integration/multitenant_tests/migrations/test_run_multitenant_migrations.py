@@ -108,12 +108,12 @@ def current_head_rev() -> str:
         ["alembic", "heads", "--resolve-dependencies"],
         cwd=_BACKEND_DIR,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
     )
     assert (
         result.returncode == 0
-    ), f"alembic heads failed (exit {result.returncode}):\n{result.stdout}"
+    ), f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
     # Output looks like "d5c86e2c6dc6 (head)\n"
     rev = result.stdout.strip().split()[0]
     assert len(rev) > 0

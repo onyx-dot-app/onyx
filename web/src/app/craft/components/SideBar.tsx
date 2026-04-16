@@ -16,7 +16,7 @@ import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import AccountPopover from "@/sections/sidebar/AccountPopover";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
@@ -398,7 +398,7 @@ const MemoizedBuildSidebarInner = memo(
       () => (
         <div>
           {backToChatButton}
-          <UserAvatarPopover folded={folded} />
+          <AccountPopover folded={folded} />
         </div>
       ),
       [folded, backToChatButton]

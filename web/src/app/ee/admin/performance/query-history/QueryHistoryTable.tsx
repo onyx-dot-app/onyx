@@ -1,4 +1,3 @@
-import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -41,7 +40,7 @@ import {
 } from "@/app/ee/admin/performance/query-history/constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {
   SvgDownloadCloud,
@@ -61,7 +60,7 @@ function QueryHistoryTableRow({
       key={chatSessionMinimal.id}
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
-      <TableCell>
+      <TableCell className="max-w-xs">
         <Text className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
@@ -329,7 +328,7 @@ export function QueryHistoryTable() {
             </Button>
           </div>
         </div>
-        <Separator />
+        <Divider />
         <Section>
           <Table className="mt-5">
             <TableHeader>

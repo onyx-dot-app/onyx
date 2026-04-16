@@ -5,6 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   LLMProviderDescriptor,
+  LLMProviderName,
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
@@ -48,11 +49,15 @@ export function useLLMProviders(personaId?: number) {
       ? SWR_KEYS.llmProvidersForPersona(personaId)
       : SWR_KEYS.llmProviders;
 
+  // `revalidateIfStale` is intentionally left at its default (true), unlike
+  // `useAdminLLMProviders` below. Admin edits call `refreshLlmProviderCaches`,
+  // but persona-scoped keys are orphaned when that runs, so `mutate` on them
+  // is a no-op. Mount-time revalidation picks up the edits on next nav.
+  // `dedupingInterval: 60000` keeps this off the hot path.
   const { data, error, mutate } = useSWR<
     LLMProviderResponse<LLMProviderDescriptor>
   >(url, errorHandlingFetcher, {
     revalidateOnFocus: false,
-    revalidateIfStale: false,
     dedupingInterval: 60000,
   });
 
@@ -109,26 +114,6 @@ export function useAdminLLMProviders() {
 }
 
 /**
- * Fetches the catalog of well-known (built-in) LLM providers.
- *
- * Hits `GET /api/admin/llm/built-in/options` which returns the static
- * list of provider descriptors that Onyx ships with out of the box
- * (OpenAI, Anthropic, Vertex AI, Bedrock, Azure, Ollama, OpenRouter,
- * etc.). Each descriptor includes the provider's known models and the
- * recommended default model.
- *
- * Used primarily on the LLM Configuration page and onboarding flows
- * to show which providers are available to set up, and to pre-populate
- * model lists before the user has entered credentials.
- *
- * @returns
- * - `wellKnownLLMProviders` — The array of built-in provider descriptors,
- *    or `null` while loading.
- * - `isLoading` — `true` until the first successful response or error.
- * - `error` — The SWR error object, if any.
- * - `mutate` — SWR `mutate` function to trigger a revalidation.
- */
-/**
  * Fetches the descriptor for a single well-known (built-in) LLM provider.
  *
  * Hits `GET /api/admin/llm/built-in/options/{providerEndpoint}` which returns
@@ -138,12 +123,14 @@ export function useAdminLLMProviders() {
  * Used inside individual provider modals to pre-populate model lists
  * before the user has entered credentials.
  *
- * @param providerEndpoint - The provider's API endpoint name (e.g. "openai", "anthropic").
+ * @param providerName - The provider's API endpoint name (e.g. "openai", "anthropic").
  *   Pass `null` to suppress the request.
  */
-export function useWellKnownLLMProvider(providerEndpoint: string | null) {
+export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerEndpoint ? SWR_KEYS.wellKnownLlmProvider(providerEndpoint) : null,
+    providerName && providerName !== LLMProviderName.CUSTOM
+      ? SWR_KEYS.wellKnownLlmProvider(providerName)
+      : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -159,14 +146,20 @@ export function useWellKnownLLMProvider(providerEndpoint: string | null) {
   };
 }
 
-export function useWellKnownLLMProviders() {
-  const {
-    data: wellKnownLLMProviders,
-    error,
-    isLoading,
-    mutate,
-  } = useSWR<WellKnownLLMProviderDescriptor[]>(
-    SWR_KEYS.wellKnownLlmProviders,
+export interface CustomProviderOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * Fetches the list of LiteLLM provider names available for custom provider
+ * configuration (i.e. providers that don't have a dedicated well-known modal).
+ *
+ * Hits `GET /api/admin/llm/custom-provider-names`.
+ */
+export function useCustomProviderNames() {
+  const { data, error, isLoading } = useSWR<CustomProviderOption[]>(
+    SWR_KEYS.customProviderNames,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -176,9 +169,8 @@ export function useWellKnownLLMProviders() {
   );
 
   return {
-    wellKnownLLMProviders: wellKnownLLMProviders ?? null,
+    customProviderNames: data ?? null,
     isLoading,
     error,
-    mutate,
   };
 }

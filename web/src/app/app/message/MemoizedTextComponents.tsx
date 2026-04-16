@@ -73,7 +73,10 @@ export const MemoizedAnchor = memo(
             : undefined;
 
           if (!associatedDoc && !associatedSubQuestion) {
-            return <>{children}</>;
+            // Citation not resolved yet (data still streaming) — hide the
+            // raw [[N]](url) link entirely. It will render as a chip once
+            // the citation/document data arrives.
+            return <></>;
           }
 
           let icon: React.ReactNode = null;

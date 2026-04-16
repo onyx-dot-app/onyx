@@ -10,7 +10,6 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
-  SvgDiscordMono,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -19,12 +18,10 @@ import {
   SvgHistory,
   SvgImage,
   SvgMcp,
-  SvgNetworkGraph,
   SvgOnyxOctagon,
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
-  SvgSlack,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -34,6 +31,8 @@ import {
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
+  SvgDiscord,
+  SvgSlack,
 } from "@opal/icons";
 
 export interface AdminRouteEntry {
@@ -92,7 +91,7 @@ export const ADMIN_ROUTES = {
   },
   DISCORD_BOTS: {
     path: "/admin/discord-bot",
-    icon: SvgDiscordMono,
+    icon: SvgDiscord,
     title: "Discord Integration",
     sidebarLabel: "Discord Integration",
   },
@@ -167,12 +166,6 @@ export const ADMIN_ROUTES = {
     icon: SvgFileText,
     title: "Document Processing",
     sidebarLabel: "Document Processing",
-  },
-  KNOWLEDGE_GRAPH: {
-    path: "/admin/kg",
-    icon: SvgNetworkGraph,
-    title: "Knowledge Graph",
-    sidebarLabel: "Knowledge Graph",
   },
   USERS: {
     path: "/admin/users",

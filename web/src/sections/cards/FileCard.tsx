@@ -184,20 +184,18 @@ export function FileCard({
       }
     >
       <div className="min-w-0 max-w-[12rem]">
-        <Interactive.Container border heightVariant="fit">
-          <div className="[&_.opal-content-md-title-row]:min-w-0 [&_.opal-content-md-title]:break-all">
-            <AttachmentItemLayout
-              icon={isProcessing ? SimpleLoader : SvgFileText}
-              title={file.name}
-              description={
-                isProcessing
-                  ? file.status === UserFileStatus.UPLOADING
-                    ? "Uploading..."
-                    : "Processing..."
-                  : typeLabel
-              }
-            />
-          </div>
+        <Interactive.Container border heightVariant="fit" widthVariant="full">
+          <AttachmentItemLayout
+            icon={isProcessing ? SimpleLoader : SvgFileText}
+            title={file.name}
+            description={
+              isProcessing
+                ? file.status === UserFileStatus.UPLOADING
+                  ? "Uploading..."
+                  : "Processing..."
+                : typeLabel
+            }
+          />
           <Spacer horizontal rem={0.5} />
         </Interactive.Container>
       </div>

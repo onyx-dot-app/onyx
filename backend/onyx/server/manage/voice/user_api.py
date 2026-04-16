@@ -1,18 +1,20 @@
+import json
 import secrets
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
-from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
@@ -42,7 +44,7 @@ class VoiceStatusResponse(BaseModel):
 
 @router.get("/status")
 def get_voice_status(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceStatusResponse:
     """Check whether STT and TTS providers are configured and ready."""
@@ -57,7 +59,7 @@ def get_voice_status(
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(...),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Transcribe audio to text using the default STT provider."""
@@ -112,28 +114,47 @@ async def transcribe_audio(
         ) from exc
 
 
+def _extract_provider_error(exc: Exception) -> str:
+    """Extract a human-readable message from a provider exception.
+
+    Provider errors often embed JSON from upstream APIs (e.g. ElevenLabs).
+    This tries to parse a readable ``message`` field out of common JSON
+    error shapes; falls back to ``str(exc)`` if nothing better is found.
+    """
+    raw = str(exc)
+    try:
+        # Many providers embed JSON after a prefix like "ElevenLabs TTS failed: {...}"
+        json_start = raw.find("{")
+        if json_start == -1:
+            return raw
+        parsed = json.loads(raw[json_start:])
+        # Shape: {"detail": {"message": "..."}} (ElevenLabs)
+        detail = parsed.get("detail", parsed)
+        if isinstance(detail, dict):
+            return detail.get("message") or detail.get("error") or raw
+        if isinstance(detail, str):
+            return detail
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return raw
+
+
+class SynthesizeRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    voice: str | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+
 @router.post("/synthesize")
 async def synthesize_speech(
-    text: str | None = Query(
-        default=None, description="Text to synthesize", max_length=4096
-    ),
-    voice: str | None = Query(default=None, description="Voice ID to use"),
-    speed: float | None = Query(
-        default=None, description="Playback speed (0.5-2.0)", ge=0.5, le=2.0
-    ),
-    user: User = Depends(current_user),
+    body: SynthesizeRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> StreamingResponse:
-    """
-    Synthesize text to speech using the default TTS provider.
-
-    Accepts parameters via query string for streaming compatibility.
-    """
-    logger.info(
-        f"TTS request: text length={len(text) if text else 0}, voice={voice}, speed={speed}"
-    )
-
-    if not text:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Text is required")
+    """Synthesize text to speech using the default TTS provider."""
+    text = body.text
+    voice = body.voice
+    speed = body.speed
+    logger.info(f"TTS request: text length={len(text)}, voice={voice}, speed={speed}")
 
     # Use short-lived session to fetch provider config, then release connection
     # before starting the long-running streaming response
@@ -176,31 +197,36 @@ async def synthesize_speech(
             logger.error(f"Failed to get voice provider: {exc}")
             raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
-    # Session is now closed - streaming response won't hold DB connection
+    # Pull the first chunk before returning the StreamingResponse. If the
+    # provider rejects the request (e.g. text too long), the error surfaces
+    # as a proper HTTP error instead of a broken audio stream.
+    stream_iter = provider.synthesize_stream(
+        text=text, voice=final_voice, speed=final_speed
+    )
+    try:
+        first_chunk = await stream_iter.__anext__()
+    except StopAsyncIteration:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "TTS provider returned no audio")
+    except Exception as exc:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, _extract_provider_error(exc)
+        ) from exc
+
     async def audio_stream() -> AsyncIterator[bytes]:
-        try:
-            chunk_count = 0
-            async for chunk in provider.synthesize_stream(
-                text=text, voice=final_voice, speed=final_speed
-            ):
-                chunk_count += 1
-                yield chunk
-            logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
-        except NotImplementedError as exc:
-            logger.error(f"TTS not implemented: {exc}")
-            raise
-        except Exception as exc:
-            logger.error(f"Synthesis failed: {exc}")
-            raise
+        yield first_chunk
+        chunk_count = 1
+        async for chunk in stream_iter:
+            chunk_count += 1
+            yield chunk
+        logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
 
     return StreamingResponse(
         audio_stream(),
         media_type="audio/mpeg",
         headers={
             "Content-Disposition": "inline; filename=speech.mp3",
-            # Allow streaming by not setting content-length
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -208,7 +234,7 @@ async def synthesize_speech(
 @router.patch("/settings")
 def update_voice_settings(
     request: VoiceSettingsUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Update user's voice settings."""
@@ -229,7 +255,7 @@ class WSTokenResponse(BaseModel):
 
 @router.post("/ws-token")
 async def get_ws_token(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> WSTokenResponse:
     """
     Generate a short-lived token for WebSocket authentication.

@@ -1,7 +1,7 @@
 "use client";
 
 import { JSX } from "react";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 
@@ -33,7 +33,7 @@ export function AdminPageTitle({
         </div>
         {farRightElement}
       </div>
-      {includeDivider ? <Separator /> : <div className="mb-6" />}
+      {includeDivider ? <Divider /> : <div className="mb-6" />}
     </div>
   );
 }

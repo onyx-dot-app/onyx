@@ -8,7 +8,9 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
+import { markdown } from "@opal/utils";
+import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 
 export type WebProviderSetupModalProps = {
@@ -80,7 +82,7 @@ export const WebProviderSetupModal = memo(
         <Modal.Content width="sm" preventAccidentalClose>
           <Modal.Header
             icon={LogoArrangement}
-            title={`Set up ${providerLabel}`}
+            title={markdown(`Set up *${providerLabel}*`)}
             description={description}
             onClose={onClose}
           />

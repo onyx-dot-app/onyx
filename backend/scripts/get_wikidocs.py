@@ -12,8 +12,8 @@ import re
 import zipfile
 from pathlib import Path
 
-from datasets import load_dataset  # type: ignore
-from tqdm import tqdm  # type: ignore
+from datasets import load_dataset  # ty: ignore[unresolved-import]
+from tqdm import tqdm
 
 
 def sanitize_filename(title: str) -> str:
@@ -137,7 +137,9 @@ def stream_wikipedia_to_zips(
         print(f"\nCompleted: {zip_path} ({pages_in_current_zip} pages)")
 
     print(f"\nSuccessfully created {current_zip_index} zip file(s) in {output_dir}")
-    print(f"Total pages processed: {min(total_pages, idx + 1)}")
+    print(
+        f"Total pages processed: {min(total_pages, idx + 1)}"  # ty: ignore[possibly-unresolved-reference]
+    )
 
 
 def main() -> int:

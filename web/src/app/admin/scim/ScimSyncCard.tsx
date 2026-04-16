@@ -2,9 +2,8 @@ import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
 import { timeAgo } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
@@ -66,7 +65,7 @@ export default function ScimSyncCard({
 
       {hasToken && (
         <>
-          <Separator noPadding />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           <Section
             flexDirection="row"

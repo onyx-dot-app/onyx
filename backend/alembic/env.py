@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any
 from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -19,7 +19,6 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.sql.schema import SchemaItem
 from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import (
     MULTI_TENANT,
@@ -27,7 +26,9 @@ from shared_configs.configs import (
     TENANT_ID_PREFIX,
 )
 from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
+from celery.backends.database.session import (  # ty: ignore[unresolved-import]
+    ResultModelBase,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
@@ -45,8 +46,6 @@ if config.config_file_name is not None and config.attributes.get(
 
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
-EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
-
 logger = logging.getLogger(__name__)
 
 ssl_context: ssl.SSLContext | None = None
@@ -54,25 +53,6 @@ if USE_IAM_AUTH:
     if not os.path.exists(SSL_CERT_FILE):
         raise FileNotFoundError(f"Expected {SSL_CERT_FILE} when USE_IAM_AUTH is true.")
     ssl_context = ssl.create_default_context(cafile=SSL_CERT_FILE)
-
-
-def include_object(
-    object: SchemaItem,  # noqa: ARG001
-    name: str | None,
-    type_: Literal[
-        "schema",
-        "table",
-        "column",
-        "index",
-        "unique_constraint",
-        "foreign_key_constraint",
-    ],
-    reflected: bool,  # noqa: ARG001
-    compare_to: SchemaItem | None,  # noqa: ARG001
-) -> bool:
-    if type_ == "table" and name in EXCLUDE_TABLES:
-        return False
-    return True
 
 
 def filter_tenants_by_range(
@@ -230,8 +210,7 @@ def do_run_migrations(
 
     context.configure(
         connection=connection,
-        target_metadata=target_metadata,  # type: ignore
-        include_object=include_object,
+        target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
         compare_type=True,
@@ -403,9 +382,8 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
-                include_object=include_object,
                 version_table_schema=schema,
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
@@ -445,9 +423,8 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
-                include_object=include_object,
                 version_table_schema=schema,
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
@@ -489,8 +466,7 @@ def run_migrations_online() -> None:
 
             context.configure(
                 connection=connection,
-                target_metadata=target_metadata,  # type: ignore
-                include_object=include_object,
+                target_metadata=target_metadata,
                 version_table_schema=schema_name,
                 include_schemas=True,
                 compare_type=True,

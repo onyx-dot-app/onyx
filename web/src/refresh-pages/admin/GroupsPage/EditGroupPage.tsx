@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { Table, Button } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import useGroupMemberCandidates from "./useGroupMemberCandidates";
+import { Table, Button, Divider } from "@opal/components";
+import { IllustrationContent, InputHorizontal } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
-import * as InputLayouts from "@/layouts/input-layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -16,23 +16,11 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useAdminUsers from "@/hooks/useAdminUsers";
 import type { UserGroup } from "@/lib/types";
-import type {
-  ApiKeyDescriptor,
-  MemberRow,
-  TokenRateLimitDisplay,
-} from "./interfaces";
-import {
-  apiKeyToMemberRow,
-  baseColumns,
-  memberTableColumns,
-  tc,
-  PAGE_SIZE,
-} from "./shared";
+import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
@@ -104,18 +92,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const initialAgentIdsRef = useRef<number[]>([]);
   const initialDocSetIdsRef = useRef<number[]>([]);
 
-  // Users and API keys
-  const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
-
+  // Users + service accounts (curator-accessible — see hook docs).
   const {
-    data: apiKeys,
-    isLoading: apiKeysLoading,
-    error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>(SWR_KEYS.adminApiKeys, errorHandlingFetcher);
+    rows: allRows,
+    isLoading: candidatesLoading,
+    error: candidatesError,
+  } = useGroupMemberCandidates();
 
-  const isLoading =
-    groupLoading || usersLoading || apiKeysLoading || tokenLimitsLoading;
-  const error = groupError ?? usersError ?? apiKeysError;
+  const isLoading = groupLoading || candidatesLoading || tokenLimitsLoading;
+  const error = groupError ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -144,12 +129,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       );
     }
   }, [tokenRateLimits]);
-
-  const allRows = useMemo(() => {
-    const activeUsers = users.filter((u) => u.is_active);
-    const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
-    return [...activeUsers, ...serviceAccountRows];
-  }, [users, apiKeys]);
 
   const memberRows = useMemo(() => {
     const selected = new Set(selectedUserIds);
@@ -366,7 +345,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 />
               </Section>
 
-              <Separator noPadding />
+              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
               {/* Members table */}
               <Section
@@ -466,11 +445,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
               {/* Delete This Group */}
               <Card>
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
-                  nonInteractive
                 >
                   <Button
                     variant="danger"
@@ -480,7 +458,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   >
                     Delete Group
                   </Button>
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
               </Card>
             </>
           )}

@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import {
-  SvgCheck,
-  SvgSlack,
-  SvgUser,
-  SvgUserManage,
-  SvgUsers,
-} from "@opal/icons";
+import { SvgCheck, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { FilterButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";

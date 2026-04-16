@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import Message from "@/refresh-components/messages/Message";
+import { Button, MessageCard } from "@opal/components";
 
 interface ConnectorInfoOverlayProps {
   visible: boolean;
@@ -17,11 +17,10 @@ export function ConnectorInfoOverlay({ visible }: ConnectorInfoOverlayProps) {
           : "opacity-0 translate-y-4 pointer-events-none"
       )}
     >
-      <Message
-        info
-        text="Existing sessions won't have access to this data"
+      <MessageCard
+        variant="info"
+        title="Existing sessions won't have access to this data"
         description="Once synced, documents from this connector will be available in your new sessions!"
-        close={false}
       />
     </div>
   );
@@ -47,13 +46,15 @@ export function ReprovisionWarningOverlay({
           : "opacity-0 translate-y-4 pointer-events-none"
       )}
     >
-      <Message
-        warning
-        text={isUpdating ? "Updating..." : "Click Update to apply your changes"}
+      <MessageCard
+        variant="warning"
+        title={
+          isUpdating ? "Updating..." : "Click Update to apply your changes"
+        }
         description="Your sandbox will be recreated with your new settings. Previously running sessions will not be affected by your changes."
-        close={false}
-        actions={isUpdating ? false : "Update"}
-        onAction={isUpdating ? undefined : onUpdate}
+        rightChildren={
+          !isUpdating ? <Button onClick={onUpdate}>Update</Button> : undefined
+        }
       />
     </div>
   );

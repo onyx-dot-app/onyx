@@ -22,10 +22,6 @@ module.exports = {
         spacing: "margin, padding",
       },
       keyframes: {
-        shimmer: {
-          "0%": { backgroundPosition: "100% 0" },
-          "100%": { backgroundPosition: "-100% 0" },
-        },
         "subtle-pulse": {
           "0%, 100%": { opacity: 0.9 },
           "50%": { opacity: 0.5 },
@@ -52,7 +48,6 @@ module.exports = {
         },
       },
       animation: {
-        shimmer: "shimmer 1.8s ease-out infinite",
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
@@ -65,11 +60,13 @@ module.exports = {
         "neutral-10": "var(--neutral-10) 5%",
       },
       screens: {
+        sm: "724px",
+        md: "912px",
+        lg: "1232px",
         "2xl": "1420px",
         "3xl": "1700px",
         "4xl": "2000px",
-        mobile: { max: "767px" },
-        desktop: "768px",
+        mobile: { max: "724px" },
         tall: { raw: "(min-height: 800px)" },
         short: { raw: "(max-height: 799px)" },
         "very-short": { raw: "(max-height: 600px)" },

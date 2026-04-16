@@ -149,7 +149,9 @@ def parse_scim_user(result: object, *, status: int = 200) -> ScimUserResource:
         result, ScimJSONResponse
     ), f"Expected ScimJSONResponse, got {type(result).__name__}"
     assert result.status_code == status
-    return ScimUserResource.model_validate(json.loads(result.body))
+    return ScimUserResource.model_validate(
+        json.loads(result.body)  # ty: ignore[invalid-argument-type]
+    )
 
 
 def parse_scim_group(result: object, *, status: int = 200) -> ScimGroupResource:
@@ -158,7 +160,9 @@ def parse_scim_group(result: object, *, status: int = 200) -> ScimGroupResource:
         result, ScimJSONResponse
     ), f"Expected ScimJSONResponse, got {type(result).__name__}"
     assert result.status_code == status
-    return ScimGroupResource.model_validate(json.loads(result.body))
+    return ScimGroupResource.model_validate(
+        json.loads(result.body)  # ty: ignore[invalid-argument-type]
+    )
 
 
 def parse_scim_list(result: object) -> ScimListResponse:
@@ -167,4 +171,6 @@ def parse_scim_list(result: object) -> ScimListResponse:
         result, ScimJSONResponse
     ), f"Expected ScimJSONResponse, got {type(result).__name__}"
     assert result.status_code == 200
-    return ScimListResponse.model_validate(json.loads(result.body))
+    return ScimListResponse.model_validate(
+        json.loads(result.body)  # ty: ignore[invalid-argument-type]
+    )

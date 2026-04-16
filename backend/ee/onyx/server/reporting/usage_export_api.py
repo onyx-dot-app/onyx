@@ -12,10 +12,11 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.usage_export import get_all_usage_reports
 from ee.onyx.db.usage_export import get_usage_report_data
 from ee.onyx.db.usage_export import UsageReportMetadata
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
@@ -31,7 +32,7 @@ class GenerateUsageReportParams(BaseModel):
 @router.post("/admin/usage-report", status_code=204)
 def generate_report(
     params: GenerateUsageReportParams,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     # Validate period parameters
     if params.period_from and params.period_to:
@@ -58,7 +59,7 @@ def generate_report(
 @router.get("/admin/usage-report/{report_name}")
 def read_usage_report(
     report_name: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),  # noqa: ARG001
 ) -> Response:
     try:
@@ -82,7 +83,7 @@ def read_usage_report(
 
 @router.get("/admin/usage-report")
 def fetch_usage_reports(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UsageReportMetadata]:
     try:

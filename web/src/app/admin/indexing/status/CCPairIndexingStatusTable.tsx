@@ -27,7 +27,7 @@ import {
   FiUnlock,
   FiRefreshCw,
 } from "react-icons/fi";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -208,9 +208,9 @@ function ConnectorRow({
       <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
       <TableCell>
         {isEditable && (
-          <SimpleTooltip tooltip="Manage Connector">
+          <Tooltip tooltip="Manage Connector">
             <Button icon={SvgSettings} prominence="tertiary" />
-          </SimpleTooltip>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>

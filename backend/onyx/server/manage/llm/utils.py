@@ -26,6 +26,7 @@ DYNAMIC_LLM_PROVIDERS = frozenset(
         LlmProviderNames.OLLAMA_CHAT,
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
+        LlmProviderNames.OPENAI_COMPATIBLE,
     }
 )
 
@@ -182,6 +183,9 @@ def generate_ollama_display_name(model_name: str) -> str:
         "qwen2.5:7b" → "Qwen 2.5 7B"
         "mistral:latest" → "Mistral"
         "deepseek-r1:14b" → "DeepSeek R1 14B"
+        "gemma4:e4b" → "Gemma 4 E4B"
+        "deepseek-v3.1:671b-cloud" → "DeepSeek V3.1 671B Cloud"
+        "qwen3-vl:235b-instruct-cloud" → "Qwen 3-vl 235B Instruct Cloud"
     """
     # Split into base name and tag
     if ":" in model_name:
@@ -208,13 +212,24 @@ def generate_ollama_display_name(model_name: str) -> str:
         # Default: Title case with dashes converted to spaces
         display_name = base.replace("-", " ").title()
 
-    # Process tag to extract size info (skip "latest")
+    # Process tag (skip "latest")
     if tag and tag.lower() != "latest":
-        # Extract size like "7b", "70b", "14b"
-        size_match = re.match(r"^(\d+(?:\.\d+)?[bBmM])", tag)
+        # Check for size prefix like "7b", "70b", optionally followed by modifiers
+        size_match = re.match(r"^(\d+(?:\.\d+)?[bBmM])(-.+)?$", tag)
         if size_match:
             size = size_match.group(1).upper()
-            display_name = f"{display_name} {size}"
+            remainder = size_match.group(2)
+            if remainder:
+                # Format modifiers like "-cloud", "-instruct-cloud"
+                modifiers = " ".join(
+                    p.title() for p in remainder.strip("-").split("-") if p
+                )
+                display_name = f"{display_name} {size} {modifiers}"
+            else:
+                display_name = f"{display_name} {size}"
+        else:
+            # Non-size tags like "e4b", "q4_0", "fp16", "cloud"
+            display_name = f"{display_name} {tag.upper()}"
 
     return display_name
 
@@ -308,12 +323,15 @@ def should_filter_as_dated_duplicate(
 def filter_model_configurations(
     model_configurations: list,
     provider: str,
+    use_stored_display_name: bool = False,
 ) -> list:
     """Filter out obsolete and dated duplicate models from configurations.
 
     Args:
         model_configurations: List of ModelConfiguration DB models
         provider: The provider name (e.g., "openai", "anthropic")
+        use_stored_display_name: If True, prefer the display_name stored in the
+            DB over LiteLLM enrichments. Set for custom-config providers.
 
     Returns:
         List of ModelConfigurationView objects with obsolete/duplicate models removed
@@ -333,7 +351,9 @@ def filter_model_configurations(
         if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
             continue
         filtered_configs.append(
-            ModelConfigurationView.from_model(model_configuration, provider)
+            ModelConfigurationView.from_model(
+                model_configuration, provider, use_stored_display_name
+            )
         )
 
     return filtered_configs

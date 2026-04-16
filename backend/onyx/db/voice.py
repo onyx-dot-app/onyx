@@ -94,7 +94,7 @@ def upsert_voice_provider(
 
     # Only update API key if explicitly changed or if provider has no key
     if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key  # type: ignore[assignment]
+        provider.api_key = api_key  # ty: ignore[invalid-assignment]
 
     db_session.flush()
 
@@ -233,5 +233,9 @@ def update_user_voice_settings(
         )
 
     if values:
-        db_session.execute(update(User).where(User.id == user_id).values(**values))  # type: ignore[arg-type]
+        db_session.execute(
+            update(User)
+            .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+            .values(**values)
+        )
         db_session.flush()
