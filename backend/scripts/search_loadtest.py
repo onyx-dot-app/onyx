@@ -345,7 +345,7 @@ def main() -> None:
         description="A load test tool for the Onyx search endpoint."
     )
     parser.add_argument(
-        "--url", required=True, help="Onyx base URL, e.g. https://st-dev.onyx.app"
+        "--url", required=True, help="Onyx base URL, e.g. https://cloud.onyx.app"
     )
     parser.add_argument(
         "--token",
