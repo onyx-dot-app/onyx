@@ -9,6 +9,9 @@ from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
+from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
+    build_sheet_descriptor_chunks,
+)
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens
@@ -233,8 +236,13 @@ def parse_to_chunks(
 
 
 class TabularChunker(SectionChunker):
-    def __init__(self, tokenizer: BaseTokenizer) -> None:
+    def __init__(
+        self,
+        tokenizer: BaseTokenizer,
+        ignore_metadata_chunks: bool = False,
+    ) -> None:
         self.tokenizer = tokenizer
+        self.ignore_metadata_chunks = ignore_metadata_chunks
 
     def chunk_section(
         self,
@@ -260,6 +268,15 @@ class TabularChunker(SectionChunker):
             tokenizer=self.tokenizer,
             max_tokens=content_token_limit,
         )
+
+        if not self.ignore_metadata_chunks:
+            metadata_chunks = build_sheet_descriptor_chunks(
+                section=section,
+                tokenizer=self.tokenizer,
+                max_tokens=content_token_limit,
+            )
+
+            chunk_texts.extend(metadata_chunks)
 
         for i, text in enumerate(chunk_texts):
             payloads.append(

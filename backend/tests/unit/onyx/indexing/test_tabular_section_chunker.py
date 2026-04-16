@@ -29,8 +29,12 @@ class CharTokenizer(BaseTokenizer):
         return "".join(chr(t) for t in tokens)
 
 
-def _make_chunker() -> TabularChunker:
-    return TabularChunker(tokenizer=CharTokenizer())
+def _make_chunker_no_metadata() -> TabularChunker:
+    return TabularChunker(tokenizer=CharTokenizer(), ignore_metadata_chunks=True)
+
+
+def _make_chunker_with_metadata() -> TabularChunker:
+    return TabularChunker(tokenizer=CharTokenizer(), ignore_metadata_chunks=False)
 
 
 _DEFAULT_LINK = "https://example.com/doc"
@@ -62,7 +66,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -91,7 +95,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -116,7 +120,7 @@ class TestTabularChunkerChunkSection:
     #     ]
 
     #     # --- ACT -------------------------------------------------------
-    #     out = _make_chunker().chunk_section(
+    #     out = _make_chunker_no_metadata().chunk_section(
     #         _tabular_section(csv_text, link=link),
     #         AccumulatorState(),
     #         content_token_limit=500,
@@ -143,7 +147,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
@@ -166,7 +170,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
@@ -188,7 +192,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
@@ -215,7 +219,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(
                 text=pending_text,
@@ -258,7 +262,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -296,7 +300,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -337,7 +341,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -365,7 +369,7 @@ class TestTabularChunkerChunkSection:
         expected_texts = [pending_text]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section("", heading="sheet:Empty"),
             AccumulatorState(
                 text=pending_text,
@@ -410,7 +414,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -440,7 +444,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=500,
@@ -487,7 +491,7 @@ class TestTabularChunkerChunkSection:
         ]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -517,7 +521,7 @@ class TestTabularChunkerChunkSection:
         expected_texts = ["Columns: x\nx=y"]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
@@ -548,7 +552,7 @@ class TestTabularChunkerChunkSection:
         expected_texts = ["S\nABC=1, DEF=2"]
 
         # --- ACT -------------------------------------------------------
-        out = _make_chunker().chunk_section(
+        out = _make_chunker_no_metadata().chunk_section(
             _tabular_section(csv_text, heading=heading),
             AccumulatorState(),
             content_token_limit=content_token_limit,
