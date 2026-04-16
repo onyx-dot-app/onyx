@@ -21,7 +21,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import BaseFilters
 
 
-DEFAULT_QUERIES = [
+DEFAULT_TEST_QUERIES = [
     "onboarding checklist",
     "how do we handle refunds",
     "password reset policy",
@@ -216,7 +216,7 @@ def load_queries_and_source_types(args: argparse.Namespace) -> Queries:
         return Queries(queries=queries, source_types=source_types)
     if args.query:
         return Queries(queries=[args.query], source_types=source_types)
-    return Queries(queries=DEFAULT_QUERIES, source_types=source_types)
+    return Queries(queries=DEFAULT_TEST_QUERIES, source_types=source_types)
 
 
 def load_token(args: argparse.Namespace) -> str:
@@ -373,8 +373,8 @@ def main() -> None:
         "--duration",
         type=float,
         help=(
-            "Duration in seconds each requesting thread will run for. If specified along with --total, the thread "
-            "will stop on whichever condition is met first."
+            "Duration in seconds each requesting thread will run for. If specified along with --total, the thread will "
+            "stop on whichever condition is met first."
         ),
     )
     parser.add_argument(
