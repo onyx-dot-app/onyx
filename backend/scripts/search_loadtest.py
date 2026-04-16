@@ -284,17 +284,6 @@ def run(args: argparse.Namespace) -> None:
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    base_request = SendSearchQueryRequest(
-        search_query="",  # Overwritten per request.
-    )
-    if args.num_hits:
-        base_request.num_hits = args.num_hits
-    stop_condition = StopCondition(
-        num_requests_to_make=(
-            args.requests_per_worker if args.requests_per_worker else None
-        ),
-        duration_s=args.duration_per_worker if args.duration_per_worker else None,
-    )
     timeout_s = args.timeout
 
     # Preflight: Verify connectivity and auth so we fail fast on URL / token
@@ -320,6 +309,17 @@ def run(args: argparse.Namespace) -> None:
 
     print()
     print(f"Load test: concurrency={args.concurrency}.")
+    base_request = SendSearchQueryRequest(
+        search_query="",  # Overwritten per request.
+    )
+    if args.num_hits:
+        base_request.num_hits = args.num_hits
+    stop_condition = StopCondition(
+        num_requests_to_make=(
+            args.requests_per_worker if args.requests_per_worker else None
+        ),
+        duration_s=args.duration_per_worker if args.duration_per_worker else None,
+    )
     print(str(stop_condition))
     results: list[Result] = []
     results_lock = threading.Lock()
