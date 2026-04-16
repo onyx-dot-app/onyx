@@ -57,6 +57,7 @@ class OnyxFileExtensions:
         ".csv",
         ".tsv",
         ".xlsx",
+        ".xlsm",
     }
     PLAIN_TEXT_EXTENSIONS = {
         ".txt",

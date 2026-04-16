@@ -189,7 +189,7 @@ def _process_file(
     if is_tabular_file(file_name):
         # Produce TabularSections
         lowered_name = file_name.lower()
-        if lowered_name.endswith(".xlsx"):
+        if lowered_name.endswith((".xlsx", ".xlsm")):
             file.seek(0)
             tabular_source: IO[bytes] = file
         else:

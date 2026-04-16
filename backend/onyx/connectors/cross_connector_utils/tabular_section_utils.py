@@ -41,7 +41,7 @@ def tabular_file_to_sections(
     """
     lowered = file_name.lower()
 
-    if lowered.endswith(".xlsx"):
+    if lowered.endswith((".xlsx", ".xlsm")):
         return [
             TabularSection(
                 link=link or file_name,
