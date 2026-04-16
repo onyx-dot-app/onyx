@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -53,7 +53,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
       <Content
         icon={SvgServer}
         title="Self-hosted"
-        sizePreset="main-ui"
+        sizePreset="secondary"
         variant="body"
         prominence="muted"
         widthVariant="fit"
@@ -69,7 +69,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
       <Content
         icon={SvgCloud}
         title="Cloud Provider"
-        sizePreset="main-ui"
+        sizePreset="secondary"
         variant="body"
         prominence="muted"
         widthVariant="fit"
@@ -92,6 +92,7 @@ export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const editEmbeddingModelModal = useCreateModal();
+  const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
@@ -218,7 +219,23 @@ export default function IndexSettingsPage() {
                 </editEmbeddingModelModal.Provider>
               )}
 
-              <Card border="solid" rounding="lg" padding="sm">
+              <Card
+                expandable
+                expanded={viewAllModelsOpen}
+                border="solid"
+                rounding="lg"
+                padding="sm"
+                content={
+                  <div className="p-4">
+                    <Content
+                      title="All models"
+                      description="Placeholder — the real picker (cloud + self-hosted tabs, MessageCard warning, per-provider SelectCards) lands here."
+                      sizePreset="main-content"
+                      variant="section"
+                    />
+                  </div>
+                }
+              >
                 <CardLayout.Header
                   headerChildren={
                     <GeneralLayouts.Section alignItems="start" gap={0}>
@@ -244,9 +261,13 @@ export default function IndexSettingsPage() {
                     </GeneralLayouts.Section>
                   }
                   topRightChildren={
-                    // TODO(@raunakab): Wire up "View All Models" later.
                     <div className="flex flex-col items-end justify-between p-2 gap-1">
-                      <Button prominence="secondary">View All Models</Button>
+                      <Button
+                        prominence="secondary"
+                        onClick={() => setViewAllModelsOpen((v) => !v)}
+                      >
+                        {viewAllModelsOpen ? "Hide Models" : "View All Models"}
+                      </Button>
                       {currentCloudProvider && (
                         <div className="p-1">
                           <Button
