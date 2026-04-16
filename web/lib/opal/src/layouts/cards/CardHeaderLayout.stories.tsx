@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Card } from "@opal/layouts";
+import { Card, Content } from "@opal/layouts";
 import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -39,12 +39,16 @@ export const Default: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={SvgGlobe}
-        title="Google Search"
-        description="Web search provider"
-        rightChildren={
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Google Search"
+            description="Web search provider"
+          />
+        }
+        topRightChildren={
           <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
             Connect
           </Button>
@@ -58,12 +62,16 @@ export const WithBothSlots: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={SvgGlobe}
-        title="Google Search"
-        description="Currently the default provider."
-        rightChildren={
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Google Search"
+            description="Currently the default provider."
+          />
+        }
+        topRightChildren={
           <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
             Current Default
           </Button>
@@ -93,12 +101,16 @@ export const RightChildrenOnly: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={SvgGlobe}
-        title="OpenAI"
-        description="Not configured"
-        rightChildren={
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="OpenAI"
+            description="Not configured"
+          />
+        }
+        topRightChildren={
           <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
             Connect
           </Button>
@@ -112,11 +124,15 @@ export const NoRightChildren: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={SvgGlobe}
-        title="Section Header"
-        description="No actions on the right."
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Section Header"
+            description="No actions on the right."
+          />
+        }
       />
     </div>
   ),
@@ -126,12 +142,16 @@ export const LongContent: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={SvgGlobe}
-        title="Very Long Provider Name That Should Truncate"
-        description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
-        rightChildren={
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title="Very Long Provider Name That Should Truncate"
+            description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
+          />
+        }
+        topRightChildren={
           <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
             Current Default
           </Button>
