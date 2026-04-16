@@ -1,5 +1,9 @@
 """
 Load test for the Onyx search flow (/api/search/send-search-message).
+
+Usage:
+    source .venv/bin/activate
+    python backend/scripts/search_loadtest.py --help
 """
 
 from __future__ import annotations
