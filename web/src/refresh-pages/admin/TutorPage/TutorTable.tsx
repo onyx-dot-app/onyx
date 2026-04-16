@@ -16,7 +16,11 @@ import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { useUser } from "@/providers/UserProvider";
 import type { TutorRow } from "./interfaces";
 import TutorRowActions from "./TutorRowActions";
-import { VIRTUAL_TUTOR_LABEL_NAME, detectTeachingStyle } from "./constants";
+import {
+  VIRTUAL_TUTOR_LABEL_NAME,
+  TEACHING_STYLE_OPTIONS,
+  detectTeachingStyle,
+} from "./constants";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,11 +52,12 @@ function isTutor(persona: Persona): boolean {
 
 function renderStyleColumn(systemPrompt: string | null) {
   const style = detectTeachingStyle(systemPrompt);
+  const option = TEACHING_STYLE_OPTIONS.find((o) => o.value === style);
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      title={style === "socratic" ? "Socratic" : "Direct"}
+      title={option?.label ?? "Balanced"}
     />
   );
 }

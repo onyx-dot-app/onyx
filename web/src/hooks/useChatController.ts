@@ -244,22 +244,31 @@ export default function useChatController({
   };
 
   const handleNewSessionNavigation = (chatSessionId: string) => {
-    // Build URL with skip-reload parameter
-    const newUrl = buildChatUrl(
-      searchParams,
-      chatSessionId,
-      null,
-      false,
-      true // skipReload
-    );
-
     // Navigate immediately if still on chat page
     // For NRF pages (/chat/nrf, /chat/nrf/side-panel), don't navigate immediately
     // Let the streaming complete inline, then the user can continue chatting there
-    const isOnChatPage = pathname === "/app";
+    const isOnChatPage = pathname === "/app" || pathname === "/tutor";
 
     if (isOnChatPage && !navigatingAway.current) {
-      router.push(newUrl as Route, { scroll: false });
+      if (pathname === "/tutor") {
+        // On /tutor, stay on /tutor and preserve existing params (assistantId, projectId)
+        const tutorParams = new URLSearchParams(searchParams?.toString() || "");
+        tutorParams.set(SEARCH_PARAM_NAMES.CHAT_ID, chatSessionId);
+        tutorParams.set(SEARCH_PARAM_NAMES.SKIP_RELOAD, "true");
+        router.push(`/tutor?${tutorParams.toString()}` as Route, {
+          scroll: false,
+        });
+      } else {
+        // Build URL with skip-reload parameter
+        const newUrl = buildChatUrl(
+          searchParams,
+          chatSessionId,
+          null,
+          false,
+          true // skipReload
+        );
+        router.push(newUrl as Route, { scroll: false });
+      }
     }
 
     // Refresh sidebar - the chat was already optimistically added via addPendingChatSession

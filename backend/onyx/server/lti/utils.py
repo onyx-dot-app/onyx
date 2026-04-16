@@ -5,6 +5,7 @@ import json
 import secrets
 import string
 import time
+from uuid import UUID
 
 import httpx
 import jwt as pyjwt
@@ -12,21 +13,30 @@ from fastapi_users import exceptions
 from jwt import PyJWKSet
 from jwt.exceptions import InvalidTokenError
 from redis import asyncio as aioredis
+from sqlalchemy import select
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import get_user_db
 from onyx.auth.users import get_user_manager
+from onyx.configs.constants import DocumentSource
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.configs.lti_configs import LTI_NONCE_TTL_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.models import HierarchyNode
+from onyx.db.models import Persona
+from onyx.db.models import PersonaLabel
 from onyx.db.models import User
+from onyx.db.models import UserProject
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
+
+# Must match the label name used by the tutor admin page
+_VIRTUAL_TUTOR_LABEL = "Virtual Tutor"
 
 
 logger = setup_logger()
@@ -153,12 +163,19 @@ def _extract_email_from_claims(claims: dict) -> str:
 
 
 def _map_lti_roles_to_onyx_role(lti_roles: list[str]) -> UserRole:
-    """Map LTI role URIs to an Onyx UserRole."""
+    """Map LTI role URIs to an Onyx UserRole.
+
+    LTI Administrators → ADMIN (full platform access).
+    LTI Instructors/ContentDevelopers → CURATOR (can create/edit their own
+    tutors and manage document sets within their user groups, but cannot
+    modify platform-wide settings or other professors' resources).
+    Everyone else → BASIC (student-level access).
+    """
     role_set = set(lti_roles)
     if role_set & _LTI_ADMIN_ROLES:
         return UserRole.ADMIN
     if role_set & _LTI_INSTRUCTOR_ROLES:
-        return UserRole.ADMIN
+        return UserRole.CURATOR
     return UserRole.BASIC
 
 
@@ -271,3 +288,118 @@ async def upsert_lti_user(email: str, lti_roles: list[str]) -> User:
                     )
                 )
                 return user
+
+
+def extract_lti_context(claims: dict) -> dict[str, str | None]:
+    """Extract Canvas course context from LTI JWT claims.
+
+    Returns a dict with keys: course_id, course_label, course_title.
+    All values may be None if the context claim is missing.
+    """
+    context = claims.get("https://purl.imsglobal.org/spec/lti/claim/context", {})
+    return {
+        "course_id": context.get("id"),
+        "course_label": context.get("label"),
+        "course_title": context.get("title"),
+    }
+
+
+async def get_or_create_lti_course_project(
+    user_id: UUID,
+    course_id: str,
+    course_label: str | None,
+    course_title: str | None,
+) -> int:
+    """Find or create a UserProject for a Canvas course.
+
+    The project name is prefixed with "[Canvas]" so it's identifiable.
+    We match on the description field which stores the stable Canvas
+    course ID, since course names can change.
+
+    Returns the project ID.
+    """
+    # Use the Canvas course ID as a stable identifier in the description
+    stable_description = f"lti:canvas:course:{course_id}"
+    display_name = course_title or course_label or f"Course {course_id}"
+    project_name = f"[Canvas] {display_name}"
+
+    async with get_async_session_context_manager() as session:
+        # Look for an existing project with this stable description for this user
+        result = await session.execute(
+            select(UserProject).where(
+                UserProject.user_id == user_id,
+                UserProject.description == stable_description,
+            )
+        )
+        existing = result.scalars().first()
+        if existing:
+            # Update the name in case the course was renamed
+            if existing.name != project_name:
+                existing.name = project_name
+                await session.commit()
+            return existing.id
+
+        # Create a new project for this course
+        project = UserProject(
+            user_id=user_id,
+            name=project_name,
+            description=stable_description,
+            instructions="",
+        )
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        logger.info(
+            "Created LTI course project: id=%d, name=%s, course_id=%s",
+            project.id,
+            project_name,
+            course_id,
+        )
+        return project.id
+
+
+async def find_tutor_persona_for_course(course_id: str) -> int | None:
+    """Find a Virtual Tutor persona linked to a Canvas course.
+
+    Searches for personas that:
+    1. Have the "Virtual Tutor" label
+    2. Are linked to any Canvas hierarchy node belonging to this course
+
+    Canvas hierarchy nodes use the pattern:
+      - Course node:  "canvas-course-{course_id}"
+      - Module nodes: "canvas-module-{course_id}-{module_id}"
+
+    So we match any node whose raw_node_id contains the course_id
+    as a suffix or component, scoped to the CANVAS source.
+
+    Returns the persona ID, or None if no tutor is configured.
+    """
+    # All Canvas hierarchy nodes for a given course start with
+    # "canvas-course-{id}" or "canvas-module-{id}-..."
+    course_node_prefix = f"canvas-course-{course_id}"
+    module_node_prefix = f"canvas-module-{course_id}-"
+
+    async with get_async_session_context_manager() as session:
+        result = await session.execute(
+            select(Persona.id)
+            .join(Persona.hierarchy_nodes)
+            .join(Persona.labels)
+            .where(
+                HierarchyNode.source == DocumentSource.CANVAS,
+                (HierarchyNode.raw_node_id == course_node_prefix)
+                | (HierarchyNode.raw_node_id.startswith(module_node_prefix)),
+                PersonaLabel.name == _VIRTUAL_TUTOR_LABEL,
+                Persona.deleted.is_(False),
+            )
+            .limit(1)
+        )
+        persona_id = result.scalar_one_or_none()
+
+        if persona_id is not None:
+            logger.info(
+                "Found tutor persona %d for Canvas course %s",
+                persona_id,
+                course_id,
+            )
+
+        return persona_id

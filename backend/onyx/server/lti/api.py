@@ -30,6 +30,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.lti.jwks import get_public_jwks
 from onyx.server.lti.utils import _extract_email_from_claims
+from onyx.server.lti.utils import extract_lti_context
+from onyx.server.lti.utils import find_tutor_persona_for_course
+from onyx.server.lti.utils import get_or_create_lti_course_project
 from onyx.server.lti.utils import store_lti_state
 from onyx.server.lti.utils import upsert_lti_user
 from onyx.server.lti.utils import validate_and_consume_state
@@ -190,14 +193,41 @@ async def lti_launch(
     # Override cookie attributes for iframe embedding
     _patch_cookie_for_embedding(response)
 
-    # Build redirect URL
-    redirect_url = f"{WEB_DOMAIN}/app?embedded=true"
-
-    # Check for custom assistant_id parameter
+    # Extract course context and create/find a project for it
+    context = extract_lti_context(claims)
     custom_claims = claims.get("https://purl.imsglobal.org/spec/lti/claim/custom", {})
     assistant_id = custom_claims.get("assistant_id")
+
+    # Build redirect URL — send students to /tutor, not /app
+    redirect_params: dict[str, str] = {}
+
+    # Resolve which tutor persona to use:
+    # 1. Explicit assistant_id from Canvas custom claim (admin-configured)
+    # 2. Auto-discover by finding a Virtual Tutor persona linked to
+    #    this course's hierarchy node
+    course_id = context.get("course_id")
     if assistant_id:
-        redirect_url += f"&assistantId={assistant_id}"
+        redirect_params["assistantId"] = str(assistant_id)
+    elif course_id:
+        discovered_id = await find_tutor_persona_for_course(course_id)
+        if discovered_id is not None:
+            redirect_params["assistantId"] = str(discovered_id)
+
+    # Create/find a UserProject for the Canvas course so conversations
+    # are scoped per-course
+    if course_id:
+        project_id = await get_or_create_lti_course_project(
+            user_id=user.id,
+            course_id=course_id,
+            course_label=context.get("course_label"),
+            course_title=context.get("course_title"),
+        )
+        redirect_params["projectId"] = str(project_id)
+
+    query_string = urlencode(redirect_params) if redirect_params else ""
+    redirect_url = f"{WEB_DOMAIN}/tutor"
+    if query_string:
+        redirect_url += f"?{query_string}"
 
     # Transfer cookies from the login response to the redirect
     redirect_response = RedirectResponse(url=redirect_url, status_code=302)

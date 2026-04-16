@@ -43,6 +43,7 @@ import { deleteAgent } from "@/refresh-pages/admin/AgentsPage/svc";
 import { useFormikContext } from "formik";
 import {
   TEACHING_STYLES,
+  TEACHING_STYLE_OPTIONS,
   VIRTUAL_TUTOR_LABEL_NAME,
   DEFAULT_STARTER_MESSAGES,
   getSystemPromptForStyle,
@@ -55,10 +56,10 @@ import {
 } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
-// Teaching Style Toggle (inside Formik context)
+// Teaching Style Selector (inside Formik context)
 // ---------------------------------------------------------------------------
 
-function TeachingStyleToggle() {
+function TeachingStyleSelector() {
   const { values, setFieldValue } = useFormikContext<{
     teaching_style: TeachingStyle;
     system_prompt: string;
@@ -72,36 +73,29 @@ function TeachingStyleToggle() {
     }
   }
 
+  const selectedOption = TEACHING_STYLE_OPTIONS.find(
+    (o) => o.value === values.teaching_style
+  );
+
   return (
     <GeneralLayouts.Section gap={0.5}>
-      <div className="flex gap-2">
-        <Button
-          prominence={
-            values.teaching_style === TEACHING_STYLES.socratic
-              ? "primary"
-              : "secondary"
-          }
-          type="button"
-          onClick={() => handleStyleChange(TEACHING_STYLES.socratic)}
-        >
-          Socratic (Guided)
-        </Button>
-        <Button
-          prominence={
-            values.teaching_style === TEACHING_STYLES.direct
-              ? "primary"
-              : "secondary"
-          }
-          type="button"
-          onClick={() => handleStyleChange(TEACHING_STYLES.direct)}
-        >
-          Direct Answers
-        </Button>
+      <div className="flex gap-1">
+        {TEACHING_STYLE_OPTIONS.map((option) => (
+          <Button
+            key={option.value}
+            prominence={
+              values.teaching_style === option.value ? "primary" : "secondary"
+            }
+            size="sm"
+            type="button"
+            onClick={() => handleStyleChange(option.value)}
+          >
+            {option.label}
+          </Button>
+        ))}
       </div>
       <Text as="p" secondaryBody text03>
-        {values.teaching_style === TEACHING_STYLES.socratic
-          ? "The tutor will guide students through reasoning with questions and hints rather than giving direct answers."
-          : "The tutor will provide clear, thorough explanations and direct answers to student questions."}
+        {selectedOption?.description ?? ""}
       </Text>
     </GeneralLayouts.Section>
   );
@@ -198,7 +192,7 @@ export default function TutorEditorPage({
     teaching_style: detectedStyle as TeachingStyle,
     system_prompt:
       existingTutor?.system_prompt ??
-      getSystemPromptForStyle(TEACHING_STYLES.socratic),
+      getSystemPromptForStyle(TEACHING_STYLES.balanced),
     prompt_manually_edited: false,
 
     // Starter messages
@@ -531,9 +525,9 @@ export default function TutorEditorPage({
                         <InputLayouts.Vertical
                           name="teaching_style"
                           title="Teaching Style"
-                          description="Choose how the tutor interacts with students."
+                          description="Choose how the tutor interacts with students. More Socratic styles guide through questions; more direct styles provide explanations upfront."
                         >
-                          <TeachingStyleToggle />
+                          <TeachingStyleSelector />
                         </InputLayouts.Vertical>
                       </GeneralLayouts.Section>
 

@@ -132,6 +132,7 @@ from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
+from onyx.server.middleware.csp import CSPMiddleware
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
@@ -662,6 +663,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # CSP frame-ancestors for LTI iframe embedding (Canvas LMS).
+    # Only adds the header when LTI_FRAME_ANCESTORS is configured.
+    application.add_middleware(CSPMiddleware)
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
