@@ -231,7 +231,6 @@ function Card(props: CardProps) {
                 padding,
                 cardBottomRoundingVariants[roundingProp]
               )}
-              data-background={background}
               data-border={border}
               data-opal-status-border={borderColor}
             >

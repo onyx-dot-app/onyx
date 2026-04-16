@@ -105,22 +105,12 @@
   min-height: 0;
 }
 
-/* ── Content body: carries styling. No top border (header provides it). ─ */
+/* ── Content body: carries border + padding. Background is always
+      transparent so the page background shows through the content slot,
+      keeping it visually distinct from the header. ─ */
 
 .opal-card-expandable-body {
-  @apply w-full overflow-clip;
-}
-
-.opal-card-expandable-body[data-background="none"] {
-  @apply bg-transparent;
-}
-
-.opal-card-expandable-body[data-background="light"] {
-  @apply bg-background-tint-00;
-}
-
-.opal-card-expandable-body[data-background="heavy"] {
-  @apply bg-background-tint-01;
+  @apply w-full overflow-clip bg-transparent;
 }
 
 .opal-card-expandable-body[data-border="none"] {

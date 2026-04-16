@@ -101,6 +101,7 @@ Everything from plain mode, **plus**:
 - **Always controlled.** `expanded` is a pure one-way visual prop. There is no `defaultExpanded` or `onExpandChange` — the caller owns state entirely (`useState` at the call site).
 - **No React context.** The component renders a flat tree; there are no compound sub-components (`Card.Header` / `Card.Content`) and no exported context hooks.
 - **Rounding adapts automatically.** When `expanded && content !== undefined`, the header's bottom corners flatten and the content's top corners flatten so they meet seamlessly. When collapsed (or when `content` is undefined), the header is fully rounded.
+- **Content background is always transparent.** The `background` prop applies to the header only; the content slot never fills its own background so the page shows through and keeps the two regions visually distinct.
 - **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation with an opacity fade (~200ms ease-out). No `@radix-ui/react-collapsible` dependency.
 
 ### Accessibility
