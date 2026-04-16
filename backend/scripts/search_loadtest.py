@@ -1,0 +1,367 @@
+"""
+Load test for the Onyx search flow (/api/search/send-search-message).
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import random
+import statistics
+import threading
+import time
+from collections import Counter
+from pathlib import Path
+
+import httpx
+from pydantic import BaseModel
+
+from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+
+
+DEFAULT_QUERIES = [
+    "onboarding checklist",
+    "how do we handle refunds",
+    "password reset policy",
+    "quarterly planning process",
+    "incident response runbook",
+    "deployment pipeline overview",
+    "vacation policy",
+    "customer escalation procedure",
+]
+
+
+class Result(BaseModel):
+    model_config = {"frozen": True}
+
+    status: int
+    latency_s: float
+    bytes_received: int
+    error: str | None = None
+
+
+class Queries(BaseModel):
+    model_config = {"frozen": True}
+
+    _queries: list[str]
+
+    def get_random_query(self) -> str:
+        return random.choice(self._queries)
+
+
+class StopCondition:
+    def __init__(self, num_requests_to_make: int | None, duration_s: float | None):
+        assert (
+            num_requests_to_make is not None or duration_s is not None
+        ), "Either num_requests_to_make or timestamp_to_stop_making_requests_s must be provided."
+        self._num_requests_to_make: int | None = num_requests_to_make
+        self._duration_s: float | None = duration_s
+        self._timestamp_to_stop_making_requests_s: float | None = (
+            time.perf_counter() + self._duration_s if self._duration_s else None
+        )
+
+    def should_stop(self, num_requests_made: int, current_timestamp_s: float) -> bool:
+        requests_condition_met = False
+        timestamp_condition_met = False
+        if self._num_requests_to_make is not None:
+            requests_condition_met = num_requests_made >= self._num_requests_to_make
+        if self._timestamp_to_stop_making_requests_s is not None:
+            timestamp_condition_met = (
+                current_timestamp_s >= self._timestamp_to_stop_making_requests_s
+            )
+        return requests_condition_met or timestamp_condition_met
+
+    def __str__(self) -> str:
+        if self._num_requests_to_make is not None and self._duration_s is not None:
+            return f"Stop condition: make {self._num_requests_to_make} requests or make requests for {self._duration_s}s."
+        if self._num_requests_to_make is not None:
+            return f"Stop condition: make {self._num_requests_to_make} requests."
+        if self._duration_s is not None:
+            return f"Stop condition: make requests for {self._duration_s}s."
+        raise ValueError("Bug: Invalid stop condition.")
+
+
+def make_one_search_request(
+    client: httpx.Client,
+    search_url: str,
+    request_headers: dict[str, str],
+    request_body: SendSearchQueryRequest,
+    timeout_s: float,
+) -> Result:
+    request_body_dict = request_body.model_dump()
+    start = time.perf_counter()
+    try:
+        resp = client.post(
+            search_url,
+            json=request_body_dict,
+            headers=request_headers,
+            timeout=timeout_s,
+        )
+        body = resp.content
+        return Result(
+            status=resp.status_code,
+            latency_s=time.perf_counter() - start,
+            bytes_received=len(body),
+            error=(
+                None
+                if resp.status_code == 200
+                else body[:200].decode("utf-8", "replace")
+            ),
+        )
+    except httpx.TimeoutException:
+        return Result(
+            status=0,
+            latency_s=time.perf_counter() - start,
+            bytes_received=0,
+            error="timeout",
+        )
+    except Exception as e:
+        return Result(
+            status=0,
+            latency_s=time.perf_counter() - start,
+            bytes_received=0,
+            error=f"{type(e).__name__}: {e}",
+        )
+
+
+def worker_loop(
+    search_url: str,
+    request_headers: dict[str, str],
+    base_request_body: SendSearchQueryRequest,
+    queries: Queries,
+    timeout_s: float,
+    results: list[Result],
+    results_lock: threading.Lock,
+    stop_condition: StopCondition,
+) -> None:
+    thread_local_base_request_body = base_request_body.model_copy()
+    with httpx.Client() as client:
+        num_requests_made = 0
+        timestamp_s = time.perf_counter()
+        while not stop_condition.should_stop(
+            num_requests_made=num_requests_made, current_timestamp_s=timestamp_s
+        ):
+            query = queries.get_random_query()
+            thread_local_base_request_body.search_query = query
+            result = make_one_search_request(
+                client,
+                search_url,
+                request_headers,
+                thread_local_base_request_body,
+                timeout_s,
+            )
+            with results_lock:
+                results.append(result)
+            num_requests_made += 1
+            timestamp_s = time.perf_counter()
+
+
+def summarize(results: list[Result], wall_time_s: float) -> None:
+    if not results:
+        print("No results.")
+        return
+    oks = [r for r in results if r.status == 200]
+    fails = [r for r in results if r.status != 200]
+    lats = [r.latency_s for r in oks]
+    print()
+    print(f"Wall time:          {wall_time_s:.3f}s")
+    print(f"Total requests:     {len(results)}")
+    print(f"Successful (200):   {len(oks)}")
+    print(f"Failed:             {len(fails)}")
+    if lats:
+        print(f"Throughput (ok):    {len(oks) / wall_time_s:.3f} req/s")
+        print(f"Latency mean:       {statistics.mean(lats):.3f}s")
+        if len(lats) >= 100:
+            # quantiles(n=100) returns 99 cut points: indices 0..98 => p1..p99.
+            percentiles = statistics.quantiles(lats, n=100)
+            print(f"Latency p50:        {percentiles[49]:.3f}s")
+            print(f"Latency p90:        {percentiles[89]:.3f}s")
+            print(f"Latency p95:        {percentiles[94]:.3f}s")
+            print(f"Latency p99:        {percentiles[98]:.3f}s")
+        print(f"Latency max:        {max(lats):.3f}s")
+    if fails:
+        err_counts = Counter((r.status, (r.error or "")[:80]) for r in fails)
+        print()
+        print("Failure breakdown:")
+        for (status, err), n in err_counts.most_common(10):
+            print(f"  [{status}] x{n}  {err}")
+
+
+def load_queries(args: argparse.Namespace) -> Queries:
+    if args.queries_file:
+        path = Path(os.path.expanduser(args.queries_file))
+        queries = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
+        if not queries:
+            raise SystemExit(f"No queries found in {path}")
+        return Queries(_queries=queries)
+    if args.query:
+        return Queries(_queries=[args.query])
+    return Queries(_queries=DEFAULT_QUERIES)
+
+
+def load_token(args: argparse.Namespace) -> str:
+    if args.token:
+        return args.token.strip()
+    if args.token_file:
+        return Path(os.path.expanduser(args.token_file)).read_text().strip()
+    env = os.environ.get("ONYX_ACCESS_TOKEN")
+    if env:
+        return env.strip()
+    raise SystemExit("Provide --token, --token-file, or ONYX_ACCESS_TOKEN env var.")
+
+
+def run_load_test(
+    search_url: str,
+    request_headers: dict[str, str],
+    base_request_body: SendSearchQueryRequest,
+    queries: Queries,
+    timeout_s: float,
+    concurrency: int,
+    results: list[Result],
+    results_lock: threading.Lock,
+    stop_condition: StopCondition,
+) -> None:
+    threads = [
+        threading.Thread(
+            target=lambda: worker_loop(
+                search_url,
+                request_headers,
+                base_request_body,
+                queries,
+                timeout_s,
+                results,
+                results_lock,
+                stop_condition,
+            ),
+            daemon=True,
+        )
+        for _ in range(concurrency)
+    ]
+
+    for t in threads:
+        t.start()
+
+    for t in threads:
+        t.join()
+
+
+def run(args: argparse.Namespace) -> None:
+    token = load_token(args)
+    queries = load_queries(args)
+    base_url = args.url.rstrip("/")
+    # Accept either the bare host (https://st-dev.onyx.app) or one ending in
+    # /api.
+    api_root = base_url if base_url.endswith("/api") else base_url + "/api"
+    search_url = f"{api_root}/search/send-search-message"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    base_request = SendSearchQueryRequest(
+        search_query="",  # Overwritten per request.
+    )
+    if args.num_hits:
+        base_request.num_hits = args.num_hits
+    stop_condition = StopCondition(
+        num_requests_to_make=args.total if args.total else None,
+        duration_s=args.duration if args.duration else None,
+    )
+    timeout_s = args.timeout
+
+    # Preflight: Verify connectivity and auth so we fail fast on URL / token
+    # issues.
+    with httpx.Client() as client:
+        for label, url in [
+            ("health", f"{api_root}/health"),
+            ("me", f"{api_root}/me"),
+        ]:
+            print(f"Preflight {label} -> {url}")
+            start = time.perf_counter()
+            try:
+                resp = client.get(url=url, headers=headers, timeout=timeout_s)
+            except Exception as e:
+                raise SystemExit(f"{type(e).__name__}: {e}")
+            latency = time.perf_counter() - start
+            print(
+                f"  status={resp.status_code}  latency={latency:.3f}s  bytes={len(resp.content)}."
+            )
+            if resp.status_code != 200:
+                print(f"  error: {resp.content[:200].decode('utf-8', 'replace')}")
+                raise SystemExit(f"Preflight '{label}' failed; aborting load test.")
+
+    print(f"Load test: concurrency={args.concurrency}.")
+    print(str(stop_condition))
+    results: list[Result] = []
+    results_lock = threading.Lock()
+    t0 = time.perf_counter()
+    run_load_test(
+        search_url=search_url,
+        request_headers=headers,
+        base_request_body=base_request,
+        queries=queries,
+        timeout_s=timeout_s,
+        concurrency=args.concurrency,
+        results=results,
+        results_lock=results_lock,
+        stop_condition=stop_condition,
+    )
+    wall_time_s = time.perf_counter() - t0
+
+    summarize(results=results, wall_time_s=wall_time_s)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="A load test tool for the Onyx search endpoint."
+    )
+    parser.add_argument(
+        "--url", required=True, help="Onyx base URL, e.g. https://st-dev.onyx.app"
+    )
+    parser.add_argument(
+        "--token",
+        help="Bearer token (onyx_pat_...). Or use --token-file / $ONYX_ACCESS_TOKEN.",
+    )
+    parser.add_argument(
+        "--token-file",
+        help="Path to a file containing a bearer token. Or use --token / $ONYX_ACCESS_TOKEN.",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Number of requesting threads to run concurrently.",
+    )
+    parser.add_argument(
+        "--total",
+        type=int,
+        help="Total number of requests to make per requesting thread. If specified along with --duration, the thread will stop on whichever condition is met first.",
+    )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        help="Duration in seconds each requesting thread will run for. If specified along with --total, the thread will stop on whichever condition is met first.",
+    )
+    parser.add_argument(
+        "--timeout", type=float, default=30.0, help="Per-request timeout in seconds."
+    )
+    parser.add_argument(
+        "--queries-file", help="File with one query per line. Or use --query."
+    )
+    parser.add_argument("--query", help="Single literal query used for every request.")
+    parser.add_argument(
+        "--num-hits",
+        type=int,
+        default=10,
+        help="Number of hits to retrieve per request.",
+    )
+    args = parser.parse_args()
+
+    try:
+        run(args)
+    except KeyboardInterrupt:
+        print("Interrupted.")
+
+
+if __name__ == "__main__":
+    main()
