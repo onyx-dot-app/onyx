@@ -44,14 +44,6 @@ RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
   chmod 0440 /etc/sudoers.d/dev
 
-# Pre-seed GitHub's SSH host keys so git-over-SSH never prompts.  Keys are
-# pinned in-repo (verified against the fingerprints GitHub publishes at
-# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
-# rather than fetched at build time, so a compromised build-time network can't
-# inject a rogue key.
-COPY github_known_hosts /etc/ssh/ssh_known_hosts
-RUN chmod 644 /etc/ssh/ssh_known_hosts
-
 ENV DEVCONTAINER=true
 
 RUN mkdir -p /workspace && \
@@ -70,3 +62,11 @@ RUN chsh -s /bin/zsh root && \
     echo '[ -f /workspace/.devcontainer/zshrc ] && . /workspace/.devcontainer/zshrc' >> "$rc"; \
   done && \
   chown dev:dev /home/dev/.zshrc
+
+# Pre-seed GitHub's SSH host keys so git-over-SSH never prompts.  Keys are
+# pinned in-repo (verified against the fingerprints GitHub publishes at
+# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
+# rather than fetched at build time, so a compromised build-time network can't
+# inject a rogue key.
+COPY github_known_hosts /etc/ssh/ssh_known_hosts
+RUN chmod 644 /etc/ssh/ssh_known_hosts
