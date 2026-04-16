@@ -30,6 +30,11 @@ def build_total_descriptor_chunks(
         line = _categorical_top_line(headers[idx], analysis.categorical_counts[idx])
         if line:
             lines.append(line)
+
+    # No meaningful information - leave early
+    if not lines:
+        return []
+
     lines.append(f"Total row count: {analysis.row_count}.")
 
     prefix = (f"{heading}\n" if heading else "") + TOTALS_HEADER
