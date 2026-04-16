@@ -207,37 +207,37 @@
 
 /* LineItem Icon Variants */
 .line-item-icon-main {
-  @apply stroke-text-03;
+  @apply fill-text-03;
 
   .group\/LineItem[data-selected="true"] & {
-    @apply stroke-action-link-05;
+    @apply fill-action-link-05;
   }
 }
 
 .line-item-icon-strikethrough {
-  @apply stroke-text-03;
+  @apply fill-text-03;
 }
 
 .line-item-icon-disabled {
-  @apply stroke-text-01;
+  @apply fill-text-01;
 }
 
 .line-item-icon-danger {
-  @apply stroke-status-error-05;
+  @apply fill-status-error-05;
 }
 
 .line-item-icon-action {
-  @apply stroke-text-03;
+  @apply fill-text-03;
 }
 
 .line-item-icon-muted {
-  @apply stroke-text-02;
+  @apply fill-text-02;
 
   .group\/LineItem[data-selected="true"] & {
-    @apply stroke-text-02;
+    @apply fill-text-02;
   }
 }
 
 .line-item-icon-skeleton {
-  @apply stroke-text-02;
+  @apply fill-text-02;
 }
