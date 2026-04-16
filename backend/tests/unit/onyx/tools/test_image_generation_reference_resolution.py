@@ -7,6 +7,7 @@ the conversation (via ``[attached image — file_id: <id>]`` tags on user
 messages and the JSON returned by prior generate_image calls), so we
 don't re-validate against an allow-list in the tool itself.
 """
+
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -80,18 +81,14 @@ class TestResolveReferenceImageFileIds:
     def test_deduplicates_preserving_first_occurrence(self) -> None:
         tool = _make_tool()
         result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={
-                REFERENCE_IMAGE_FILE_IDS_FIELD: ["gen-1", "gen-2", "gen-1"]
-            },
+            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["gen-1", "gen-2", "gen-1"]},
         )
         assert result == ["gen-1", "gen-2"]
 
     def test_strips_whitespace_and_skips_empty_strings(self) -> None:
         tool = _make_tool()
         result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={
-                REFERENCE_IMAGE_FILE_IDS_FIELD: ["  gen-1  ", "", "   "]
-            },
+            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["  gen-1  ", "", "   "]},
         )
         assert result == ["gen-1"]
 
@@ -108,8 +105,6 @@ class TestResolveReferenceImageFileIds:
         than the tail, since the LLM put the most important one first."""
         tool = _make_tool(max_reference_images=2)
         result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={
-                REFERENCE_IMAGE_FILE_IDS_FIELD: ["a", "b", "c", "d"]
-            },
+            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["a", "b", "c", "d"]},
         )
         assert result == ["a", "b"]
