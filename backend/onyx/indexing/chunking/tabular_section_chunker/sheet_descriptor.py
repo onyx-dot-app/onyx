@@ -1,6 +1,7 @@
 """Per-section sheet descriptor chunk builder."""
 
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
+from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
 
@@ -62,7 +63,7 @@ def _overview_line(a: SheetAnalysis) -> str:
 
 
 def _columns_line(headers: list[str]) -> str:
-    return "Columns: " + ", ".join(_label(h) for h in headers)
+    return "Columns: " + ", ".join(label(h) for h in headers)
 
 
 def _time_range_line(a: SheetAnalysis) -> str:
@@ -74,7 +75,7 @@ def _time_range_line(a: SheetAnalysis) -> str:
 def _numeric_cols_line(headers: list[str], a: SheetAnalysis) -> str:
     if not a.numeric_cols:
         return ""
-    names = ", ".join(_label(headers[i]) for i in a.numeric_cols[:MAX_NUMERIC_COLS])
+    names = ", ".join(label(headers[i]) for i in a.numeric_cols[:MAX_NUMERIC_COLS])
     return f"Numeric columns (aggregatable by sum, average, min, max): {names}"
 
 
@@ -82,7 +83,7 @@ def _categorical_cols_line(headers: list[str], a: SheetAnalysis) -> str:
     if not a.categorical_cols:
         return ""
     names = ", ".join(
-        _label(headers[i]) for i in a.categorical_cols[:MAX_CATEGORICAL_COLS]
+        label(headers[i]) for i in a.categorical_cols[:MAX_CATEGORICAL_COLS]
     )
     return f"Categorical columns (groupable, can be counted by value): {names}"
 
@@ -90,7 +91,7 @@ def _categorical_cols_line(headers: list[str], a: SheetAnalysis) -> str:
 def _id_col_line(headers: list[str], a: SheetAnalysis) -> str:
     if a.id_col is None:
         return ""
-    return f"Identifier column: {_label(headers[a.id_col])}."
+    return f"Identifier column: {label(headers[a.id_col])}."
 
 
 def _values_seen_line(headers: list[str], a: SheetAnalysis) -> str:
@@ -98,9 +99,5 @@ def _values_seen_line(headers: list[str], a: SheetAnalysis) -> str:
     for ci in a.categorical_cols[:MAX_CATEGORICAL_WITH_SAMPLES]:
         sample = sorted(a.categorical_values.get(ci, []))[:MAX_DISTINCT_SAMPLES]
         if sample:
-            rows.append(f"Values seen in {_label(headers[ci])}: " + ", ".join(sample))
+            rows.append(f"Values seen in {label(headers[ci])}: " + ", ".join(sample))
     return "\n".join(rows)
-
-
-def _label(name: str) -> str:
-    return f"{name} ({name.replace('_', ' ')})" if "_" in name else name

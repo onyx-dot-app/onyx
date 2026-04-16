@@ -2,6 +2,13 @@ from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 
 
+def label(name: str) -> str:
+    """Render a column name with a space-substituted friendly alias in
+    parens for underscored headers so retrieval matches either surface
+    form (e.g. ``MTTR_hours`` → ``MTTR_hours (MTTR hours)``)."""
+    return f"{name} ({name.replace('_', ' ')})" if "_" in name else name
+
+
 def pack_lines(
     lines: list[str],
     prefix: str,

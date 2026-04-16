@@ -1,6 +1,7 @@
 from collections import Counter
 
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
+from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
 
@@ -44,7 +45,7 @@ def _numeric_totals_line(name: str, values: list[float]) -> str:
     total = sum(values)
     avg = total / len(values)
     return (
-        f"Column {_label(name)}: total (sum across all rows) = {_fmt(total)}, "
+        f"Column {label(name)}: total (sum across all rows) = {_fmt(total)}, "
         f"average = {_fmt(avg)}, minimum = {_fmt(min(values))}, "
         f"maximum = {_fmt(max(values))}, count = {len(values)}."
     )
@@ -55,14 +56,10 @@ def _categorical_top_line(name: str, counts: Counter[str]) -> str:
     if not top:
         return ""
     val, n = top[0]
-    return f"Column {_label(name)} most frequent value: {val} ({n} occurrences)."
-
-
-def _label(name: str) -> str:
-    return f"{name} ({name.replace('_', ' ')})" if "_" in name else name
+    return f"Column {label(name)} most frequent value: {val} ({n} occurrences)."
 
 
 def _fmt(num: float) -> str:
-    if num == int(num) and abs(num) < 1e15:
+    if abs(num) < 1e15 and num == int(num):
         return str(int(num))
     return f"{num:.6g}"
