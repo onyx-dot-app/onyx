@@ -10,12 +10,6 @@ class EmbeddingProvider(str, Enum):
     AZURE = "azure"
 
 
-class RerankerProvider(str, Enum):
-    COHERE = "cohere"
-    LITELLM = "litellm"
-    BEDROCK = "bedrock"
-
-
 class EmbedTextType(str, Enum):
     QUERY = "query"
     PASSAGE = "passage"

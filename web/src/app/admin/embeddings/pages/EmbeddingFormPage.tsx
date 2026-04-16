@@ -23,11 +23,9 @@ import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
   AdvancedSearchConfiguration,
   EmbeddingPrecision,
-  RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
 } from "../interfaces";
-import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import Modal from "@/refresh-components/Modal";
 import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
@@ -54,19 +52,10 @@ export default function EmbeddingForm() {
       contextual_rag_llm_name: null,
       contextual_rag_llm_provider: null,
       multilingual_expansion: [],
-      disable_rerank_for_streaming: false,
       api_url: null,
-      num_rerank: 0,
       embedding_precision: EmbeddingPrecision.BFLOAT16,
       reduced_dimension: null,
     });
-
-  const [rerankingDetails, setRerankingDetails] = useState<RerankingDetails>({
-    rerank_api_key: "",
-    rerank_provider_type: null,
-    rerank_model_name: "",
-    rerank_api_url: null,
-  });
 
   const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
     SwitchoverType.REINDEX
@@ -74,12 +63,7 @@ export default function EmbeddingForm() {
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isFormValid, setIsFormValid] = useState(true);
-  const [rerankFormErrors, setRerankFormErrors] = useState<
-    Record<string, string>
-  >({});
-  const [isRerankFormValid, setIsRerankFormValid] = useState(true);
   const advancedFormRef = useRef(null);
-  const rerankFormRef = useRef(null);
 
   const updateAdvancedEmbeddingDetails = (
     key: keyof AdvancedSearchConfiguration,
@@ -145,36 +129,12 @@ export default function EmbeddingForm() {
         contextual_rag_llm_name: searchSettings.contextual_rag_llm_name,
         contextual_rag_llm_provider: searchSettings.contextual_rag_llm_provider,
         multilingual_expansion: searchSettings.multilingual_expansion,
-        disable_rerank_for_streaming:
-          searchSettings.disable_rerank_for_streaming,
-        num_rerank: searchSettings.num_rerank,
         api_url: null,
         embedding_precision: searchSettings.embedding_precision,
         reduced_dimension: searchSettings.reduced_dimension,
       });
-
-      setRerankingDetails({
-        rerank_api_key: searchSettings.rerank_api_key,
-        rerank_provider_type: searchSettings.rerank_provider_type,
-        rerank_model_name: searchSettings.rerank_model_name,
-        rerank_api_url: searchSettings.rerank_api_url,
-      });
     }
   }, [searchSettings]);
-
-  const originalRerankingDetails: RerankingDetails = searchSettings
-    ? {
-        rerank_api_key: searchSettings.rerank_api_key,
-        rerank_provider_type: searchSettings.rerank_provider_type,
-        rerank_model_name: searchSettings.rerank_model_name,
-        rerank_api_url: searchSettings.rerank_api_url,
-      }
-    : {
-        rerank_api_key: "",
-        rerank_provider_type: null,
-        rerank_model_name: "",
-        rerank_api_url: null,
-      };
 
   useEffect(() => {
     if (currentEmbeddingModel) {
@@ -200,7 +160,6 @@ export default function EmbeddingForm() {
     const searchSettings = combineSearchSettings(
       selectedProvider,
       advancedEmbeddingDetails,
-      rerankingDetails,
       selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
       switchoverType
     );
@@ -212,12 +171,7 @@ export default function EmbeddingForm() {
       toast.error("Failed to update search settings");
       return false;
     }
-  }, [
-    selectedProvider,
-    advancedEmbeddingDetails,
-    rerankingDetails,
-    switchoverType,
-  ]);
+  }, [selectedProvider, advancedEmbeddingDetails, switchoverType]);
 
   const handleValidationChange = useCallback(
     (isValid: boolean, errors: Record<string, string>) => {
@@ -227,19 +181,10 @@ export default function EmbeddingForm() {
     []
   );
 
-  const handleRerankValidationChange = useCallback(
-    (isValid: boolean, errors: Record<string, string>) => {
-      setIsRerankFormValid(isValid);
-      setRerankFormErrors(errors);
-    },
-    []
-  );
-
-  // Combine validation states for both forms
-  const isOverallFormValid = isFormValid && isRerankFormValid;
+  const isOverallFormValid = isFormValid;
   const combinedFormErrors = useMemo(() => {
-    return { ...formErrors, ...rerankFormErrors };
-  }, [formErrors, rerankFormErrors]);
+    return { ...formErrors };
+  }, [formErrors]);
 
   const ReIndexingButton = useMemo(() => {
     const ReIndexingButtonComponent = ({
@@ -445,7 +390,6 @@ export default function EmbeddingForm() {
       searchSettings = combineSearchSettings(
         selectedProvider,
         advancedEmbeddingDetails,
-        rerankingDetails,
         selectedProvider.provider_type
           ?.toLowerCase()
           .split(" ")[0] as EmbeddingProvider | null,
@@ -456,7 +400,6 @@ export default function EmbeddingForm() {
       searchSettings = combineSearchSettings(
         selectedProvider,
         advancedEmbeddingDetails,
-        rerankingDetails,
         null,
         switchoverType
       );
@@ -522,8 +465,6 @@ export default function EmbeddingForm() {
                     setDisplayPoorModelName(false);
                     setShowPoorModel(true);
                   } else {
-                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
-                    nextFormStep();
                     nextFormStep();
                   }
                 }}
@@ -573,8 +514,6 @@ export default function EmbeddingForm() {
                 <OpalButton
                   onClick={() => {
                     setShowPoorModel(false);
-                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
-                    nextFormStep();
                     nextFormStep();
                   }}
                 >
@@ -599,59 +538,6 @@ export default function EmbeddingForm() {
         {formStep == 1 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              Select a Reranking Model
-            </h2>
-            <Text as="p" className="mb-4">
-              Updating the reranking model does not require re-indexing
-              documents. The reranker helps improve search quality by reordering
-              results after the initial embedding search. Changes will take
-              effect immediately for all new searches.
-            </Text>
-
-            <CardSection>
-              <RerankingDetailsForm
-                ref={rerankFormRef}
-                setModelTab={setModelTab}
-                modelTab={
-                  originalRerankingDetails.rerank_model_name
-                    ? modelTab
-                    : modelTab || "cloud"
-                }
-                currentRerankingDetails={rerankingDetails}
-                originalRerankingDetails={originalRerankingDetails}
-                setRerankingDetails={setRerankingDetails}
-                onValidationChange={handleRerankValidationChange}
-              />
-            </CardSection>
-
-            <div className={`mt-4 w-full grid grid-cols-3`}>
-              <OpalButton
-                prominence="secondary"
-                icon={SvgArrowLeft}
-                onClick={() => prevFormStep()}
-              >
-                Previous
-              </OpalButton>
-
-              <ReIndexingButton needsReIndex={needsReIndex} />
-
-              <div className="flex w-full justify-end">
-                <OpalButton
-                  prominence="secondary"
-                  onClick={() => {
-                    nextFormStep();
-                  }}
-                  rightIcon={SvgArrowRight}
-                >
-                  Advanced
-                </OpalButton>
-              </div>
-            </div>
-          </>
-        )}
-        {formStep == 2 && (
-          <>
-            <h2 className="text-2xl font-bold mb-4 text-text-800">
               Advanced Search Configuration
             </h2>
             <Text as="p" className="mb-4">
@@ -672,11 +558,7 @@ export default function EmbeddingForm() {
             <div className={`mt-4 grid  grid-cols-3 w-full `}>
               <OpalButton
                 prominence="secondary"
-                onClick={() => {
-                  // Skip reranking step (step 1), go back to embedding model (step 0)
-                  prevFormStep();
-                  prevFormStep();
-                }}
+                onClick={() => prevFormStep()}
                 icon={SvgArrowLeft}
               >
                 Previous

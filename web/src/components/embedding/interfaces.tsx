@@ -357,7 +357,7 @@ export const getFormattedProviderName = (providerType: string | null) => {
   }
 };
 
-export const getTitleForRerankType = (type: string) => {
+export const getTitleForEmbeddingModelGroup = (type: string) => {
   switch (type) {
     case "nomic-ai":
       return "Nomic (recommended)";
@@ -368,7 +368,7 @@ export const getTitleForRerankType = (type: string) => {
   }
 };
 
-export const getIconForRerankType = (type: string) => {
+export const getIconForEmbeddingModelGroup = (type: string) => {
   switch (type) {
     case "nomic-ai":
       return <NomicIcon size={40} />;

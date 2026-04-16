@@ -1,8 +1,8 @@
 import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
   EmbeddingModelDescriptor,
-  getIconForRerankType,
-  getTitleForRerankType,
+  getIconForEmbeddingModelGroup,
+  getTitleForEmbeddingModelGroup,
   getFormattedProviderName,
   HostedEmbeddingModel,
   CloudEmbeddingModel,
@@ -256,9 +256,9 @@ export function ModelSelector({
         {Object.entries(groupedModelOptions).map(([type, models]) => (
           <div key={type}>
             <div className="flex items-center mb-2">
-              {getIconForRerankType(type)}
+              {getIconForEmbeddingModelGroup(type)}
               <h2 className="ml-2 mt-2 text-xl font-bold">
-                {getTitleForRerankType(type)}
+                {getTitleForEmbeddingModelGroup(type)}
               </h2>
             </div>
 

@@ -5,7 +5,7 @@ import { SvgSettings } from "@opal/icons";
 export default function EmbeddingSidebar() {
   const { formStep, setFormStep } = useEmbeddingFormContext();
 
-  const settingSteps = ["Embedding Model", "Reranking Model", "Advanced"];
+  const settingSteps = ["Embedding Model", "Advanced"];
 
   return (
     <StepSidebar

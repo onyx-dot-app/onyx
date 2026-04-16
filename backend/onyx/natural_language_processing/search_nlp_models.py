@@ -12,12 +12,10 @@ from types import TracebackType
 from typing import Any
 from typing import cast
 
-import aioboto3
 import httpx
 import requests
 import voyageai
 from cohere import AsyncClient as CohereAsyncClient
-from cohere.core.api_error import ApiError
 from google.oauth2 import service_account
 from httpx import HTTPError
 from requests import JSONDecodeError
@@ -39,12 +37,10 @@ from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
 from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
 from onyx.natural_language_processing.constants import EmbeddingModelTextType
-from onyx.natural_language_processing.exceptions import CohereBillingLimitError
 from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
-from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
@@ -57,14 +53,11 @@ from shared_configs.configs import SKIP_WARM_UP
 from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
-from shared_configs.model_server_models import RerankRequest
-from shared_configs.model_server_models import RerankResponse
 from shared_configs.utils import batch_list
 
 logger = setup_logger()
@@ -570,90 +563,6 @@ class CloudEmbedding:
             )
 
 
-# API-based reranking functions (moved from model server)
-async def cohere_rerank_api(
-    query: str, docs: list[str], model_name: str, api_key: str
-) -> list[float]:
-    cohere_client = CohereAsyncClient(api_key=api_key)
-    try:
-        response = await cohere_client.rerank(
-            query=query, documents=docs, model=model_name
-        )
-    except ApiError as err:
-        if err.status_code == 402:
-            logger.warning(
-                "Cohere rerank request rejected due to billing cap. Falling back to retrieval ordering until billing resets."
-            )
-            raise CohereBillingLimitError(
-                "Cohere billing limit reached for reranking"
-            ) from err
-        raise
-    results = response.results
-    sorted_results = sorted(results, key=lambda item: item.index)
-    return [result.relevance_score for result in sorted_results]
-
-
-async def cohere_rerank_aws(
-    query: str,
-    docs: list[str],
-    model_name: str,
-    region_name: str,
-    aws_access_key_id: str,
-    aws_secret_access_key: str,
-) -> list[float]:
-    session = aioboto3.Session(
-        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
-    )
-    async with session.client(
-        "bedrock-runtime", region_name=region_name
-    ) as bedrock_client:
-        body = json.dumps(
-            {
-                "query": query,
-                "documents": docs,
-                "api_version": 2,
-            }
-        )
-        # Invoke the Bedrock model asynchronously
-        response = await bedrock_client.invoke_model(
-            modelId=model_name,
-            accept="application/json",
-            contentType="application/json",
-            body=body,
-        )
-
-        # Read the response asynchronously
-        response_body = json.loads(await response["body"].read())
-
-        # Extract and sort the results
-        results = response_body.get("results", [])
-        sorted_results = sorted(results, key=lambda item: item["index"])
-
-        return [result["relevance_score"] for result in sorted_results]
-
-
-async def litellm_rerank(
-    query: str, docs: list[str], api_url: str, model_name: str, api_key: str | None
-) -> list[float]:
-    headers = {} if not api_key else {"Authorization": f"Bearer {api_key}"}
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            api_url,
-            json={
-                "model": model_name,
-                "query": query,
-                "documents": docs,
-            },
-            headers=headers,
-        )
-        response.raise_for_status()
-        result = response.json()
-        return [
-            item["relevance_score"]
-            for item in sorted(result["results"], key=lambda x: x["index"])
-        ]
-
-
 class EmbeddingModel:
     def __init__(
         self,
@@ -1027,104 +936,6 @@ class EmbeddingModel:
         )
 
 
-class RerankingModel:
-    def __init__(
-        self,
-        model_name: str,
-        provider_type: RerankerProvider | None,
-        api_key: str | None,
-        api_url: str | None,
-        model_server_host: str = MODEL_SERVER_HOST,
-        model_server_port: int = MODEL_SERVER_PORT,
-    ) -> None:
-        self.model_name = model_name
-        self.provider_type = provider_type
-        self.api_key = api_key
-        self.api_url = api_url
-
-        # Only build model server endpoint for local models
-        if self.provider_type is None:
-            model_server_url = build_model_server_url(
-                model_server_host, model_server_port
-            )
-            self.rerank_server_endpoint: str | None = (
-                model_server_url + "/encoder/cross-encoder-scores"
-            )
-        else:
-            # API providers don't need model server endpoint
-            self.rerank_server_endpoint = None
-
-    async def _make_direct_rerank_call(
-        self, query: str, passages: list[str]
-    ) -> list[float]:
-        """Make direct API call to cloud provider, bypassing model server."""
-        if self.provider_type is None:
-            raise ValueError("Provider type is required for direct API calls")
-
-        if self.api_key is None:
-            raise ValueError("API key is required for cloud provider")
-
-        if self.provider_type == RerankerProvider.COHERE:
-            return await cohere_rerank_api(
-                query, passages, self.model_name, self.api_key
-            )
-        elif self.provider_type == RerankerProvider.BEDROCK:
-            aws_access_key_id, aws_secret_access_key, aws_region = pass_aws_key(
-                self.api_key
-            )
-            return await cohere_rerank_aws(
-                query,
-                passages,
-                self.model_name,
-                aws_region,
-                aws_access_key_id,
-                aws_secret_access_key,
-            )
-        elif self.provider_type == RerankerProvider.LITELLM:
-            if self.api_url is None:
-                raise ValueError("API URL is required for LiteLLM reranking.")
-            return await litellm_rerank(
-                query, passages, self.api_url, self.model_name, self.api_key
-            )
-        else:
-            raise ValueError(f"Unsupported reranking provider: {self.provider_type}")
-
-    def predict(self, query: str, passages: list[str]) -> list[float]:
-        # Route between direct API calls and model server calls
-        if self.provider_type is not None:
-            # For API providers, make direct API call
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                return loop.run_until_complete(
-                    self._make_direct_rerank_call(query, passages)
-                )
-            finally:
-                loop.close()
-        else:
-            # For local models, use model server
-            if self.rerank_server_endpoint is None:
-                raise ValueError(
-                    "Rerank server endpoint is not configured for local models"
-                )
-
-            rerank_request = RerankRequest(
-                query=query,
-                documents=passages,
-                model_name=self.model_name,
-                provider_type=self.provider_type,
-                api_key=self.api_key,
-                api_url=self.api_url,
-            )
-
-            response = requests.post(
-                self.rerank_server_endpoint, json=rerank_request.model_dump()
-            )
-            response.raise_for_status()
-
-            return RerankResponse(**response.json()).scores
-
-
 class QueryAnalysisModel:
     def __init__(
         self,
@@ -1218,39 +1029,3 @@ def warm_up_bi_encoder(
     else:
         retry_encode = warm_up_retry(embedding_model.encode)
         retry_encode(texts=[warm_up_str], text_type=EmbedTextType.QUERY)
-
-
-# No longer used
-def warm_up_cross_encoder(
-    rerank_model_name: str,
-    non_blocking: bool = False,
-) -> None:
-    if SKIP_WARM_UP:
-        return
-
-    logger.debug(f"Warming up reranking model: {rerank_model_name}")
-
-    reranking_model = RerankingModel(
-        model_name=rerank_model_name,
-        provider_type=None,
-        api_url=None,
-        api_key=None,
-    )
-
-    def _warm_up() -> None:
-        try:
-            reranking_model.predict(WARM_UP_STRINGS[0], WARM_UP_STRINGS[1:])
-            logger.debug(f"Warm-up complete for reranking model: {rerank_model_name}")
-        except Exception as e:
-            logger.warning(
-                f"Warm-up request failed for reranking model {rerank_model_name}: {e}"
-            )
-
-    if non_blocking:
-        threading.Thread(target=_warm_up, daemon=True).start()
-        logger.debug(
-            f"Started non-blocking warm-up for reranking model: {rerank_model_name}"
-        )
-    else:
-        retry_rerank = warm_up_retry(reranking_model.predict)
-        retry_rerank(WARM_UP_STRINGS[0], WARM_UP_STRINGS[1:])

@@ -1,5 +1,5 @@
 """
-Constants for natural language processing, including embedding and reranking models.
+Constants for natural language processing embedding models.
 
 This file contains constants moved from model_server to support the gradual migration
 of API-based calls to bypass the model server.

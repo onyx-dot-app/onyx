@@ -2,7 +2,7 @@ import json
 import os
 
 #####
-# Embedding/Reranking Model Configs
+# Embedding Model Configs
 #####
 # Important considerations when choosing models
 # Max tokens count needs to be high considering use case (at least 512)
@@ -27,7 +27,7 @@ OLD_DEFAULT_DOCUMENT_ENCODER_MODEL = "thenlper/gte-small"
 OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM = 384
 OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS = False
 
-# These are only used if reranking is turned off, to normalize the direct retrieval scores for display
+# Used to normalize the direct retrieval scores for display
 # Currently unused
 SIM_SCORE_RANGE_LOW = float(os.environ.get("SIM_SCORE_RANGE_LOW") or 0.0)
 SIM_SCORE_RANGE_HIGH = float(os.environ.get("SIM_SCORE_RANGE_HIGH") or 1.0)
@@ -42,9 +42,6 @@ EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE") or 0) or None
 BATCH_SIZE_ENCODE_CHUNKS = EMBEDDING_BATCH_SIZE or 8
 # don't send over too many chunks at once, as sending too many could cause timeouts
 BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = EMBEDDING_BATCH_SIZE or 512
-# For score display purposes, only way is to know the expected ranges
-CROSS_ENCODER_RANGE_MAX = 1
-CROSS_ENCODER_RANGE_MIN = 0
 
 
 #####

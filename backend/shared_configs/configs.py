@@ -44,25 +44,12 @@ DOC_EMBEDDING_CONTEXT_SIZE = 512
 # Used to distinguish alternative indices
 ALT_INDEX_SUFFIX = "__danswer_alt_index"
 
-# Used for loading defaults for automatic deployments and dev flows
-# For local, use: mixedbread-ai/mxbai-rerank-xsmall-v1
-DEFAULT_CROSS_ENCODER_MODEL_NAME = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_MODEL_NAME") or None
-)
-DEFAULT_CROSS_ENCODER_API_KEY = os.environ.get("DEFAULT_CROSS_ENCODER_API_KEY") or None
-DEFAULT_CROSS_ENCODER_PROVIDER_TYPE = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_PROVIDER_TYPE") or None
-)
-DISABLE_RERANK_FOR_STREAMING = (
-    os.environ.get("DISABLE_RERANK_FOR_STREAMING", "").lower() == "true"
-)
-
 # This controls the minimum number of pytorch "threads" to allocate to the embedding
 # model. If torch finds more threads on its own, this value is not used.
 MIN_THREADS_ML_MODELS = int(os.environ.get("MIN_THREADS_ML_MODELS") or 1)
 
-# Model server that has indexing only set will throw exception if used for reranking
-# or intent classification
+# Model server that has indexing only set will throw exception if used for
+# intent classification
 INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
