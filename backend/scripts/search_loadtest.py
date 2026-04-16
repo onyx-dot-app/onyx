@@ -119,7 +119,7 @@ def make_one_search_request(
             error=(
                 None
                 if resp.status_code == 200
-                else body[:1000].decode("utf-8", "replace")
+                else body[:512].decode("utf-8", "replace")
             ),
         )
     except httpx.TimeoutException:
@@ -199,7 +199,7 @@ def summarize(results: list[Result], wall_time_s: float) -> None:
             print(f"Round trip latency p99:        {percentiles[98]:.3f}s")
         print(f"Round trip latency max:        {max(lats):.3f}s")
     if fails:
-        err_counts = Counter((r.status, (r.error or "")[:80]) for r in fails)
+        err_counts = Counter((r.status, (r.error or "")[:512]) for r in fails)
         print()
         print("Failure breakdown:")
         for (status, err), n in err_counts.most_common(10):
@@ -313,10 +313,8 @@ def run(args: argparse.Namespace) -> None:
                 f"  status={resp.status_code}  latency={latency:.3f}s  bytes={len(resp.content)}."
             )
             if resp.status_code != 200:
-                print(f"  error: {resp.content[:1000].decode('utf-8', 'replace')}")
+                print(f"  error: {resp.content[:1024].decode('utf-8', 'replace')}")
                 raise SystemExit(f"Preflight '{label}' failed; aborting load test.")
-            else:
-                print(f"  success: {resp.content[:1000].decode('utf-8', 'replace')}")
 
     print()
     print(f"Load test: concurrency={args.concurrency}.")
@@ -399,6 +397,17 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+
+    if not args.total and not args.duration:
+        parser.error(
+            "No stop condition specified. Must specify either --total or --duration."
+        )
+    if args.concurrency <= 0:
+        parser.error("Concurrency must be greater than 0.")
+    if args.timeout <= 0:
+        parser.error("Timeout must be greater than 0.")
+    if args.num_hits <= 0:
+        parser.error("Number of hits must be greater than 0.")
 
     try:
         run(args)
