@@ -19,6 +19,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
@@ -109,6 +110,10 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             if not idle_sandboxes:
                 task_logger.debug("No idle sandboxes found")
                 return
+
+            # Tenant-work-gating hook: refresh this tenant's active-set
+            # membership whenever sandbox cleanup has work to do.
+            maybe_mark_tenant_active(tenant_id)
 
             task_logger.info(
                 f"Found {len(idle_sandboxes)} idle sandboxes to put to sleep"

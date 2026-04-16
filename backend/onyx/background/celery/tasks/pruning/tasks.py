@@ -72,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
@@ -227,6 +228,11 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                 cc_pairs = get_connector_credential_pairs(db_session)
                 for cc_pair_entry in cc_pairs:
                     cc_pair_ids.append(cc_pair_entry.id)
+
+            # Tenant-work-gating hook: any cc_pair means pruning could have
+            # work to do for this tenant on some cycle.
+            if cc_pair_ids:
+                maybe_mark_tenant_active(tenant_id)
 
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()

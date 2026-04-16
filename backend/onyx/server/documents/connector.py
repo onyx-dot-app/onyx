@@ -125,6 +125,7 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorBase
@@ -1639,6 +1640,10 @@ def create_connector_with_mock_credential(
             cc_pair_name=connector_data.name,
             groups=connector_data.groups,
         )
+
+        # Tenant-work-gating lifecycle hook: keep new-tenant latency to
+        # seconds instead of one full-fanout interval.
+        maybe_mark_tenant_active(tenant_id)
 
         # trigger indexing immediately
         client_app.send_task(

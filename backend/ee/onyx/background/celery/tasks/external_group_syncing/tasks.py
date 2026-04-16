@@ -69,6 +69,7 @@ from onyx.redis.redis_connector_ext_group_sync import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
@@ -201,6 +202,11 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
             for cc_pair in cc_pairs:
                 if _is_external_group_sync_due(cc_pair):
                     cc_pair_ids_to_sync.append(cc_pair.id)
+
+        # Tenant-work-gating hook: refresh this tenant's active-set membership
+        # whenever external-group sync has any due cc_pairs to dispatch.
+        if cc_pair_ids_to_sync:
+            maybe_mark_tenant_active(tenant_id)
 
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:

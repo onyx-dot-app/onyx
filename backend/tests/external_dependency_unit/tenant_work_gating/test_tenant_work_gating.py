@@ -19,6 +19,7 @@ from onyx.redis.redis_tenant_work_gating import _SET_KEY
 from onyx.redis.redis_tenant_work_gating import cleanup_expired
 from onyx.redis.redis_tenant_work_gating import get_active_tenants
 from onyx.redis.redis_tenant_work_gating import mark_tenant_active
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 
 
 @pytest.fixture(autouse=True)
@@ -157,3 +158,26 @@ def test_rendered_key_is_cloud_prefixed() -> None:
     raw = RedisPool().get_raw_client()
     assert raw.zscore("cloud:active_tenants", "tenant_a") is not None
     assert raw.zscore("active_tenants", "tenant_a") is None
+
+
+def test_maybe_mark_is_noop_when_gating_disabled() -> None:
+    """Writer-side API: when the feature flag is off, the call must not
+    write to Redis so deploys are inert."""
+    with patch(
+        "onyx.server.runtime.onyx_runtime.OnyxRuntime.get_tenant_work_gating_enabled",
+        return_value=False,
+    ):
+        maybe_mark_tenant_active("tenant_a")
+
+    assert get_active_tenants(ttl_seconds=60) == set()
+
+
+def test_maybe_mark_writes_when_gating_enabled() -> None:
+    """Writer-side API: when the feature flag is on, the call must write."""
+    with patch(
+        "onyx.server.runtime.onyx_runtime.OnyxRuntime.get_tenant_work_gating_enabled",
+        return_value=True,
+    ):
+        maybe_mark_tenant_active("tenant_a")
+
+    assert get_active_tenants(ttl_seconds=60) == {"tenant_a"}

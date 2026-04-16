@@ -108,6 +108,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
 from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
 from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
@@ -895,6 +896,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 )
 
                 secondary_cc_pair_ids = standard_cc_pair_ids
+
+        # Tenant-work-gating hook: refresh this tenant's active-set membership
+        # whenever indexing actually has work to dispatch.
+        if primary_cc_pair_ids or secondary_cc_pair_ids:
+            maybe_mark_tenant_active(tenant_id)
 
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
