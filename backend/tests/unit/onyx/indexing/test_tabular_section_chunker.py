@@ -587,7 +587,7 @@ class TestTabularChunkerChunkSection:
         content_chunk = (
             "sheet:T\n" "Columns: Name, Age\n" "Name=Alice, Age=30\n" "Name=Bob, Age=25"
         )
-        metadata_chunk = (
+        descriptor_chunk = (
             "sheet:T\n"
             "Sheet overview.\n"
             "This sheet has 2 rows and 2 columns.\n"
@@ -596,7 +596,17 @@ class TestTabularChunkerChunkSection:
             "Categorical columns (groupable, can be counted by value): Name\n"
             "Values seen in Name: Alice, Bob"
         )
-        expected_texts = [content_chunk, metadata_chunk]
+        totals_chunk = (
+            "sheet:T\n"
+            "Totals and overall aggregates across all rows. This sheet can answer "
+            "whole-dataset questions about total, overall, grand total, sum across "
+            "all, average, combined, mean, minimum, maximum, and count of values.\n"
+            "Column Age: total (sum across all rows) = 55, average = 27.5, "
+            "minimum = 25, maximum = 30, count = 2.\n"
+            "Column Name most frequent value: Alice (1 occurrences).\n"
+            "Total row count: 2."
+        )
+        expected_texts = [content_chunk, descriptor_chunk, totals_chunk]
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker_with_metadata().chunk_section(
@@ -607,8 +617,8 @@ class TestTabularChunkerChunkSection:
 
         # --- ASSERT ----------------------------------------------------
         assert [p.text for p in out.payloads] == expected_texts
-        # Content first, metadata second — only the first chunk is fresh.
-        assert [p.is_continuation for p in out.payloads] == [False, True]
+        # Content first, metadata chunks follow as continuations.
+        assert [p.is_continuation for p in out.payloads] == [False, True, True]
 
 
 class TestBuildSheetDescriptorChunks:

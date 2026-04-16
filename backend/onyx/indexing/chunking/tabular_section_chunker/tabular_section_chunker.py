@@ -10,6 +10,9 @@ from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
+from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
+    build_total_descriptor_chunks,
+)
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens
@@ -247,6 +250,13 @@ class TabularChunker(SectionChunker):
         if not self.ignore_metadata_chunks:
             chunk_texts.extend(
                 build_sheet_descriptor_chunks(
+                    section=section,
+                    tokenizer=self.tokenizer,
+                    max_tokens=content_token_limit,
+                )
+            )
+            chunk_texts.extend(
+                build_total_descriptor_chunks(
                     section=section,
                     tokenizer=self.tokenizer,
                     max_tokens=content_token_limit,
