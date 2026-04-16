@@ -46,6 +46,7 @@ import freshdeskIcon from "@public/Freshdesk.png";
 import geminiSVG from "@public/Gemini.svg";
 import gitbookDarkIcon from "@public/GitBookDark.png";
 import gitbookLightIcon from "@public/GitBookLight.png";
+import githubDarkIcon from "@public/GithubDarkMode.png";
 import githubLightIcon from "@public/Github.png";
 import gongIcon from "@public/Gong.png";
 import googleIcon from "@public/Google.png";
@@ -855,7 +856,7 @@ export const GitbookIcon = createLogoIcon(gitbookDarkIcon, {
   darkSrc: gitbookLightIcon,
 });
 export const GithubIcon = createLogoIcon(githubLightIcon, {
-  monochromatic: true,
+  darkSrc: githubDarkIcon,
 });
 export const GitlabIcon = createLogoIcon(gitlabIcon);
 export const GmailIcon = createLogoIcon(gmailIcon);
