@@ -569,7 +569,6 @@ class LitellmLLM(LLM):
                     ReasoningEffort.LOW,
                     ReasoningEffort.MEDIUM,
                     ReasoningEffort.HIGH,
-                    ReasoningEffort.XHIGH,
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 else:

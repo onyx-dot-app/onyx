@@ -25,7 +25,6 @@ class ReasoningEffort(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-    XHIGH = "xhigh"
 
 
 # OpenAI reasoning effort mapping
@@ -36,7 +35,6 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
 }
 
 # Anthropic reasoning effort to budget tokens mapping
@@ -46,7 +44,6 @@ ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
     ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 2048,
     ReasoningEffort.HIGH: 4096,
-    ReasoningEffort.XHIGH: 8192,
 }
 
 # Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
@@ -56,7 +53,6 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
 }
 
 
