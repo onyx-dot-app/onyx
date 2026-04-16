@@ -141,6 +141,7 @@ repos:
     hooks:
       - id: ripsecrets
         args:
+          - --strict-ignore
           - --additional-pattern
           - ^sk-[A-Za-z0-9_\-]{20,}$
 

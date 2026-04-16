@@ -1,7 +1,11 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:0f02d9299928849c7b15f3b348dcfdcdcb64411ff7a4580cbc026a6ee7aa1554",
-  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--network=onyx_default"],
+  "image": "onyxdotapp/onyx-devcontainer@sha256:4986c9252289b660ce772b45f0488b938fe425d8114245e96ef64b273b3fcee4",
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--network=onyx_default"
+  ],
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
     "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",

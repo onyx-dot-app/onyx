@@ -4,6 +4,17 @@ set -euo pipefail
 
 echo "Setting up firewall..."
 
+# Reset default policies to ACCEPT before flushing rules.  On re-runs the
+# previous invocation's DROP policies are still in effect; flushing rules while
+# the default is DROP would block the DNS lookups below.  Register a trap so
+# that if the script exits before the DROP policies are re-applied at the end,
+# we fail closed instead of leaving the container with an unrestricted
+# firewall.
+trap 'iptables -P INPUT DROP; iptables -P OUTPUT DROP; iptables -P FORWARD DROP' EXIT
+iptables -P INPUT ACCEPT
+iptables -P OUTPUT ACCEPT
+iptables -P FORWARD ACCEPT
+
 # Only flush the filter table.  The nat and mangle tables are managed by Docker
 # (DNS DNAT to 127.0.0.11, container networking, etc.) and must not be touched —
 # flushing them breaks Docker's embedded DNS resolver.
@@ -34,8 +45,16 @@ ALLOWED_DOMAINS=(
     "pypi.org"
     "files.pythonhosted.org"
     "go.dev"
+    "proxy.golang.org"
+    "sum.golang.org"
     "storage.googleapis.com"
+    "dl.google.com"
     "static.rust-lang.org"
+    "index.crates.io"
+    "static.crates.io"
+    "archive.ubuntu.com"
+    "security.ubuntu.com"
+    "deb.nodesource.com"
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
