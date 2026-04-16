@@ -3,7 +3,7 @@
 import { ValidSources } from "@/lib/types";
 import { SourceIcon } from "./SourceIcon";
 import { useState } from "react";
-import { OnyxIcon } from "./icons/icons";
+import { GithubIcon, OnyxIcon } from "./icons/icons";
 
 export function WebResultIcon({
   url,
@@ -23,6 +23,8 @@ export function WebResultIcon({
     <>
       {hostname.includes("onyx.app") ? (
         <OnyxIcon size={size} className="dark:text-[#fff] text-[#000]" />
+      ) : hostname === "github.com" || hostname.endsWith(".github.com") ? (
+        <GithubIcon size={size} />
       ) : !error ? (
         <img
           className="my-0 rounded-full py-0"
