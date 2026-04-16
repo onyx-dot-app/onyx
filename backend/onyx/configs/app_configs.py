@@ -324,6 +324,9 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
     ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
+DISABLE_OPENSEARCH_MIGRATION_TASK = (
+    os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
+)
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
