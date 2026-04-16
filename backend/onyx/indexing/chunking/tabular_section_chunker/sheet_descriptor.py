@@ -162,18 +162,23 @@ def _is_id_name(name: str) -> bool:
 def _analyze(headers: list[str], rows: list[list[str]]) -> SheetAnalysis:
     a = SheetAnalysis(row_count=len(rows), num_cols=len(headers))
     for idx, header in enumerate(headers):
+        # Pull the column's non-empty values; skip if the column is blank.
         values = [r[idx].strip() for r in rows if idx < len(r) and r[idx].strip()]
         if not values:
             continue
 
+        # Identifier: id-named column whose values are all unique. Detected
+        # before classification so a numeric `id` column still gets flagged.
         distinct = set(values)
         if a.id_col is None and len(distinct) == len(values) and _is_id_name(header):
             a.id_col = idx
 
+        # Numeric: every value parses as a number.
         if all(_is_numeric(v) for v in values):
             a.numeric_cols.append(idx)
             continue
 
+        # Date: every value parses as a date — fold into the sheet-wide range.
         dates = [_try_date(v) for v in values]
         if all(d is not None for d in dates):
             dmin, dmax = min(d for d in dates if d), max(d for d in dates if d)
@@ -181,6 +186,7 @@ def _analyze(headers: list[str], rows: list[list[str]]) -> SheetAnalysis:
             a.date_max = dmax if a.date_max is None else max(a.date_max, dmax)
             continue
 
+        # Categorical: low-cardinality column — keep distinct values for samples.
         if len(distinct) <= max(CATEGORICAL_DISTINCT_THRESHOLD, len(values) // 2):
             a.categorical_cols.append(idx)
             a.categorical_values[idx] = values
