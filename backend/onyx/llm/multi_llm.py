@@ -67,6 +67,7 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
+    "claude-opus-4-7",
 )
 
 

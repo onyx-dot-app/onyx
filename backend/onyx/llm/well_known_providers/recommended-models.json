@@ -10,8 +10,12 @@
       ]
     },
     "anthropic": {
-      "default_model": "claude-opus-4-6",
+      "default_model": "claude-opus-4-7",
       "additional_visible_models": [
+        {
+          "name": "claude-opus-4-7",
+          "display_name": "Claude Opus 4.7"
+        },
         {
           "name": "claude-opus-4-6",
           "display_name": "Claude Opus 4.6"

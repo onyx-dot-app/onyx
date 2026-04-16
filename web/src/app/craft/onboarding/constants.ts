@@ -5,12 +5,12 @@
 export interface BuildLlmSelection {
   providerName: string; // e.g., "build-mode-anthropic" (LLMProviderDescriptor.name)
   provider: string; // e.g., "anthropic"
-  modelName: string; // e.g., "claude-opus-4-6"
+  modelName: string; // e.g., "claude-opus-4-7"
 }
 
 // Priority order for smart default LLM selection
 const LLM_SELECTION_PRIORITY = [
-  { provider: "anthropic", modelName: "claude-opus-4-6" },
+  { provider: "anthropic", modelName: "claude-opus-4-7" },
   { provider: "openai", modelName: "gpt-5.2" },
   { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
 ] as const;
@@ -63,10 +63,11 @@ export function getDefaultLlmSelection(
 export const RECOMMENDED_BUILD_MODELS = {
   preferred: {
     provider: "anthropic",
-    modelName: "claude-opus-4-6",
-    displayName: "Claude Opus 4.6",
+    modelName: "claude-opus-4-7",
+    displayName: "Claude Opus 4.7",
   },
   alternatives: [
+    { provider: "anthropic", modelName: "claude-opus-4-6" },
     { provider: "anthropic", modelName: "claude-sonnet-4-6" },
     { provider: "openai", modelName: "gpt-5.2" },
     { provider: "openai", modelName: "gpt-5.1-codex" },
@@ -148,7 +149,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "anthropic",
     recommended: true,
     models: [
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
