@@ -464,6 +464,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     searchParams,
     resetInputBar,
     setSelectedAgentFromId,
+    totalAvailableSources: sources.length,
   });
 
   const {

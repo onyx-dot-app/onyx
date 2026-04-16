@@ -31,7 +31,6 @@ from onyx.background.celery.tasks.pruning.tasks import (
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
-from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
@@ -125,6 +124,8 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.documents.mock_connector_data import get_mock_indexing_statuses
+from onyx.server.documents.mock_connector_data import load_mock_data
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorBase
@@ -1119,28 +1120,40 @@ def get_connector_indexing_status(
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
 
-    if MOCK_CONNECTOR_FILE_PATH:
-        import json
+    mock_data = load_mock_data()
+    if mock_data is not None:
+        mock_statuses = get_mock_indexing_statuses(mock_data)
+        if mock_statuses is not None:
+            # Group statuses by source, mirroring the real code path.
+            source_to_statuses: dict[
+                DocumentSource, list[ConnectorIndexingStatusLite]
+            ] = {}
+            for raw in mock_statuses:
+                status = ConnectorIndexingStatusLite(**raw)
+                source_to_statuses.setdefault(status.source, []).append(status)
 
-        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
-            raw_data = json.load(f)
-            connector_indexing_statuses = [
-                ConnectorIndexingStatusLite(**status) for status in raw_data
-            ]
-        return [
-            ConnectorIndexingStatusLiteResponse(
-                source=DocumentSource.FILE,
-                summary=SourceSummary(
-                    total_connectors=100,
-                    active_connectors=100,
-                    public_connectors=100,
-                    total_docs_indexed=100000,
-                ),
-                current_page=1,
-                total_pages=1,
-                indexing_statuses=connector_indexing_statuses,
-            )
-        ]
+            response_list: list[ConnectorIndexingStatusLiteResponse] = []
+            for source in sorted(source_to_statuses):
+                statuses = source_to_statuses[source]
+                total_docs = sum(s.docs_indexed for s in statuses)
+                public_count = sum(
+                    1 for s in statuses if s.access_type == AccessType.PUBLIC
+                )
+                response_list.append(
+                    ConnectorIndexingStatusLiteResponse(
+                        source=source,
+                        summary=SourceSummary(
+                            total_connectors=len(statuses),
+                            active_connectors=len(statuses),
+                            public_connectors=public_count,
+                            total_docs_indexed=total_docs,
+                        ),
+                        current_page=1,
+                        total_pages=1,
+                        indexing_statuses=statuses,
+                    )
+                )
+            return response_list
 
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
@@ -1270,16 +1283,16 @@ def get_connector_indexing_status(
     # Process editable cc_pairs
     editable_statuses: list[ConnectorIndexingStatusLite] = []
     for cc_pair in editable_cc_pairs:
-        status = build_connector_indexing_status(cc_pair, True)
-        if status:
-            editable_statuses.append(status)
+        editable_status = build_connector_indexing_status(cc_pair, True)
+        if editable_status:
+            editable_statuses.append(editable_status)
 
     # Process non-editable cc_pairs
     non_editable_statuses: list[ConnectorIndexingStatusLite] = []
     for cc_pair in non_editable_cc_pairs:
-        status = build_connector_indexing_status(cc_pair, False)
-        if status:
-            non_editable_statuses.append(status)
+        non_editable_status = build_connector_indexing_status(cc_pair, False)
+        if non_editable_status:
+            non_editable_statuses.append(non_editable_status)
 
     # Process federated connectors
     federated_statuses: list[FederatedConnectorStatus] = []
@@ -1332,13 +1345,14 @@ def get_connector_indexing_status(
         editable_statuses + non_editable_statuses + federated_statuses
     ):
         if isinstance(connector_status, FederatedConnectorStatus):
-            source = connector_status.source.to_non_federated_source()
+            maybe_source = connector_status.source.to_non_federated_source()
         else:
-            source = connector_status.source
+            maybe_source = connector_status.source
 
         # Skip if source is None (federated connectors without mapping)
-        if source is None:
+        if maybe_source is None:
             continue
+        source = maybe_source
 
         if source not in source_to_summary:
             source_to_summary[source] = SourceSummary(
@@ -1373,26 +1387,27 @@ def get_connector_indexing_status(
         editable_statuses + non_editable_statuses + federated_statuses
     ):
         if isinstance(connector_status, FederatedConnectorStatus):
-            source = connector_status.source.to_non_federated_source()
+            maybe_source = connector_status.source.to_non_federated_source()
         else:
-            source = connector_status.source
+            maybe_source = connector_status.source
 
         # Skip if source is None (federated connectors without mapping)
-        if source is None:
+        if maybe_source is None:
             continue
+        source = maybe_source
 
         if source not in source_to_all_statuses:
             source_to_all_statuses[source] = []
         source_to_all_statuses[source].append(connector_status)
 
     # Create paginated response objects by source
-    response_list: list[ConnectorIndexingStatusLiteResponse] = []
+    paginated_responses: list[ConnectorIndexingStatusLiteResponse] = []
 
     source_list = list(source_to_all_statuses.keys())
     source_list.sort()
 
     for source in source_list:
-        statuses = source_to_all_statuses[source]
+        all_statuses = source_to_all_statuses[source]
         # Get current page for this source (default to page 1, 1-indexed)
         current_page = request.source_to_page.get(source, 1)
 
@@ -1401,24 +1416,26 @@ def get_connector_indexing_status(
         end_idx = start_idx + _INDEXING_STATUS_PAGE_SIZE
 
         if request.get_all_connectors:
-            page_statuses = statuses
+            page_statuses = all_statuses
         else:
             # Get the page slice for this source
-            page_statuses = statuses[start_idx:end_idx]
+            page_statuses = all_statuses[start_idx:end_idx]
 
         # Create response object for this source
         if page_statuses:  # Only include sources that have data on this page
-            response_list.append(
+            paginated_responses.append(
                 ConnectorIndexingStatusLiteResponse(
                     source=source,
                     summary=source_to_summary[source],
                     current_page=current_page,
-                    total_pages=math.ceil(len(statuses) / _INDEXING_STATUS_PAGE_SIZE),
+                    total_pages=math.ceil(
+                        len(all_statuses) / _INDEXING_STATUS_PAGE_SIZE
+                    ),
                     indexing_statuses=page_statuses,
                 )
             )
 
-    return response_list
+    return paginated_responses
 
 
 def _get_connector_indexing_status_lite(
