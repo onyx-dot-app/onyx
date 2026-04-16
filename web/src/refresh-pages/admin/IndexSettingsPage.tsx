@@ -53,8 +53,10 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
       <Content
         icon={SvgServer}
         title="Self-hosted"
-        sizePreset="secondary"
+        sizePreset="main-ui"
         variant="body"
+        prominence="muted"
+        widthVariant="fit"
       />
     );
   }
@@ -67,8 +69,10 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
       <Content
         icon={SvgCloud}
         title="Cloud Provider"
-        sizePreset="secondary"
+        sizePreset="main-ui"
         variant="body"
+        prominence="muted"
+        widthVariant="fit"
       />
       {cloudProvider.costslink && (
         <LinkButton href={cloudProvider.costslink} target="_blank">
