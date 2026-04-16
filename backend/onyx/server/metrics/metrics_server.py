@@ -28,6 +28,7 @@ _DEFAULT_PORTS: dict[str, int] = {
     "docprocessing": 9093,
     "heavy": 9094,
     "light": 9095,
+    "primary": 9097,
 }
 
 _server_started = False
