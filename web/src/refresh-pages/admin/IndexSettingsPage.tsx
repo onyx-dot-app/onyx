@@ -3,9 +3,8 @@
 import { useCallback } from "react";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
-import useSWR, { mutate } from "swr";
+import { mutate } from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, Card as CardLayout } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -17,20 +16,18 @@ import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import {
-  HostedEmbeddingModel,
-  CloudEmbeddingModel,
-} from "@/components/embedding/interfaces";
-import {
-  SavedSearchSettings,
-  LLMContextualCost,
-} from "@/app/admin/embeddings/interfaces";
-import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { SavedSearchSettings } from "@/app/admin/embeddings/interfaces";
 import { getEmbeddingProvider } from "@/lib/embedding";
 import UpgradingPage from "@/app/admin/configuration/search/UpgradingPage";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
+import {
+  useCurrentEmbeddingModel,
+  useCurrentSearchSettings,
+  useFutureEmbeddingModel,
+  useLLMContextualCosts,
+} from "@/hooks/useSearchSettings";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -72,37 +69,23 @@ export default function IndexSettingsPage() {
 
   const imageProcessingEnabled =
     s.image_extraction_and_analysis_enabled ?? false;
+
   const {
     data: currentEmbeddingModel,
     isLoading: isLoadingCurrentModel,
     error: currentEmbeddingModelError,
-  } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    SWR_KEYS.currentSearchSettings,
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
+  } = useCurrentEmbeddingModel();
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
-    useSWR<SavedSearchSettings | null>(
-      SWR_KEYS.currentSearchSettings,
-      errorHandlingFetcher,
-      { refreshInterval: 5000 }
-    );
+    useCurrentSearchSettings();
 
   const {
     data: futureEmbeddingModel,
     isLoading: isLoadingFutureModel,
     error: futureEmbeddingModelError,
-  } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    SWR_KEYS.secondarySearchSettings,
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
+  } = useFutureEmbeddingModel();
 
-  const { data: contextualCosts } = useSWR<LLMContextualCost[]>(
-    LLM_CONTEXTUAL_COST_ADMIN_URL,
-    errorHandlingFetcher
-  );
+  const { data: contextualCosts } = useLLMContextualCosts();
 
   const saveSearchSettings = useCallback(
     async (updates: Partial<SavedSearchSettings>) => {
