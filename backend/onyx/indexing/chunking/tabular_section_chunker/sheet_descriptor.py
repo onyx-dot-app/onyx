@@ -5,6 +5,7 @@ import io
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import date
+from itertools import zip_longest
 
 from dateutil.parser import parse as parse_dt
 
@@ -161,9 +162,10 @@ def _is_id_name(name: str) -> bool:
 
 def _analyze(headers: list[str], rows: list[list[str]]) -> SheetAnalysis:
     a = SheetAnalysis(row_count=len(rows), num_cols=len(headers))
-    for idx, header in enumerate(headers):
+    columns = zip_longest(*rows, fillvalue="")
+    for idx, (header, raw_values) in enumerate(zip(headers, columns)):
         # Pull the column's non-empty values; skip if the column is blank.
-        values = [r[idx].strip() for r in rows if idx < len(r) and r[idx].strip()]
+        values = [v.strip() for v in raw_values if v.strip()]
         if not values:
             continue
 
@@ -181,7 +183,8 @@ def _analyze(headers: list[str], rows: list[list[str]]) -> SheetAnalysis:
         # Date: every value parses as a date — fold into the sheet-wide range.
         dates = [_try_date(v) for v in values]
         if all(d is not None for d in dates):
-            dmin, dmax = min(d for d in dates if d), max(d for d in dates if d)
+            dmin = min(filter(None, dates))
+            dmax = max(filter(None, dates))
             a.date_min = dmin if a.date_min is None else min(a.date_min, dmin)
             a.date_max = dmax if a.date_max is None else max(a.date_max, dmax)
             continue
