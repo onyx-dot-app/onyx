@@ -15,32 +15,31 @@ import {
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
   EmbeddingProvider,
-  HostedEmbeddingModel,
+  SelfHostedEmbeddingModel,
   RerankerProvider,
   RerankingModel,
 } from "@/lib/indexing/interfaces";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Embedding
+// ═══════════════════════════════════════════════════════════════════════════
+
 // ─── Backend URLs ────────────────────────────────────────────────────────────
 
 export const EMBEDDING_PROVIDERS_ADMIN_URL =
   "/api/admin/embedding/embedding-provider";
-
 export const EMBEDDING_MODELS_ADMIN_URL = "/api/admin/embedding";
-
-// ─── UI options ──────────────────────────────────────────────────────────────
-
-export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
 
 // ─── Hosted (self-hosted) embedding models ───────────────────────────────────
 
-export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
+export const SELF_HOSTED_MODELS: SelfHostedEmbeddingModel[] = [
   {
     model_name: "nomic-ai/nomic-embed-text-v1",
     model_dim: 768,
     normalize: true,
     description:
-      "The recommended default for most situations. If you aren't sure which model to use, this is probably the one.",
+      "Nomic’s embedding model specialized for retrieval, similarity, clustering and classification.",
     isDefault: true,
     link: "https://huggingface.co/nomic-ai/nomic-embed-text-v1",
     query_prefix: "search_query: ",
@@ -110,31 +109,18 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
 
 // ─── Cloud embedding providers ───────────────────────────────────────────────
 
-export const LITELLM_CLOUD_PROVIDER: CloudEmbeddingProvider = {
-  provider_type: EmbeddingProvider.LITELLM,
-  website: "https://github.com/BerriAI/litellm",
-  icon: SvgLitellm,
-  description: "Open-source library to call LLM APIs using OpenAI format",
-  apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
-  embedding_models: [], // No default embedding models
-};
-
-export const AZURE_CLOUD_PROVIDER: CloudEmbeddingProvider = {
-  provider_type: EmbeddingProvider.AZURE,
-  website:
-    "https://azure.microsoft.com/en-us/products/cognitive-services/openai/",
-  icon: SvgAzure,
-  description:
-    "Azure OpenAI is a cloud-based AI service that provides access to OpenAI models.",
-  apiLink:
-    "https://docs.microsoft.com/en-us/azure/ai-services/openai/how-to/create-resource",
-  costslink:
-    "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
-  embedding_models: [], // No default embedding models
-};
-
-export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
-  {
+/**
+ * Registry of cloud embedding providers, keyed by {@link EmbeddingProvider}.
+ *
+ * This is the single source of truth for cloud embedding providers. Add new
+ * entries here when introducing a new provider — the `Record` typing forces
+ * exhaustiveness, so a missing entry is a compile-time error.
+ */
+export const CLOUD_EMBEDDING_PROVIDERS: Record<
+  EmbeddingProvider,
+  CloudEmbeddingProvider
+> = {
+  [EmbeddingProvider.COHERE]: {
     provider_type: EmbeddingProvider.COHERE,
     website: "https://cohere.ai",
     icon: SvgCohere,
@@ -174,7 +160,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
     ],
   },
-  {
+  [EmbeddingProvider.OPENAI]: {
     provider_type: EmbeddingProvider.OPENAI,
     website: "https://openai.com",
     icon: SvgOpenai,
@@ -213,8 +199,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
     ],
   },
-
-  {
+  [EmbeddingProvider.GOOGLE]: {
     provider_type: EmbeddingProvider.GOOGLE,
     website: "https://ai.google",
     icon: SvgGoogle,
@@ -252,7 +237,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
     ],
   },
-  {
+  [EmbeddingProvider.VOYAGE]: {
     provider_type: EmbeddingProvider.VOYAGE,
     website: "https://www.voyageai.com",
     icon: SvgVoyage,
@@ -291,9 +276,99 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
       },
     ],
   },
-];
+  [EmbeddingProvider.LITELLM]: {
+    provider_type: EmbeddingProvider.LITELLM,
+    website: "https://github.com/BerriAI/litellm",
+    icon: SvgLitellm,
+    description: "Open-source library to call LLM APIs using OpenAI format",
+    apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
+    embedding_models: [], // No default embedding models
+  },
+  [EmbeddingProvider.AZURE]: {
+    provider_type: EmbeddingProvider.AZURE,
+    website:
+      "https://azure.microsoft.com/en-us/products/cognitive-services/openai/",
+    icon: SvgAzure,
+    description:
+      "Azure OpenAI is a cloud-based AI service that provides access to OpenAI models.",
+    apiLink:
+      "https://docs.microsoft.com/en-us/azure/ai-services/openai/how-to/create-resource",
+    costslink:
+      "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
+    embedding_models: [], // No default embedding models
+  },
+};
 
-// ─── Reranking models ────────────────────────────────────────────────────────
+// ─── Embedding helpers ───────────────────────────────────────────────────────
+
+export function getFormattedProviderName(providerType: string | null) {
+  if (!providerType) return "Self-hosted";
+
+  switch (providerType) {
+    case "openai":
+      return "OpenAI";
+    case "cohere":
+      return "Cohere";
+    case "voyage":
+      return "Voyage AI";
+    case "google":
+      return "Google";
+    case "litellm":
+      return "LiteLLM";
+    case "azure":
+      return "Azure";
+    default:
+      return providerType.charAt(0).toUpperCase() + providerType.slice(1);
+  }
+}
+
+/**
+ * Find the {@link CloudEmbeddingProvider} entry matching `providerType`, or
+ * `null` if none matches (e.g. self-hosted models).
+ */
+export function findCloudProvider(
+  providerType: string | null
+): CloudEmbeddingProvider | null {
+  if (!providerType) return null;
+  return CLOUD_EMBEDDING_PROVIDERS[providerType as EmbeddingProvider] ?? null;
+}
+
+export function getEmbeddingProvider(providerType: string | null): {
+  icon: IconFunctionComponent;
+  displayName: string;
+} {
+  if (!providerType) return { icon: SvgNomic, displayName: "Self-hosted" };
+  return {
+    icon: findCloudProvider(providerType)?.icon ?? SvgCpu,
+    displayName: getFormattedProviderName(providerType),
+  };
+}
+
+export function getCurrentModelCopy(
+  currentModelName: string
+): CloudEmbeddingModel | SelfHostedEmbeddingModel | null {
+  const CLOUD_EMBEDDING_PROVIDERS_FLATTENED = Object.values(
+    CLOUD_EMBEDDING_PROVIDERS
+  ).flatMap((provider) => provider.embedding_models);
+
+  return (
+    SELF_HOSTED_MODELS.find((model) => model.model_name === currentModelName) ||
+    CLOUD_EMBEDDING_PROVIDERS_FLATTENED.find(
+      (model) => model.model_name === currentModelName
+    ) ||
+    null
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Image processing
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Reranking
+// ═══════════════════════════════════════════════════════════════════════════
 
 export const rerankingModels: RerankingModel[] = [
   {
@@ -354,28 +429,7 @@ export const rerankingModels: RerankingModel[] = [
   },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-export function getFormattedProviderName(providerType: string | null) {
-  if (!providerType) return "Self-hosted";
-
-  switch (providerType) {
-    case "openai":
-      return "OpenAI";
-    case "cohere":
-      return "Cohere";
-    case "voyage":
-      return "Voyage AI";
-    case "google":
-      return "Google";
-    case "litellm":
-      return "LiteLLM";
-    case "azure":
-      return "Azure";
-    default:
-      return providerType.charAt(0).toUpperCase() + providerType.slice(1);
-  }
-}
+// ─── Reranking helpers ───────────────────────────────────────────────────────
 
 export function getTitleForRerankType(type: string) {
   switch (type) {
@@ -397,82 +451,4 @@ export function getIconForRerankType(type: string) {
     default:
       return <OpenSourceIcon size={40} />;
   }
-}
-
-export function getCurrentModelCopy(
-  currentModelName: string
-): CloudEmbeddingModel | HostedEmbeddingModel | null {
-  const AVAILABLE_CLOUD_PROVIDERS_FLATTENED = AVAILABLE_CLOUD_PROVIDERS.flatMap(
-    (provider) =>
-      provider.embedding_models.map((model) => ({
-        ...model,
-        provider_type: provider.provider_type,
-        model_name: model.model_name,
-      }))
-  );
-
-  return (
-    AVAILABLE_MODELS.find((model) => model.model_name === currentModelName) ||
-    AVAILABLE_CLOUD_PROVIDERS_FLATTENED.find(
-      (model) => model.model_name === currentModelName
-    ) ||
-    null
-  );
-}
-
-// ─── Provider lookup (icon + display name) ───────────────────────────────────
-
-export interface EmbeddingProviderEntry {
-  icon: IconFunctionComponent;
-  displayName: string;
-}
-
-const PROVIDERS: Record<string, EmbeddingProviderEntry> = {
-  [EmbeddingProvider.OPENAI]: { icon: SvgOpenai, displayName: "OpenAI" },
-  [EmbeddingProvider.COHERE]: { icon: SvgCohere, displayName: "Cohere" },
-  [EmbeddingProvider.VOYAGE]: { icon: SvgVoyage, displayName: "Voyage AI" },
-  [EmbeddingProvider.GOOGLE]: { icon: SvgGoogle, displayName: "Google" },
-  [EmbeddingProvider.LITELLM]: { icon: SvgLitellm, displayName: "LiteLLM" },
-  [EmbeddingProvider.AZURE]: { icon: SvgAzure, displayName: "Azure" },
-};
-
-const SELF_HOSTED_ENTRY: EmbeddingProviderEntry = {
-  icon: SvgNomic,
-  displayName: "Self-hosted",
-};
-
-const DEFAULT_ENTRY: EmbeddingProviderEntry = {
-  icon: SvgCpu,
-  displayName: "Self-hosted",
-};
-
-export function getEmbeddingProvider(
-  providerType: string | null
-): EmbeddingProviderEntry {
-  if (!providerType) return SELF_HOSTED_ENTRY;
-  return (
-    PROVIDERS[providerType] ?? {
-      ...DEFAULT_ENTRY,
-      displayName: providerType.charAt(0).toUpperCase() + providerType.slice(1),
-    }
-  );
-}
-
-const ALL_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
-  ...AVAILABLE_CLOUD_PROVIDERS,
-  LITELLM_CLOUD_PROVIDER,
-  AZURE_CLOUD_PROVIDER,
-];
-
-/**
- * Find the {@link CloudEmbeddingProvider} entry matching `providerType`, or
- * `null` if none matches (e.g. self-hosted models).
- */
-export function findCloudProvider(
-  providerType: string | null
-): CloudEmbeddingProvider | null {
-  if (!providerType) return null;
-  return (
-    ALL_CLOUD_PROVIDERS.find((p) => p.provider_type === providerType) ?? null
-  );
 }

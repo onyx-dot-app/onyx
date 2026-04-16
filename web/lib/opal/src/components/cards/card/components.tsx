@@ -1,5 +1,10 @@
+import "@opal/components/cards/shared.css";
 import "@opal/components/cards/card/styles.css";
-import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import type {
+  PaddingVariants,
+  RoundingVariants,
+  StatusVariants,
+} from "@opal/types";
 import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 
@@ -61,6 +66,14 @@ type CardProps = {
    */
   border?: BorderVariant;
 
+  /**
+   * Border color, drawn from the same status palette as {@link MessageCard}.
+   * Has no visual effect when `border="none"`.
+   *
+   * @default "default"
+   */
+  borderColor?: StatusVariants;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 
@@ -76,6 +89,7 @@ function Card({
   rounding: roundingProp = "md",
   background = "light",
   border = "none",
+  borderColor = "default",
   ref,
   children,
 }: CardProps) {
@@ -88,6 +102,7 @@ function Card({
       className={cn("opal-card", padding, rounding)}
       data-background={background}
       data-border={border}
+      data-opal-status-border={borderColor}
     >
       {children}
     </div>

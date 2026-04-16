@@ -1,12 +1,12 @@
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { CloudEmbeddingModel } from "@/lib/indexing/interfaces";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
 import { markdown } from "@opal/utils";
 import { SvgServer } from "@opal/icons";
 
 export interface SelectModelModalProps {
-  model: CloudEmbeddingModel;
+  model: EmbeddingModelDescriptor;
   onConfirm: () => void;
   onCancel: () => void;
 }

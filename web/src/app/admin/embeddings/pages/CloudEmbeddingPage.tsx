@@ -13,10 +13,9 @@ import {
   EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
 import {
-  AVAILABLE_CLOUD_PROVIDERS,
-  AZURE_CLOUD_PROVIDER,
+  CLOUD_EMBEDDING_PROVIDERS,
+  getCurrentModelCopy,
   getFormattedProviderName,
-  LITELLM_CLOUD_PROVIDER,
 } from "@/lib/indexing";
 import { deleteSearchSettings } from "@/lib/indexing/svc";
 import { EmbeddingDetails } from "../EmbeddingModelSelectionForm";
@@ -27,6 +26,10 @@ import { CustomEmbeddingModelForm } from "@/components/embedding/CustomEmbedding
 import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import CardSection from "@/components/admin/CardSection";
+
+const LITELLM_CLOUD_PROVIDER =
+  CLOUD_EMBEDDING_PROVIDERS[EmbeddingProvider.LITELLM];
+const AZURE_CLOUD_PROVIDER = CLOUD_EMBEDDING_PROVIDERS[EmbeddingProvider.AZURE];
 
 export default function CloudEmbeddingPage({
   currentModel,
@@ -39,11 +42,17 @@ export default function CloudEmbeddingPage({
   setShowModelInQueue,
   advancedEmbeddingDetails,
 }: {
-  setShowModelInQueue: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
-  setShowTentativeModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
+  setShowModelInQueue: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
+  setShowTentativeModel: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
   currentModel: EmbeddingModelDescriptor | CloudEmbeddingModel;
-  setAlreadySelectedModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
-  embeddingModelDetails?: CloudEmbeddingModel[];
+  setAlreadySelectedModel: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
+  embeddingModelDetails?: EmbeddingModelDescriptor[];
   embeddingProviderDetails?: EmbeddingDetails[];
   setShowTentativeProvider: React.Dispatch<
     React.SetStateAction<CloudEmbeddingProvider | null>
@@ -62,14 +71,23 @@ export default function CloudEmbeddingPage({
     );
   }
 
-  const providers: CloudEmbeddingProviderFull[] = AVAILABLE_CLOUD_PROVIDERS.map(
-    (model) => ({
-      ...model,
+  const providers: CloudEmbeddingProviderFull[] = Object.values(
+    CLOUD_EMBEDDING_PROVIDERS
+  )
+    .filter(
+      (provider) =>
+        provider.provider_type !== EmbeddingProvider.LITELLM &&
+        provider.provider_type !== EmbeddingProvider.AZURE
+    )
+    .map((provider) => ({
+      ...provider,
       configured:
         embeddingProviderDetails &&
-        hasProviderTypeinArray(embeddingProviderDetails, model.provider_type),
-    })
-  );
+        hasProviderTypeinArray(
+          embeddingProviderDetails,
+          provider.provider_type
+        ),
+    }));
   const [liteLLMProvider, setLiteLLMProvider] = useState<
     EmbeddingDetails | undefined
   >(undefined);
@@ -114,7 +132,7 @@ export default function CloudEmbeddingPage({
         {providers.map((provider) => (
           <div key={provider.provider_type} className="mt-4 w-full">
             <div className="flex items-center mb-2">
-              {provider.icon({ size: 40 })}
+              <provider.icon size={40} />
               <h2 className="ml-2  mt-2 text-xl font-bold">
                 {getFormattedProviderName(provider.provider_type)}{" "}
                 {provider.provider_type == EmbeddingProvider.COHERE &&
@@ -169,13 +187,11 @@ export default function CloudEmbeddingPage({
           )}
         </Text>
 
-        <div key={LITELLM_CLOUD_PROVIDER.provider_type} className="mt-4 w-full">
+        <div key={EmbeddingProvider.LITELLM} className="mt-4 w-full">
           <div className="flex items-center mb-2">
-            {LITELLM_CLOUD_PROVIDER.icon({ size: 40 })}
+            <LITELLM_CLOUD_PROVIDER.icon size={40} />
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {getFormattedProviderName(LITELLM_CLOUD_PROVIDER.provider_type)}{" "}
-              {LITELLM_CLOUD_PROVIDER.provider_type ==
-                EmbeddingProvider.COHERE && "(recommended)"}
+              {getFormattedProviderName(EmbeddingProvider.LITELLM)}
             </h2>
             <HoverPopup
               mainContent={
@@ -274,7 +290,7 @@ export default function CloudEmbeddingPage({
                     provider={liteLLMProvider}
                     currentValues={
                       currentModel.provider_type === EmbeddingProvider.LITELLM
-                        ? (currentModel as CloudEmbeddingModel)
+                        ? currentModel
                         : null
                     }
                     setShowTentativeModel={setShowTentativeModel}
@@ -292,11 +308,11 @@ export default function CloudEmbeddingPage({
           }
         </Text>
 
-        <div key={AZURE_CLOUD_PROVIDER.provider_type} className="mt-4 w-full">
+        <div key={EmbeddingProvider.AZURE} className="mt-4 w-full">
           <div className="flex items-center mb-2">
-            {AZURE_CLOUD_PROVIDER.icon({ size: 40 })}
+            <AZURE_CLOUD_PROVIDER.icon size={40} />
             <h2 className="ml-2  mt-2 text-xl font-bold">
-              {getFormattedProviderName(AZURE_CLOUD_PROVIDER.provider_type)}{" "}
+              {getFormattedProviderName(EmbeddingProvider.AZURE)}{" "}
             </h2>
             <HoverPopup
               mainContent={
@@ -401,7 +417,7 @@ export default function CloudEmbeddingPage({
                     provider={azureProvider}
                     currentValues={
                       currentModel.provider_type === EmbeddingProvider.AZURE
-                        ? (currentModel as CloudEmbeddingModel)
+                        ? currentModel
                         : null
                     }
                     setShowTentativeModel={setShowTentativeModel}
@@ -425,17 +441,29 @@ export function CloudModelCard({
   setShowModelInQueue,
   setShowTentativeProvider,
 }: {
-  model: CloudEmbeddingModel;
+  model: EmbeddingModelDescriptor;
   provider: CloudEmbeddingProviderFull;
   currentModel: EmbeddingModelDescriptor | CloudEmbeddingModel;
-  setAlreadySelectedModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
-  setShowTentativeModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
-  setShowModelInQueue: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
+  setAlreadySelectedModel: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
+  setShowTentativeModel: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
+  setShowModelInQueue: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
   setShowTentativeProvider: React.Dispatch<
     React.SetStateAction<CloudEmbeddingProvider | null>
   >;
 }) {
   const [showDeleteModel, setShowDeleteModel] = useState(false);
+  const registryEntry = getCurrentModelCopy(model.model_name);
+  const description = registryEntry?.description;
+  const pricePerMillion =
+    registryEntry && "pricePerMillion" in registryEntry
+      ? registryEntry.pricePerMillion
+      : undefined;
   const modelId = typeof model.id === "number" ? model.id : null;
   const currentModelId =
     typeof currentModel.id === "number" ? currentModel.id : null;
@@ -514,14 +542,15 @@ export function CloudModelCard({
         </div>
       </div>
       <p className="text-sm text-text-600 dark:text-neutral-400 mb-2">
-        {model.description}
+        {description ?? "Custom model—no description is available."}
       </p>
       {model?.provider_type?.toLowerCase() !=
-        EmbeddingProvider.LITELLM.toLowerCase() && (
-        <div className="text-xs text-text-500 mb-2">
-          ${model.pricePerMillion}/M tokens
-        </div>
-      )}
+        EmbeddingProvider.LITELLM.toLowerCase() &&
+        pricePerMillion !== undefined && (
+          <div className="text-xs text-text-500 mb-2">
+            ${pricePerMillion}/M tokens
+          </div>
+        )}
       <div className="mt-3">
         <button
           className={`w-full p-2 rounded-lg text-sm ${

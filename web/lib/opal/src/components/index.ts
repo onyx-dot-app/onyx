@@ -93,7 +93,6 @@ export {
 export {
   MessageCard,
   type MessageCardProps,
-  type MessageCardVariant,
 } from "@opal/components/cards/message-card/components";
 
 /* Pagination */

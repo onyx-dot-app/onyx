@@ -13,7 +13,7 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button, SelectCard } from "@opal/components";
-import { Card } from "@opal/layouts";
+import { Card, Content } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -114,12 +114,16 @@ export default function CodeInterpreterPage() {
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
               <Card.Header
-                sizePreset="main-ui"
-                variant="section"
-                icon={SvgTerminal}
-                title="Code Interpreter"
-                description="Built-in Python runtime"
-                rightChildren={
+                headerChildren={
+                  <Content
+                    sizePreset="main-ui"
+                    variant="section"
+                    icon={SvgTerminal}
+                    title="Code Interpreter"
+                    description="Built-in Python runtime"
+                  />
+                }
+                topRightChildren={
                   <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
                 }
                 bottomRightChildren={
@@ -162,12 +166,16 @@ export default function CodeInterpreterPage() {
             onClick={() => handleToggle(true)}
           >
             <Card.Header
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgTerminal}
-              title="Code Interpreter (Disconnected)"
-              description="Built-in Python runtime"
-              rightChildren={
+              headerChildren={
+                <Content
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgTerminal}
+                  title="Code Interpreter (Disconnected)"
+                  description="Built-in Python runtime"
+                />
+              }
+              topRightChildren={
                 <Section flexDirection="row" alignItems="center" padding={0.5}>
                   {isReconnecting ? (
                     <CheckingStatus />

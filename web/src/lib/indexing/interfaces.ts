@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 
 // ─── Embedding providers ─────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ export interface CloudEmbeddingProvider {
 
   // Frontend-specific properties
   website: string;
-  icon: (props: IconProps) => React.ReactNode;
+  icon: IconFunctionComponent;
   description: string;
   apiLink: string;
   costslink?: string;
@@ -36,6 +36,12 @@ export interface CloudEmbeddingProviderFull extends CloudEmbeddingProvider {
 
 // ─── Embedding models ────────────────────────────────────────────────────────
 
+/**
+ * The backend-persisted shape for an embedding model. Reflects what the
+ * server actually sends/stores — notably **no `description`**, since
+ * descriptions are frontend-only marketing copy on the registry types
+ * ({@link CloudEmbeddingModel}, {@link SelfHostedEmbeddingModel}).
+ */
 export interface EmbeddingModelDescriptor {
   id?: number;
   model_name: string;
@@ -44,7 +50,6 @@ export interface EmbeddingModelDescriptor {
   query_prefix: string;
   passage_prefix: string;
   provider_type: EmbeddingProvider | null;
-  description: string;
   api_key: string | null;
   api_url: string | null;
   api_version?: string | null;
@@ -54,10 +59,12 @@ export interface EmbeddingModelDescriptor {
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
+  description: string;
   pricePerMillion: number;
 }
 
-export interface HostedEmbeddingModel extends EmbeddingModelDescriptor {
+export interface SelfHostedEmbeddingModel extends EmbeddingModelDescriptor {
+  description: string;
   link?: string;
   isDefault?: boolean;
 }

@@ -2,12 +2,12 @@ import { BooleanFormField, TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { HostedEmbeddingModel } from "@/lib/indexing/interfaces";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
 
 export function CustomModelForm({
   onSubmit,
 }: {
-  onSubmit: (model: HostedEmbeddingModel) => void;
+  onSubmit: (model: EmbeddingModelDescriptor) => void;
 }) {
   return (
     <div>
@@ -17,7 +17,6 @@ export function CustomModelForm({
           model_dim: "",
           query_prefix: "",
           passage_prefix: "",
-          description: "",
           normalize: true,
         }}
         validationSchema={Yup.object().shape({
@@ -58,14 +57,6 @@ export function CustomModelForm({
               placeholder="E.g. '768'"
               type="number"
             />
-            <TextFormField
-              min={-1}
-              name="description"
-              label="Description:"
-              subtext="Description of  your model"
-              placeholder=""
-            />
-
             <TextFormField
               name="query_prefix"
               label="[Optional] Query Prefix:"

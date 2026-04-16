@@ -12,9 +12,9 @@ import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
   AdvancedSearchConfiguration,
   CloudEmbeddingModel,
+  EmbeddingModelDescriptor,
   EmbeddingPrecision,
   EmbeddingProvider,
-  HostedEmbeddingModel,
   RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
@@ -89,9 +89,7 @@ export default function EmbeddingForm() {
     setAdvancedEmbeddingDetails((values) => ({ ...values, [key]: value }));
   };
 
-  const updateSelectedProvider = (
-    model: CloudEmbeddingModel | HostedEmbeddingModel
-  ) => {
+  const updateSelectedProvider = (model: EmbeddingModelDescriptor) => {
     setSelectedProvider(model);
   };
   const [displayPoorModelName, setDisplayPoorModelName] = useState(true);
@@ -104,15 +102,14 @@ export default function EmbeddingForm() {
     data: currentEmbeddingModel,
     isLoading: isLoadingCurrentModel,
     error: currentEmbeddingModelError,
-  } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
+  } = useSWR<EmbeddingModelDescriptor | null>(
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
 
-  const [selectedProvider, setSelectedProvider] = useState<
-    CloudEmbeddingModel | HostedEmbeddingModel | null
-  >(currentEmbeddingModel!);
+  const [selectedProvider, setSelectedProvider] =
+    useState<EmbeddingModelDescriptor | null>(currentEmbeddingModel!);
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useSWR<SavedSearchSettings | null>(

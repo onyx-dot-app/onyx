@@ -2,11 +2,11 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@opal/components";
-import { HostedEmbeddingModel } from "@/lib/indexing/interfaces";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
 import { SvgServer } from "@opal/icons";
 
 export interface ModelSelectionConfirmationModalProps {
-  selectedModel: HostedEmbeddingModel;
+  selectedModel: EmbeddingModelDescriptor;
   isCustom: boolean;
   onConfirm: () => void;
   onCancel: () => void;

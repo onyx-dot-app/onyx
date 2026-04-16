@@ -1,7 +1,7 @@
 import {
   CloudEmbeddingModel,
   EmbeddingModelDescriptor,
-  HostedEmbeddingModel,
+  SelfHostedEmbeddingModel,
 } from "@/lib/indexing/interfaces";
 import {
   getCurrentModelCopy,
@@ -32,8 +32,7 @@ export function ModelPreview({
       <div className="font-bold text-lg flex">{model.model_name}</div>
 
       <div className="text-sm mt-1 mx-1 mb-3">
-        {model.description ||
-          currentModelCopy?.description ||
+        {currentModelCopy?.description ||
           "Custom model—no description is available."}
       </div>
 
@@ -74,7 +73,7 @@ export function ModelPreview({
               )}
 
             {"isDefault" in model &&
-              (model as HostedEmbeddingModel).isDefault && (
+              (model as SelfHostedEmbeddingModel).isDefault && (
                 <div>
                   <span className="font-semibold text-text-700">Type:</span>
                   <div className="text-text-600">Default</div>
@@ -142,10 +141,10 @@ export function ModelPreview({
             </div>
           )}
 
-          {"link" in model && (model as HostedEmbeddingModel).link && (
+          {"link" in model && (model as SelfHostedEmbeddingModel).link && (
             <div className="pt-2">
               <a
-                href={(model as HostedEmbeddingModel).link}
+                href={(model as SelfHostedEmbeddingModel).link}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center text-blue-500 hover:text-blue-700 transition-colors duration-200 text-sm"
@@ -166,11 +165,17 @@ export function ModelOption({
   onSelect,
   selected,
 }: {
-  model: HostedEmbeddingModel;
-  onSelect?: (model: HostedEmbeddingModel) => void;
+  model: EmbeddingModelDescriptor;
+  onSelect?: (model: EmbeddingModelDescriptor) => void;
   selected: boolean;
 }) {
-  const currentModelCopy = getCurrentModelCopy(model.model_name);
+  const registryEntry = getCurrentModelCopy(model.model_name);
+  const link =
+    registryEntry && "link" in registryEntry ? registryEntry.link : undefined;
+  const isDefault =
+    registryEntry && "isDefault" in registryEntry
+      ? registryEntry.isDefault
+      : false;
 
   return (
     <div
@@ -183,9 +188,9 @@ export function ModelOption({
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-bold text-lg">{model.model_name}</h3>
 
-        {model.link && (
+        {link && (
           <a
-            href={model.link}
+            href={link}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -196,12 +201,11 @@ export function ModelOption({
         )}
       </div>
       <p className="text-sm k text-text-600 dark:text-neutral-400 text-left mb-2">
-        {model.description ||
-          currentModelCopy?.description ||
+        {registryEntry?.description ??
           "Custom model—no description is available."}
       </p>
       <div className="text-xs text-text-500">
-        {model.isDefault ? "Default" : "Self-hosted"}
+        {isDefault ? "Default" : "Self-hosted"}
       </div>
       {onSelect && (
         <div className="mt-3">
@@ -229,9 +233,9 @@ export function ModelSelector({
   setSelectedModel,
   currentEmbeddingModel,
 }: {
-  currentEmbeddingModel: HostedEmbeddingModel;
-  modelOptions: HostedEmbeddingModel[];
-  setSelectedModel: (model: HostedEmbeddingModel) => void;
+  currentEmbeddingModel: EmbeddingModelDescriptor;
+  modelOptions: SelfHostedEmbeddingModel[];
+  setSelectedModel: (model: EmbeddingModelDescriptor) => void;
 }) {
   const groupedModelOptions = modelOptions.reduce(
     (acc, model) => {
@@ -249,7 +253,7 @@ export function ModelSelector({
 
       return acc;
     },
-    {} as Record<string, HostedEmbeddingModel[]>
+    {} as Record<string, SelfHostedEmbeddingModel[]>
   );
 
   return (

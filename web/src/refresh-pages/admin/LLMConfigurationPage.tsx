@@ -141,13 +141,19 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <CardLayout.Header
-            icon={icon}
-            title={provider.name}
-            description={companyName}
-            sizePreset="main-ui"
-            variant="section"
-            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
-            rightChildren={
+            headerChildren={
+              <Content
+                icon={icon}
+                title={provider.name}
+                description={companyName}
+                sizePreset="main-ui"
+                variant="section"
+                tag={
+                  isDefault ? { title: "Default", color: "blue" } : undefined
+                }
+              />
+            }
+            topRightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
                   group="ExistingProviderCard"
@@ -205,12 +211,16 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
-        icon={icon}
-        title={productName}
-        description={companyName}
-        sizePreset="main-ui"
-        variant="section"
-        rightChildren={
+        headerChildren={
+          <Content
+            icon={icon}
+            title={productName}
+            description={companyName}
+            sizePreset="main-ui"
+            variant="section"
+          />
+        }
+        topRightChildren={
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"
@@ -252,12 +262,16 @@ function NewCustomProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
-        icon={icon}
-        title={productName}
-        description={companyName}
-        sizePreset="main-ui"
-        variant="section"
-        rightChildren={
+        headerChildren={
+          <Content
+            icon={icon}
+            title={productName}
+            description={companyName}
+            sizePreset="main-ui"
+            variant="section"
+          />
+        }
+        topRightChildren={
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"

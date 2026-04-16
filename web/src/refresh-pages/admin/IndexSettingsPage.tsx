@@ -17,7 +17,7 @@ import {
   LinkButton,
   MessageCard,
 } from "@opal/components";
-import { SvgCloud, SvgSettings } from "@opal/icons";
+import { SvgCloud, SvgServer, SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
@@ -25,6 +25,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SavedSearchSettings } from "@/lib/indexing/interfaces";
 import {
   findCloudProvider,
+  getCurrentModelCopy,
   getEmbeddingProvider,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
@@ -41,21 +42,32 @@ import {
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
-interface CloudProviderInfoProps {
+interface EmbeddingProviderInfoProps {
   providerType: string | null;
 }
 
-function CloudProviderInfo({ providerType }: CloudProviderInfoProps) {
+function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
+  if (!providerType) {
+    return (
+      <Content
+        icon={SvgServer}
+        title="Self-hosted"
+        sizePreset="secondary"
+        variant="body"
+      />
+    );
+  }
+
   const cloudProvider = findCloudProvider(providerType);
   if (!cloudProvider) return null;
 
   return (
-    <div className="flex flex-row items-center gap-2 p-2">
+    <>
       <Content
         icon={SvgCloud}
         title="Cloud Provider"
         sizePreset="secondary"
-        variant="section"
+        variant="body"
       />
       {cloudProvider.costslink && (
         <LinkButton href={cloudProvider.costslink} target="_blank">
@@ -67,7 +79,7 @@ function CloudProviderInfo({ providerType }: CloudProviderInfoProps) {
           Docs
         </LinkButton>
       )}
-    </div>
+    </>
   );
 }
 
@@ -217,27 +229,43 @@ export default function IndexSettingsPage() {
           {currentEmbeddingModel && (
             <Card border="solid" rounding="lg" padding="sm">
               <CardLayout.Header
-                icon={
-                  getEmbeddingProvider(currentEmbeddingModel.provider_type).icon
+                headerChildren={
+                  <GeneralLayouts.Section alignItems="start" gap={0}>
+                    <Content
+                      icon={
+                        getEmbeddingProvider(
+                          currentEmbeddingModel.provider_type
+                        ).icon
+                      }
+                      title={currentEmbeddingModel.model_name}
+                      description={
+                        getCurrentModelCopy(currentEmbeddingModel.model_name)
+                          ?.description
+                      }
+                      sizePreset="main-ui"
+                      variant="section"
+                    />
+                    <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                      <EmbeddingProviderInfo
+                        providerType={currentEmbeddingModel.provider_type}
+                      />
+                    </div>
+                  </GeneralLayouts.Section>
                 }
-                title={currentEmbeddingModel.model_name}
-                description={currentEmbeddingModel.description}
-                sizePreset="main-ui"
-                variant="section"
-                rightChildren={
+                topRightChildren={
                   // TODO(@raunakab): Wire up later.
                   <div className="flex flex-col items-end justify-between p-2 gap-1">
                     <Button prominence="secondary">View All Models</Button>
                     <div className="p-1">
-                      <Button icon={SvgSettings} prominence="tertiary" />
+                      <Button
+                        icon={SvgSettings}
+                        prominence="tertiary"
+                        size="md"
+                      />
                     </div>
                   </div>
                 }
-              >
-                <CloudProviderInfo
-                  providerType={currentEmbeddingModel.provider_type}
-                />
-              </CardLayout.Header>
+              />
             </Card>
           )}
         </GeneralLayouts.Section>

@@ -15,7 +15,8 @@
   @apply bg-background-tint-01;
 }
 
-/* Border variants */
+/* Border variants. Border *color* lives in `cards/shared.css` and is keyed
+   off the `data-opal-status-border` attribute. */
 .opal-card[data-border="none"] {
   border: none;
 }

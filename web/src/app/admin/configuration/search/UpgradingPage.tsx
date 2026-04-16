@@ -18,10 +18,7 @@ import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import {
-  CloudEmbeddingModel,
-  HostedEmbeddingModel,
-} from "@/lib/indexing/interfaces";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
 import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
@@ -32,7 +29,7 @@ import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 export default function UpgradingPage({
   futureEmbeddingModel,
 }: {
-  futureEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
+  futureEmbeddingModel: EmbeddingModelDescriptor;
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const vectorDbEnabled = useVectorDbEnabled();

@@ -6,11 +6,8 @@ import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
 import { ModelSelector } from "@/components/embedding/ModelSelector";
-import {
-  CloudEmbeddingModel,
-  HostedEmbeddingModel,
-} from "@/lib/indexing/interfaces";
-import { AVAILABLE_MODELS } from "@/lib/indexing";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
+import { SELF_HOSTED_MODELS } from "@/lib/indexing";
 import { CustomModelForm } from "../../../../components/embedding/CustomModelForm";
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
@@ -18,8 +15,8 @@ export default function OpenEmbeddingPage({
   onSelectOpenSource,
   selectedProvider,
 }: {
-  onSelectOpenSource: (model: HostedEmbeddingModel) => void;
-  selectedProvider: HostedEmbeddingModel | CloudEmbeddingModel;
+  onSelectOpenSource: (model: EmbeddingModelDescriptor) => void;
+  selectedProvider: EmbeddingModelDescriptor;
 }) {
   const [configureModel, setConfigureModel] = useState(false);
   return (
@@ -34,7 +31,7 @@ export default function OpenEmbeddingPage({
       </Text>
       <Spacer rem={1} />
       <ModelSelector
-        modelOptions={AVAILABLE_MODELS}
+        modelOptions={SELF_HOSTED_MODELS}
         setSelectedModel={onSelectOpenSource}
         currentEmbeddingModel={selectedProvider}
       />

@@ -1,11 +1,11 @@
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { CloudEmbeddingModel } from "@/lib/indexing/interfaces";
+import { EmbeddingModelDescriptor } from "@/lib/indexing/interfaces";
 import { markdown } from "@opal/utils";
 import { SvgCheck } from "@opal/icons";
 
 export interface AlreadyPickedModalProps {
-  model: CloudEmbeddingModel;
+  model: EmbeddingModelDescriptor;
   onClose: () => void;
 }
 

@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { MessageCard } from "@opal/components";
-import type { MessageCardVariant } from "@opal/components/cards/message-card/components";
+import type { StatusVariants } from "@opal/types";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";
@@ -11,7 +11,7 @@ import type { Toast, ToastLevel } from "@/hooks/useToast";
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 
-const LEVEL_TO_VARIANT: Record<ToastLevel, MessageCardVariant> = {
+const LEVEL_TO_VARIANT: Record<ToastLevel, StatusVariants> = {
   default: "default",
   success: "success",
   error: "error",

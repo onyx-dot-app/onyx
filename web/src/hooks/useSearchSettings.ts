@@ -2,14 +2,11 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  CloudEmbeddingModel,
-  HostedEmbeddingModel,
+  EmbeddingModelDescriptor,
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
-
-type EmbeddingModel = CloudEmbeddingModel | HostedEmbeddingModel;
 
 /**
  * Fetches the currently-active search settings, including the embedding model
@@ -29,10 +26,13 @@ export function useCurrentSearchSettings() {
 /**
  * Fetches the currently-active embedding model. Narrower-typed view of
  * {@link useCurrentSearchSettings} focused on model metadata (name,
- * description, provider, etc.).
+ * provider, etc.).
+ *
+ * Returns the backend-persisted shape, which does NOT carry a `description`.
+ * Descriptions are frontend-only — look them up via `getCurrentModelCopy`.
  */
 export function useCurrentEmbeddingModel() {
-  return useSWR<EmbeddingModel | null>(
+  return useSWR<EmbeddingModelDescriptor | null>(
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 }
@@ -44,7 +44,7 @@ export function useCurrentEmbeddingModel() {
  * an embedding model switchover is running.
  */
 export function useFutureEmbeddingModel() {
-  return useSWR<EmbeddingModel | null>(
+  return useSWR<EmbeddingModelDescriptor | null>(
     SWR_KEYS.secondarySearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 }

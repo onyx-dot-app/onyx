@@ -1,8 +1,7 @@
 import {
   AdvancedSearchConfiguration,
-  CloudEmbeddingProvider,
+  EmbeddingModelDescriptor,
   EmbeddingProvider,
-  HostedEmbeddingModel,
   RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
@@ -70,7 +69,7 @@ export async function updateSearchSettings(
 // Advanced embedding details may update default values.
 // Do NOT modify the order unless you are positive the new hierarchy is correct.
 export function combineSearchSettings(
-  selectedProvider: CloudEmbeddingProvider | HostedEmbeddingModel,
+  selectedProvider: EmbeddingModelDescriptor,
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
   provider_type: EmbeddingProvider | null,

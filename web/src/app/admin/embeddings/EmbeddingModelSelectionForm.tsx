@@ -7,16 +7,15 @@ import {
   AdvancedSearchConfiguration,
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
+  EmbeddingModelDescriptor,
   EmbeddingProvider,
-  HostedEmbeddingModel,
+  SelfHostedEmbeddingModel,
 } from "@/lib/indexing/interfaces";
 import {
-  AVAILABLE_CLOUD_PROVIDERS,
-  AVAILABLE_MODELS,
-  AZURE_CLOUD_PROVIDER,
+  SELF_HOSTED_MODELS,
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
-  LITELLM_CLOUD_PROVIDER,
+  findCloudProvider,
 } from "@/lib/indexing";
 import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "@/app/admin/embeddings/pages/CloudEmbeddingPage";
@@ -41,11 +40,9 @@ export interface EmbeddingDetails {
 export interface EmbeddingModelSelectionProps {
   modelTab: "open" | "cloud" | null;
   setModelTab: Dispatch<SetStateAction<"open" | "cloud" | null>>;
-  currentEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
-  selectedProvider: CloudEmbeddingModel | HostedEmbeddingModel;
-  updateSelectedProvider: (
-    model: CloudEmbeddingModel | HostedEmbeddingModel
-  ) => void;
+  currentEmbeddingModel: EmbeddingModelDescriptor;
+  selectedProvider: EmbeddingModelDescriptor;
+  updateSelectedProvider: (model: EmbeddingModelDescriptor) => void;
   updateCurrentModel: (
     newModel: string,
     provider_type: EmbeddingProvider
@@ -73,16 +70,16 @@ export default function EmbeddingModelSelection({
 
   // Cloud Model based modals
   const [alreadySelectedModel, setAlreadySelectedModel] =
-    useState<CloudEmbeddingModel | null>(null);
+    useState<EmbeddingModelDescriptor | null>(null);
   const [showTentativeModel, setShowTentativeModel] =
-    useState<CloudEmbeddingModel | null>(null);
+    useState<EmbeddingModelDescriptor | null>(null);
 
   const [showModelInQueue, setShowModelInQueue] =
-    useState<CloudEmbeddingModel | null>(null);
+    useState<EmbeddingModelDescriptor | null>(null);
 
   // Open Model based modals
   const [showTentativeOpenProvider, setShowTentativeOpenProvider] =
-    useState<HostedEmbeddingModel | null>(null);
+    useState<EmbeddingModelDescriptor | null>(null);
 
   const [showDeleteCredentialsModal, setShowDeleteCredentialsModal] =
     useState<boolean>(false);
@@ -90,7 +87,7 @@ export default function EmbeddingModelSelection({
   const [showAddConnectorPopup, setShowAddConnectorPopup] =
     useState<boolean>(false);
 
-  const { data: embeddingModelDetails } = useSWR<CloudEmbeddingModel[]>(
+  const { data: embeddingModelDetails } = useSWR<EmbeddingModelDescriptor[]>(
     EMBEDDING_MODELS_ADMIN_URL,
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
@@ -118,7 +115,7 @@ export default function EmbeddingModelSelection({
         <ModelSelectionConfirmationModal
           selectedModel={showTentativeOpenProvider}
           isCustom={
-            AVAILABLE_MODELS.find(
+            SELF_HOSTED_MODELS.find(
               (model) =>
                 model.model_name === showTentativeOpenProvider.model_name
             ) === undefined
@@ -246,7 +243,7 @@ export default function EmbeddingModelSelection({
       {modelTab == "open" && (
         <OpenEmbeddingPage
           selectedProvider={selectedProvider}
-          onSelectOpenSource={(model: HostedEmbeddingModel) => {
+          onSelectOpenSource={(model) => {
             setShowTentativeOpenProvider(model);
           }}
         />
@@ -281,14 +278,8 @@ export default function EmbeddingModelSelection({
               <Button
                 prominence="secondary"
                 onClick={() => {
-                  const allProviders = [
-                    ...AVAILABLE_CLOUD_PROVIDERS,
-                    LITELLM_CLOUD_PROVIDER,
-                    AZURE_CLOUD_PROVIDER,
-                  ];
-                  const provider = allProviders.find(
-                    (p) =>
-                      p.provider_type === currentEmbeddingModel.provider_type
+                  const provider = findCloudProvider(
+                    currentEmbeddingModel.provider_type
                   );
                   if (!provider) {
                     return;

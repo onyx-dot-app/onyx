@@ -1,5 +1,5 @@
 import {
-  CloudEmbeddingModel,
+  EmbeddingModelDescriptor,
   EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
 import { getFormattedProviderName } from "@/lib/indexing";
@@ -18,8 +18,10 @@ export function CustomEmbeddingModelForm({
   provider,
   embeddingType,
 }: {
-  setShowTentativeModel: Dispatch<SetStateAction<CloudEmbeddingModel | null>>;
-  currentValues: CloudEmbeddingModel | null;
+  setShowTentativeModel: Dispatch<
+    SetStateAction<EmbeddingModelDescriptor | null>
+  >;
+  currentValues: EmbeddingModelDescriptor | null;
   provider: EmbeddingDetails;
   embeddingType: EmbeddingProvider;
 }) {
@@ -37,7 +39,6 @@ export function CustomEmbeddingModelForm({
             api_key: "",
             enabled: true,
             api_url: provider.api_url,
-            description: "",
             index_name: "",
           }
         }
@@ -51,11 +52,10 @@ export function CustomEmbeddingModelForm({
           api_key: Yup.string().optional(),
           enabled: Yup.boolean(),
           api_url: Yup.string().required("API base URL is required"),
-          description: Yup.string(),
           index_name: Yup.string().nullable(),
         })}
         onSubmit={async (values) => {
-          setShowTentativeModel(values as CloudEmbeddingModel);
+          setShowTentativeModel(values as EmbeddingModelDescriptor);
         }}
       >
         {({ isSubmitting, submitForm, errors }) => (

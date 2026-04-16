@@ -1,5 +1,10 @@
+import "@opal/components/cards/shared.css";
 import "@opal/components/cards/message-card/styles.css";
-import type { RichStr, IconFunctionComponent } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  StatusVariants,
+} from "@opal/types";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
@@ -14,11 +19,9 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type MessageCardVariant = "default" | "info" | "success" | "warning" | "error";
-
 interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
-  variant?: MessageCardVariant;
+  variant?: StatusVariants;
 
   /** Override the default variant icon. */
   icon?: IconFunctionComponent;
@@ -58,7 +61,7 @@ type MessageCardProps = MessageCardBaseProps &
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
-  MessageCardVariant,
+  StatusVariants,
   { icon: IconFunctionComponent; iconClass: string }
 > = {
   default: { icon: SvgAlertCircle, iconClass: "stroke-text-03" },
@@ -135,7 +138,12 @@ function MessageCard({
   );
 
   return (
-    <div className="opal-message-card" data-variant={variant} ref={ref}>
+    <div
+      className="opal-message-card"
+      data-variant={variant}
+      data-opal-status-border={variant}
+      ref={ref}
+    >
       <ContentAction
         icon={(props) => <Icon {...props} className={iconClass} />}
         title={title}
@@ -156,4 +164,4 @@ function MessageCard({
   );
 }
 
-export { MessageCard, type MessageCardProps, type MessageCardVariant };
+export { MessageCard, type MessageCardProps };
