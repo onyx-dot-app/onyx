@@ -307,4 +307,3 @@ class TestMergeToolCalls:
         assert len(result) == 1
         # String should be converted to list item
         assert result[0].tool_args["queries"] == ["single_query", "q2"]
-
