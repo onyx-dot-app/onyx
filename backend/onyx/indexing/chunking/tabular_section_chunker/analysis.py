@@ -54,10 +54,10 @@ def analyze_sheet(headers: list[str], parsed_rows: list[ParsedRow]) -> SheetAnal
             continue
 
         # Date: every value parses as a date — fold into the sheet-wide range.
-        dates = [_try_date(v) for v in values]
-        if all(d is not None for d in dates):
-            dmin = min(filter(None, dates))
-            dmax = max(filter(None, dates))
+        dates = _try_all_dates(values)
+        if dates:
+            dmin = min(dates)
+            dmax = max(dates)
             a.date_min = dmin if a.date_min is None else min(a.date_min, dmin)
             a.date_max = dmax if a.date_max is None else max(a.date_max, dmax)
             continue
@@ -84,6 +84,16 @@ def _parse_num(value: str) -> float | None:
         return float(value.replace(",", ""))
     except ValueError:
         return None
+
+
+def _try_all_dates(values: list[str]) -> list[date] | None:
+    parsed: list[date] = []
+    for v in values:
+        d = _try_date(v)
+        if d is None:
+            return None
+        parsed.append(d)
+    return parsed
 
 
 def _try_date(value: str) -> date | None:
