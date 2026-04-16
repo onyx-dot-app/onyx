@@ -47,10 +47,14 @@ def create_release_notifications_for_versions(
     # Get active users and exclude API key users
     user_ids = list(
         db_session.scalars(
-            select(User.id).where(  # type: ignore
+            select(User.id).where(  # ty: ignore[no-matching-overload]
                 User.is_active == True,  # noqa: E712
                 User.account_type.notin_([AccountType.BOT, AccountType.EXT_PERM_USER]),
-                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(False),  # type: ignore[attr-defined]
+                User.email.endswith(
+                    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+                ).is_(  # ty: ignore[unresolved-attribute]
+                    False
+                ),
             )
         ).all()
     )

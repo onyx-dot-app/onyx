@@ -50,6 +50,7 @@ class Section(BaseModel):
     link: str | None = None
     text: str | None = None
     image_file_id: str | None = None
+    heading: str | None = None
 
 
 class TextSection(Section):

@@ -115,7 +115,7 @@ class TestLicenseEnforcementMiddleware:
             response.status_code = 200
             return response
 
-        return captured_middleware, call_next
+        return captured_middleware, call_next  # ty: ignore[invalid-return-type]
 
     @pytest.mark.asyncio
     @patch(

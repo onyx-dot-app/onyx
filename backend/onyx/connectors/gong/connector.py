@@ -110,7 +110,7 @@ class GongConnector(LoadConnector, PollConnector):
         # The batch_ids in the previous method appears to be batches of call_ids to process
         # In this method, we will retrieve transcripts for them in batches.
         transcripts: list[dict[str, Any]] = []
-        workspace_list = self.workspaces or [None]  # type: ignore
+        workspace_list = self.workspaces or [None]
         workspace_map = self._get_workspace_id_map() if self.workspaces else {}
 
         for workspace in workspace_list:

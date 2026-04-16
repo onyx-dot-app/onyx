@@ -95,11 +95,13 @@ class ClickupConnector(LoadConnector, PollConnector):
             params["date_updated_lt"] = end
 
         if self.connector_type == "list":
-            params["list_ids[]"] = self.connector_ids
+            params["list_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
         elif self.connector_type == "folder":
-            params["project_ids[]"] = self.connector_ids
+            params["project_ids[]"] = (  # ty: ignore[invalid-assignment]
+                self.connector_ids
+            )
         elif self.connector_type == "space":
-            params["space_ids[]"] = self.connector_ids
+            params["space_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
 
         url_endpoint = f"/team/{self.team_id}/task"
 

@@ -1164,7 +1164,10 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
+                placement=Placement(
+                    turn_index=llm_cycle_count  # ty: ignore[possibly-unresolved-reference]
+                    + reasoning_cycles
+                ),
                 obj=OverallStop(type="stop"),
             )
         )

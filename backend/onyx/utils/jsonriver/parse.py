@@ -408,12 +408,12 @@ class _Parser:
         elif token_type == JsonTokenType.ArrayStart:
             array_state = _InArrayState()
             self._state_stack.append(array_state)
-            return array_state.value
+            return array_state.value  # ty: ignore[invalid-return-type]
 
         elif token_type == JsonTokenType.ObjectStart:
             object_state = _InObjectExpectingKeyState()
             self._state_stack.append(object_state)
-            return object_state.value
+            return object_state.value  # ty: ignore[invalid-return-type]
 
         else:
             raise ValueError(

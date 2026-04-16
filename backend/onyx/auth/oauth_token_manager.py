@@ -191,7 +191,7 @@ class OAuthTokenManager:
     @staticmethod
     def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:
         if isinstance(value, SensitiveValue):
-            return value.get_value(apply_mask=False)
+            return value.get_value(apply_mask=False)  # ty: ignore[invalid-return-type]
         return value
 
     @staticmethod
@@ -199,5 +199,7 @@ class OAuthTokenManager:
         token_data: SensitiveValue[dict[str, Any]] | dict[str, Any],
     ) -> dict[str, Any]:
         if isinstance(token_data, SensitiveValue):
-            return token_data.get_value(apply_mask=False)
+            return token_data.get_value(  # ty: ignore[invalid-return-type]
+                apply_mask=False
+            )
         return token_data

@@ -448,7 +448,7 @@ def bulk_invite_users(
     except (EmailUndeliverableError, EmailNotValidError) as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid email address: {email} - {str(e)}",
+            detail=f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
         )
 
     # Count only new users (not already invited or existing) that need seats

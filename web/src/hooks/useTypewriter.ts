@@ -110,6 +110,23 @@ export function useTypewriter(target: string, enabled: boolean): string {
     }
   }, [target.length, displayedLength]);
 
+  // When the user navigates away and back (tab switch, window focus),
+  // snap to all collected content so they see the full response immediately.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        const targetLen = targetRef.current.length;
+        if (displayedLengthRef.current < targetLen) {
+          displayedLengthRef.current = targetLen;
+          setDisplayedLength(targetLen);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   return useMemo(
     () => target.slice(0, Math.min(displayedLength, target.length)),
     [target, displayedLength]

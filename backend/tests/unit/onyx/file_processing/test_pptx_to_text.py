@@ -1,9 +1,9 @@
 import io
 
-from pptx import Presentation  # type: ignore[import-untyped]
-from pptx.chart.data import CategoryChartData  # type: ignore[import-untyped]
-from pptx.enum.chart import XL_CHART_TYPE  # type: ignore[import-untyped]
-from pptx.util import Inches  # type: ignore[import-untyped]
+from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
+from pptx.util import Inches
 
 from onyx.file_processing.extract_file_text import pptx_to_text
 

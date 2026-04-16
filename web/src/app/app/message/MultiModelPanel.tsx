@@ -44,6 +44,8 @@ export interface MultiModelPanelProps {
   errorStackTrace?: string | null;
   /** Additional error details */
   errorDetails?: Record<string, any> | null;
+  /** Whether any model is still streaming — disables preferred selection */
+  isGenerating?: boolean;
 }
 
 /**
@@ -73,19 +75,24 @@ export default function MultiModelPanel({
   isRetryable,
   errorStackTrace,
   errorDetails,
+  isGenerating,
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
+  const canSelect = !isHidden && !isPreferred && !isGenerating;
+
   const handlePanelClick = useCallback(() => {
-    if (!isHidden && !isPreferred) onSelect();
-  }, [isHidden, isPreferred, onSelect]);
+    if (canSelect) onSelect();
+  }, [canSelect, onSelect]);
 
   const header = (
     <div
       className={cn(
-        "rounded-12",
-        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00"
+        "rounded-12 transition-colors",
+        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
+        canSelect && "cursor-pointer hover:bg-background-tint-02"
       )}
+      onClick={handlePanelClick}
     >
       <ContentAction
         sizePreset="main-ui"
@@ -140,13 +147,7 @@ export default function MultiModelPanel({
   }
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
-        !isPreferred && "cursor-pointer hover:bg-background-tint-02"
-      )}
-      onClick={handlePanelClick}
-    >
+    <div className="flex flex-col gap-3 min-w-0 rounded-16">
       {header}
       {errorMessage ? (
         <div className="p-4">

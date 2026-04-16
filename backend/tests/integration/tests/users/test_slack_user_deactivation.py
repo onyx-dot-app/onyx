@@ -8,6 +8,7 @@ Verifies that:
 
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 import redis
 import requests
@@ -28,7 +29,7 @@ _LICENSE_REDIS_KEY = "public:license:metadata"
 
 
 def _seed_license(r: redis.Redis, seats: int) -> None:
-    now = datetime.utcnow()
+    now = datetime.now(tz=timezone.utc)
     metadata = LicenseMetadata(
         tenant_id="public",
         organization_name="Test Org",

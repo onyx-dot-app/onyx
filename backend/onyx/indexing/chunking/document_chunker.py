@@ -7,6 +7,7 @@ from onyx.indexing.chunking.image_section_chunker import ImageChunker
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -38,6 +39,7 @@ class DocumentChunker:
                 chunk_splitter=chunk_splitter,
             ),
             SectionType.IMAGE: ImageChunker(),
+            SectionType.TABULAR: TabularChunker(tokenizer=tokenizer),
         }
 
     def chunk(

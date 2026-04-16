@@ -5,7 +5,7 @@ from datetime import timezone
 from typing import Any
 
 from oauthlib.oauth2 import BackendApplicationClient
-from requests_oauthlib import OAuth2Session  # type: ignore
+from requests_oauthlib import OAuth2Session
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource

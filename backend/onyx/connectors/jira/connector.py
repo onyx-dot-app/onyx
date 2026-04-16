@@ -184,13 +184,13 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
         else:
             error_text = str(raw_text)
     elif hasattr(e, "response") and e.response is not None:
-        status_code = e.response.status_code
+        status_code = e.response.status_code  # ty: ignore[unresolved-attribute]
         # Try JSON first, fall back to text
         try:
-            error_json = e.response.json()
+            error_json = e.response.json()  # ty: ignore[unresolved-attribute]
             error_text = _format_error_text(error_json)
         except Exception:
-            error_text = e.response.text
+            error_text = e.response.text  # ty: ignore[unresolved-attribute]
 
     # Handle specific status codes
     if status_code == 400:
@@ -230,7 +230,9 @@ def enhanced_search_ids(
         "fields": "id",
     }
     try:
-        response = jira_client._session.get(enhanced_search_path, params=params)
+        response = jira_client._session.get(  # ty: ignore[unresolved-attribute]
+            enhanced_search_path, params=params
+        )
         response.raise_for_status()
         response_json = response.json()
     except Exception as e:
@@ -253,7 +255,9 @@ def _bulk_fetch_request(
     # to avoid reading unnecessary data
     payload["fields"] = fields.split(",") if fields else ["*all"]
 
-    resp = jira_client._session.post(bulk_fetch_path, json=payload)
+    resp = jira_client._session.post(  # ty: ignore[unresolved-attribute]
+        bulk_fetch_path, json=payload
+    )
     return resp.json()["issues"]
 
 
@@ -298,7 +302,11 @@ def bulk_fetch_issues(
             raise
 
     return [
-        Issue(jira_client._options, jira_client._session, raw=issue)
+        Issue(
+            jira_client._options,
+            jira_client._session,  # ty: ignore[invalid-argument-type]
+            raw=issue,
+        )
         for issue in raw_issues
     ]
 
@@ -415,18 +423,26 @@ def process_jira_issue(
     if creator is not None and (
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
-        people.add(basic_expert_info)
-        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
-        if email := basic_expert_info.get_email():
+        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
+        metadata_dict[_FIELD_REPORTER] = (
+            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
+        )
+        if (
+            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
+        ):
             metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
     assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
     if assignee is not None and (
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
-        people.add(basic_expert_info)
-        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
-        if email := basic_expert_info.get_email():
+        people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
+        metadata_dict[_FIELD_ASSIGNEE] = (
+            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
+        )
+        if (
+            email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
+        ):
             metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
 
     metadata_dict[_FIELD_KEY] = issue.key
@@ -818,7 +834,7 @@ class JiraConnector(
                     # Add permission information to the document if requested
                     if include_permissions:
                         document.external_access = self._get_project_permissions(
-                            project_key,
+                            project_key,  # ty: ignore[invalid-argument-type]
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document

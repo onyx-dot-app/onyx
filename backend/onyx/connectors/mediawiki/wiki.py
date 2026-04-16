@@ -8,7 +8,8 @@ from typing import Any
 from typing import cast
 from typing import ClassVar
 
-import pywikibot.time  # type: ignore[import-untyped]
+import pywikibot.config
+import pywikibot.time
 from pywikibot import pagegenerators
 from pywikibot import textlib
 
@@ -46,7 +47,9 @@ def pywikibot_timestamp_to_utc_datetime(
 
 
 def get_doc_from_page(
-    page: pywikibot.Page, site: pywikibot.Site | None, source_type: DocumentSource
+    page: pywikibot.Page,
+    site: pywikibot.Site | None,  # ty: ignore[invalid-type-form]
+    source_type: DocumentSource,
 ) -> Document:
     """Generate Onyx Document from a MediaWiki page object.
 
@@ -178,7 +181,7 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         # Pywikibot can handle batching for us, including only loading page contents when we finally request them.
         category_pages = [
             pagegenerators.PreloadingGenerator(
-                pagegenerators.EdittimeFilterPageGenerator(
+                pagegenerators.EdittimeFilterPageGenerator(  # ty: ignore[invalid-argument-type]
                     pagegenerators.CategorizedPageGenerator(
                         category, recurse=self.recurse_depth
                     ),

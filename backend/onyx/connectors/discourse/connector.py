@@ -221,8 +221,8 @@ class DiscourseConnector(PollConnector):
         if self.permissions is None:
             raise ConnectorMissingCredentialError("Discourse")
 
-        start_datetime = datetime.utcfromtimestamp(start).replace(tzinfo=timezone.utc)
-        end_datetime = datetime.utcfromtimestamp(end).replace(tzinfo=timezone.utc)
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
         self._get_categories_map()
 

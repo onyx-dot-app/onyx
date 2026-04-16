@@ -174,7 +174,11 @@ def batch_create_notifications(
 
     # rowcount returns number of rows inserted (excludes conflicts)
     # CursorResult has rowcount but session.execute type hints are too broad
-    return result.rowcount if result.rowcount >= 0 else 0  # type: ignore[attr-defined]
+    return (
+        result.rowcount  # ty: ignore[unresolved-attribute]
+        if result.rowcount >= 0  # ty: ignore[unresolved-attribute]
+        else 0
+    )
 
 
 def update_notification_last_shown(

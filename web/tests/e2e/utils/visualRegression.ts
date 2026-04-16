@@ -31,6 +31,7 @@ const DEFAULT_MASK_SELECTORS: string[] = [
  */
 const DEFAULT_HIDE_SELECTORS: string[] = [
   '[data-testid="toast-container"]',
+  '[data-testid="onyx-logo"] p', // greeting text is random, hide to prevent size variation
   // TODO: Remove once it loads consistently.
   '[data-testid="actions-container"]',
 ];

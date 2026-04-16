@@ -1,12 +1,12 @@
 import asyncio
 import collections.abc
-import concurrent
+import concurrent.futures
 import contextvars
 import copy
 import threading
 import uuid
-from collections.abc import Awaitable
 from collections.abc import Callable
+from collections.abc import Coroutine
 from collections.abc import Iterator
 from collections.abc import MutableMapping
 from collections.abc import Sequence
@@ -124,7 +124,9 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
                 return self._dict.pop(key)
             return self._dict.pop(key, default)
 
-    def setdefault(self, key: KT, default: VT) -> VT:
+    def setdefault(  # ty: ignore[invalid-method-override]
+        self, key: KT, default: VT
+    ) -> VT:
         """Set a default value if key is missing, atomically."""
         with self.lock:
             return self._dict.setdefault(key, default)
@@ -443,18 +445,18 @@ def run_functions_in_parallel(
     return results
 
 
-def run_async_sync_no_cancel(coro: Awaitable[T]) -> T:
+def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
     """
     async-to-sync converter. Basically just executes asyncio.run in a separate thread.
     Which is probably somehow inefficient or not ideal but fine for now.
     """
     context = contextvars.copy_context()
+
+    def _run() -> T:
+        return cast(T, context.run(asyncio.run, coro))
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future: concurrent.futures.Future[T] = executor.submit(
-            context.run,  # type: ignore[arg-type]
-            asyncio.run,
-            coro,
-        )
+        future = executor.submit(_run)
         return future.result()
 
 
@@ -498,7 +500,7 @@ class TimeoutThread(threading.Thread, Generic[R]):
 
     def end(self) -> None:
         raise TimeoutError(
-            f"Function {self.func.__name__} timed out after {self.timeout} seconds"
+            f"Function {self.func.__name__} timed out after {self.timeout} seconds"  # ty: ignore[unresolved-attribute]
         )
 
 
@@ -567,10 +569,12 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     for some extra generator code to run and not have the result(s) yielded.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index: dict[Future[tuple[int, R | None]], int] = {
-            executor.submit(_next_or_none, ind, gen): ind
-            for ind, gen in enumerate(gens)
-        }
+        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # type: ignore
+            {
+                executor.submit(_next_or_none, ind, gen): ind
+                for ind, gen in enumerate(gens)
+            }
+        )
 
         next_ind = len(gens)
         while future_to_index:
@@ -580,7 +584,7 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 if result is not None:
                     yield result
                     future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
-                        next_ind
+                        next_ind  # ty: ignore[invalid-assignment]
                     )
                     next_ind += 1
                 del future_to_index[future]

@@ -64,7 +64,7 @@ def recompute_user_permissions__no_commit(
     for uid, perms in perms_by_user.items():
         db_session.execute(
             update(User)
-            .where(User.id == uid)  # type: ignore[arg-type]
+            .where(User.id == uid)  # ty: ignore[invalid-argument-type]
             .values(effective_permissions=sorted(perms))
         )
 

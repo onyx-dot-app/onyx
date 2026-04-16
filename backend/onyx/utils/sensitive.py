@@ -42,7 +42,7 @@ def make_mock_sensitive_value(value: dict[str, Any] | str | None) -> MagicMock:
         >>> # Now mock_credential.credential_json.get_value(apply_mask=False) returns {"api_key": "secret"}
     """
     if value is None:
-        return None  # type: ignore[return-value]
+        return None  # ty: ignore[invalid-return-type]
 
     mock = MagicMock(spec=SensitiveValue)
     mock.get_value.return_value = value
@@ -104,9 +104,9 @@ class SensitiveValue(Generic[T]):
             if self._is_json:
                 self._decrypted_value = json.loads(decrypted_str)
             else:
-                self._decrypted_value = decrypted_str  # type: ignore[assignment]
+                self._decrypted_value = decrypted_str  # ty: ignore[invalid-assignment]
         # The return type should always match T based on is_json flag
-        return self._decrypted_value  # type: ignore[return-value]
+        return self._decrypted_value  # ty: ignore[invalid-return-type]
 
     def get_value(
         self,
@@ -140,9 +140,9 @@ class SensitiveValue(Generic[T]):
         # Type narrowing doesn't work well here due to the generic T,
         # but at runtime the types will match
         if isinstance(value, dict):
-            return mask_credential_dict(value)
+            return mask_credential_dict(value)  # ty: ignore[invalid-return-type]
         elif isinstance(value, str):
-            return mask_string(value)
+            return mask_string(value)  # ty: ignore[invalid-return-type]
         else:
             raise ValueError(f"Cannot mask value of type {type(value)}")
 

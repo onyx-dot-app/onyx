@@ -86,7 +86,7 @@ def build_connection_string(
 if LOG_POSTGRES_LATENCY:
 
     @event.listens_for(Engine, "before_cursor_execute")
-    def before_cursor_execute(  # type: ignore
+    def before_cursor_execute(
         conn,
         cursor,  # noqa: ARG001
         statement,  # noqa: ARG001
@@ -97,7 +97,7 @@ if LOG_POSTGRES_LATENCY:
         conn.info["query_start_time"] = time.time()
 
     @event.listens_for(Engine, "after_cursor_execute")
-    def after_cursor_execute(  # type: ignore
+    def after_cursor_execute(
         conn,
         cursor,  # noqa: ARG001
         statement,
@@ -117,7 +117,9 @@ if LOG_POSTGRES_CONN_COUNTS:
     checkin_count = 0
 
     @event.listens_for(Engine, "checkout")
-    def log_checkout(dbapi_connection, connection_record, connection_proxy):  # type: ignore  # noqa: ARG001
+    def log_checkout(
+        dbapi_connection, connection_record, connection_proxy  # noqa: ARG001
+    ):
         global checkout_count
         checkout_count += 1
 
@@ -133,7 +135,7 @@ if LOG_POSTGRES_CONN_COUNTS:
         )
 
     @event.listens_for(Engine, "checkin")
-    def log_checkin(dbapi_connection, connection_record):  # type: ignore  # noqa: ARG001
+    def log_checkin(dbapi_connection, connection_record):  # noqa: ARG001
         global checkin_count
         checkin_count += 1
         logger.debug(f"Total connection checkins: {checkin_count}")

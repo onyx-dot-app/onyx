@@ -119,7 +119,7 @@ def _mock_graph_get_for_enumeration(
             return _make_graph_page(members_by_group.get(group_id, []))
         return _make_graph_page(groups)
 
-    return side_effect  # type: ignore[return-value]
+    return side_effect  # ty: ignore[invalid-return-type]
 
 
 @patch(f"{MODULE}._graph_api_get")

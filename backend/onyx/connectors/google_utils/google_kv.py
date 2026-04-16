@@ -6,7 +6,7 @@ from urllib.parse import ParseResult
 from urllib.parse import urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
+from google_auth_oauthlib.flow import InstalledAppFlow
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -63,7 +63,7 @@ def _load_google_json(raw: object) -> dict[str, Any]:
     ``str`` branch can be removed.
     """
     if isinstance(raw, dict):
-        return raw
+        return raw  # ty: ignore[invalid-return-type]
     if isinstance(raw, str):
         return json.loads(raw)
     raise ValueError(f"Unexpected Google credential payload type: {type(raw)!r}")
@@ -82,7 +82,7 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
     if source == DocumentSource.GOOGLE_DRIVE:
         drive_service = get_drive_service(creds)
         user_info = (
-            drive_service.about()
+            drive_service.about()  # ty: ignore[unresolved-attribute]
             .get(
                 fields="user(emailAddress)",
             )
@@ -92,7 +92,7 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
     elif source == DocumentSource.GMAIL:
         gmail_service = get_gmail_service(creds)
         user_info = (
-            gmail_service.users()
+            gmail_service.users()  # ty: ignore[unresolved-attribute]
             .getProfile(
                 userId="me",
                 fields="emailAddress",
@@ -159,7 +159,7 @@ def build_service_account_creds(
     service_account_key = get_service_account_key(source=source)
 
     credential_dict = {
-        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.json(),
+        DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.model_dump_json(),
     }
     if primary_admin_email:
         credential_dict[DB_CREDENTIALS_PRIMARY_ADMIN_KEY] = primary_admin_email

@@ -13,7 +13,7 @@ def unwrap_str(val: JSON_ro) -> str:
     Also handles legacy plain-string values cached in Redis."""
     if isinstance(val, dict):
         try:
-            return cast(str, val["value"])
+            return cast(str, val["value"])  # ty: ignore[invalid-argument-type]
         except KeyError:
             raise ValueError(
                 f"Expected dict with 'value' key, got keys: {list(val.keys())}"

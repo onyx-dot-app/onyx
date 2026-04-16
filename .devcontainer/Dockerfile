@@ -1,6 +1,7 @@
 FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
   curl \
   default-jre \
   fd-find \
@@ -61,3 +62,11 @@ RUN chsh -s /bin/zsh root && \
     echo '[ -f /workspace/.devcontainer/zshrc ] && . /workspace/.devcontainer/zshrc' >> "$rc"; \
   done && \
   chown dev:dev /home/dev/.zshrc
+
+# Pre-seed GitHub's SSH host keys so git-over-SSH never prompts.  Keys are
+# pinned in-repo (verified against the fingerprints GitHub publishes at
+# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
+# rather than fetched at build time, so a compromised build-time network can't
+# inject a rogue key.
+COPY github_known_hosts /etc/ssh/ssh_known_hosts
+RUN chmod 644 /etc/ssh/ssh_known_hosts

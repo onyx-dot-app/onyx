@@ -41,9 +41,13 @@ def tabular_file_to_sections(
     """
     lowered = file_name.lower()
 
-    if lowered.endswith(".xlsx"):
+    if lowered.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
         return [
-            TabularSection(link=f"sheet:{sheet_title}", text=csv_text)
+            TabularSection(
+                link=link or file_name,
+                text=csv_text,
+                heading=f"{file_name} :: {sheet_title}",
+            )
             for csv_text, sheet_title in xlsx_sheet_extraction(
                 file, file_name=file_name
             )

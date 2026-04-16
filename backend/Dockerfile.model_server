@@ -50,6 +50,10 @@ COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
 COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 COPY ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
 
+# Sentry configuration (used when SENTRY_DSN is set)
+COPY ./onyx/configs/__init__.py /app/onyx/configs/__init__.py
+COPY ./onyx/configs/sentry.py /app/onyx/configs/sentry.py
+
 # Place to fetch version information
 COPY ./onyx/__init__.py /app/onyx/__init__.py
 

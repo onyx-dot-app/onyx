@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
+from office365.sharepoint.client_context import ClientContext
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (

@@ -299,7 +299,7 @@ class SearchDoc(BaseModel):
             for item in items
         ]
 
-        return search_docs
+        return search_docs  # ty: ignore[invalid-return-type]
 
     # TODO - there is likely a way to clean this all up and not have the switch between these
     @classmethod
@@ -319,8 +319,12 @@ class SearchDoc(BaseModel):
             for saved_search_doc in saved_search_docs
         ]
 
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
+    def model_dump(  # ty: ignore[invalid-method-override]
+        self, *args: list, **kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        initial_dict = super().model_dump(
+            *args, **kwargs  # ty: ignore[invalid-argument-type]
+        )
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None
         )

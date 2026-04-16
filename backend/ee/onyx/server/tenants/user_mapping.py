@@ -349,8 +349,9 @@ def get_tenant_count(tenant_id: str) -> int:
         user_count = (
             db_session.query(User)
             .filter(
-                User.email.in_(emails),  # type: ignore
-                User.is_active == True,  # type: ignore  # noqa: E712
+                User.email.in_(emails),  # ty: ignore[unresolved-attribute]
+                User.is_active  # noqa: E712  # ty: ignore[invalid-argument-type]
+                == True,
             )
             .count()
         )

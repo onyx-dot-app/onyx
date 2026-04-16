@@ -51,7 +51,11 @@ function CustomToolAuthCard({
       title={`${toolName} not connected`}
       description={`Connect to ${toolName} to enable this tool`}
       rightChildren={
-        <Button icon={SvgArrowExchange} onClick={handleAuthenticate}>
+        <Button
+          prominence="primary"
+          icon={SvgArrowExchange}
+          onClick={handleAuthenticate}
+        >
           Connect
         </Button>
       }

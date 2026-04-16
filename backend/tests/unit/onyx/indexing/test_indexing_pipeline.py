@@ -248,7 +248,7 @@ def _make_doc(
         id=doc_id,
         title="Test Doc",
         semantic_identifier="test-doc",
-        sections=cast(list[TextSection | ImageSection], sections),
+        sections=sections,
         source=DocumentSource.FILE,
         metadata={},
     )
@@ -322,10 +322,7 @@ def test_document_ingestion_hook_preserves_image_section_order() -> None:
     """Hook receives all sections including images and controls final ordering."""
     image = ImageSection(image_file_id="img-1", link=None)
     doc = _make_doc(
-        sections=cast(
-            list[TextSection | ImageSection],
-            [TextSection(text="original", link=None), image],
-        )
+        sections=[TextSection(text="original", link=None), image],
     )
     # Hook moves the image before the text section
     with patch(

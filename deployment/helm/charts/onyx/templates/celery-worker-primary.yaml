@@ -70,6 +70,10 @@ spec:
               "-Q",
               "celery,periodic_tasks",
             ]
+          ports:
+            - name: metrics
+              containerPort: 9097
+              protocol: TCP
           resources:
             {{- toYaml .Values.celery_worker_primary.resources | nindent 12 }}
           envFrom:

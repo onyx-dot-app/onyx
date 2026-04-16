@@ -252,7 +252,7 @@ async def test_voice_provider(
         api_base=api_base,
         custom_config=request.custom_config or {},
     )
-    temp_provider.api_key = api_key  # type: ignore[assignment]
+    temp_provider.api_key = api_key  # ty: ignore[invalid-assignment]
 
     try:
         provider = get_voice_provider(temp_provider)

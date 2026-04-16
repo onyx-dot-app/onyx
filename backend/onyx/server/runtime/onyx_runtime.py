@@ -7,6 +7,9 @@ from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEF
 from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
+from onyx.configs.app_configs import ENABLE_TENANT_WORK_GATING
+from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
+from onyx.configs.app_configs import TENANT_WORK_GATING_TTL_SECONDS
 from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
@@ -138,6 +141,87 @@ class OnyxRuntime:
             return 1.0
 
         return value
+
+    @staticmethod
+    def _read_tenant_work_gating_flag(axis: str, default: bool) -> bool:
+        """Read `runtime:tenant_work_gating:{axis}` from Redis and interpret
+        it as a bool. Returns `default` if the key is absent or unparseable.
+        `axis` is either `enabled` (compute the gate) or `enforce` (actually
+        skip)."""
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:{axis}")
+        if raw is None:
+            return default
+
+        try:
+            return cast(bytes, raw).decode().strip().lower() == "true"
+        except Exception:
+            return default
+
+    @staticmethod
+    def get_tenant_work_gating_enabled() -> bool:
+        """Should we *compute* the work gate? (read the Redis set, log how
+        many tenants would be skipped). Env-var `ENABLE_TENANT_WORK_GATING`
+        is the fallback default when no Redis override is set — it acts as
+        the master switch that turns the feature on in shadow mode."""
+        return OnyxRuntime._read_tenant_work_gating_flag(
+            "enabled", default=ENABLE_TENANT_WORK_GATING
+        )
+
+    @staticmethod
+    def get_tenant_work_gating_enforce() -> bool:
+        """Should we *actually skip* tenants not in the work set?
+
+        Deliberately Redis-only with a hard-coded default of False: the env
+        var `ENABLE_TENANT_WORK_GATING` only flips `enabled` (shadow mode),
+        never `enforce`. Enforcement has to be turned on by an explicit
+        `runtime:tenant_work_gating:enforce=true` write so ops can't
+        accidentally skip real tenant traffic by flipping an env flag. Only
+        meaningful when `get_tenant_work_gating_enabled()` is also True.
+        """
+        return OnyxRuntime._read_tenant_work_gating_flag("enforce", default=False)
+
+    @staticmethod
+    def get_tenant_work_gating_ttl_seconds() -> int:
+        """Membership TTL for the `active_tenants` sorted set. Members older
+        than this are treated as "no recent work" by the gate read path.
+        Must be > (full-fanout cadence × base task schedule) so self-healing
+        has time to refresh memberships before they expire."""
+        default = TENANT_WORK_GATING_TTL_SECONDS
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:ttl_seconds")
+        if raw is None:
+            return default
+
+        try:
+            value = int(cast(bytes, raw).decode())
+            return value if value > 0 else default
+        except ValueError:
+            return default
+
+    @staticmethod
+    def get_tenant_work_gating_full_fanout_interval_seconds() -> int:
+        """Minimum wall-clock interval between full-fanout cycles. When at
+        least this many seconds have elapsed since the last bypass, the
+        generator ignores the gate on its next invocation and dispatches to
+        every non-gated tenant, letting consumers re-populate the active
+        set. Schedule-independent so beat drift or backlog can't skew the
+        self-heal cadence."""
+        default = TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        raw = r.get(
+            f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_interval_seconds"
+        )
+        if raw is None:
+            return default
+
+        try:
+            value = int(cast(bytes, raw).decode())
+            return value if value > 0 else default
+        except ValueError:
+            return default
 
     @staticmethod
     def get_build_fence_lookup_table_interval() -> int:

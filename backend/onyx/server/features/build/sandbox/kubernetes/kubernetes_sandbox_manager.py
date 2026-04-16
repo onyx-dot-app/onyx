@@ -51,10 +51,10 @@ from uuid import UUID
 from uuid import uuid4
 
 from acp.schema import PromptResponse
-from kubernetes import client  # type: ignore
+from kubernetes import client
 from kubernetes import config
-from kubernetes.client.rest import ApiException  # type: ignore
-from kubernetes.stream import stream as k8s_stream  # type: ignore
+from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.api.packet_logger import get_packet_logger

@@ -270,8 +270,10 @@ def extract_document_ids(citation_info: object) -> list[str]:
 def _is_valid_citation(citation: object) -> TypeGuard[Citation]:
     return (
         isinstance(citation, dict)
-        and isinstance(citation.get("document_id"), str)
-        and bool(citation["document_id"])
+        and isinstance(
+            citation.get("document_id"), str  # ty: ignore[invalid-argument-type]
+        )
+        and bool(citation["document_id"])  # ty: ignore[invalid-argument-type]
     )
 
 

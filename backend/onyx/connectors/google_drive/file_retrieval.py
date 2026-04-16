@@ -7,9 +7,9 @@ from typing import cast
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
-from googleapiclient.discovery import Resource  # type: ignore
-from googleapiclient.errors import HttpError  # type: ignore
-from googleapiclient.http import BatchHttpRequest  # type: ignore
+from googleapiclient.discovery import Resource
+from googleapiclient.errors import HttpError
+from googleapiclient.http import BatchHttpRequest
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -115,7 +115,7 @@ def _get_folders_in_parent(
         query += f" and '{parent_id}' in parents"
 
     for file in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,
         corpora="allDrives",
@@ -136,7 +136,7 @@ def get_folder_metadata(
     fields = _get_hierarchy_fields_for_file_type(field_type)
     try:
         return (
-            service.files()
+            service.files()  # ty: ignore[unresolved-attribute]
             .get(
                 fileId=folder_id,
                 fields=fields,
@@ -169,7 +169,11 @@ def get_shared_drive_name(
     folders. Only drives().get() returns the real user-assigned name.
     """
     try:
-        drive = service.drives().get(driveId=drive_id, fields="name").execute()
+        drive = (
+            service.drives()  # ty: ignore[unresolved-attribute]
+            .get(driveId=drive_id, fields="name")
+            .execute()
+        )
         return drive.get("name")
     except HttpError as e:
         if e.resp.status in (403, 404):
@@ -261,7 +265,7 @@ def _get_files_in_parent(
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
 
     for file in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,
         corpora="allDrives",
@@ -371,7 +375,7 @@ def get_files_in_shared_drive(
         folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
         folder_query += " and trashed = false"
         for folder in execute_paginated_retrieval(
-            retrieval_function=service.files().list,
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
             list_key="files",
             continue_on_404_or_403=True,
             corpora="drive",
@@ -389,7 +393,7 @@ def get_files_in_shared_drive(
     file_query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval_with_max_pages(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=True,
@@ -436,7 +440,7 @@ def get_all_files_in_my_drive_and_shared(
             folder_query += " and 'me' in owners"
         found_folders = False
         for folder in execute_paginated_retrieval(
-            retrieval_function=service.files().list,
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
             list_key="files",
             corpora="user",
             fields=_get_fields_for_file_type(field_type),
@@ -454,7 +458,7 @@ def get_all_files_in_my_drive_and_shared(
         file_query += " and 'me' in owners"
     file_query += generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval_with_max_pages(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=False,
@@ -499,7 +503,7 @@ def get_all_files_for_oauth(
 
     yield from execute_paginated_retrieval_with_max_pages(
         max_num_pages=max_num_pages,
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=False,
         corpora=corpora,
@@ -516,7 +520,7 @@ def get_root_folder_id(service: Resource) -> str:
     # we dont paginate here because there is only one root folder per user
     # https://developers.google.com/drive/api/guides/v2-to-v3-reference
     return (
-        service.files()
+        service.files()  # ty: ignore[unresolved-attribute]
         .get(fileId="root", fields=GoogleFields.ID.value)
         .execute()[GoogleFields.ID.value]
     )
@@ -550,7 +554,7 @@ def get_file_by_web_view_link(
     """Retrieve a Google Drive file using its webViewLink."""
     file_id = _extract_file_id_from_web_view_link(web_view_link)
     return (
-        service.files()
+        service.files()  # ty: ignore[unresolved-attribute]
         .get(
             fileId=file_id,
             supportsAllDrives=True,
@@ -612,12 +616,17 @@ def _get_files_by_web_view_links_batch(
         else:
             result.files[request_id] = response
 
-    batch = cast(BatchHttpRequest, service.new_batch_http_request(callback=callback))
+    batch = cast(
+        BatchHttpRequest,
+        service.new_batch_http_request(  # ty: ignore[unresolved-attribute]
+            callback=callback
+        ),
+    )
 
     for web_view_link in web_view_links:
         try:
             file_id = _extract_file_id_from_web_view_link(web_view_link)
-            request = service.files().get(
+            request = service.files().get(  # ty: ignore[unresolved-attribute]
                 fileId=file_id,
                 supportsAllDrives=True,
                 fields=fields,

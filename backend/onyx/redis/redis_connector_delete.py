@@ -70,7 +70,7 @@ class RedisConnectorDelete:
             return None
 
         fence_str = fence_bytes.decode("utf-8")
-        payload = RedisConnectorDeletePayload.model_validate_json(cast(str, fence_str))
+        payload = RedisConnectorDeletePayload.model_validate_json(fence_str)
 
         return payload
 

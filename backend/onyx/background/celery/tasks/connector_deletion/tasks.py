@@ -59,6 +59,7 @@ from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.metrics.deletion_metrics import inc_deletion_blocked
 from onyx.server.metrics.deletion_metrics import inc_deletion_completed
 from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
@@ -171,6 +172,11 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
             cc_pairs = get_connector_credential_pairs(db_session)
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
+
+        # Tenant-work-gating hook: any cc_pair means deletion could have
+        # cleanup work to do for this tenant on some cycle.
+        if cc_pair_ids:
+            maybe_mark_tenant_active(tenant_id)
 
         # try running cleanup on the cc_pair_ids
         for cc_pair_id in cc_pair_ids:

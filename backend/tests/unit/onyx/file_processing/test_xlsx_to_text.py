@@ -1,9 +1,12 @@
 import io
 from typing import cast
+from unittest.mock import MagicMock
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
+from onyx.file_processing.extract_file_text import _clean_worksheet_matrix
+from onyx.file_processing.extract_file_text import _worksheet_to_matrix
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.extract_file_text import xlsx_to_text
 
@@ -197,6 +200,52 @@ class TestXlsxToText:
         assert "r1c1" in lines[0] and "r1c2" in lines[0]
         assert "r2c1" in lines[1] and "r2c2" in lines[1]
         assert "r3c1" in lines[2] and "r3c2" in lines[2]
+
+
+class TestWorksheetToMatrixJaggedRows:
+    """openpyxl read_only mode can yield rows of differing widths when
+    trailing cells are empty. The matrix must be padded to a rectangle
+    so downstream column cleanup can index safely."""
+
+    def test_pads_shorter_trailing_rows(self) -> None:
+        ws = MagicMock()
+        ws.iter_rows.return_value = iter(
+            [
+                ("A", "B", "C"),
+                ("X", "Y"),
+                ("P",),
+            ]
+        )
+        matrix = _worksheet_to_matrix(ws)
+        assert matrix == [["A", "B", "C"], ["X", "Y", ""], ["P", "", ""]]
+
+    def test_pads_when_first_row_is_shorter(self) -> None:
+        ws = MagicMock()
+        ws.iter_rows.return_value = iter(
+            [
+                ("A",),
+                ("X", "Y", "Z"),
+            ]
+        )
+        matrix = _worksheet_to_matrix(ws)
+        assert matrix == [["A", "", ""], ["X", "Y", "Z"]]
+
+    def test_clean_worksheet_matrix_no_index_error_on_jagged_rows(self) -> None:
+        """Regression: previously raised IndexError when a later row was
+        shorter than the first row and the out-of-range column on the
+        first row was empty (so the short-circuit in `all()` did not
+        save us)."""
+        ws = MagicMock()
+        ws.iter_rows.return_value = iter(
+            [
+                ("A", "", "", "B"),
+                ("X", "Y"),
+            ]
+        )
+        matrix = _worksheet_to_matrix(ws)
+        # Must not raise.
+        cleaned = _clean_worksheet_matrix(matrix)
+        assert cleaned == [["A", "", "", "B"], ["X", "Y", "", ""]]
 
 
 class TestXlsxSheetExtraction:

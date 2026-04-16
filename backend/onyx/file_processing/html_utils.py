@@ -54,8 +54,8 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
 
 def parse_html_with_trafilatura(html_content: str) -> str:
     """Parse HTML content using trafilatura."""
-    import trafilatura  # type: ignore
-    from trafilatura.settings import use_config  # type: ignore
+    import trafilatura
+    from trafilatura.settings import use_config
 
     config = use_config()
     config.set("DEFAULT", "include_links", "True")

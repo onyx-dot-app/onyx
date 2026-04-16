@@ -284,10 +284,13 @@ serviceAccount:
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
+  # These apply to both the internal nginx proxy AND the ingress-nginx annotations.
+  # Must be high enough to cover deep research (30+ min sessions) and LLM TTFT
+  # for large prompts (70K+ tokens). 900s matches the craft/build timeout in production.
   timeouts:
     connect: 300  # Time to establish connection with upstream server
-    send: 300     # Time to send request to upstream server
-    read: 300     # Time to read response from upstream server
+    send: 900     # Time to send request to upstream server
+    read: 900     # Time to read response from upstream server
   controller:
     containerPort:
       http: 1024

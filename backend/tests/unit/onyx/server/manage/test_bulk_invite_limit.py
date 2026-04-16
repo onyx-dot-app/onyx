@@ -65,7 +65,7 @@ _COMMON_PATCHES = [
 
 def _with_common_patches(fn: object) -> object:
     for p in reversed(_COMMON_PATCHES):
-        fn = p(fn)  # type: ignore
+        fn = p(fn)  # ty: ignore[no-matching-overload]
     return fn
 
 

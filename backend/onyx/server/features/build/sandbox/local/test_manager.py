@@ -96,7 +96,9 @@ def test_user(
     from sqlalchemy import select
 
     # Check if user already exists
-    stmt = select(User).where(User.email == TEST_USER_EMAIL)  # type: ignore[arg-type]
+    stmt = select(User).where(
+        User.email == TEST_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
     existing_user = db_session.execute(stmt).unique().scalar_one_or_none()
 
     if existing_user:

@@ -479,7 +479,7 @@ def restore_session(
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=session.nextjs_port,
+                            nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
                             llm_config=llm_config,
                             use_demo_data=session.demo_data_enabled,
                         )
@@ -498,7 +498,7 @@ def restore_session(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
-                        nextjs_port=session.nextjs_port,
+                        nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'onyx-dashboards'
+    orgId: 1
+    folder: 'Onyx'
+    type: file
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/onyx
+      foldersFromFilesStructure: false

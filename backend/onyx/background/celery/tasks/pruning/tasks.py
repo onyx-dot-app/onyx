@@ -51,7 +51,6 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
 from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
@@ -73,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
@@ -228,6 +228,11 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                 cc_pairs = get_connector_credential_pairs(db_session)
                 for cc_pair_entry in cc_pairs:
                     cc_pair_ids.append(cc_pair_entry.id)
+
+            # Tenant-work-gating hook: any cc_pair means pruning could have
+            # work to do for this tenant on some cycle.
+            if cc_pair_ids:
+                maybe_mark_tenant_active(tenant_id)
 
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
@@ -641,16 +646,6 @@ def connector_pruning_generator_task(
                 redis_client=redis_client,
                 source=source,
                 raw_id_to_parent=all_connector_doc_ids,
-            )
-
-            # Link hierarchy nodes to documents for sources where pages can be
-            # both hierarchy nodes AND documents (e.g. Notion, Confluence)
-            all_doc_id_list = list(all_connector_doc_ids.keys())
-            link_hierarchy_nodes_to_documents(
-                db_session=db_session,
-                document_ids=all_doc_id_list,
-                source=source,
-                commit=True,
             )
 
             diff_start = time.monotonic()

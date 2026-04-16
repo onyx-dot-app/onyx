@@ -6,7 +6,7 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
-from atlassian.errors import ApiError  # type: ignore
+from atlassian.errors import ApiError
 from requests.exceptions import HTTPError
 from typing_extensions import override
 

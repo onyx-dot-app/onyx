@@ -81,6 +81,15 @@ export function ScrollableTable({
  * Processes content for markdown rendering by handling code blocks and LaTeX
  */
 export const processContent = (content: string): string => {
+  // Strip incomplete citation links at the end of streaming content.
+  // During typewriter animation, [[N]](url) is revealed character by character.
+  // ReactMarkdown can't parse an incomplete link and renders it as raw text.
+  // This regex removes any trailing partial citation pattern so only complete
+  // links are passed to the markdown parser.
+  content = content.replace(/\[\[\d+\]\]\([^)]*$/, "");
+  // Also strip a lone [[ or [[N] or [[N]] at the very end (before the URL part arrives)
+  content = content.replace(/\[\[(?:\d+\]?\]?)?$/, "");
+
   const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
   const matches = content.match(codeBlockRegex);
 

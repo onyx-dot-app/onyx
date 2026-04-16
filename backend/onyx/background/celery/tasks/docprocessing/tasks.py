@@ -51,6 +51,7 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -86,6 +87,8 @@ from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.notification import create_notification
+from onyx.db.notification import get_notifications
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -105,7 +108,11 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
+from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
+from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
@@ -521,12 +528,24 @@ def check_indexing_completion(
 
         # Update CC pair status if successful
         cc_pair = get_connector_credential_pair_from_id(
-            db_session, attempt.connector_credential_pair_id
+            db_session,
+            attempt.connector_credential_pair_id,
+            eager_load_connector=True,
         )
         if cc_pair is None:
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        source = cc_pair.connector.source.value
+        connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
+        on_index_attempt_status_change(
+            tenant_id=tenant_id,
+            source=source,
+            cc_pair_id=cc_pair.id,
+            connector_name=connector_name,
+            status=attempt.status.value,
+        )
 
         if attempt.status.is_successful():
             # NOTE: we define the last successful index time as the time the last successful
@@ -548,10 +567,41 @@ def check_indexing_completion(
                 event=MilestoneRecordType.CONNECTOR_SUCCEEDED,
             )
 
+            on_connector_indexing_success(
+                tenant_id=tenant_id,
+                source=source,
+                cc_pair_id=cc_pair.id,
+                connector_name=connector_name,
+                docs_indexed=attempt.new_docs_indexed or 0,
+                success_timestamp=attempt.time_updated.timestamp(),
+            )
+
             # Clear repeated error state on success
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
+
+                # Delete any existing error notification for this CC pair so a
+                # fresh one is created if the connector fails again later.
+                for notif in get_notifications(
+                    user=None,
+                    db_session=db_session,
+                    notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                    include_dismissed=True,
+                ):
+                    if (
+                        notif.additional_data
+                        and notif.additional_data.get("cc_pair_id") == cc_pair.id
+                    ):
+                        db_session.delete(notif)
+
                 db_session.commit()
+                on_connector_error_state_change(
+                    tenant_id=tenant_id,
+                    source=source,
+                    cc_pair_id=cc_pair.id,
+                    connector_name=connector_name,
+                    in_error=False,
+                )
 
             if attempt.status == IndexingStatus.SUCCESS:
                 logger.info(
@@ -761,7 +811,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
-    # redis_client_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+    # redis_client_celery: Redis = self.app.broker_connection().channel().client
 
     lock_beat: RedisLock = redis_client.lock(
         OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK,
@@ -847,6 +897,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                 secondary_cc_pair_ids = standard_cc_pair_ids
 
+        # Tenant-work-gating hook: refresh this tenant's active-set membership
+        # whenever indexing actually has work to dispatch.
+        if primary_cc_pair_ids or secondary_cc_pair_ids:
+            maybe_mark_tenant_active(tenant_id)
+
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
             for cc_pair_id in primary_cc_pair_ids:
@@ -874,6 +929,43 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
+                    )
+                    error_connector_name = (
+                        cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
+                    )
+                    on_connector_error_state_change(
+                        tenant_id=tenant_id,
+                        source=cc_pair.connector.source.value,
+                        cc_pair_id=cc_pair_id,
+                        connector_name=error_connector_name,
+                        in_error=True,
+                    )
+
+                    connector_name = (
+                        cc_pair.name
+                        or cc_pair.connector.name
+                        or f"CC pair {cc_pair.id}"
+                    )
+                    source = cc_pair.connector.source.value
+                    connector_url = f"/admin/connector/{cc_pair.id}"
+                    create_notification(
+                        user_id=None,
+                        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                        db_session=db_session,
+                        title=f"Connector '{connector_name}' has entered repeated error state",
+                        description=(
+                            f"The {source} connector has failed repeatedly and "
+                            f"has been flagged. View indexing history in the "
+                            f"Advanced section: {connector_url}"
+                        ),
+                        additional_data={"cc_pair_id": cc_pair.id},
+                    )
+
+                    task_logger.error(
+                        f"Connector entered repeated error state: "
+                        f"cc_pair={cc_pair.id} "
+                        f"connector={cc_pair.connector.name} "
+                        f"source={source}"
                     )
                     # When entering repeated error state, also pause the connector
                     # to prevent continued indexing retry attempts burning through embedding credits.

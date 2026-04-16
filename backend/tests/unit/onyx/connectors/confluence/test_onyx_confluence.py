@@ -22,7 +22,9 @@ def _create_mock_response(
     response.status_code = status_code
     response.url = url
     if json_data is not None:
-        response.json = mock.Mock(return_value=json_data)  # type: ignore
+        response.json = mock.Mock(  # ty: ignore[invalid-assignment]
+            return_value=json_data
+        )
     if status_code >= 400:
         response.reason = "Mock Error"
     return response
@@ -35,7 +37,9 @@ def _create_http_error(
     url: str = "",
 ) -> requests.Response:
     response = _create_mock_response(status_code, json_data, url)
-    response.raise_for_status = mock.Mock(side_effect=HTTPError(response=response))  # type: ignore
+    response.raise_for_status = mock.Mock(  # ty: ignore[invalid-assignment]
+        side_effect=HTTPError(response=response)
+    )
     return response
 
 
@@ -296,7 +300,9 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         print(f"!!! Unexpected GET path in mock: {path}")
         raise RuntimeError(f"Unexpected GET path in mock: {path}")
 
-    confluence_server_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
 
     # --- Execute ---
     # Consume the iterator to trigger the calls
@@ -359,9 +365,17 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
     # Ensure the result is correct
     # NOTE: size does not get updated during _traverse_and_update
     final_results = copy.deepcopy(top_level_raw_response)
-    final_results["results"][0]["child_items"]["results"] = [{"child_id": 101}, {"child_id": 102}]  # type: ignore
-    final_results["results"][1]["child_items"]["results"] = [{"child_id": 201}, {"child_id": 203}]  # type: ignore
-    final_results["results"][2]["child_items"]["results"] = [{"child_id": 301}]  # type: ignore
+    final_results["results"][0]["child_items"]["results"] = [  # type: ignore
+        {"child_id": 101},
+        {"child_id": 102},
+    ]
+    final_results["results"][1]["child_items"]["results"] = [  # type: ignore
+        {"child_id": 201},
+        {"child_id": 203},
+    ]
+    final_results["results"][2]["child_items"]["results"] = [  # type: ignore
+        {"child_id": 301}
+    ]
     assert result == final_results["results"]
 
 
@@ -515,7 +529,9 @@ def test_paginated_cql_retrieval_handles_pagination_error(
             print(f"!!! Unexpected GET path in mock: {path}")
             raise RuntimeError(f"Unexpected GET path in mock: {path}")
 
-    confluence_server_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
 
     # --- Execute ---
     results = list(
@@ -644,7 +660,9 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
             print(f"!!! Unexpected GET path in mock: {path}")
             raise RuntimeError(f"Unexpected GET path in mock: {path}")
 
-    confluence_server_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
 
     # --- Execute ---
     results = list(
@@ -859,7 +877,9 @@ def test_paginate_url_reduces_limit_on_500_server(
 
         raise RuntimeError(f"Unexpected path: {path}")
 
-    confluence_server_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
 
     results = list(
         confluence_server_client.paginated_cql_retrieval(
@@ -920,7 +940,9 @@ def test_paginate_url_server_falls_back_to_one_by_one_after_limit_floor(
 
         raise RuntimeError(f"Unexpected path: {path}")
 
-    confluence_server_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
 
     results = list(
         confluence_server_client.paginated_cql_retrieval(

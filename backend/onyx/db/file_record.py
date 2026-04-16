@@ -96,4 +96,4 @@ def upsert_filerecord(
     )
     db_session.execute(stmt)
 
-    return db_session.get(FileRecord, file_id)  # type: ignore[return-value]
+    return db_session.get(FileRecord, file_id)  # ty: ignore[invalid-return-type]

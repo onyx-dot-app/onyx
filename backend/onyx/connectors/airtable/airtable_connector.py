@@ -547,7 +547,7 @@ class AirtableConnector(LoadConnector):
                 for record in batch_records:
                     # Capture the current context so that the thread gets the current tenant ID
                     current_context = contextvars.copy_context()
-                    future_to_record[
+                    future_to_record[  # ty: ignore[invalid-assignment]
                         executor.submit(
                             current_context.run,
                             self._process_record,

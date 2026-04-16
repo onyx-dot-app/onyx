@@ -127,7 +127,8 @@ def insert_slack_channel_config(
         existing_default = db_session.scalar(
             select(SlackChannelConfig).where(
                 SlackChannelConfig.slack_bot_id == slack_bot_id,
-                SlackChannelConfig.is_default is True,  # type: ignore
+                SlackChannelConfig.is_default  # ty: ignore[invalid-argument-type]
+                is True,
             )
         )
         if existing_default:

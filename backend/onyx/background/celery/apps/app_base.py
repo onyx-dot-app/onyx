@@ -6,16 +6,16 @@ from typing import Any
 from typing import cast
 
 import sentry_sdk
-from celery import bootsteps  # type: ignore
+from celery import bootsteps  # ty: ignore[unresolved-import]
 from celery import Task
-from celery.app import trace
+from celery.app import trace  # ty: ignore[unresolved-import]
 from celery.exceptions import WorkerShutdown
 from celery.signals import before_task_publish
 from celery.signals import task_postrun
 from celery.signals import task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
-from celery.worker import strategy  # type: ignore
+from celery.worker import strategy  # ty: ignore[unresolved-import]
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text

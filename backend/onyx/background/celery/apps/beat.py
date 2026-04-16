@@ -3,7 +3,7 @@ from typing import Any
 
 from celery import Celery
 from celery import signals
-from celery.beat import PersistentScheduler  # type: ignore
+from celery.beat import PersistentScheduler  # ty: ignore[unresolved-import]
 from celery.signals import beat_init
 from celery.utils.log import get_task_logger
 
