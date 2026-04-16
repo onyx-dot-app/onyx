@@ -12,14 +12,8 @@ class ParsedRow(BaseModel):
 
 def read_csv_header(csv_text: str) -> list[str]:
     """Return the first non-blank row (the header) of a CSV string, or
-<<<<<<< HEAD
     [] if the text has no usable header.
     """
-=======
-    [] if the text has no usable header. Useful when a caller needs the
-    header even though there are no data rows (where ``parse_csv_string``
-    would yield nothing)."""
->>>>>>> c55ab0cdf (Move csv parsing logic to util file)
     if not csv_text.strip():
         return []
     for row in csv.reader(io.StringIO(csv_text)):
