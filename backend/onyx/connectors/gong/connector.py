@@ -146,7 +146,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         next_cursor = data.get("records", {}).get("cursor")
         return transcripts, next_cursor
 
-    def _get_call_details_by_ids(self, call_ids: list[str]) -> dict:
+    def _get_call_details_by_ids(self, call_ids: list[str]) -> dict[str, Any]:
         body = {
             "filter": {"callIds": call_ids},
             "contentSelector": {"exposedFields": {"parties": True}},
@@ -280,18 +280,20 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             checkpoint.has_more = True
             return checkpoint
 
+        workspace_ids = checkpoint.workspace_ids
+
         # If we've exhausted all workspaces, we're done
-        if checkpoint.workspace_index >= len(checkpoint.workspace_ids):
+        if checkpoint.workspace_index >= len(workspace_ids):
             checkpoint.has_more = False
             return checkpoint
 
         start_time, end_time = self._compute_time_range(start, end)
         logger.info(
             f"Fetching Gong calls between {start_time} and {end_time} "
-            f"(workspace {checkpoint.workspace_index + 1}/{len(checkpoint.workspace_ids)})"
+            f"(workspace {checkpoint.workspace_index + 1}/{len(workspace_ids)})"
         )
 
-        workspace_id = checkpoint.workspace_ids[checkpoint.workspace_index]
+        workspace_id = workspace_ids[checkpoint.workspace_index]
 
         # Step 2: Fetch one page of transcripts
         transcripts, next_cursor = self._fetch_transcript_page(
@@ -437,9 +439,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             # This workspace is exhausted — advance to next
             checkpoint.workspace_index += 1
             checkpoint.cursor = None
-            checkpoint.has_more = checkpoint.workspace_index < len(
-                checkpoint.workspace_ids
-            )
+            checkpoint.has_more = checkpoint.workspace_index < len(workspace_ids)
 
         return checkpoint
 
