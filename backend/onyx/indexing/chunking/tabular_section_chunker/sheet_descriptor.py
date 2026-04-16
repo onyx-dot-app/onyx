@@ -122,7 +122,7 @@ def _id_col_line(headers: list[str], a: SheetAnalysis) -> str:
 def _values_seen_line(headers: list[str], a: SheetAnalysis) -> str:
     rows: list[str] = []
     for ci in a.categorical_cols[:MAX_CATEGORICAL_WITH_SAMPLES]:
-        sample = sorted(set(a.categorical_values.get(ci, [])))[:MAX_DISTINCT_SAMPLES]
+        sample = sorted(a.categorical_values.get(ci, []))[:MAX_DISTINCT_SAMPLES]
         if sample:
             rows.append(f"Values seen in {_label(headers[ci])}: " + ", ".join(sample))
     return "\n".join(rows)
@@ -188,7 +188,7 @@ def _analyze(headers: list[str], parsed_rows: list[ParsedRow]) -> SheetAnalysis:
         # Categorical: low-cardinality column — keep distinct values for samples.
         if len(distinct) <= max(CATEGORICAL_DISTINCT_THRESHOLD, len(values) // 2):
             a.categorical_cols.append(idx)
-            a.categorical_values[idx] = values
+            a.categorical_values[idx] = list(distinct)
     return a
 
 
