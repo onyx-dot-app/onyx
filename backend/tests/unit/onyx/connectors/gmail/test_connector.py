@@ -52,12 +52,7 @@ def test_build_time_range_query() -> None:
 
 
 def _thread_with_date(date_header: str | None) -> dict[str, Any]:
-    """Load the realistic thread fixture and mutate its Date header in-place.
-
-    When ``date_header`` is None, any existing Date headers are stripped;
-    otherwise the first Date header on each message is replaced (or appended
-    if absent).
-    """
+    """Load the fixture thread and replace (or strip, if None) its Date header."""
     json_path = os.path.join(os.path.dirname(__file__), "thread.json")
     with open(json_path, "r") as f:
         thread = cast(dict[str, Any], json.load(f))
