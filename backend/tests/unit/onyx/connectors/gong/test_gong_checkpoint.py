@@ -443,3 +443,41 @@ class TestGongConnectorCheckpoint:
         # The retry call should only request call2, not both
         retry_call_body = mock_request.call_args_list[2][1]["json"]
         assert retry_call_body["filter"]["callIds"] == ["call2"]
+
+    @patch.object(GongConnector, "_throttled_request")
+    def test_expired_cursor_restarts_workspace(
+        self,
+        mock_request: MagicMock,
+        connector: GongConnector,
+    ) -> None:
+        """Expired pagination cursor resets checkpoint to restart the workspace."""
+        expired_response = MagicMock()
+        expired_response.status_code = 400
+        expired_response.ok = False
+        expired_response.text = '{"requestId":"abc","errors":["cursor has expired"]}'
+
+        mock_request.return_value = expired_response
+
+        # Checkpoint mid-pagination with a (now-expired) cursor
+        checkpoint = GongConnectorCheckpoint(
+            has_more=True,
+            workspace_ids=[None],
+            workspace_index=0,
+            cursor="stale-cursor",
+        )
+
+        docs: list[Document] = []
+        generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(generator)
+                if isinstance(item, Document):
+                    docs.append(item)
+        except StopIteration as e:
+            checkpoint = e.value
+
+        assert len(docs) == 0
+        # Cursor reset so next call restarts the workspace from scratch
+        assert checkpoint.cursor is None
+        assert checkpoint.workspace_index == 0
+        assert checkpoint.has_more is True

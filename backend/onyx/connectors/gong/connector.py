@@ -9,6 +9,7 @@ from typing import Any
 from typing import cast
 
 import requests
+from pydantic import BaseModel
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
@@ -39,6 +40,24 @@ class GongConnectorCheckpoint(ConnectorCheckpoint):
     cursor: str | None = None
     # Cached time range — computed once, reused across checkpoint calls
     time_range: tuple[str, str] | None = None
+
+
+class _TranscriptPage(BaseModel):
+    """One page of transcripts from /v2/calls/transcript."""
+
+    transcripts: list[dict[str, Any]]
+    next_cursor: str | None = None
+
+
+class _CursorExpiredError(Exception):
+    """Raised when Gong rejects a pagination cursor as expired.
+
+    Gong pagination cursors TTL is ~1 hour from the first request in a
+    pagination sequence, not from the last cursor fetch. Since checkpointed
+    connector runs can pause between invocations, a resumed run may encounter
+    an expired cursor and must restart the current workspace from scratch.
+    See https://visioneers.gong.io/integrations-77/pagination-cursor-expires-after-1-hours-even-for-a-new-cursor-1382
+    """
 
 
 class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
@@ -113,10 +132,11 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         end_datetime: str | None,
         workspace_id: str | None,
         cursor: str | None,
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> _TranscriptPage:
         """Fetch one page of transcripts from the Gong API.
 
-        Returns (transcripts, next_cursor). next_cursor is None when no more pages.
+        Raises _CursorExpiredError if Gong reports the pagination cursor
+        expired (TTL is ~1 hour from first request in the pagination sequence).
         """
         body: dict[str, Any] = {"filter": {}}
         if start_datetime:
@@ -133,18 +153,21 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         )
         # If no calls in the range, return empty
         if response.status_code == 404:
-            return [], None
+            return _TranscriptPage(transcripts=[])
 
-        try:
-            response.raise_for_status()
-        except Exception:
+        if not response.ok:
+            # Cursor expiration comes back as a 4xx with this error message —
+            # detect it before raise_for_status so callers can restart the workspace.
+            if cursor and "cursor has expired" in response.text.lower():
+                raise _CursorExpiredError(response.text)
             logger.error(f"Error fetching transcripts: {response.text}")
-            raise
+            response.raise_for_status()
 
         data = response.json()
-        transcripts = data.get("callTranscripts", [])
-        next_cursor = data.get("records", {}).get("cursor")
-        return transcripts, next_cursor
+        return _TranscriptPage(
+            transcripts=data.get("callTranscripts", []),
+            next_cursor=data.get("records", {}).get("cursor"),
+        )
 
     def _get_call_details_by_ids(self, call_ids: list[str]) -> dict[str, Any]:
         body = {
@@ -428,21 +451,36 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         workspace_id = workspace_ids[checkpoint.workspace_index]
 
         # Step 2: Fetch one page of transcripts
-        transcripts, next_cursor = self._fetch_transcript_page(
-            start_datetime=start_time,
-            end_datetime=end_time,
-            workspace_id=workspace_id,
-            cursor=checkpoint.cursor,
-        )
+        try:
+            page = self._fetch_transcript_page(
+                start_datetime=start_time,
+                end_datetime=end_time,
+                workspace_id=workspace_id,
+                cursor=checkpoint.cursor,
+            )
+        except _CursorExpiredError:
+            # Gong cursors TTL ~1h from first request in the sequence. If the
+            # checkpoint paused long enough for the cursor to expire, restart
+            # the current workspace from the beginning of the time range.
+            # Document upserts are idempotent (keyed by call_id) so
+            # reprocessing is safe.
+            logger.warning(
+                f"Gong pagination cursor expired for workspace "
+                f"{checkpoint.workspace_index + 1}/{len(workspace_ids)}; "
+                f"restarting workspace from beginning of time range."
+            )
+            checkpoint.cursor = None
+            checkpoint.has_more = True
+            return checkpoint
 
         # Step 3: Process transcripts into documents
-        if transcripts:
-            yield from self._process_transcripts(transcripts)
+        if page.transcripts:
+            yield from self._process_transcripts(page.transcripts)
 
         # Step 4: Update checkpoint state
-        if next_cursor:
+        if page.next_cursor:
             # More pages in this workspace
-            checkpoint.cursor = next_cursor
+            checkpoint.cursor = page.next_cursor
             checkpoint.has_more = True
         else:
             # This workspace is exhausted — advance to next
