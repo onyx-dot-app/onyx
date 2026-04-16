@@ -208,8 +208,6 @@ exclude = [
     "**/.venv/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/skills/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/templates/**",
-    "**/alembic/versions/**",
-    "**/alembic_tenants/versions/**",
 ]
 
 [tool.ty.rules]
