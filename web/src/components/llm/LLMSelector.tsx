@@ -15,7 +15,6 @@ interface LLMOption {
   providerId: number;
   providerName: string;
   provider: string;
-  providerDisplayName: string;
   supportsImageInput: boolean;
   vendor: string | null;
 }
@@ -91,8 +90,6 @@ export default function LLMSelector({
           providerId: provider.id,
           providerName: provider.name,
           provider: provider.provider,
-          providerDisplayName:
-            provider.provider_display_name || provider.provider,
           supportsImageInput,
           vendor: modelConfiguration.vendor || null,
         };
