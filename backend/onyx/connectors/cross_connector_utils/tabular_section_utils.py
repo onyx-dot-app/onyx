@@ -41,7 +41,7 @@ def tabular_file_to_sections(
     """
     lowered = file_name.lower()
 
-    if lowered.endswith((".xlsx", ".xlsm")):
+    if lowered.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
         return [
             TabularSection(
                 link=link or file_name,
