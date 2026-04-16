@@ -38,6 +38,12 @@ from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
+from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
+from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
+from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
+from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
+from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
+from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -59,6 +65,7 @@ def on_task_prerun(
     **kwds: Any,
 ) -> None:
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
+    on_celery_task_prerun(task_id, task)
 
 
 @signals.task_postrun.connect
@@ -73,6 +80,31 @@ def on_task_postrun(
     **kwds: Any,
 ) -> None:
     app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
+    on_celery_task_postrun(task_id, task, state)
+
+
+@signals.task_retry.connect
+def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
+    task_id = getattr(getattr(sender, "request", None), "id", None)
+    on_celery_task_retry(task_id, sender)
+
+
+@signals.task_revoked.connect
+def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
+    task_name = getattr(sender, "name", None) or str(sender)
+    on_celery_task_revoked(kwargs.get("task_id"), task_name)
+
+
+@signals.task_rejected.connect
+def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
+    message = kwargs.get("message")
+    task_name: str | None = None
+    if message is not None:
+        headers = getattr(message, "headers", None) or {}
+        task_name = headers.get("task")
+    if task_name is None:
+        task_name = "unknown"
+    on_celery_task_rejected(None, task_name)
 
 
 @celeryd_init.connect
@@ -212,6 +244,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
+    start_metrics_server("primary")
     app_base.on_worker_ready(sender, **kwargs)
 
 
