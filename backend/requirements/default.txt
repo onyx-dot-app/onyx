@@ -413,7 +413,7 @@ langchain-core==1.2.28
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
-langsmith==0.3.45
+langsmith==0.7.31
     # via langchain-core
 lazy-imports==1.0.1
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
