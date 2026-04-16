@@ -54,8 +54,9 @@ class Queries(BaseModel):
     def get_random_source_type_set_or_none(self) -> list[DocumentSource] | None:
         if self.source_types is None:
             return None
+        source_types_list = sorted(self.source_types)
         return random.sample(
-            self.source_types, random.randint(0, len(self.source_types))
+            source_types_list, random.randint(0, len(source_types_list))
         )
 
 
@@ -83,7 +84,10 @@ class StopCondition:
 
     def __str__(self) -> str:
         if self._num_requests_to_make is not None and self._duration_s is not None:
-            return f"Stop condition: make {self._num_requests_to_make} request(s) or make requests for {self._duration_s}s."
+            return (
+                f"Stop condition: make {self._num_requests_to_make} request(s) or make requests for "
+                f"{self._duration_s}s, whichever comes first."
+            )
         if self._num_requests_to_make is not None:
             return f"Stop condition: make {self._num_requests_to_make} request(s)."
         if self._duration_s is not None:
@@ -360,12 +364,18 @@ def main() -> None:
     parser.add_argument(
         "--total",
         type=int,
-        help="Total number of requests to make per requesting thread. If specified along with --duration, the thread will stop on whichever condition is met first.",
+        help=(
+            "Total number of requests to make per requesting thread. If specified along with --duration, the thread "
+            "will stop on whichever condition is met first."
+        ),
     )
     parser.add_argument(
         "--duration",
         type=float,
-        help="Duration in seconds each requesting thread will run for. If specified along with --total, the thread will stop on whichever condition is met first.",
+        help=(
+            "Duration in seconds each requesting thread will run for. If specified along with --total, the thread "
+            "will stop on whichever condition is met first."
+        ),
     )
     parser.add_argument(
         "--timeout", type=float, default=30.0, help="Per-request timeout in seconds."
@@ -382,7 +392,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--source-types",
-        help="Comma-separated list of source types to filter by. The specific source types to filter by will be randomly selected per request from this list. If not specified, there will be no source type filter for all requests.",
+        help=(
+            "Comma-separated list of source types to filter by. The specific source types to filter by will be "
+            "randomly selected per request from this list. If not specified, there will be no source type filter for "
+            "all requests."
+        ),
     )
     args = parser.parse_args()
 
