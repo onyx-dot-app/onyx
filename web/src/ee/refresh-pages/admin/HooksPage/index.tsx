@@ -15,7 +15,7 @@ import {
   useModalClose,
 } from "@/refresh-components/contexts/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { Button, SelectCard, Text } from "@opal/components";
+import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
 import { Content, IllustrationContent } from "@opal/layouts";
@@ -23,7 +23,6 @@ import Modal from "@/refresh-components/Modal";
 import {
   SvgArrowExchange,
   SvgBubbleText,
-  SvgExternalLink,
   SvgFileBroadcast,
   SvgShareWebhook,
   SvgPlug,
@@ -190,17 +189,11 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
           />
 
           {spec.docs_url && (
-            <a
-              href={spec.docs_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-6 flex items-center gap-1 w-min"
-            >
-              <span className="underline font-secondary-body text-text-03">
+            <div className="ml-6">
+              <LinkButton href={spec.docs_url} target="_blank">
                 Documentation
-              </span>
-              <SvgExternalLink size={12} className="shrink-0" />
-            </a>
+              </LinkButton>
+            </div>
           )}
         </div>
 
@@ -369,17 +362,11 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <a
-                  href={spec.docs_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-6 flex items-center gap-1 w-min"
-                >
-                  <span className="underline font-secondary-body text-text-03">
+                <div className="ml-6">
+                  <LinkButton href={spec.docs_url} target="_blank">
                     Documentation
-                  </span>
-                  <SvgExternalLink size={12} className="shrink-0" />
-                </a>
+                  </LinkButton>
+                </div>
               )}
             </div>
 

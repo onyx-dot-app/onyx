@@ -1,5 +1,10 @@
 import "@opal/components/buttons/link-button/styles.css";
-import { Tooltip, type TooltipSide } from "@opal/components";
+import type { RichStr } from "@opal/types";
+import type { TooltipSide } from "@opal/components/tooltip/components";
+
+// Direct file imports to avoid circular resolution through the @opal/components
+// and @opal/icons barrels, which break CJS-based test runners (jest).
+import { Tooltip } from "@opal/components/tooltip/components";
 import SvgExternalLink from "@opal/icons/external-link";
 
 // ---------------------------------------------------------------------------
@@ -22,8 +27,8 @@ interface LinkButtonProps {
   /** Applies disabled styling + suppresses navigation/clicks. */
   disabled?: boolean;
 
-  /** Tooltip text shown on hover. */
-  tooltip?: string;
+  /** Tooltip text shown on hover. Pass `markdown(...)` for inline markdown. */
+  tooltip?: string | RichStr;
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
@@ -57,10 +62,26 @@ function LinkButton({
 }: LinkButtonProps) {
   const inner = (
     <>
-      <span className="opal-link-button-label">{children}</span>
+      <span className="opal-link-button-label font-secondary-body">
+        {children}
+      </span>
       <SvgExternalLink size={12} />
     </>
   );
+
+  // Always stop propagation so clicks don't bubble to interactive ancestors
+  // (cards, list rows, etc. that commonly wrap a LinkButton). If disabled,
+  // also preventDefault on anchors so the browser doesn't navigate.
+  const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+    if (disabled) e.preventDefault();
+  };
+
+  const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (disabled) return;
+    onClick?.();
+  };
 
   const element = href ? (
     <a
@@ -70,6 +91,7 @@ function LinkButton({
       rel={target === "_blank" ? "noopener noreferrer" : undefined}
       aria-disabled={disabled || undefined}
       data-disabled={disabled || undefined}
+      onClick={handleAnchorClick}
     >
       {inner}
     </a>
@@ -77,7 +99,7 @@ function LinkButton({
     <button
       type="button"
       className="opal-link-button"
-      onClick={disabled ? undefined : onClick}
+      onClick={handleButtonClick}
       disabled={disabled}
       data-disabled={disabled || undefined}
     >

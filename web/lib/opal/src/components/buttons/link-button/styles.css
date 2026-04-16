@@ -23,6 +23,9 @@
   @apply opacity-50 cursor-not-allowed;
 }
 
+/* `font-secondary-body` is a plain CSS class defined in globals.css (not a
+   Tailwind utility), so `@apply` can't consume it — other Opal components
+   attach it via `className` on the JSX element, and we do the same here. */
 .opal-link-button-label {
-  @apply font-secondary-body underline;
+  @apply underline;
 }

@@ -23,7 +23,7 @@ The component renders a plain `<a>` (when given `href`) or `<button>` (when give
 | `target` | `string` | — | Anchor target (e.g. `"_blank"`). Adds `rel="noopener noreferrer"` automatically when `"_blank"`. |
 | `onClick` | `() => void` | — | Click handler. Without `href`, renders the component as `<button>`. |
 | `disabled` | `boolean` | `false` | Applies disabled styling + suppresses navigation / clicks |
-| `tooltip` | `string` | — | Hover tooltip text |
+| `tooltip` | `string \| RichStr` | — | Hover tooltip text. Pass `markdown(...)` for inline markdown. |
 | `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
 
 Exactly one of `href` / `onClick` is expected. Passing both is allowed but only `href` takes effect (renders as an anchor).
