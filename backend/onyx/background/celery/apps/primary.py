@@ -3,7 +3,7 @@ import os
 from typing import Any
 from typing import cast
 
-from celery import bootsteps  # type: ignore
+from celery import bootsteps  # ty: ignore[unresolved-import]
 from celery import Celery
 from celery import signals
 from celery import Task
@@ -46,7 +46,7 @@ logger = setup_logger()
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.primary")
-celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
+celery_app.Task = app_base.TenantAwareTask  # ty: ignore[invalid-assignment]
 
 
 @signals.task_prerun.connect
@@ -85,7 +85,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
-    pool_size = cast(int, sender.concurrency)  # type: ignore
+    pool_size = cast(int, sender.concurrency)  # ty: ignore[unresolved-attribute]
     SqlEngine.init_engine(
         pool_size=pool_size, max_overflow=CELERY_WORKER_PRIMARY_POOL_OVERFLOW
     )
@@ -145,7 +145,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
         raise WorkerShutdown("Primary worker lock could not be acquired!")
 
     # tacking on our own user data to the sender
-    sender.primary_worker_lock = lock  # type: ignore
+    sender.primary_worker_lock = lock  # ty: ignore[unresolved-attribute]
 
     # As currently designed, when this worker starts as "primary", we reinitialize redis
     # to a clean state (for our purposes, anyway)

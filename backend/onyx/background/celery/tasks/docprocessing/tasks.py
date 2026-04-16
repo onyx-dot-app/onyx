@@ -810,7 +810,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
-    # redis_client_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+    # redis_client_celery: Redis = self.app.broker_connection().channel().client
 
     lock_beat: RedisLock = redis_client.lock(
         OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK,

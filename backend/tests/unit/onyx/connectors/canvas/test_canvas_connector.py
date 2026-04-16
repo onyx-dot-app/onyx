@@ -1391,7 +1391,7 @@ class TestLoadFromCheckpoint:
             current_course_index=0,
             stage=CanvasStage.PAGES,
         )
-        cp.stage = "invalid"  # type: ignore[assignment]
+        cp.stage = "invalid"  # ty: ignore[invalid-assignment]
 
         with pytest.raises(ValueError, match="Invalid checkpoint stage"):
             _run_checkpoint(connector, cp)

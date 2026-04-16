@@ -89,7 +89,9 @@ def _build_test_client(
     if login_status_code in {301, 302, 303, 307, 308}:
         login_response.headers["location"] = "/app"
     login_response.set_cookie("testsession", "session-token")
-    backend.login = AsyncMock(return_value=login_response)  # type: ignore[method-assign]
+    backend.login = AsyncMock(  # ty: ignore[invalid-assignment]
+        return_value=login_response
+    )
 
     user = MagicMock()
     user.is_active = True

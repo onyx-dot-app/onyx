@@ -228,7 +228,11 @@ def setup_logger(
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
-    logger.notice = lambda msg, *args, **kwargs: logger.log(logging.getLevelName("NOTICE"), msg, *args, **kwargs)  # type: ignore
+    logger.notice = (  # type: ignore
+        lambda msg, *args, **kwargs: logger.log(
+            logging.getLevelName("NOTICE"), msg, *args, **kwargs
+        )
+    )
 
     # After handler configuration, disable propagation to avoid duplicate logs
     # Prevent messages from propagating to the root logger which can cause

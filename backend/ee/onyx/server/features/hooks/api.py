@@ -287,8 +287,10 @@ def update_hook(
     validated_is_reachable: bool | None = None
     if endpoint_url_changing or api_key_changing or timeout_changing:
         existing = _get_hook_or_404(db_session, hook_id)
-        effective_url: str = (
-            req.endpoint_url if endpoint_url_changing else existing.endpoint_url  # type: ignore[assignment]  # endpoint_url is required on create and cannot be cleared on update
+        effective_url: str = (  # ty: ignore[invalid-assignment]
+            req.endpoint_url
+            if endpoint_url_changing
+            else existing.endpoint_url  # endpoint_url is required on create and cannot be cleared on update
         )
         effective_api_key: str | None = (
             (api_key if not isinstance(api_key, UnsetType) else None)
@@ -299,8 +301,10 @@ def update_hook(
                 else None
             )
         )
-        effective_timeout: float = (
-            req.timeout_seconds if timeout_changing else existing.timeout_seconds  # type: ignore[assignment]  # req.timeout_seconds is non-None when timeout_changing (validated by HookUpdateRequest)
+        effective_timeout: float = (  # ty: ignore[invalid-assignment]
+            req.timeout_seconds
+            if timeout_changing
+            else existing.timeout_seconds  # req.timeout_seconds is non-None when timeout_changing (validated by HookUpdateRequest)
         )
         validation = _validate_endpoint(
             endpoint_url=effective_url,

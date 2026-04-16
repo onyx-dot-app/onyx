@@ -683,7 +683,7 @@ def remove_stale_hierarchy_node_cc_pair_entries(
             )
         )
 
-    result: CursorResult = db_session.execute(stmt)  # type: ignore[assignment]
+    result: CursorResult = db_session.execute(stmt)  # ty: ignore[invalid-assignment]
     deleted = result.rowcount
 
     if commit:

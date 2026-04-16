@@ -4,7 +4,7 @@ from typing import Any
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import build  # type: ignore[import-untyped]
+from googleapiclient.discovery import build
 from googleapiclient.discovery import Resource
 
 from onyx.utils.logger import setup_logger
@@ -99,25 +99,33 @@ def get_google_docs_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDocsService:
-    return _get_google_service("docs", "v1", creds, user_email)
+    return _get_google_service(  # ty: ignore[invalid-return-type]
+        "docs", "v1", creds, user_email
+    )
 
 
 def get_drive_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService:
-    return _get_google_service("drive", "v3", creds, user_email)
+    return _get_google_service(  # ty: ignore[invalid-return-type]
+        "drive", "v3", creds, user_email
+    )
 
 
 def get_admin_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> AdminService:
-    return _get_google_service("admin", "directory_v1", creds, user_email)
+    return _get_google_service(  # ty: ignore[invalid-return-type]
+        "admin", "directory_v1", creds, user_email
+    )
 
 
 def get_gmail_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GmailService:
-    return _get_google_service("gmail", "v1", creds, user_email)
+    return _get_google_service(  # ty: ignore[invalid-return-type]
+        "gmail", "v1", creds, user_email
+    )

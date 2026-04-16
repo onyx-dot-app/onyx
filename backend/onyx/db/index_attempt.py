@@ -229,7 +229,7 @@ def transition_attempt_to_in_progress(
             )
 
         attempt.status = IndexingStatus.IN_PROGRESS
-        attempt.time_started = attempt.time_started or func.now()  # type: ignore
+        attempt.time_started = attempt.time_started or func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -250,7 +250,7 @@ def mark_attempt_in_progress(
         ).scalar_one()
 
         attempt.status = IndexingStatus.IN_PROGRESS
-        attempt.time_started = index_attempt.time_started or func.now()  # type: ignore
+        attempt.time_started = index_attempt.time_started or func.now()
         db_session.commit()
 
         # Add telemetry for index attempt status change

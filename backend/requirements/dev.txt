@@ -241,11 +241,8 @@ multidict==6.7.0
     #   aiobotocore
     #   aiohttp
     #   yarl
-mypy==1.13.0
 mypy-extensions==1.0.0
-    # via
-    #   black
-    #   mypy
+    # via black
 nest-asyncio==1.6.0
     # via ipykernel
 nodeenv==1.9.1
@@ -473,6 +470,7 @@ traitlets==5.14.3
     #   matplotlib-inline
 trove-classifiers==2025.12.1.14
     # via hatchling
+ty==0.0.31
 typer==0.20.0
     # via huggingface-hub
 types-beautifulsoup4==4.12.0.3
@@ -504,7 +502,6 @@ typing-extensions==4.15.0
     #   huggingface-hub
     #   ipython
     #   mcp
-    #   mypy
     #   openai
     #   pydantic
     #   pydantic-core

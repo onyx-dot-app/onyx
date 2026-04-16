@@ -18,7 +18,7 @@ from urllib.parse import urlunparse
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -434,7 +434,7 @@ class GoogleDriveConnector(
         for is_admin in [True, False]:
             query = "isAdmin=true" if is_admin else "isAdmin=false"
             for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,
+                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
                 list_key="users",
                 fields=USER_FIELDS,
                 domain=self.google_domain,
@@ -719,7 +719,7 @@ class GoogleDriveConnector(
         )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
-            retrieval_function=drive_service.drives().list,
+            retrieval_function=drive_service.drives().list,  # ty: ignore[unresolved-attribute]
             list_key="drives",
             useDomainAdminAccess=is_service_account,
             fields="drives(id),nextPageToken",
@@ -907,7 +907,9 @@ class GoogleDriveConnector(
             # resume from a checkpoint
             if resuming and (drive_id := curr_stage.current_folder_or_drive_id):
                 resume_start = curr_stage.completed_until
-                for file_or_token in _yield_from_drive(drive_id, resume_start):
+                for file_or_token in _yield_from_drive(
+                    drive_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                ):
                     if isinstance(file_or_token, str):
                         checkpoint.completion_map[user_email].next_page_token = (
                             file_or_token
@@ -1302,7 +1304,9 @@ class GoogleDriveConnector(
             resume_start = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until
-            yield from _yield_from_folder_crawl(folder_id, resume_start)
+            yield from _yield_from_folder_crawl(
+                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+            )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
         # instead, the traversed_parent_ids are used to determine what we have left to retrieve
@@ -1883,7 +1887,9 @@ class GoogleDriveConnector(
 
         try:
             drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            drive_service.files().list(pageSize=1, fields="files(id)").execute()
+            drive_service.files().list(  # ty: ignore[unresolved-attribute]
+                pageSize=1, fields="files(id)"
+            ).execute()
 
             if isinstance(self._creds, ServiceAccountCredentials):
                 # default is ~17mins of retries, don't do that here since this is called from

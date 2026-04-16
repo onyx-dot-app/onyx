@@ -215,7 +215,7 @@ def test_index_doc_batch_prepare_sanitizes_before_db_ops(
     context = indexing_pipeline.index_doc_batch_prepare(
         documents=[document],
         index_attempt_metadata=IndexAttemptMetadata(connector_id=1, credential_id=2),
-        db_session=object(),  # type: ignore[arg-type]
+        db_session=object(),  # ty: ignore[invalid-argument-type]
         ignore_time_skip=True,
     )
 
@@ -227,4 +227,4 @@ def test_index_doc_batch_prepare_sanitizes_before_db_ops(
 
     upsert_documents = captured["upsert_documents"]
     assert isinstance(upsert_documents, list)
-    assert upsert_documents[0].id == "docid"
+    assert upsert_documents[0].id == "docid"  # ty: ignore[unresolved-attribute]

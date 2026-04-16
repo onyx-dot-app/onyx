@@ -639,9 +639,11 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[
+        socket.TCP_KEEPALIVE  # ty: ignore[unresolved-attribute]
+    ] = 60
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60
 
 
 class OnyxCallTypes(str, Enum):

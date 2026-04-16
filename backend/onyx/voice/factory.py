@@ -25,7 +25,7 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
         api_key = provider.api_key.get_value(apply_mask=False)
     else:
         # Plain string from temporary model
-        api_key = provider.api_key  # type: ignore[assignment]
+        api_key = provider.api_key
     api_base = provider.api_base
     custom_config = provider.custom_config
     stt_model = provider.stt_model

@@ -207,8 +207,8 @@ def _list_session_directories(
     Returns:
         List of session ID strings (directory names)
     """
-    from kubernetes.client.rest import ApiException  # type: ignore
-    from kubernetes.stream import stream as k8s_stream  # type: ignore
+    from kubernetes.client.rest import ApiException
+    from kubernetes.stream import stream as k8s_stream
 
     pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
 

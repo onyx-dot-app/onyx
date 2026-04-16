@@ -995,7 +995,7 @@ class SlackConnector(
                     # Capture the current context so that the thread gets the current tenant ID
                     current_context = contextvars.copy_context()
                     futures.append(
-                        executor.submit(
+                        executor.submit(  # ty: ignore[invalid-argument-type]
                             current_context.run,
                             _process_message,
                             message=message,

@@ -134,7 +134,7 @@ def mark_doc_permission_sync_attempt_in_progress(
             )
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
-        attempt.time_started = func.now()  # type: ignore
+        attempt.time_started = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -157,9 +157,9 @@ def mark_doc_permission_sync_attempt_failed(
         ).scalar_one()
 
         if not attempt.time_started:
-            attempt.time_started = func.now()  # type: ignore
+            attempt.time_started = func.now()
         attempt.status = PermissionSyncStatus.FAILED
-        attempt.time_finished = func.now()  # type: ignore
+        attempt.time_finished = func.now()
         attempt.error_message = error_message
         db_session.commit()
 
@@ -217,7 +217,7 @@ def complete_doc_permission_sync_attempt(
         else:
             attempt.status = PermissionSyncStatus.SUCCESS
 
-        attempt.time_finished = func.now()  # type: ignore
+        attempt.time_finished = func.now()
         db_session.commit()
 
         # Add telemetry
@@ -341,7 +341,7 @@ def mark_external_group_sync_attempt_in_progress(
             )
 
         attempt.status = PermissionSyncStatus.IN_PROGRESS
-        attempt.time_started = func.now()  # type: ignore
+        attempt.time_started = func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -364,9 +364,9 @@ def mark_external_group_sync_attempt_failed(
         ).scalar_one()
 
         if not attempt.time_started:
-            attempt.time_started = func.now()  # type: ignore
+            attempt.time_started = func.now()
         attempt.status = PermissionSyncStatus.FAILED
-        attempt.time_finished = func.now()  # type: ignore
+        attempt.time_finished = func.now()
         attempt.error_message = error_message
         db_session.commit()
 
@@ -433,7 +433,7 @@ def complete_external_group_sync_attempt(
         else:
             attempt.status = PermissionSyncStatus.SUCCESS
 
-        attempt.time_finished = func.now()  # type: ignore
+        attempt.time_finished = func.now()
         db_session.commit()
 
         # Add telemetry

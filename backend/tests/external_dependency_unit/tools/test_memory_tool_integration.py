@@ -15,7 +15,7 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 @pytest.fixture()
-def test_user(db_session: Session):  # type: ignore
+def test_user(db_session: Session):
     """Create a test user with use_memories enabled."""
     user = create_test_user(db_session, "memory_test")
     user.use_memories = True
@@ -25,7 +25,7 @@ def test_user(db_session: Session):  # type: ignore
 
 
 @pytest.fixture()
-def test_user_no_memories(db_session: Session):  # type: ignore
+def test_user_no_memories(db_session: Session):
     """Create a test user with use_memories disabled."""
     user = create_test_user(db_session, "memory_test_off")
     user.use_memories = False

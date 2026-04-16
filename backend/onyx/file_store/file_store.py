@@ -276,7 +276,7 @@ class S3BackedFileStore(FileStore):
 
                 # For AWS S3, we need to handle region-specific bucket creation
                 region = (
-                    s3_client._client_config.region_name
+                    s3_client._client_config.region_name  # ty: ignore[unresolved-attribute]
                     if hasattr(s3_client, "_client_config")
                     else None
                 )

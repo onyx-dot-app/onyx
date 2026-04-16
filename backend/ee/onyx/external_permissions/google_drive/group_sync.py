@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -183,7 +183,7 @@ def _get_drive_members(
     )
 
     admin_user_info = (
-        admin_service.users()
+        admin_service.users()  # ty: ignore[unresolved-attribute]
         .get(userKey=google_drive_connector.primary_admin_email)
         .execute()
     )
@@ -197,7 +197,7 @@ def _get_drive_members(
 
         try:
             for permission in execute_paginated_retrieval(
-                drive_service.permissions().list,
+                drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
                 list_key="permissions",
                 fileId=drive_id,
                 fields="permissions(emailAddress, type),nextPageToken",
@@ -256,7 +256,7 @@ def _get_all_google_groups(
     """
     group_emails: set[str] = set()
     for group in execute_paginated_retrieval(
-        admin_service.groups().list,
+        admin_service.groups().list,  # ty: ignore[unresolved-attribute]
         list_key="groups",
         domain=google_domain,
         fields="groups(email),nextPageToken",
@@ -274,7 +274,7 @@ def _google_group_to_onyx_group(
     """
     group_member_emails: set[str] = set()
     for member in execute_paginated_retrieval(
-        admin_service.members().list,
+        admin_service.members().list,  # ty: ignore[unresolved-attribute]
         list_key="members",
         groupKey=group_email,
         fields="members(email),nextPageToken",
@@ -298,7 +298,7 @@ def _map_group_email_to_member_emails(
     for group_email in group_emails:
         group_member_emails: set[str] = set()
         for member in execute_paginated_retrieval(
-            admin_service.members().list,
+            admin_service.members().list,  # ty: ignore[unresolved-attribute]
             list_key="members",
             groupKey=group_email,
             fields="members(email),nextPageToken",

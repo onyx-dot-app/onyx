@@ -8,7 +8,7 @@ from datetime import timezone
 from enum import Enum
 from typing import Any
 
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.utils.logger import setup_logger

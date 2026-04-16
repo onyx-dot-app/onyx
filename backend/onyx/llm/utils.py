@@ -208,9 +208,9 @@ def litellm_exception_to_error_msg(
             api_error = core_exception.api_error
             if isinstance(api_error, dict):
                 upstream_detail = (
-                    api_error.get("message")
-                    or api_error.get("detail")
-                    or api_error.get("error")
+                    api_error.get("message")  # ty: ignore[invalid-argument-type]
+                    or api_error.get("detail")  # ty: ignore[invalid-argument-type]
+                    or api_error.get("error")  # ty: ignore[invalid-argument-type]
                 )
         if not upstream_detail:
             upstream_detail = str(core_exception)

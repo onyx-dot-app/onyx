@@ -300,8 +300,11 @@ def fetch_user_groups_for_user(
     stmt = (
         select(UserGroup)
         .join(User__UserGroup, User__UserGroup.user_group_id == UserGroup.id)
-        .join(User, User.id == User__UserGroup.user_id)  # type: ignore
-        .where(User.id == user_id)  # type: ignore
+        .join(
+            User,
+            User.id == User__UserGroup.user_id,  # ty: ignore[invalid-argument-type]
+        )
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
@@ -430,7 +433,7 @@ def fetch_user_groups_for_documents(
         .group_by(Document.id)
     )
 
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
@@ -804,7 +807,9 @@ def update_user_group(
         db_user_group.is_up_to_date = False
 
     removed_users = db_session.scalars(
-        select(User).where(User.id.in_(removed_user_ids))  # type: ignore
+        select(User).where(
+            User.id.in_(removed_user_ids)  # ty: ignore[unresolved-attribute]
+        )
     ).unique()
 
     # Filter out admin and global curator users before validating curator status

@@ -18,20 +18,20 @@ from urllib.parse import quote
 from urllib.parse import unquote
 from urllib.parse import urlsplit
 
-import msal  # type: ignore[import-untyped]
+import msal
 import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-from office365.graph_client import GraphClient  # type: ignore[import-untyped]
-from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
-from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
-from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
-from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
-from office365.runtime.client_request import ClientRequestException  # type: ignore
-from office365.runtime.paths.resource_path import ResourcePath  # type: ignore[import-untyped]
-from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
-from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
+from office365.graph_client import GraphClient
+from office365.onedrive.driveitems.driveItem import DriveItem
+from office365.onedrive.sites.site import Site
+from office365.onedrive.sites.sites_with_root import SitesWithRoot
+from office365.runtime.auth.token_response import TokenResponse
+from office365.runtime.client_request import ClientRequestException
+from office365.runtime.paths.resource_path import ResourcePath
+from office365.runtime.queries.client_query import ClientQuery
+from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel
 from pydantic import Field
 from requests.exceptions import HTTPError
@@ -263,7 +263,11 @@ def sleep_and_retry(
                 logger.warning(
                     f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
                 )
-                retry_after = e.response.headers.get("Retry-After")
+                retry_after = (
+                    e.response.headers.get(  # ty: ignore[unresolved-attribute]
+                        "Retry-After"
+                    )
+                )
                 if retry_after:
                     sleep_time = int(retry_after)
                 else:
@@ -829,7 +833,7 @@ def _convert_sitepage_to_document(
 
     if include_permissions:
         external_access = get_sharepoint_external_access(
-            ctx=ctx,
+            ctx=ctx,  # ty: ignore[invalid-argument-type]
             graph_client=graph_client,
             site_page=site_page,
             add_prefix=True,
@@ -897,7 +901,7 @@ def _convert_sitepage_to_slim_document(
         raise ValueError("Site page ID is required")
 
     external_access = get_sharepoint_external_access(
-        ctx=ctx,
+        ctx=ctx,  # ty: ignore[invalid-argument-type]
         graph_client=graph_client,
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,

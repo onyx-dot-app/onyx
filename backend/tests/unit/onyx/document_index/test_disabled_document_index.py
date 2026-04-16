@@ -74,7 +74,7 @@ def test_index_raises(disabled_index: DisabledDocumentIndex) -> None:
     with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
         disabled_index.index(
             chunks=[],
-            index_batch_params=_StubBatchParams(),  # type: ignore
+            index_batch_params=_StubBatchParams(),  # ty: ignore[invalid-argument-type]
         )
 
 

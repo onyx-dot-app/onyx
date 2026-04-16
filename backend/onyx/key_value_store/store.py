@@ -46,7 +46,7 @@ class PgRedisKVStore(KeyValueStore):
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
-                obj.encrypted_value = encrypted_val  # type: ignore[assignment]
+                obj.encrypted_value = encrypted_val  # ty: ignore[invalid-assignment]
             else:
                 obj = KVStore(key=key, value=plain_val, encrypted_value=encrypted_val)
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case

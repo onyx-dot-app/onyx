@@ -327,7 +327,7 @@ class AxeroConnector(PollConnector):
                 )
 
                 all_axero_forums = _map_post_to_parent(
-                    posts=forums_posts,
+                    posts=forums_posts,  # ty: ignore[invalid-argument-type]
                     api_key=self.axero_key,
                     axero_base_url=self.base_url,
                 )

@@ -217,39 +217,47 @@ class LangfuseTracingProcessor(TracingProcessor):
             # Create spans using trace_context (thread-safe ID-based approach)
             # In Langfuse SDK v3, use start_observation with as_type parameter
             if isinstance(data, GenerationSpanData):
-                langfuse_span = client.start_observation(  # type: ignore[call-overload]
-                    trace_context=trace_context,
-                    name=self._get_generation_name(data),
-                    as_type="generation",
-                    metadata=trace_metadata,
-                    model=data.model,
-                    model_parameters=self._get_model_parameters(data),
+                langfuse_span = (
+                    client.start_observation(  # ty: ignore[no-matching-overload]
+                        trace_context=trace_context,
+                        name=self._get_generation_name(data),
+                        as_type="generation",
+                        metadata=trace_metadata,
+                        model=data.model,
+                        model_parameters=self._get_model_parameters(data),
+                    )
                 )
             elif isinstance(data, FunctionSpanData):
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.name,
-                    as_type="tool",
-                    metadata=trace_metadata,
+                langfuse_span = (
+                    client.start_observation(  # ty: ignore[no-matching-overload]
+                        trace_context=trace_context,
+                        name=data.name,
+                        as_type="tool",
+                        metadata=trace_metadata,
+                    )
                 )
             elif isinstance(data, AgentSpanData):
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.name,
-                    as_type="agent",
-                    metadata={
-                        **(trace_metadata or {}),
-                        "tools": data.tools,
-                        "handoffs": data.handoffs,
-                        "output_type": data.output_type,
-                    },
+                langfuse_span = (
+                    client.start_observation(  # ty: ignore[no-matching-overload]
+                        trace_context=trace_context,
+                        name=data.name,
+                        as_type="agent",
+                        metadata={
+                            **(trace_metadata or {}),
+                            "tools": data.tools,
+                            "handoffs": data.handoffs,
+                            "output_type": data.output_type,
+                        },
+                    )
                 )
             else:
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.type if hasattr(data, "type") else "unknown",
-                    as_type="span",
-                    metadata=trace_metadata,
+                langfuse_span = (
+                    client.start_observation(  # ty: ignore[no-matching-overload]
+                        trace_context=trace_context,
+                        name=data.type if hasattr(data, "type") else "unknown",
+                        as_type="span",
+                        metadata=trace_metadata,
+                    )
                 )
 
             with self._lock:

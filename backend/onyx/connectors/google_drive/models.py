@@ -199,7 +199,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         if isinstance(v, set):
             return ThreadSafeSet(v)
         if isinstance(v, list):
-            return ThreadSafeSet(set(v))
+            return ThreadSafeSet(set(v))  # ty: ignore[invalid-return-type]
         return ThreadSafeSet()
 
     @field_validator("fully_walked_hierarchy_node_raw_ids", mode="before")
@@ -209,5 +209,5 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         if isinstance(v, set):
             return ThreadSafeSet(v)
         if isinstance(v, list):
-            return ThreadSafeSet(set(v))
+            return ThreadSafeSet(set(v))  # ty: ignore[invalid-return-type]
         return ThreadSafeSet()

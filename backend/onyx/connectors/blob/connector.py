@@ -76,7 +76,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
 
-    def set_allow_images(self, allow_images: bool) -> None:
+    def set_allow_images(  # ty: ignore[invalid-method-override]
+        self, allow_images: bool
+    ) -> None:
         """Set whether to process images in this connector."""
         logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
@@ -195,7 +197,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     method="sts-assume-role",
                 )
                 botocore_session = get_session()
-                botocore_session._credentials = refreshable  # type: ignore[attr-defined]
+                botocore_session._credentials = (  # ty: ignore[unresolved-attribute]
+                    refreshable
+                )
                 session = boto3.Session(botocore_session=botocore_session)
                 self.s3_client = session.client("s3")
             elif authentication_method == "assume_role":

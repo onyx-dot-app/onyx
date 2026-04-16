@@ -67,11 +67,12 @@ repos:
         args: ["--active", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
-      # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
+      # NOTE: ty is fast enough to run in pre-commit but is pre-release (v0.0.31).
+      # Uncomment to enable.
       # - id: uv-run
-      #   name: mypy
-      #   args: ["--all-extras", "mypy"]
-      #   pass_filenames: true
+      #   name: ty
+      #   args: ["--active", "ty", "check"]
+      #   pass_filenames: false
       #   files: ^backend/.*\.py$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks

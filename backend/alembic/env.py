@@ -26,7 +26,9 @@ from shared_configs.configs import (
     TENANT_ID_PREFIX,
 )
 from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
+from celery.backends.database.session import (  # ty: ignore[unresolved-import]
+    ResultModelBase,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be

@@ -121,5 +121,7 @@ def require_permission(
 
         return user
 
-    dependency._is_require_permission = True  # type: ignore[attr-defined]  # sentinel for auth_check detection
+    dependency._is_require_permission = (  # ty: ignore[unresolved-attribute]
+        True  # sentinel for auth_check detection
+    )
     return dependency

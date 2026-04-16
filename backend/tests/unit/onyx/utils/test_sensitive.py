@@ -96,7 +96,7 @@ class TestSensitiveValueString:
             is_json=False,
         )
         with pytest.raises(SensitiveAccessError):
-            for _ in sensitive:  # type: ignore[attr-defined]
+            for _ in sensitive:
                 pass
 
     def test_getitem_raises_error(self) -> None:
@@ -208,7 +208,7 @@ class TestSensitiveValueJson:
             is_json=True,
         )
         with pytest.raises(SensitiveAccessError):
-            for _ in sensitive:  # type: ignore[attr-defined]
+            for _ in sensitive:
                 pass
 
 

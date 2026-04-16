@@ -6,8 +6,8 @@ from typing import cast
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
-from googleapiclient.errors import HttpError  # type: ignore
-from googleapiclient.http import MediaIoBaseDownload  # type: ignore
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
@@ -65,7 +65,7 @@ def _get_folder_info(
 
     try:
         folder = (
-            service.files()
+            service.files()  # ty: ignore[unresolved-attribute]
             .get(
                 fileId=folder_id,
                 fields="name, parents",
@@ -91,7 +91,11 @@ def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
         return _folder_cache[cache_key][0]
 
     try:
-        drive = service.drives().get(driveId=drive_id).execute()
+        drive = (
+            service.drives()  # ty: ignore[unresolved-attribute]
+            .get(driveId=drive_id)
+            .execute()
+        )
         drive_name = drive.get("name", f"Shared Drive {drive_id}")
         _folder_cache[cache_key] = (drive_name, None)
         return drive_name
@@ -258,7 +262,9 @@ def download_request(
     """
     # For other file types, download the file
     # Use the correct API call for downloading files
-    request = service.files().get_media(fileId=file_id)
+    request = service.files().get_media(  # ty: ignore[unresolved-attribute]
+        fileId=file_id
+    )
     return _download_request(request, file_id, size_threshold)
 
 
@@ -331,7 +337,7 @@ def _download_and_extract_sections_basic(
     # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
         export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
-        request = service.files().export_media(
+        request = service.files().export_media(  # ty: ignore[unresolved-attribute]
             fileId=file_id, mimeType=export_mime_type
         )
         response = _download_request(request, file_id, size_threshold)
@@ -455,7 +461,9 @@ def align_basic_advanced(
     for adv_ind in range(1, len(adv_sections)):
         heading = adv_sections[adv_ind].text.split(HEADING_DELIMITER)[0]
         # retrieve the longest part of the heading that is not a smart chip
-        heading_key = max(heading.split(SMART_CHIP_CHAR), key=len).strip()
+        heading_key = max(  # ty: ignore[unresolved-attribute]
+            heading.split(SMART_CHIP_CHAR), key=len
+        ).strip()
         if heading_key == "":
             logger.warning(
                 f"Cannot match heading: {heading}, its link will come from the following section"

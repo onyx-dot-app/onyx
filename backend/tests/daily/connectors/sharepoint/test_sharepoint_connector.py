@@ -548,7 +548,9 @@ def test_resolve_tenant_domain_from_site_urls(
     # The tenant domain should match the first label of the site URL hostname
     from urllib.parse import urlsplit
 
-    expected = urlsplit(site_url).hostname.split(".")[0]  # type: ignore
+    hostname = urlsplit(site_url).hostname
+    assert hostname is not None
+    expected = hostname.split(".")[0]
     assert connector.sp_tenant_domain == expected
 
 

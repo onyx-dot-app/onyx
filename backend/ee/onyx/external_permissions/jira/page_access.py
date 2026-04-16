@@ -68,7 +68,7 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
             logger.warning(f"Expected a 'raw' field, but none was found: {raw_perm=}")
             continue
 
-        permission = Permission(**raw_perm.raw)
+        permission = Permission(**raw_perm.raw)  # ty: ignore[invalid-argument-type]
 
         # We only care about ability to browse through projects + issues (not other permissions such as read/write).
         if permission.permission != "BROWSE_PROJECTS":

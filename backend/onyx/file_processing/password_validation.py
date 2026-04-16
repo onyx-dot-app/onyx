@@ -62,7 +62,7 @@ def is_xlsx_protected(file: IO[Any]) -> bool:
 
 
 def is_office_file_protected(file: IO[Any]) -> bool:
-    import msoffcrypto  # type: ignore[import-untyped]
+    import msoffcrypto
 
     with preserve_position(file):
         office = msoffcrypto.OfficeFile(file)

@@ -208,7 +208,9 @@ class QueueDepthCollector(_CachedCollector):
         inaccurate, which is the safest behavior for alerting.
         """
         try:
-            raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # type: ignore[assignment]
+            raw: bytes | str | None = redis_client.lindex(
+                queue_name, -1
+            )  # ty: ignore[invalid-assignment]
             if raw is None:
                 return None
             msg = json.loads(raw)
@@ -267,14 +269,18 @@ class RedisHealthCollector(_CachedCollector):
         )
 
         try:
-            mem_info: dict = redis_client.info("memory")  # type: ignore[assignment]
+            mem_info: dict = redis_client.info(  # ty: ignore[invalid-assignment]
+                "memory"
+            )
             memory_used.add_metric([], mem_info.get("used_memory", 0))
             memory_peak.add_metric([], mem_info.get("used_memory_peak", 0))
             frag = mem_info.get("mem_fragmentation_ratio")
             if frag is not None:
                 memory_frag.add_metric([], frag)
 
-            client_info: dict = redis_client.info("clients")  # type: ignore[assignment]
+            client_info: dict = redis_client.info(  # ty: ignore[invalid-assignment]
+                "clients"
+            )
             connected_clients.add_metric([], client_info.get("connected_clients", 0))
         except Exception:
             logger.debug("Failed to collect Redis health metrics", exc_info=True)

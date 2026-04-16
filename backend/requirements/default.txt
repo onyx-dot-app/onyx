@@ -487,14 +487,10 @@ multidict==6.7.0
     #   yarl
 mwparserfromhell==0.7.2
     # via pywikibot
-mypy==1.13.0
-    # via sqlalchemy
 mypy-boto3-s3==1.39.5
     # via boto3-stubs
 mypy-extensions==1.0.0
-    # via
-    #   mypy
-    #   typing-inspect
+    # via typing-inspect
 nest-asyncio==1.6.0
 nltk==3.9.4
     # via unstructured
@@ -960,7 +956,6 @@ typing-extensions==4.15.0
     #   jira
     #   langchain-core
     #   mcp
-    #   mypy
     #   mypy-boto3-s3
     #   office365-rest-python-client
     #   openai

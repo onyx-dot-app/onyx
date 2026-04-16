@@ -195,7 +195,7 @@ class TestDeletePerFileGuardKey:
             assert redis_client.exists(
                 guard_key
             ), "Guard key should be set in Redis after enqueue"
-            ttl = int(redis_client.ttl(guard_key))  # type: ignore[arg-type]
+            ttl = int(redis_client.ttl(guard_key))  # ty: ignore[invalid-argument-type]
             assert (
                 0 < ttl <= CELERY_USER_FILE_DELETE_TASK_EXPIRES
             ), f"Guard key TTL {ttl}s is outside the expected range (0, {CELERY_USER_FILE_DELETE_TASK_EXPIRES}]"

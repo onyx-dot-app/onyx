@@ -127,7 +127,9 @@ def fetch_and_cache_channel_metadata(
                 response.validate()
 
                 # Cast response.data to dict for type checking
-                response_data: dict[str, Any] = response.data  # type: ignore
+                response_data: dict[str, Any] = (  # ty: ignore[invalid-assignment]
+                    response.data
+                )
                 for ch in response_data.get("channels", []):
                     channel_id = ch.get("id")
                     if not channel_id:
@@ -1267,8 +1269,10 @@ def slack_retrieval(
         for chunk in chunks:
             match_highlight = chunk.content
             for highlight in sorted_highlighted_texts:  # faster than re sub
-                match_highlight = match_highlight.replace(
-                    highlight, f"<hi>{highlight}</hi>"
+                match_highlight = (
+                    match_highlight.replace(  # ty: ignore[no-matching-overload]
+                        highlight, f"<hi>{highlight}</hi>"
+                    )
                 )
 
             # if nothing got replaced, the chunk is irrelevant
