@@ -679,7 +679,7 @@ pynacl==1.6.2
 pypandoc-binary==1.16.2
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.10.0
+pypdf==6.10.2
     # via unstructured-client
 pyperclip==1.11.0
     # via fastmcp
