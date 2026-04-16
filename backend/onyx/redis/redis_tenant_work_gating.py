@@ -56,16 +56,19 @@ def mark_tenant_active(tenant_id: str) -> None:
 
 def maybe_mark_tenant_active(tenant_id: str) -> None:
     """Convenience wrapper for writer call sites: records the tenant only
-    when the feature flag is on. Becomes a no-op when gating is disabled,
-    so deploys are inert until the Redis toggle flips."""
-    # Local import to avoid a module-load cycle: OnyxRuntime imports
-    # onyx.redis.redis_pool, so a top-level import here would wedge on
-    # certain startup paths.
-    from onyx.server.runtime.onyx_runtime import OnyxRuntime
+    when the feature flag is on. Fully defensive — never raises, so a Redis
+    outage or flag-read failure can't abort the calling task."""
+    try:
+        # Local import to avoid a module-load cycle: OnyxRuntime imports
+        # onyx.redis.redis_pool, so a top-level import here would wedge on
+        # certain startup paths.
+        from onyx.server.runtime.onyx_runtime import OnyxRuntime
 
-    if not OnyxRuntime.get_tenant_work_gating_enabled():
-        return
-    mark_tenant_active(tenant_id)
+        if not OnyxRuntime.get_tenant_work_gating_enabled():
+            return
+        mark_tenant_active(tenant_id)
+    except Exception:
+        logger.exception(f"maybe_mark_tenant_active failed: tenant_id={tenant_id}")
 
 
 def get_active_tenants(ttl_seconds: int) -> set[str] | None:
