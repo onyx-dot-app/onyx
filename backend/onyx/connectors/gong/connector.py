@@ -233,6 +233,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         Returns a list of workspace IDs. If no workspaces are configured,
         returns [None] to indicate "fetch all workspaces".
+
+        Raises ValueError if workspaces are configured but none resolve —
+        we never silently widen scope to "fetch all" on misconfiguration,
+        because that could ingest an entire Gong account by mistake.
         """
         if not self.workspaces:
             return [None]
@@ -246,12 +250,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
                 continue
             resolved.append(workspace_id)
 
-        # If all workspaces were invalid, fall back to fetching all
         if not resolved:
-            logger.warning(
-                "No valid workspaces found, falling back to fetching all workspaces"
+            raise ValueError(
+                f"No valid Gong workspaces found — check workspace names/IDs in connector config. Configured: {self.workspaces}"
             )
-            return [None]
 
         return resolved
 
