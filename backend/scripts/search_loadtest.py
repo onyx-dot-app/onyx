@@ -17,6 +17,8 @@ import httpx
 from pydantic import BaseModel
 
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import BaseFilters
 
 
 DEFAULT_QUERIES = [
@@ -44,9 +46,17 @@ class Queries(BaseModel):
     model_config = {"frozen": True}
 
     queries: list[str]
+    source_types: set[DocumentSource] | None = None
 
     def get_random_query(self) -> str:
         return random.choice(self.queries)
+
+    def get_random_source_type_set_or_none(self) -> list[DocumentSource] | None:
+        if self.source_types is None:
+            return None
+        return random.sample(
+            self.source_types, random.randint(0, len(self.source_types))
+        )
 
 
 class StopCondition:
@@ -141,8 +151,13 @@ def worker_loop(
         while not stop_condition.should_stop(
             num_requests_made=num_requests_made, current_timestamp_s=timestamp_s
         ):
-            query = queries.get_random_query()
-            thread_local_base_request_body.search_query = query
+            thread_local_base_request_body.search_query = queries.get_random_query()
+            source_type_filter = queries.get_random_source_type_set_or_none()
+            thread_local_base_request_body.filters = None
+            if source_type_filter:
+                thread_local_base_request_body.filters = BaseFilters(
+                    source_type=source_type_filter
+                )
             result = make_one_search_request(
                 client,
                 search_url,
