@@ -342,9 +342,9 @@ test.describe("Default Agent MCP Integration", () => {
     // Scroll to the Actions & Tools section (open by default)
     await scrollToBottom(page);
 
-    // Find the MCP server card by name text
+    // Find the MCP server card by name text (expandable card)
     const serverCard = page
-      .locator(".opal-card")
+      .locator(".opal-card-expandable")
       .filter({ hasText: serverName })
       .first();
     await expect(serverCard).toBeVisible({ timeout: 10000 });
@@ -640,9 +640,9 @@ test.describe("Default Agent MCP Integration", () => {
     // Scroll to Actions & Tools section
     await scrollToBottom(page);
 
-    // Find the MCP server card by name
+    // Find the MCP server card by name (expandable card)
     const serverCard = page
-      .locator(".opal-card")
+      .locator(".opal-card-expandable")
       .filter({ hasText: serverName })
       .first();
     await expect(serverCard).toBeVisible({ timeout: 10000 });
@@ -683,9 +683,9 @@ test.describe("Default Agent MCP Integration", () => {
     await page.waitForURL("**/admin/configuration/chat-preferences**");
     await scrollToBottom(page);
 
-    // Re-find the server card
+    // Re-find the server card (expandable card)
     const serverCardAfter = page
-      .locator(".opal-card")
+      .locator(".opal-card-expandable")
       .filter({ hasText: serverName })
       .first();
     await expect(serverCardAfter).toBeVisible({ timeout: 10000 });

@@ -172,6 +172,7 @@ export default function ModelListContent({
                         <LineItem
                           muted
                           icon={group.Icon}
+                          strokeIcon={false}
                           rightChildren={
                             open ? (
                               <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />

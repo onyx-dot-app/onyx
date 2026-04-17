@@ -34,6 +34,7 @@ R = TypeVar("R")
 KT = TypeVar("KT")  # Key type
 VT = TypeVar("VT")  # Value type
 _T = TypeVar("_T")  # Default type
+_MISSING: object = object()
 
 
 class ThreadSafeDict(MutableMapping[KT, VT]):
@@ -117,10 +118,10 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
         with self.lock:
             return self._dict.get(key, default)
 
-    def pop(self, key: KT, default: Any = None) -> Any:
+    def pop(self, key: KT, default: Any = _MISSING) -> Any:
         """Remove and return a value with optional default, atomically."""
         with self.lock:
-            if default is None:
+            if default is _MISSING:
                 return self._dict.pop(key)
             return self._dict.pop(key, default)
 
