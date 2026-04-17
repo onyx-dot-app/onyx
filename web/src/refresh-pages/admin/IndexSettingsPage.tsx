@@ -18,7 +18,13 @@ import {
   MessageCard,
   SelectCard,
 } from "@opal/components";
-import { SvgCloud, SvgFold, SvgServer, SvgSettings } from "@opal/icons";
+import {
+  SvgCloud,
+  SvgFold,
+  SvgServer,
+  SvgSettings,
+  SvgUnplug,
+} from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -48,6 +54,7 @@ import {
   useCurrentSearchSettings,
   useLLMContextualCosts,
 } from "@/hooks/useSearchSettings";
+import Spacer from "@/refresh-components/Spacer";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -107,13 +114,26 @@ interface ProviderGroupProps {
 function ProviderGroup({ provider }: ProviderGroupProps) {
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
-      <div className="w-full h-[2.25rem]">
-        <Content
-          icon={provider.icon}
-          title={getFormattedProviderName(provider.provider_type)}
-          sizePreset="secondary"
-          variant="section"
-        />
+      <div className="px-1 pt-1 w-full">
+        <GeneralLayouts.Section flexDirection="row" gap={0}>
+          <Spacer horizontal rem={0.675} />
+          <div className="flex flex-row justify-between items-center w-full py-1">
+            <Content
+              icon={provider.icon}
+              title={markdown(
+                `[${getFormattedProviderName(provider.provider_type)}](${
+                  provider.docsLink
+                })`
+              )}
+              sizePreset="secondary"
+              variant="body"
+            />
+            <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
+              <Button icon={SvgUnplug} prominence="tertiary" size="sm" />
+              <Button icon={SvgSettings} prominence="tertiary" size="sm" />
+            </GeneralLayouts.Section>
+          </div>
+        </GeneralLayouts.Section>
       </div>
       {provider.embedding_models.map((model) => (
         <EmbeddingModelCard
