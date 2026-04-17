@@ -95,9 +95,9 @@ function Button({
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        size={size}
+        width={width}
+        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}

@@ -156,7 +156,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
                 <Switch
@@ -286,7 +286,7 @@ function NumericLimitField({
   };
 
   return (
-    <Hoverable.Root group="numericLimit" widthVariant="full">
+    <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
         showClearButton={false}

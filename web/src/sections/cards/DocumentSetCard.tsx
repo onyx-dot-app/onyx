@@ -38,7 +38,7 @@ export default function DocumentSetCard({
           <Interactive.Container
             data-testid={`document-set-card-${documentSet.id}`}
             border
-            heightVariant="fit"
+            size="fit"
           >
             <AttachmentItemLayout
               icon={SvgFiles}

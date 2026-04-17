@@ -15,9 +15,9 @@ Inherits **all** props from [`Content`](../content/README.md) (same discriminate
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
-| `paddingVariant` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
+| `padding` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
 
-### `paddingVariant` reference
+### `padding` reference
 
 | Value | Padding class | Effective padding |
 |---|---|---|
@@ -37,7 +37,7 @@ These values are identical to the padding applied by `Interactive.Container` at 
 ```
 
 - The outer wrapper is `flex flex-row items-stretch w-full`.
-- `Content` sits inside a `flex-1 min-w-0` div with padding from `paddingVariant`.
+- `Content` sits inside a `flex-1 min-w-0` div with padding from `padding`.
 - `rightChildren` is wrapped in `flex items-stretch shrink-0` so it stretches vertically.
 
 ## Usage Examples
@@ -56,7 +56,7 @@ import SvgSettings from "@opal/icons/settings";
   sizePreset="main-content"
   variant="section"
   tag={{ title: "Default", color: "blue" }}
-  paddingVariant="lg"
+  padding="lg"
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
   }
@@ -76,7 +76,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
   description="Gemini"
   sizePreset="main-content"
   variant="section"
-  paddingVariant="md"
+  padding="md"
   rightChildren={
     <Button rightIcon={SvgArrowExchange} prominence="tertiary">
       Connect
@@ -92,7 +92,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
   title="Section Header"
   sizePreset="main-content"
   variant="section"
-  paddingVariant="lg"
+  padding="lg"
 />
 ```
 

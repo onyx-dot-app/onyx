@@ -63,7 +63,7 @@ export const NoPadding: Story = {
     variant: "section",
     title: "Compact Row",
     description: "No padding around content area.",
-    paddingVariant: "fit",
+    padding: "fit",
     rightChildren: <Button prominence="tertiary">Action</Button>,
   },
 };

@@ -103,7 +103,7 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
             variant="select-tinted"
             width="full"
             justifyContent="between"
-            roundingVariant="sm"
+            rounding="sm"
           >
             {USER_ROLE_LABELS[user.role]}
           </OpenButton>

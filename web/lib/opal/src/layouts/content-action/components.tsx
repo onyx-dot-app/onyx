@@ -20,7 +20,7 @@ type ContentActionProps = ContentProps & {
    * @default "lg"
    * @see {@link ContainerSizeVariants} for the full list of presets.
    */
-  paddingVariant?: ContainerSizeVariants;
+  padding?: ContainerSizeVariants;
 };
 
 // ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ type ContentActionProps = ContentProps & {
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
  *
- * The `Content` area receives padding controlled by `paddingVariant`, using
+ * The `Content` area receives padding controlled by `padding`, using
  * the same size scale as `Interactive.Container` and `Button`. The
  * `rightChildren` wrapper stretches to the full height of the row.
  *
@@ -47,21 +47,21 @@ type ContentActionProps = ContentProps & {
  *   description="GPT"
  *   sizePreset="main-content"
  *   variant="section"
- *   paddingVariant="lg"
+ *   padding="lg"
  *   rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
  * />
  * ```
  */
 function ContentAction({
   rightChildren,
-  paddingVariant = "lg",
+  padding = "lg",
   ...contentProps
 }: ContentActionProps) {
-  const { padding } = containerSizeVariants[paddingVariant];
+  const { padding: paddingClass } = containerSizeVariants[padding];
 
   return (
     <div className="flex flex-row items-stretch w-full">
-      <div className={cn("flex-1 min-w-0 self-center", padding)}>
+      <div className={cn("flex-1 min-w-0 self-center", paddingClass)}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (

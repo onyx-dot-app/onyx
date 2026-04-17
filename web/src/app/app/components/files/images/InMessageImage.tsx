@@ -77,7 +77,7 @@ export const InMessageImage = memo(function InMessageImage({
         onOpenChange={(open) => setFullImageShowing(open)}
       />
 
-      <Hoverable.Root group="messageImage" widthVariant="fit">
+      <Hoverable.Root group="messageImage" width="fit">
         <div className={cn("relative", shapeContainerClasses)}>
           {!imageLoaded && (
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />

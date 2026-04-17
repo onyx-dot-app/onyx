@@ -272,7 +272,7 @@ export default function HookFormModal({
                   <ContentAction
                     sizePreset="main-ui"
                     variant="section"
-                    paddingVariant="fit"
+                    padding="fit"
                     title={hookPointDisplayName}
                     description={hookPointDescription}
                     rightChildren={
@@ -283,7 +283,7 @@ export default function HookFormModal({
                           icon={SvgShareWebhook}
                           title="Hook Point"
                           prominence="muted"
-                          widthVariant="fit"
+                          width="fit"
                         />
                         {docsUrl && (
                           <LinkButton href={docsUrl} target="_blank">

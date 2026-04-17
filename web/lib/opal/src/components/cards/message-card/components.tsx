@@ -156,7 +156,7 @@ function MessageCard({
         description={description}
         sizePreset="main-ui"
         variant="section"
-        paddingVariant="md"
+        padding="md"
         rightChildren={right}
       />
 

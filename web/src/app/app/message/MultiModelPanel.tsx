@@ -97,7 +97,7 @@ export default function MultiModelPanel({
       <ContentAction
         sizePreset="main-ui"
         variant="body"
-        paddingVariant="lg"
+        padding="lg"
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
