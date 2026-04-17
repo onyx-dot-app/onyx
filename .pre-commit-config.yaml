@@ -68,6 +68,7 @@ repos:
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
+        alias: ty
         name: ty
         args: ["ty", "check"]
         pass_filenames: true
