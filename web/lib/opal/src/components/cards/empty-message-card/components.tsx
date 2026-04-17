@@ -18,9 +18,6 @@ type EmptyMessageCardBaseProps = {
   /** Primary message text. */
   title: string | RichStr;
 
-  /** Optional description text. */
-  description?: string | RichStr;
-
   /** Padding preset for the card. @default "md" */
   padding?: PaddingVariants;
 
@@ -28,10 +25,16 @@ type EmptyMessageCardBaseProps = {
   ref?: React.Ref<HTMLDivElement>;
 };
 
-type EmptyMessageCardProps = EmptyMessageCardBaseProps & {
-  /** @default "secondary" */
-  sizePreset?: "secondary" | "main-ui";
-};
+type EmptyMessageCardProps =
+  | (EmptyMessageCardBaseProps & {
+      /** @default "secondary" */
+      sizePreset?: "secondary";
+    })
+  | (EmptyMessageCardBaseProps & {
+      sizePreset: "main-ui";
+      /** Optional description text. */
+      description?: string | RichStr;
+    });
 
 // ---------------------------------------------------------------------------
 // EmptyMessageCard
@@ -42,7 +45,6 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
     sizePreset = "secondary",
     icon = SvgEmpty,
     title,
-    description,
     padding = "md",
     ref,
   } = props;
@@ -67,7 +69,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
         <Content
           icon={icon}
           title={title}
-          description={description}
+          description={"description" in props ? props.description : undefined}
           sizePreset={sizePreset}
           variant="section"
         />
