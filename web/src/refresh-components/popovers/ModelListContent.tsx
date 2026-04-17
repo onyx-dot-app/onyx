@@ -8,7 +8,6 @@ import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import {
   Collapsible,
@@ -127,7 +126,7 @@ export default function ModelListContent({
           ) : null
         }
         sizePreset="main-ui"
-        roundingVariant="sm"
+        rounding="sm"
       />
     );
   };
@@ -187,7 +186,7 @@ export default function ModelListContent({
                               />
                             </div>
                           }
-                          roundingVariant="sm"
+                          rounding="sm"
                           nonInteractive
                         />
                       </CollapsibleTrigger>
