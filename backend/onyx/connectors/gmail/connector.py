@@ -253,7 +253,17 @@ def thread_to_document(
 
     updated_at_datetime = None
     if updated_at:
-        updated_at_datetime = time_str_to_utc(updated_at)
+        try:
+            updated_at_datetime = time_str_to_utc(updated_at)
+        except (ValueError, OverflowError) as e:
+            # Old mailboxes contain RFC-violating Date headers. Drop the
+            # timestamp instead of aborting the indexing run.
+            logger.warning(
+                "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                full_thread.get("id"),
+                updated_at,
+                e,
+            )
 
     id = full_thread.get("id")
     if not id:
