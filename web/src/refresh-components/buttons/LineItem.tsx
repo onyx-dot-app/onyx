@@ -82,6 +82,7 @@ export interface LineItemProps
 
   selected?: boolean;
   icon?: React.FunctionComponent<IconProps>;
+  strokeIcon?: boolean;
   description?: string;
   rightChildren?: React.ReactNode;
   href?: string;
@@ -154,6 +155,7 @@ export default function LineItem({
   skeleton,
   emphasized,
   icon: Icon,
+  strokeIcon = true,
   description,
   children,
   rightChildren,
@@ -245,7 +247,12 @@ export default function LineItem({
             !!(children && description) && "mt-0.5"
           )}
         >
-          <Icon className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])} />
+          <Icon
+            className={cn(
+              "h-[1rem] w-[1rem]",
+              strokeIcon && iconClassNames[variant]
+            )}
+          />
         </div>
       )}
       <Section alignItems="start" gap={0}>
