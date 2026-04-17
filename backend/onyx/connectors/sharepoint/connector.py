@@ -1958,7 +1958,7 @@ class SharepointConnector(
         self._graph_client = GraphClient(
             _acquire_token_for_graph, environment=self._azure_environment
         )
-        if auth_method == SharepointAuthMethod.CERTIFICATE.value:
+        if self.include_site_pages:
             self.sp_tenant_domain = self._resolve_tenant_domain()
         return None
 
