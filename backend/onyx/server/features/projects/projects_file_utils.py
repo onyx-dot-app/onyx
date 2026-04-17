@@ -9,6 +9,8 @@ from pydantic import ConfigDict
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -50,6 +52,48 @@ def get_upload_size_bytes(upload: UploadFile) -> int | None:
             f"error_type={type(e).__name__}, error={e})"
         )
         return None
+
+
+def count_pdf_embedded_images(upload: UploadFile, cap: int) -> int:
+    """Count embedded images in a PDF, short-circuiting at cap+1.
+
+    Used to reject PDFs whose image count would OOM the user-file-processing
+    worker during indexing. Returns ``cap + 1`` (or whatever the running count
+    is at the point we exceed) as a sentinel if the count exceeds the cap, so
+    callers do not iterate thousands of image objects just to report a number.
+    Returns 0 if the PDF cannot be parsed — the upstream extractor will raise
+    a clearer error in that case.
+
+    Always resets the file pointer before returning.
+    """
+    try:
+        from pypdf import PdfReader
+
+        upload.file.seek(0)
+        reader = PdfReader(upload.file)
+        if reader.is_encrypted:
+            # Encrypted PDFs cannot be inspected without the password. Let the
+            # password-protected check (which runs before this one) handle them
+            # and rely on the extraction-time cap as the backstop.
+            return 0
+        count = 0
+        for page in reader.pages:
+            for _ in page.images:
+                count += 1
+                if count > cap:
+                    return count
+        return count
+    except Exception as e:
+        logger.warning(
+            f"Failed to count embedded images in PDF "
+            f"'{get_safe_filename(upload)}': {type(e).__name__}: {e}"
+        )
+        return 0
+    finally:
+        try:
+            upload.file.seek(0)
+        except Exception:
+            pass
 
 
 def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
@@ -190,6 +234,11 @@ def categorize_uploaded_files(
         token_threshold_k * 1000 if token_threshold_k else None
     )  # 0 → None = no limit
 
+    # Running total of embedded images across PDFs in this batch. Once the
+    # aggregate cap is reached, subsequent PDFs in the same upload are
+    # rejected even if they'd individually fit under MAX_EMBEDDED_IMAGES_PER_FILE.
+    batch_image_total = 0
+
     for upload in files:
         try:
             filename = get_safe_filename(upload)
@@ -251,6 +300,44 @@ def categorize_uploaded_files(
                         )
                     )
                     continue
+
+                # Reject PDFs with an unreasonable number of embedded images
+                # (either per-file or accumulated across this upload batch).
+                # A PDF with thousands of embedded images can OOM the
+                # user-file-processing celery worker because every image is
+                # decoded with PIL and then sent to the vision LLM.
+                if extension == ".pdf":
+                    file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+                    batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
+                    # Use the larger of the two caps as the short-circuit
+                    # threshold so we get a useful count for both checks.
+                    count = count_pdf_embedded_images(upload, max(file_cap, batch_cap))
+                    if count > file_cap:
+                        results.rejected.append(
+                            RejectedFile(
+                                filename=filename,
+                                reason=(
+                                    f"PDF contains too many embedded images "
+                                    f"(more than {file_cap}). Try splitting "
+                                    f"the document into smaller files."
+                                ),
+                            )
+                        )
+                        continue
+                    if batch_image_total + count > batch_cap:
+                        results.rejected.append(
+                            RejectedFile(
+                                filename=filename,
+                                reason=(
+                                    f"Upload would exceed the "
+                                    f"{batch_cap}-image limit across all "
+                                    f"files in this batch. Try uploading "
+                                    f"fewer image-heavy files at once."
+                                ),
+                            )
+                        )
+                        continue
+                    batch_image_total += count
 
                 text_content = extract_file_text(
                     file=upload.file,
