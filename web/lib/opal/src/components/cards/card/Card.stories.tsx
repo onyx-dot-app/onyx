@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
-import { Card } from "@opal/components";
+import { Button, Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
@@ -113,7 +113,7 @@ export const Expandable: Story = {
           expandable
           expanded={open}
           border="solid"
-          content={
+          expandedContent={
             <div className="flex flex-col gap-2">
               <p>First model</p>
               <p>Second model</p>
@@ -121,13 +121,13 @@ export const Expandable: Story = {
             </div>
           }
         >
-          <button
-            type="button"
+          <Button
+            prominence="tertiary"
+            width="full"
             onClick={() => setOpen((v) => !v)}
-            className="w-full text-left"
           >
             Toggle (expanded={String(open)})
-          </button>
+          </Button>
         </Card>
       </div>
     );
@@ -139,14 +139,14 @@ export const ExpandableNoContent: Story = {
     const [open, setOpen] = useState(false);
     return (
       <div className="w-96">
-        <Card expandable expanded={open} border="solid" content={undefined}>
-          <button
-            type="button"
+        <Card expandable expanded={open} border="solid">
+          <Button
+            prominence="tertiary"
+            width="full"
             onClick={() => setOpen((v) => !v)}
-            className="w-full text-left"
           >
             Toggle (no content — renders like a plain card)
-          </button>
+          </Button>
         </Card>
       </div>
     );
@@ -166,15 +166,15 @@ export const ExpandableRoundingVariants: Story = {
             expanded={openKey === rounding}
             rounding={rounding}
             border="solid"
-            content={<p>content for rounding={rounding}</p>}
+            expandedContent={<p>content for rounding={rounding}</p>}
           >
-            <button
-              type="button"
+            <Button
+              prominence="tertiary"
+              width="full"
               onClick={() => setOpenKey(rounding)}
-              className="w-full text-left"
             >
               rounding={rounding} (click to expand)
-            </button>
+            </Button>
           </Card>
         ))}
       </div>

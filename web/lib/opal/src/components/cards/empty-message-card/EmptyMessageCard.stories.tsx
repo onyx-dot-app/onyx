@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { EmptyMessageCard } from "@opal/components";
-import { SvgSparkle, SvgUsers } from "@opal/icons";
+import { SvgActions, SvgServer, SvgSparkle, SvgUsers } from "@opal/icons";
 
 const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
 
@@ -26,6 +26,22 @@ export const WithCustomIcon: Story = {
   },
 };
 
+export const MainUi: Story = {
+  args: {
+    sizePreset: "main-ui",
+    title: "No Actions Found",
+    icon: SvgActions,
+    description: "Provide OpenAPI schema to preview actions here.",
+  },
+};
+
+export const MainUiNoDescription: Story = {
+  args: {
+    sizePreset: "main-ui",
+    title: "No Knowledge",
+  },
+};
+
 export const PaddingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
@@ -46,6 +62,12 @@ export const Multiple: Story = {
       <EmptyMessageCard title="No models available." />
       <EmptyMessageCard icon={SvgSparkle} title="No agents selected." />
       <EmptyMessageCard icon={SvgUsers} title="No groups added." />
+      <EmptyMessageCard
+        sizePreset="main-ui"
+        icon={SvgServer}
+        title="No Discord servers configured yet"
+        description="Create a server configuration to get started."
+      />
     </div>
   ),
 };

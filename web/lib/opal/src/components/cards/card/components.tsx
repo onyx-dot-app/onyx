@@ -3,6 +3,7 @@ import "@opal/components/cards/card/styles.css";
 import type {
   PaddingVariants,
   RoundingVariants,
+  SizeVariants,
   StatusVariants,
 } from "@opal/types";
 import {
@@ -37,7 +38,7 @@ type CardBaseProps = {
    * | `"fit"` | `p-0`   |
    *
    * In expandable mode, applied **only** to the header region. The
-   * `content` slot has no intrinsic padding — callers own any padding
+   * `expandedContent` slot has no intrinsic padding — callers own any padding
    * inside the content they pass in.
    *
    * @default "md"
@@ -55,7 +56,7 @@ type CardBaseProps = {
    * | `"lg"` | `rounded-16` |
    *
    * In expandable mode when expanded, rounding applies only to the header's
-   * top corners and the content's bottom corners so the two join seamlessly.
+   * top corners and the expandedContent's bottom corners so the two join seamlessly.
    * When collapsed, rounding applies to all four corners of the header.
    *
    * @default "md"
@@ -103,7 +104,7 @@ type CardBaseProps = {
 type CardPlainProps = CardBaseProps & {
   /**
    * When `false` (or omitted), renders a plain card — same behavior as before
-   * this prop existed. No fold behavior, no `content` slot.
+   * this prop existed. No fold behavior, no `expandedContent` slot.
    *
    * @default false
    */
@@ -113,7 +114,7 @@ type CardPlainProps = CardBaseProps & {
 type CardExpandableProps = CardBaseProps & {
   /**
    * Enables the expandable variant. Renders `children` as the always-visible
-   * header and `content` as the body that animates open/closed based on
+   * header and `expandedContent` as the body that animates open/closed based on
    * `expanded`.
    */
   expandable: true;
@@ -131,7 +132,16 @@ type CardExpandableProps = CardBaseProps & {
    * when `expanded` changes. If `undefined`, the card behaves visually like
    * a plain card (no divider, no bottom slot).
    */
-  content?: React.ReactNode;
+  expandedContent?: React.ReactNode;
+
+  /**
+   * Max-height constraint on the expandable content area.
+   * - `"md"` (default): caps at 20rem with vertical scroll.
+   * - `"fit"`: no max-height — content takes its natural height.
+   *
+   * @default "md"
+   */
+  expandableContentHeight?: Extract<SizeVariants, "md" | "fit">;
 };
 
 type CardProps = CardPlainProps | CardExpandableProps;
@@ -149,7 +159,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  *   Same shape as the original Card.
  *
  * - **Expandable** (`expandable: true`): renders `children` as the header
- *   region and the `content` prop as an animating body below. Fold state is
+ *   region and the `expandedContent` prop as an animating body below. Fold state is
  *   fully controlled via the `expanded` prop — Card does not own state and
  *   does not wire a click trigger. Callers attach their own
  *   `onClick={() => setExpanded(v => !v)}` to whatever element they want to
@@ -168,7 +178,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * <Card
  *   expandable
  *   expanded={open}
- *   content={<ModelList />}
+ *   expandedContent={<ModelList />}
  *   border="solid"
  * >
  *   <button onClick={() => setOpen(v => !v)}>Toggle</button>
@@ -204,8 +214,12 @@ function Card(props: CardProps) {
   }
 
   // Expandable mode
-  const { expanded = false, content } = props;
-  const showContent = expanded && content !== undefined;
+  const {
+    expanded = false,
+    expandedContent,
+    expandableContentHeight = "md",
+  } = props;
+  const showContent = expanded && expandedContent !== undefined;
   const headerRounding = showContent
     ? cardTopRoundingVariants[roundingProp]
     : cardRoundingVariants[roundingProp];
@@ -220,7 +234,7 @@ function Card(props: CardProps) {
       >
         {children}
       </div>
-      {content !== undefined && (
+      {expandedContent !== undefined && (
         <div
           className="opal-card-expandable-wrapper"
           data-expanded={showContent ? "true" : "false"}
@@ -233,8 +247,9 @@ function Card(props: CardProps) {
               )}
               data-border={border}
               data-opal-status-border={borderColor}
+              data-content-height={expandableContentHeight}
             >
-              {content}
+              {expandedContent}
             </div>
           </div>
         </div>

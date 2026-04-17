@@ -72,24 +72,24 @@ function Header({
   bottomRightChildren,
   bottomChildren,
 }: CardHeaderProps) {
-  const hasRight = topRightChildren || bottomRightChildren;
+  const hasRight = topRightChildren != null || bottomRightChildren != null;
 
   return (
     <div className="flex flex-col w-full">
       <div className="flex flex-row items-start w-full">
-        {headerChildren && (
+        {headerChildren != null && (
           <div className="self-start p-2 grow min-w-0">{headerChildren}</div>
         )}
         {hasRight && (
           <div className="flex flex-col items-end shrink-0">
-            {topRightChildren && <div>{topRightChildren}</div>}
-            {bottomRightChildren && (
+            {topRightChildren != null && <div>{topRightChildren}</div>}
+            {bottomRightChildren != null && (
               <div className="flex flex-row">{bottomRightChildren}</div>
             )}
           </div>
         )}
       </div>
-      {bottomChildren && <div className="w-full">{bottomChildren}</div>}
+      {bottomChildren != null && <div className="w-full">{bottomChildren}</div>}
     </div>
   );
 }

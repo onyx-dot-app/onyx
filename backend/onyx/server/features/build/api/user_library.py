@@ -40,6 +40,8 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -51,6 +53,9 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
@@ -126,6 +131,49 @@ class DeleteFileResponse(BaseModel):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def _looks_like_pdf(filename: str, content_type: str | None) -> bool:
+    """True if either the filename or the content-type indicates a PDF.
+
+    Client-supplied ``content_type`` can be spoofed (e.g. a PDF uploaded with
+    ``Content-Type: application/octet-stream``), so we also fall back to
+    extension-based detection via ``mimetypes.guess_type`` on the filename.
+    """
+    if content_type == "application/pdf":
+        return True
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed == "application/pdf"
+
+
+def _check_pdf_image_caps(
+    filename: str, content: bytes, content_type: str | None, batch_total: int
+) -> int:
+    """Enforce per-file and per-batch embedded-image caps for PDFs.
+
+    Returns the number of embedded images in this file (0 for non-PDFs) so
+    callers can update their running batch total. Raises OnyxError(INVALID_INPUT)
+    if either cap is exceeded.
+    """
+    if not _looks_like_pdf(filename, content_type):
+        return 0
+    file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+    batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
+    # Short-circuit at the larger cap so we get a useful count for both checks.
+    count = count_pdf_embedded_images(BytesIO(content), max(file_cap, batch_cap))
+    if count > file_cap:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"PDF '{filename}' contains too many embedded images "
+            f"(more than {file_cap}). Try splitting the document into smaller files.",
+        )
+    if batch_total + count > batch_cap:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Upload would exceed the {batch_cap}-image limit across all "
+            f"files in this batch. Try uploading fewer image-heavy files at once.",
+        )
+    return count
 
 
 def _sanitize_path(path: str) -> str:
@@ -356,6 +404,7 @@ async def upload_files(
 
     uploaded_entries: list[LibraryEntryResponse] = []
     total_size = 0
+    batch_image_total = 0
     now = datetime.now(timezone.utc)
 
     # Sanitize the base path
@@ -374,6 +423,14 @@ async def upload_files(
                 status_code=400,
                 detail=f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB",
             )
+
+        # Reject PDFs with an unreasonable per-file or per-batch image count
+        batch_image_total += _check_pdf_image_caps(
+            filename=file.filename or "unnamed",
+            content=content,
+            content_type=file.content_type,
+            batch_total=batch_image_total,
+        )
 
         # Validate cumulative storage (existing + this upload batch)
         total_size += file_size
@@ -473,6 +530,7 @@ async def upload_zip(
 
     uploaded_entries: list[LibraryEntryResponse] = []
     total_size = 0
+    batch_image_total = 0
 
     # Extract zip contents into a subfolder named after the zip file
     zip_name = api_sanitize_filename(file.filename or "upload")
@@ -510,6 +568,36 @@ async def upload_zip(
                 if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
                     logger.warning(f"Skipping '{zip_info.filename}' - exceeds max size")
                     continue
+
+                # Skip PDFs that would trip the per-file or per-batch image
+                # cap (would OOM the user-file-processing worker). Matches
+                # /upload behavior but uses skip-and-warn to stay consistent
+                # with the zip path's handling of oversized files.
+                zip_file_name = zip_info.filename.split("/")[-1]
+                zip_content_type, _ = mimetypes.guess_type(zip_file_name)
+                if zip_content_type == "application/pdf":
+                    image_count = count_pdf_embedded_images(
+                        BytesIO(file_content),
+                        max(
+                            MAX_EMBEDDED_IMAGES_PER_FILE,
+                            MAX_EMBEDDED_IMAGES_PER_UPLOAD,
+                        ),
+                    )
+                    if image_count > MAX_EMBEDDED_IMAGES_PER_FILE:
+                        logger.warning(
+                            "Skipping '%s' - exceeds %d per-file embedded-image cap",
+                            zip_info.filename,
+                            MAX_EMBEDDED_IMAGES_PER_FILE,
+                        )
+                        continue
+                    if batch_image_total + image_count > MAX_EMBEDDED_IMAGES_PER_UPLOAD:
+                        logger.warning(
+                            "Skipping '%s' - would exceed %d per-batch embedded-image cap",
+                            zip_info.filename,
+                            MAX_EMBEDDED_IMAGES_PER_UPLOAD,
+                        )
+                        continue
+                    batch_image_total += image_count
 
                 total_size += file_size
 

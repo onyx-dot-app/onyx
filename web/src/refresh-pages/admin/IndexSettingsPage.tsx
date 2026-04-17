@@ -225,7 +225,7 @@ export default function IndexSettingsPage() {
                 border="solid"
                 rounding="lg"
                 padding="sm"
-                content={
+                expandedContent={
                   <div className="p-4">
                     <Content
                       title="All models"

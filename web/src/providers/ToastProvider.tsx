@@ -12,11 +12,11 @@ const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 
 const LEVEL_TO_VARIANT: Record<ToastLevel, StatusVariants> = {
-  default: "default",
   success: "success",
   error: "error",
   warning: "warning",
   info: "info",
+  default: "default",
 };
 
 function buildDescription(t: Toast): string | undefined {

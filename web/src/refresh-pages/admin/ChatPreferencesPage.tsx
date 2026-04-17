@@ -33,7 +33,7 @@ import {
 } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -112,7 +112,7 @@ function MCPServerCard({
       border="solid"
       rounding="lg"
       padding="fit"
-      content={
+      expandedContent={
         hasContent ? (
           <ActionsLayouts.Content>
             <div className="flex flex-col gap-2">
@@ -682,7 +682,10 @@ function ChatPreferencesForm() {
                     gap={0.25}
                   >
                     {uniqueSources.length === 0 ? (
-                      <EmptyMessage title="No connectors set up" />
+                      <EmptyMessageCard
+                        sizePreset="main-ui"
+                        title="No connectors set up"
+                      />
                     ) : (
                       <>
                         <Section

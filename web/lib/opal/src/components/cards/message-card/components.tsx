@@ -1,5 +1,6 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/message-card/styles.css";
+import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -124,28 +125,23 @@ function MessageCard({
   const Icon = iconOverride ?? DefaultIcon;
 
   const right = onClose ? (
-    <div className="p-1.5">
-      <Button
-        icon={SvgX}
-        prominence="internal"
-        size="sm"
-        onClick={onClose}
-        aria-label="Close"
-      />
-    </div>
+    <Button
+      icon={SvgX}
+      prominence="internal"
+      size="md"
+      onClick={onClose}
+      aria-label="Close"
+    />
   ) : (
     rightChildren
   );
 
   return (
-    <div
-      className="opal-message-card"
-      data-variant={variant}
-      data-opal-status-border={variant}
-      ref={ref}
-    >
+    <div className="opal-message-card" data-variant={variant} ref={ref}>
       <ContentAction
-        icon={(props) => <Icon {...props} className={iconClass} />}
+        icon={(props) => (
+          <Icon {...props} className={cn(props.className, iconClass)} />
+        )}
         title={title}
         description={description}
         sizePreset="main-ui"
@@ -156,7 +152,7 @@ function MessageCard({
 
       {bottomChildren && (
         <>
-          <Divider paddingParallel="fit" paddingPerpendicular="xs" />
+          <Divider paddingParallel="sm" paddingPerpendicular="xs" />
           {bottomChildren}
         </>
       )}

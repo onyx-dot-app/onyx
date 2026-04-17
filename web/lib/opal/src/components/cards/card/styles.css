@@ -110,8 +110,14 @@
       keeping it visually distinct from the header. ─ */
 
 .opal-card-expandable-body {
-  @apply w-full overflow-clip bg-transparent;
+  @apply w-full bg-transparent;
 }
+
+.opal-card-expandable-body[data-content-height="md"] {
+  @apply max-h-[20rem] overflow-y-auto;
+}
+
+/* "fit" = no constraint; natural height, no scroll. */
 
 .opal-card-expandable-body[data-border="none"] {
   border: none;
