@@ -1,4 +1,4 @@
-import copy
+from collections.abc import Generator
 from collections.abc import Generator
 from typing import Any
 
