@@ -1,6 +1,7 @@
 import io
 from typing import cast
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
@@ -319,6 +320,17 @@ class TestXlsxSheetExtraction:
         at debug (not warning) and still return []."""
         bad_file = io.BytesIO(b"not a zip file")
         sheets = xlsx_sheet_extraction(bad_file, file_name="~$temp.xlsx")
+        assert sheets == []
+
+    def test_known_openpyxl_bug_max_value_returns_empty(self) -> None:
+        """openpyxl's strict descriptor validation rejects font family
+        values >14 with 'Max value is 14'. Treat as a known openpyxl bug
+        and skip the file rather than fail the whole connector batch."""
+        with patch(
+            "onyx.file_processing.extract_file_text.openpyxl.load_workbook",
+            side_effect=ValueError("Max value is 14"),
+        ):
+            sheets = xlsx_sheet_extraction(io.BytesIO(b""), file_name="bad_font.xlsx")
         assert sheets == []
 
     def test_csv_content_matches_xlsx_to_text_per_sheet(self) -> None:
