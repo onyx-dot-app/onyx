@@ -3,6 +3,7 @@ import "@opal/components/cards/card/styles.css";
 import type {
   PaddingVariants,
   RoundingVariants,
+  SizeVariants,
   StatusVariants,
 } from "@opal/types";
 import {
@@ -132,6 +133,15 @@ type CardExpandableProps = CardBaseProps & {
    * a plain card (no divider, no bottom slot).
    */
   expandedContent?: React.ReactNode;
+
+  /**
+   * Max-height constraint on the expandable content area.
+   * - `"md"` (default): caps at 20rem with vertical scroll.
+   * - `"fit"`: no max-height — content takes its natural height.
+   *
+   * @default "md"
+   */
+  expandableContentHeight?: Extract<SizeVariants, "md" | "fit">;
 };
 
 type CardProps = CardPlainProps | CardExpandableProps;
@@ -204,7 +214,11 @@ function Card(props: CardProps) {
   }
 
   // Expandable mode
-  const { expanded = false, expandedContent } = props;
+  const {
+    expanded = false,
+    expandedContent,
+    expandableContentHeight = "md",
+  } = props;
   const showContent = expanded && expandedContent !== undefined;
   const headerRounding = showContent
     ? cardTopRoundingVariants[roundingProp]
@@ -233,6 +247,7 @@ function Card(props: CardProps) {
               )}
               data-border={border}
               data-opal-status-border={borderColor}
+              data-content-height={expandableContentHeight}
             >
               {expandedContent}
             </div>

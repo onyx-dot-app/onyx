@@ -256,17 +256,21 @@ export default function ImageGenerationContent() {
                     }
                   >
                     <Card.Header
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={() => (
-                        <ModelIcon
-                          provider={provider.provider_name}
-                          size={16}
+                      headerChildren={
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          icon={() => (
+                            <ModelIcon
+                              provider={provider.provider_name}
+                              size={16}
+                            />
+                          )}
+                          title={provider.title}
+                          description={provider.description}
                         />
-                      )}
-                      title={provider.title}
-                      description={provider.description}
-                      rightChildren={
+                      }
+                      topRightChildren={
                         isDisconnected ? (
                           <Button
                             prominence="tertiary"
