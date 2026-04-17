@@ -33,13 +33,11 @@ def _make_mock_msal() -> MagicMock:
     return mock_app
 
 
-@patch("onyx.connectors.sharepoint.connector.load_certificate_from_pfx")
 @patch("onyx.connectors.sharepoint.connector.msal.ConfidentialClientApplication")
 @patch("onyx.connectors.sharepoint.connector.GraphClient")
 def test_client_secret_with_site_pages_sets_tenant_domain(
     _mock_graph_client: MagicMock,
     mock_msal_cls: MagicMock,
-    _mock_load_cert: MagicMock,
 ) -> None:
     """client_secret auth + include_site_pages=True must resolve sp_tenant_domain."""
     mock_msal_cls.return_value = _make_mock_msal()
@@ -52,17 +50,18 @@ def test_client_secret_with_site_pages_sets_tenant_domain(
 
 @patch("onyx.connectors.sharepoint.connector.msal.ConfidentialClientApplication")
 @patch("onyx.connectors.sharepoint.connector.GraphClient")
-def test_client_secret_without_site_pages_leaves_tenant_domain_none(
+def test_client_secret_without_site_pages_still_sets_tenant_domain(
     _mock_graph_client: MagicMock,
     mock_msal_cls: MagicMock,
 ) -> None:
-    """client_secret auth + include_site_pages=False must leave sp_tenant_domain as None."""
+    """client_secret auth + include_site_pages=False must still resolve sp_tenant_domain
+    because _create_rest_client_context is also called for drive items."""
     mock_msal_cls.return_value = _make_mock_msal()
     connector = SharepointConnector(sites=[SITE_URL], include_site_pages=False)
 
     connector.load_credentials(CLIENT_SECRET_CREDS)
 
-    assert connector.sp_tenant_domain is None
+    assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
 
 
 @patch("onyx.connectors.sharepoint.connector.load_certificate_from_pfx")
@@ -73,10 +72,29 @@ def test_certificate_with_site_pages_sets_tenant_domain(
     mock_msal_cls: MagicMock,
     mock_load_cert: MagicMock,
 ) -> None:
-    """certificate auth + include_site_pages=True must still resolve sp_tenant_domain."""
+    """certificate auth + include_site_pages=True must resolve sp_tenant_domain."""
     mock_msal_cls.return_value = _make_mock_msal()
     mock_load_cert.return_value = MagicMock()
     connector = SharepointConnector(sites=[SITE_URL], include_site_pages=True)
+
+    connector.load_credentials(CERTIFICATE_CREDS)
+
+    assert connector.sp_tenant_domain == EXPECTED_TENANT_DOMAIN
+
+
+@patch("onyx.connectors.sharepoint.connector.load_certificate_from_pfx")
+@patch("onyx.connectors.sharepoint.connector.msal.ConfidentialClientApplication")
+@patch("onyx.connectors.sharepoint.connector.GraphClient")
+def test_certificate_without_site_pages_sets_tenant_domain(
+    _mock_graph_client: MagicMock,
+    mock_msal_cls: MagicMock,
+    mock_load_cert: MagicMock,
+) -> None:
+    """certificate auth + include_site_pages=False must still resolve sp_tenant_domain
+    because _create_rest_client_context is also called for drive items."""
+    mock_msal_cls.return_value = _make_mock_msal()
+    mock_load_cert.return_value = MagicMock()
+    connector = SharepointConnector(sites=[SITE_URL], include_site_pages=False)
 
     connector.load_credentials(CERTIFICATE_CREDS)
 
