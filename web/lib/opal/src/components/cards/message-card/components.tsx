@@ -3,9 +3,11 @@ import "@opal/components/cards/message-card/styles.css";
 import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
+  PaddingVariants,
   RichStr,
   StatusVariants,
 } from "@opal/types";
+import { paddingVariants } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
@@ -32,6 +34,9 @@ interface MessageCardBaseProps {
 
   /** Optional description below the title. */
   description?: string | RichStr;
+
+  /** Padding preset. @default "sm" */
+  padding?: Extract<PaddingVariants, "sm" | "xs">;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -116,6 +121,7 @@ function MessageCard({
   icon: iconOverride,
   title,
   description,
+  padding = "sm",
   bottomChildren,
   rightChildren,
   onClose,
@@ -137,7 +143,11 @@ function MessageCard({
   );
 
   return (
-    <div className="opal-message-card" data-variant={variant} ref={ref}>
+    <div
+      className={cn("opal-message-card", paddingVariants[padding])}
+      data-variant={variant}
+      ref={ref}
+    >
       <ContentAction
         icon={(props) => (
           <Icon {...props} className={cn(props.className, iconClass)} />
@@ -146,7 +156,7 @@ function MessageCard({
         description={description}
         sizePreset="main-ui"
         variant="section"
-        paddingVariant="lg"
+        paddingVariant="md"
         rightChildren={right}
       />
 
