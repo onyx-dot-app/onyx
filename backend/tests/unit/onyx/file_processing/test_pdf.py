@@ -12,6 +12,9 @@ dependency on pypdf internals (pypdf.generic).
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
+from onyx.file_processing import extract_file_text
 from onyx.file_processing.extract_file_text import pdf_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
@@ -95,6 +98,42 @@ class TestReadPdfFile:
         assert len(collected[0][0]) > 0
         # Returned list is empty when callback is used
         assert images == []
+
+    def test_image_cap_skips_images_above_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the embedded-image cap is exceeded, remaining images are skipped.
+
+        The cap protects the user-file-processing worker from OOMing on PDFs
+        with thousands of embedded images. Setting the cap to 0 should yield
+        zero extracted images even though the fixture has one.
+        """
+        monkeypatch.setattr(extract_file_text, "MAX_EMBEDDED_IMAGES_PER_FILE", 0)
+        _, _, images = read_pdf_file(_load("with_image.pdf"), extract_images=True)
+        assert images == []
+
+    def test_image_cap_at_limit_extracts_up_to_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cap >= image count behaves identically to the uncapped path."""
+        monkeypatch.setattr(extract_file_text, "MAX_EMBEDDED_IMAGES_PER_FILE", 100)
+        _, _, images = read_pdf_file(_load("with_image.pdf"), extract_images=True)
+        assert len(images) == 1
+
+    def test_image_cap_with_callback_stops_streaming_at_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The cap also short-circuits the streaming callback path."""
+        monkeypatch.setattr(extract_file_text, "MAX_EMBEDDED_IMAGES_PER_FILE", 0)
+        collected: list[tuple[bytes, str]] = []
+
+        def callback(data: bytes, name: str) -> None:
+            collected.append((data, name))
+
+        read_pdf_file(
+            _load("with_image.pdf"), extract_images=True, image_callback=callback
+        )
+        assert collected == []
 
 
 # ── pdf_to_text ──────────────────────────────────────────────────────────

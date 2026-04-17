@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -126,6 +127,54 @@ class DeleteFileResponse(BaseModel):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def _count_pdf_embedded_images(content: bytes, cap: int) -> int:
+    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
+
+    Used to reject PDFs whose image count would OOM the user-file-processing
+    worker during indexing. Returns ``cap + 1`` as a sentinel if the count
+    exceeds the cap, so callers do not iterate thousands of image objects just
+    to report a number. Returns 0 if the PDF cannot be parsed — the downstream
+    indexing pipeline handles malformed PDFs separately.
+    """
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(BytesIO(content))
+        if reader.is_encrypted:
+            # Encrypted PDFs cannot be inspected without the password. Let the
+            # indexing pipeline handle them (it has decrypt-with-empty-password
+            # fallback) and rely on the extraction-time cap as the backstop.
+            return 0
+        count = 0
+        for page in reader.pages:
+            for _ in page.images:
+                count += 1
+                if count > cap:
+                    return count
+        return count
+    except Exception:
+        logger.exception("Failed to count embedded images in PDF")
+        return 0
+
+
+def _reject_if_too_many_embedded_images(
+    filename: str, content: bytes, content_type: str | None
+) -> None:
+    """Raise HTTPException(400) if the PDF has more embedded images than the cap."""
+    if content_type != "application/pdf":
+        return
+    cap = MAX_EMBEDDED_IMAGES_PER_FILE
+    count = _count_pdf_embedded_images(content, cap)
+    if count > cap:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"PDF '{filename}' contains too many embedded images "
+                f"(more than {cap}). Consider splitting or compressing the file."
+            ),
+        )
 
 
 def _sanitize_path(path: str) -> str:
@@ -375,6 +424,13 @@ async def upload_files(
                 detail=f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB",
             )
 
+        # Reject PDFs with an unreasonable number of embedded images
+        _reject_if_too_many_embedded_images(
+            filename=file.filename or "unnamed",
+            content=content,
+            content_type=file.content_type,
+        )
+
         # Validate cumulative storage (existing + this upload batch)
         total_size += file_size
         if existing_usage + total_size > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
@@ -510,6 +566,26 @@ async def upload_zip(
                 if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
                     logger.warning(f"Skipping '{zip_info.filename}' - exceeds max size")
                     continue
+
+                # Skip PDFs with an unreasonable number of embedded images (would
+                # OOM the user-file-processing worker). Matches /upload behavior
+                # but uses skip-and-warn to stay consistent with the zip path's
+                # handling of oversized files.
+                zip_file_name = zip_info.filename.split("/")[-1]
+                zip_content_type, _ = mimetypes.guess_type(zip_file_name)
+                if zip_content_type == "application/pdf":
+                    if (
+                        _count_pdf_embedded_images(
+                            file_content, MAX_EMBEDDED_IMAGES_PER_FILE
+                        )
+                        > MAX_EMBEDDED_IMAGES_PER_FILE
+                    ):
+                        logger.warning(
+                            "Skipping '%s' - exceeds %d embedded-image cap",
+                            zip_info.filename,
+                            MAX_EMBEDDED_IMAGES_PER_FILE,
+                        )
+                        continue
 
                 total_size += file_size
 

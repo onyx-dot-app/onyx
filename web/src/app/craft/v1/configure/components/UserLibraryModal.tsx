@@ -271,6 +271,17 @@ export default function UserLibraryModal({
                   />
                 </Section>
 
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  padding={0.5}
+                  height="fit"
+                >
+                  <Text secondaryBody text03>
+                    PDFs with more than 500 embedded images are not supported.
+                  </Text>
+                </Section>
+
                 {isLoading ? (
                   <Section padding={2} height="fit">
                     <Text secondaryBody text03>

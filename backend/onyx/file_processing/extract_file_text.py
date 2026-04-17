@@ -23,6 +23,7 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image
 
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -254,8 +255,27 @@ def read_pdf_file(
         )
 
         if extract_images:
+            image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+            images_processed = 0
+            cap_reached = False
             for page_num, page in enumerate(pdf_reader.pages):
+                if cap_reached:
+                    break
                 for image_file_object in page.images:
+                    if images_processed >= image_cap:
+                        # Defense-in-depth backstop. Upload-time validation
+                        # should have rejected files exceeding the cap, but
+                        # we also break here so a single oversized file can
+                        # never pin a worker.
+                        logger.warning(
+                            "PDF embedded image cap reached (%d). "
+                            "Skipping remaining images on page %d and beyond.",
+                            image_cap,
+                            page_num + 1,
+                        )
+                        cap_reached = True
+                        break
+
                     image = Image.open(io.BytesIO(image_file_object.data))
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format=image.format)
@@ -268,6 +288,7 @@ def read_pdf_file(
                         image_callback(img_bytes, image_name)
                     else:
                         extracted_images.append((img_bytes, image_name))
+                    images_processed += 1
 
         return text, metadata, extracted_images
 
