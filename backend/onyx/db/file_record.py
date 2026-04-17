@@ -62,6 +62,21 @@ def delete_filerecord_by_file_id(
     db_session.query(FileRecord).filter_by(file_id=file_id).delete()
 
 
+def update_filerecord_origin(
+    file_id: str,
+    from_origin: FileOrigin,
+    to_origin: FileOrigin,
+    db_session: Session,
+) -> None:
+    """Change a file_record's `file_origin`, filtered on the current origin
+    so the update is idempotent. Caller owns the commit.
+    """
+    db_session.query(FileRecord).filter(
+        FileRecord.file_id == file_id,
+        FileRecord.file_origin == from_origin,
+    ).update({FileRecord.file_origin: to_origin})
+
+
 def upsert_filerecord(
     file_id: str,
     display_name: str,

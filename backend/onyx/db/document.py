@@ -696,6 +696,7 @@ def upsert_documents(
                         else {}
                     ),
                     doc_metadata=doc.doc_metadata,
+                    file_id=doc.file_id,
                 )
             )
             for doc in seen_documents.values()
@@ -712,6 +713,7 @@ def upsert_documents(
         "secondary_owners": insert_stmt.excluded.secondary_owners,
         "doc_metadata": insert_stmt.excluded.doc_metadata,
         "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
+        "file_id": insert_stmt.excluded.file_id,
     }
     if includes_permissions:
         # Use COALESCE to preserve existing permissions when new values are NULL.
