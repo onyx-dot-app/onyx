@@ -69,7 +69,7 @@ _embedding_input_chars_total = Counter(
 _embeddings_in_progress = Gauge(
     "onyx_embeddings_in_progress",
     "Number of embedding batches currently in-flight.",
-    [PROVIDER_LABEL_NAME],
+    [PROVIDER_LABEL_NAME, TEXT_TYPE_LABEL_NAME],
 )
 
 
