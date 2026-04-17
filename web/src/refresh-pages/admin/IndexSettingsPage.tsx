@@ -16,23 +16,30 @@ import {
   Divider,
   LinkButton,
   MessageCard,
+  SelectCard,
 } from "@opal/components";
 import { SvgCloud, SvgFold, SvgServer, SvgSettings } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
+import type { IconFunctionComponent } from "@opal/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { SavedSearchSettings } from "@/lib/indexing/interfaces";
 import {
+  SavedSearchSettings,
+  CloudEmbeddingModel,
+  CloudEmbeddingProvider,
+} from "@/lib/indexing/interfaces";
+import {
+  CLOUD_EMBEDDING_PROVIDERS,
   findCloudProvider,
   getCurrentModelCopy,
   getEmbeddingProvider,
+  getFormattedProviderName,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
-
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
@@ -86,6 +93,64 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         </LinkButton>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Embedding model picker components
+// ---------------------------------------------------------------------------
+
+interface ProviderGroupProps {
+  provider: CloudEmbeddingProvider;
+}
+
+function ProviderGroup({ provider }: ProviderGroupProps) {
+  return (
+    <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
+      <div className="w-full h-[2.25rem]">
+        <Content
+          icon={provider.icon}
+          title={getFormattedProviderName(provider.provider_type)}
+          sizePreset="secondary"
+          variant="section"
+        />
+      </div>
+      {provider.embedding_models.map((model) => (
+        <EmbeddingModelCard
+          key={model.model_name}
+          model={model}
+          providerIcon={provider.icon}
+        />
+      ))}
+    </GeneralLayouts.Section>
+  );
+}
+
+interface EmbeddingModelCardProps {
+  model: CloudEmbeddingModel;
+  providerIcon: IconFunctionComponent;
+}
+
+function EmbeddingModelCard({ model, providerIcon }: EmbeddingModelCardProps) {
+  return (
+    <SelectCard state="filled" rounding="md" padding="xs">
+      <CardLayout.Header
+        headerChildren={
+          <div className="flex flex-col">
+            <Content
+              icon={providerIcon}
+              title={model.model_name}
+              description={model.description}
+              sizePreset="main-ui"
+              variant="section"
+            />
+            <div className="flex flex-row px-6 pt-2 gap-4">
+              <EmbeddingProviderInfo providerType={model.provider_type} />
+            </div>
+          </div>
+        }
+      />
+    </SelectCard>
   );
 }
 
@@ -227,14 +292,16 @@ export default function IndexSettingsPage() {
                 rounding="lg"
                 padding={viewAllModelsOpen ? "fit" : "sm"}
                 expandedContent={
-                  <div className="p-4">
-                    <Content
-                      title="All models"
-                      description="Placeholder — cloud-hosted and self-hosted model lists grouped by provider."
-                      sizePreset="main-content"
-                      variant="section"
-                    />
-                  </div>
+                  <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                    {Object.values(CLOUD_EMBEDDING_PROVIDERS)
+                      .filter((p) => p.embedding_models.length > 0)
+                      .map((provider) => (
+                        <ProviderGroup
+                          key={provider.provider_type}
+                          provider={provider}
+                        />
+                      ))}
+                  </GeneralLayouts.Section>
                 }
               >
                 <CardLayout.Header
@@ -247,7 +314,7 @@ export default function IndexSettingsPage() {
                           leftSearchIcon
                         />
                         <Button
-                          prominence="tertiary"
+                          prominence="internal"
                           onClick={() => setViewAllModelsOpen(false)}
                           rightIcon={SvgFold}
                         >
