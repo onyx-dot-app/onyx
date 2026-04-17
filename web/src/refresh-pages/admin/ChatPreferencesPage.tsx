@@ -1093,6 +1093,7 @@ export default function ChatPreferencesPage() {
                   <MessageCard
                     title="Modify with caution."
                     description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                    padding="xs"
                   />
                 </Modal.Body>
                 <Modal.Footer>
