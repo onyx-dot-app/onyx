@@ -12,7 +12,7 @@ dependencies = [
     "cohere==5.6.1",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm==1.81.6",
+    "litellm[google]==1.81.6",
     "openai==2.14.0",
     "pydantic==2.11.7",
     "prometheus_client>=0.21.1",
