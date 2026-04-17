@@ -3,8 +3,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Text } from "@opal/components";
-import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
+import { LineItemButton, Text } from "@opal/components";
+import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
@@ -15,6 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import { cn } from "@opal/utils";
 
 export interface ModelListContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
@@ -114,20 +115,20 @@ export default function ModelListContent({
       capabilities.length > 0 ? capabilities.join(", ") : undefined;
 
     return (
-      <LineItem
+      <LineItemButton
         key={`${option.provider}:${option.modelName}`}
-        selected={selected}
-        disabled={disabled}
+        state={selected ? "selected" : "empty"}
+        title={option.displayName}
         description={description}
         onClick={() => onSelect(option)}
         rightChildren={
           selected ? (
-            <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+            <SvgCheck className="text-action-link-05" size={16} />
           ) : null
         }
-      >
-        {option.displayName}
-      </LineItem>
+        sizePreset="main-ui"
+        roundingVariant="sm"
+      />
     );
   };
 
@@ -169,20 +170,26 @@ export default function ModelListContent({
                       onOpenChange={() => toggleGroup(group.key)}
                     >
                       <CollapsibleTrigger asChild>
-                        <LineItem
-                          muted
+                        <LineItemButton
+                          sizePreset="secondary"
+                          variant="body"
+                          prominence="muted"
                           icon={group.Icon}
-                          strokeIcon={false}
+                          title={group.displayName}
                           rightChildren={
-                            open ? (
-                              <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
-                            ) : (
-                              <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
-                            )
+                            <div className="flex flex-col h-full justify-center">
+                              <SvgChevronRight
+                                className={cn(
+                                  "text-text-04 transition-all",
+                                  open && "rotate-90"
+                                )}
+                                size={16}
+                              />
+                            </div>
                           }
-                        >
-                          {group.displayName}
-                        </LineItem>
+                          roundingVariant="sm"
+                          nonInteractive
+                        />
                       </CollapsibleTrigger>
 
                       <CollapsibleContent>
