@@ -1320,7 +1320,12 @@ def get_lm_studio_available_models(
             name=request.provider_name, db_session=db_session
         )
         if existing_provider and existing_provider.custom_config:
-            stored_base = (existing_provider.api_base or "").strip().rstrip("/")
+            stored_base = (
+                (existing_provider.api_base or "")
+                .strip()
+                .rstrip("/")
+                .removesuffix("/v1")
+            )
             if stored_base == cleaned_api_base:
                 api_key = existing_provider.custom_config.get(
                     LM_STUDIO_API_KEY_CONFIG_KEY
@@ -1476,10 +1481,11 @@ def _get_litellm_models_response(api_key: str | None, api_base: str) -> dict:
     url = f"{cleaned_api_base}/v1/models"
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "Onyx",
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
