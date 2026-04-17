@@ -131,6 +131,7 @@ function KnowledgeSidebar({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 selected={isActive}
                 emphasized={isActive || isSelected || selectionCount > 0}
@@ -720,6 +721,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 emphasized={isSelected || selectionCount > 0}
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
