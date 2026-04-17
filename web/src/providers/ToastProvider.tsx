@@ -54,7 +54,7 @@ function ToastContainer() {
       className={cn(
         "fixed bottom-4 right-4 z-[10000]",
         "flex flex-col gap-2 items-end",
-        "max-w-[420px]"
+        "w-[420px]"
       )}
     >
       {visible.map((t) => {
@@ -66,7 +66,7 @@ function ToastContainer() {
           <div
             key={t.id}
             className={cn(
-              "shadow-02 rounded-12",
+              "w-full",
               t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
