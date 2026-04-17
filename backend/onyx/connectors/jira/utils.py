@@ -62,18 +62,32 @@ def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
 def extract_text_from_adf(adf: dict | None) -> str:
     """Extracts plain text from Atlassian Document Format:
     https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/
-
-    WARNING: This function is incomplete and will e.g. skip lists!
     """
-    # TODO: complete this function
+    if adf is None:
+        return ""
+
     texts = []
-    if adf is not None and "content" in adf:
-        for block in adf["content"]:
-            if "content" in block:
-                for item in block["content"]:
-                    if item["type"] == "text":
-                        texts.append(item["text"])
-    return " ".join(texts)
+
+    def _traverse(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+
+        node_type = node.get("type")
+        if node_type == "text":
+            if "text" in node:
+                texts.append(node["text"])
+        elif node_type == "hardBreak":
+            texts.append("\n")
+        elif node_type == "paragraph":
+            texts.append("\n")
+
+        # Recursively traverse content
+        if "content" in node:
+            for child in node["content"]:
+                _traverse(child)
+
+    _traverse(adf)
+    return "".join(texts).strip()
 
 
 def build_jira_url(jira_base_url: str, issue_key: str) -> str:

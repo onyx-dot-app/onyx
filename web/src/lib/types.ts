@@ -544,6 +544,7 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  JiraServiceManagement = "jira_service_management",
 
   // Craft-specific sources
   CraftFile = "craft_file",
