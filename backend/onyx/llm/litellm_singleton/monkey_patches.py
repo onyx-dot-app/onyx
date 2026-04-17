@@ -20,8 +20,6 @@ Status checked against LiteLLM v1.83.0 (2026-03-31):
      separating different summary_index sections
    - Our patch inserts "\\n\\n" when the summary_index changes
    STATUS: STILL NEEDED - Upstream does not insert separators between summary sections.
-   NOTE: The original Patch 2 also fixed parallel tool calls (hardcoded index=0) and
-         premature finish_reason="tool_calls". Both are FIXED UPSTREAM in v1.83.0.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
@@ -58,10 +56,6 @@ Status checked against LiteLLM v1.83.0 (2026-03-31):
    NOTE: In v1.83.0, this method also handles ResponseIncompleteEvent and
          ResponseFailedEvent. Our patch only handles ResponseCompletedEvent and
          returns None for the new types, which is acceptable.
-
-7. Responses API metadata=None TypeError (REMOVED):
-   - FIXED UPSTREAM in v1.83.0 — all occurrences now use
-     `kwargs.get("metadata") or {}`. Patch removed.
 """
 
 import time
@@ -245,11 +239,6 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     LiteLLM passes through reasoning_summary_text.delta content as-is, without
     separating different summary_index sections. This patch prepends "\\n\\n" when
     the summary_index changes, producing readable section breaks.
-
-    The original Patch 2 also fixed parallel tool calls (hardcoded index=0) and
-    premature finish_reason="tool_calls" on output_item.done. Both are now fixed
-    upstream in litellm 1.83.0 (output_index is used, finish_reason=None on
-    output_item.done).
     """
     if (
         getattr(
@@ -264,14 +253,11 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     def _patched_responses_chunk_parser(
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
-        from pydantic import BaseModel
-
         from litellm.types.llms.openai import ResponsesAPIStreamEvents
-        from litellm.types.utils import (
-            Delta,
-            ModelResponseStream,
-            StreamingChoices,
-        )
+        from litellm.types.utils import Delta
+        from litellm.types.utils import ModelResponseStream
+        from litellm.types.utils import StreamingChoices
+        from pydantic import BaseModel
 
         parsed_chunk = chunk
         if isinstance(parsed_chunk, BaseModel):
@@ -296,7 +282,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                     last_summary_index is not None
                     and summary_index != last_summary_index
                 ):
-                    # New summary section started, prepend newlines to separate them
+                    # New summary part started, prepend newlines to separate them
                     content_part = "\n\n" + content_part
                 self._last_reasoning_summary_index = summary_index
 
@@ -415,7 +401,7 @@ def _patch_openai_responses_transform_response() -> None:
                                     if hasattr(choice, "message") and hasattr(
                                         choice.message, "reasoning_content"
                                     ):
-                                        choice.message.reasoning_content = combined_text  # ty: ignore[invalid-assignment]
+                                        choice.message.reasoning_content = combined_text
                     break  # Only process the first reasoning item
 
         return result
@@ -543,9 +529,7 @@ def _patch_logging_assembled_streaming_response() -> None:
     This patch creates a copy of the response before modification, preserving the
     original object with its proper ResponseAPIUsage type.
     """
-    from litellm.litellm_core_utils.litellm_logging import (
-        Logging as LiteLLMLoggingObj,
-    )
+    from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
     from litellm.responses.utils import ResponseAPILoggingUtils
     from litellm.types.llms.openai import ResponseAPIUsage
     from litellm.types.llms.openai import ResponseCompletedEvent
