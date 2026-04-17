@@ -7,9 +7,6 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from pydantic import BaseModel
 
-from ee.onyx.server.query_and_chat.models import SearchDocWithContent
-from ee.onyx.server.query_and_chat.models import SearchFullResponse
-from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from onyx.chat.models import ChatFullResponse
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import BaseFilters
@@ -54,10 +51,11 @@ async def _post_model(
     )
 
 
-def _project_doc(
-    doc: SearchDocWithContent | SearchDoc, content: str | None
-) -> dict[str, Any]:
-    """Project a backend search doc into the MCP wire shape."""
+def _project_doc(doc: SearchDoc, content: str | None) -> dict[str, Any]:
+    """Project a backend search doc into the MCP wire shape.
+
+    Accepts SearchDocWithContent (EE) too since it extends SearchDoc.
+    """
     return {
         "semantic_identifier": doc.semantic_identifier,
         "content": content,
@@ -199,9 +197,12 @@ async def search_indexed_documents(
     base_url = build_api_server_url_for_http_requests(respect_env_override_if_set=True)
     is_ee = global_version.is_ee_version()
 
-    request: SendSearchQueryRequest | SendMessageRequest
+    request: BaseModel
     if is_ee:
-        # EE: use the dedicated search endpoint (no LLM invocation)
+        # EE: use the dedicated search endpoint (no LLM invocation).
+        # Lazy import so CE deployments that strip ee/ never load this module.
+        from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+
         request = SendSearchQueryRequest(
             search_query=query,
             filters=filters,
@@ -237,6 +238,8 @@ async def search_indexed_documents(
             }
 
         if is_ee:
+            from ee.onyx.server.query_and_chat.models import SearchFullResponse
+
             ee_payload = SearchFullResponse.model_validate_json(response.content)
             if ee_payload.error:
                 return {
