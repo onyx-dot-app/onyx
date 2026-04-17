@@ -47,13 +47,22 @@ class JsmConnector(JiraConnector):
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """
         Wraps the standard Jira generator to ensure all yielding Documents 
-        have the JIRA_SERVICE_MANAGEMENT source.
+        have the JIRA_SERVICE_MANAGEMENT source and enriched JSM metadata.
         """
         try:
             while True:
                 item = next(generator)
                 if isinstance(item, Document):
                     item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+                    
+                    # Refine metadata for JSM specific context if available
+                    # Note: These fields are common in JSM environments
+                    if "request-type" in item.metadata:
+                        item.metadata["jsm_request_type"] = item.metadata.pop("request-type")
+                    
+                    if "customer-satisfaction" in item.metadata:
+                        item.metadata["jsm_satisfaction_score"] = item.metadata.pop("customer-satisfaction")
+
                 yield item
         except StopIteration as e:
             return e.value

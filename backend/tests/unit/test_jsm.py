@@ -7,35 +7,34 @@ from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
 
 def test_jsm_connector_source_override():
-      mock_checkpoint = JiraConnectorCheckpoint()
+    mock_checkpoint = JiraConnectorCheckpoint()
 
     mock_doc = Document(
-              id="test-issue",
-              sections=[],
-              source=DocumentSource.JIRA,
-              metadata={},
-              semantic_identifier="TEST-1",
+        id="test-issue",
+        sections=[],
+        source=DocumentSource.JIRA,
+        metadata={},
+        semantic_identifier="TEST-1",
     )
 
     def mock_gen(*args, **kwargs):
-              yield mock_doc
-              return mock_checkpoint
+        yield mock_doc
+        return mock_checkpoint
 
     connector = JsmConnector(jira_base_url="https://test.atlassian.net")
 
     with patch("onyx.connectors.jira.connector.JiraConnector.load_from_checkpoint", side_effect=mock_gen):
-              gen = connector.load_from_checkpoint(0, 100, mock_checkpoint)
-              yielded_item = next(gen)
+        gen = connector.load_from_checkpoint(0, 100, mock_checkpoint)
+        yielded_item = next(gen)
 
         assert yielded_item.id == "test-issue"
         assert yielded_item.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
 
         try:
-                      next(gen)
-except StopIteration as e:
-              assert e.value == mock_checkpoint
+            next(gen)
+        except StopIteration as e:
+            assert e.value == mock_checkpoint
 
 if __name__ == "__main__":
-      test_jsm_connector_source_override()
-      print("Test passed!")
-  
+    test_jsm_connector_source_override()
+    print("Test passed!")
