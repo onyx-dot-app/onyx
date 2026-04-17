@@ -26,7 +26,13 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
+import {
+  Card as CardLayout,
+  Content,
+  ContentAction,
+  InputHorizontal,
+  InputVertical,
+} from "@opal/layouts";
 import {
   useSettingsContext,
   useVectorDbEnabled,
@@ -49,8 +55,6 @@ import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -103,13 +107,62 @@ function MCPServerCard({
     ? "Authenticate this MCP server before enabling its tools."
     : undefined;
 
+  const expanded = !isFolded;
+  const hasContent = tools.length > 0 && filteredTools.length > 0;
+
   return (
-    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description}
-        icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={
+    <OpalCard
+      expandable
+      expanded={expanded}
+      border="solid"
+      rounding="lg"
+      padding="sm"
+      expandedContent={
+        hasContent ? (
+          <div className="flex flex-col gap-2 p-2">
+            {filteredTools.map((tool) => (
+              <OpalCard key={tool.id} border="solid" rounding="lg" padding="sm">
+                <CardLayout.Header
+                  headerChildren={
+                    <ContentAction
+                      icon={tool.icon}
+                      title={tool.name}
+                      description={tool.description}
+                      sizePreset="main-ui"
+                      variant="section"
+                      paddingVariant="fit"
+                    />
+                  }
+                  topRightChildren={
+                    <Tooltip tooltip={authTooltip} side="top">
+                      <Switch
+                        checked={isToolEnabled(tool.id)}
+                        onCheckedChange={(checked) =>
+                          onToggleTool(tool.id, checked)
+                        }
+                        disabled={needsAuth}
+                      />
+                    </Tooltip>
+                  }
+                />
+              </OpalCard>
+            ))}
+          </div>
+        ) : undefined
+      }
+    >
+      <CardLayout.Header
+        headerChildren={
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+          />
+        }
+        topRightChildren={
           <Tooltip tooltip={authTooltip} side="top">
             <Switch
               checked={serverEnabled}
@@ -118,53 +171,29 @@ function MCPServerCard({
             />
           </Tooltip>
         }
-      >
-        {tools.length > 0 && (
-          <Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Button
-              rightIcon={isFolded ? SvgExpand : SvgFold}
-              onClick={() => setIsFolded((prev) => !prev)}
-              prominence="internal"
-              size="lg"
-            >
-              {isFolded ? "Expand" : "Fold"}
-            </Button>
-          </Section>
-        )}
-      </ActionsLayouts.Header>
-      {tools.length > 0 && filteredTools.length > 0 && (
-        <ActionsLayouts.Content>
-          <div className="flex flex-col gap-2">
-            {filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon}
-                rightChildren={
-                  <Tooltip tooltip={authTooltip} side="top">
-                    <Switch
-                      checked={isToolEnabled(tool.id)}
-                      onCheckedChange={(checked) =>
-                        onToggleTool(tool.id, checked)
-                      }
-                      disabled={needsAuth}
-                    />
-                  </Tooltip>
-                }
+        bottomChildren={
+          tools.length > 0 ? (
+            <Section flexDirection="row" gap={0.5}>
+              <InputTypeIn
+                placeholder="Search tools..."
+                variant="internal"
+                leftSearchIcon
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
-            ))}
-          </div>
-        </ActionsLayouts.Content>
-      )}
-    </ExpandableCard.Root>
+              <Button
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+                prominence="internal"
+                size="lg"
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            </Section>
+          ) : undefined
+        }
+      />
+    </OpalCard>
   );
 }
 
@@ -858,12 +887,24 @@ function ChatPreferencesForm() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <ExpandableCard.Root key={tool.id} defaultFolded>
-                          <ActionsLayouts.Header
-                            title={tool.display_name || tool.name}
-                            description={tool.description}
-                            icon={SvgActions}
-                            rightChildren={
+                        <OpalCard
+                          key={tool.id}
+                          border="solid"
+                          rounding="lg"
+                          padding="sm"
+                        >
+                          <CardLayout.Header
+                            headerChildren={
+                              <ContentAction
+                                icon={SvgActions}
+                                title={tool.display_name || tool.name}
+                                description={tool.description}
+                                sizePreset="main-ui"
+                                variant="section"
+                                paddingVariant="fit"
+                              />
+                            }
+                            topRightChildren={
                               <Switch
                                 checked={isToolEnabled(tool.id)}
                                 onCheckedChange={(checked) =>
@@ -872,7 +913,7 @@ function ChatPreferencesForm() {
                               />
                             }
                           />
-                        </ExpandableCard.Root>
+                        </OpalCard>
                       ))}
                     </Section>
                   </SimpleCollapsible.Content>

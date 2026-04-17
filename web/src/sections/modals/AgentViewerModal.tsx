@@ -7,10 +7,15 @@ import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import {
+  Card as CardLayout,
+  Content,
+  ContentAction,
+  InputHorizontal,
+} from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { Divider } from "@opal/components";
+import { Card, Divider } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import {
   SvgActions,
@@ -21,8 +26,6 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
@@ -50,46 +53,55 @@ interface ViewerMCPServerCardProps {
 }
 
 function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
-  const [folded, setFolded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const serverIcon = getActionIcon(server.server_url, server.name);
 
   return (
-    <ExpandableCard.Root isFolded={folded} onFoldedChange={setFolded}>
-      <ExpandableCard.Header>
-        <div className="p-2">
+    <Card
+      expandable
+      expanded={expanded}
+      border="solid"
+      rounding="lg"
+      padding="sm"
+      expandedContent={
+        tools.length > 0 ? (
+          <div className="flex flex-col gap-2 p-2">
+            {tools.map((tool) => (
+              <Section key={tool.id} padding={0.25}>
+                <Content
+                  title={tool.display_name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+              </Section>
+            ))}
+          </div>
+        ) : undefined
+      }
+    >
+      <CardLayout.Header
+        headerChildren={
           <ContentAction
             icon={serverIcon}
             title={server.name}
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            rightChildren={
-              <Button
-                prominence="internal"
-                rightIcon={folded ? SvgExpand : SvgFold}
-                onClick={() => setFolded((prev) => !prev)}
-              >
-                {folded ? "Expand" : "Fold"}
-              </Button>
-            }
+            paddingVariant="fit"
           />
-        </div>
-      </ExpandableCard.Header>
-      {tools.length > 0 && (
-        <ActionsLayouts.Content>
-          {tools.map((tool) => (
-            <Section key={tool.id} padding={0.25}>
-              <Content
-                title={tool.display_name}
-                description={tool.description}
-                sizePreset="main-ui"
-                variant="section"
-              />
-            </Section>
-          ))}
-        </ActionsLayouts.Content>
-      )}
-    </ExpandableCard.Root>
+        }
+        topRightChildren={
+          <Button
+            prominence="internal"
+            rightIcon={expanded ? SvgFold : SvgExpand}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? "Fold" : "Expand"}
+          </Button>
+        }
+      />
+    </Card>
   );
 }
 
@@ -99,9 +111,9 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <ExpandableCard.Root>
-      <ExpandableCard.Header>
-        <div className="p-2">
+    <Card border="solid" rounding="lg" padding="sm">
+      <CardLayout.Header
+        headerChildren={
           <Content
             icon={SvgActions}
             title={tool.display_name}
@@ -109,9 +121,9 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
             sizePreset="main-ui"
             variant="section"
           />
-        </div>
-      </ExpandableCard.Header>
-    </ExpandableCard.Root>
+        }
+      />
+    </Card>
   );
 }
 
