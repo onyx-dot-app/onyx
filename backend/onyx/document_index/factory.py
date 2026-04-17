@@ -49,6 +49,11 @@ def get_default_document_index(
         secondary_large_chunks_enabled = secondary_search_settings.large_chunks_enabled
 
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
+    if ONYX_DISABLE_VESPA:
+        if not opensearch_retrieval_enabled:
+            raise ValueError(
+                "BUG: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
+            )
     if opensearch_retrieval_enabled:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         secondary_indexing_setting = (
