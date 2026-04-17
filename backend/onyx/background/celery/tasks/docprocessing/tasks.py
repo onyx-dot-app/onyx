@@ -1020,7 +1020,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # `tasks_created > 0` here gives us a "real work was done" signal
         # rather than just "tenant has a cc_pair somewhere."
         if tasks_created > 0:
-            maybe_mark_tenant_active(tenant_id)
+            maybe_mark_tenant_active(tenant_id, caller="check_for_indexing")
 
         # 2/3: VALIDATE
         # Check for inconsistent index attempts - active attempts without task IDs
