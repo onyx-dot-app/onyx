@@ -5,8 +5,7 @@ import {
 } from "@opal/core";
 import type { ExtremaSizeVariants, DistributiveOmit } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
-import type { ContentActionProps } from "@opal/layouts/content-action/components";
-import { ContentAction } from "@opal/layouts";
+import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,13 +84,15 @@ function LineItemButton({
       <Interactive.Container
         type={type}
         widthVariant={width}
-        heightVariant="lg"
+        heightVariant="fit"
         roundingVariant={roundingVariant}
       >
-        <ContentAction
-          {...(contentActionProps as ContentActionProps)}
-          paddingVariant="fit"
-        />
+        <div className="w-full p-2">
+          <ContentAction
+            {...(contentActionProps as ContentActionProps)}
+            paddingVariant="fit"
+          />
+        </div>
       </Interactive.Container>
     </Interactive.Stateful>
   );

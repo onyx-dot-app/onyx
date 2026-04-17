@@ -352,36 +352,52 @@
    the title inherits color from the Interactive's `--interactive-foreground`
    and icons switch to `--interactive-foreground-icon`. This is automatic —
    no opt-in prop is required.
+
+   Opt-out: set `nonInteractive` on <Content> to add
+   `data-opal-non-interactive` to the wrapper div, which excludes
+   the element from these overrides via the `:not(…) >` selector.
    =========================================================================== */
 
-.interactive .opal-content-xl {
+.interactive :not([data-opal-non-interactive]) > .opal-content-xl {
   color: inherit;
 }
 
-.interactive .opal-content-xl .opal-content-xl-icon {
+.interactive
+  :not([data-opal-non-interactive])
+  > .opal-content-xl
+  .opal-content-xl-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.interactive .opal-content-lg {
+.interactive :not([data-opal-non-interactive]) > .opal-content-lg {
   color: inherit;
 }
 
-.interactive .opal-content-lg .opal-content-lg-icon {
+.interactive
+  :not([data-opal-non-interactive])
+  > .opal-content-lg
+  .opal-content-lg-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.interactive .opal-content-md {
+.interactive :not([data-opal-non-interactive]) > .opal-content-md {
   color: inherit;
 }
 
-.interactive .opal-content-md .opal-content-md-icon {
+.interactive
+  :not([data-opal-non-interactive])
+  > .opal-content-md
+  .opal-content-md-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.interactive .opal-content-sm {
+.interactive :not([data-opal-non-interactive]) > .opal-content-sm {
   color: inherit;
 }
 
-.interactive .opal-content-sm .opal-content-sm-icon {
+.interactive
+  :not([data-opal-non-interactive])
+  > .opal-content-sm
+  .opal-content-sm-icon {
   color: var(--interactive-foreground-icon);
 }

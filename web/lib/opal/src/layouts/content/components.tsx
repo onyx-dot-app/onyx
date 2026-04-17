@@ -62,6 +62,17 @@ interface ContentBaseProps {
    */
   widthVariant?: ExtremaSizeVariants;
 
+  /**
+   * Opt out of the automatic interactive color override.
+   *
+   * When `Content` is nested inside an `.interactive` element, its title and
+   * icon colors are normally overridden by the interactive foreground palette.
+   * Set this to `true` to keep Content's own colors regardless of context.
+   *
+   * @default false
+   */
+  nonInteractive?: boolean;
+
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -127,6 +138,7 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     widthVariant = "full",
+    nonInteractive,
     ref,
     ...rest
   } = props;
@@ -186,7 +198,14 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  return <div className={widthVariants[widthVariant]}>{layout}</div>;
+  return (
+    <div
+      className={widthVariants[widthVariant]}
+      data-opal-non-interactive={nonInteractive || undefined}
+    >
+      {layout}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
