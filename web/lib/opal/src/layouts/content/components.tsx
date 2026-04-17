@@ -58,7 +58,7 @@ interface ContentBaseProps {
    * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
-   * @default "fit"
+   * @default "full"
    */
   width?: ExtremaSizeVariants;
 
