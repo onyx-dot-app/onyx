@@ -124,13 +124,12 @@ function MCPServerCard({
               <OpalCard key={tool.id} border="solid" rounding="lg" padding="sm">
                 <CardLayout.Header
                   headerChildren={
-                    <ContentAction
+                    <Content
                       icon={tool.icon}
                       title={tool.name}
                       description={tool.description}
                       sizePreset="main-ui"
                       variant="section"
-                      paddingVariant="fit"
                     />
                   }
                   topRightChildren={
@@ -153,13 +152,12 @@ function MCPServerCard({
     >
       <CardLayout.Header
         headerChildren={
-          <ContentAction
+          <Content
             icon={getActionIcon(server.server_url, server.name)}
             title={server.name}
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
           />
         }
         topRightChildren={
@@ -895,13 +893,12 @@ function ChatPreferencesForm() {
                         >
                           <CardLayout.Header
                             headerChildren={
-                              <ContentAction
+                              <Content
                                 icon={SvgActions}
                                 title={tool.display_name || tool.name}
                                 description={tool.description}
                                 sizePreset="main-ui"
                                 variant="section"
-                                paddingVariant="fit"
                               />
                             }
                             topRightChildren={
