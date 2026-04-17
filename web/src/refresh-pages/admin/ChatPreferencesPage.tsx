@@ -29,7 +29,6 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   Card as CardLayout,
   Content,
-  ContentAction,
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
