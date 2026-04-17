@@ -26,7 +26,7 @@ import * as ActionsLayouts from "@/layouts/actions-layouts";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -307,7 +307,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 })}
               </Section>
             ) : (
-              <EmptyMessage title="No Knowledge" />
+              <EmptyMessageCard sizePreset="main-ui" title="No Knowledge" />
             )}
           </Section>
 
@@ -329,7 +329,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   ))}
                 </Section>
               ) : (
-                <EmptyMessage title="No Actions" />
+                <EmptyMessageCard sizePreset="main-ui" title="No Actions" />
               )}
             </SimpleCollapsible.Content>
           </SimpleCollapsible>

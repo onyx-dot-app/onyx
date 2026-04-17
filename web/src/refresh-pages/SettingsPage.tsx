@@ -53,7 +53,7 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
@@ -1701,7 +1701,10 @@ function ConnectorsSettings() {
             ))}
           </>
         ) : (
-          <EmptyMessage title="No connectors set up for your organization." />
+          <EmptyMessageCard
+            sizePreset="main-ui"
+            title="No connectors set up for your organization."
+          />
         )}
       </Section>
     </Section>

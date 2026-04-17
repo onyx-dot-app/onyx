@@ -1,5 +1,5 @@
 import { Card } from "@opal/components/cards/card/components";
-import { Content, SizePreset } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
 import type {
   IconFunctionComponent,
@@ -18,6 +18,9 @@ type EmptyMessageCardBaseProps = {
   /** Primary message text. */
   title: string | RichStr;
 
+  /** Optional description text. */
+  description?: string | RichStr;
+
   /** Padding preset for the card. @default "md" */
   padding?: PaddingVariants;
 
@@ -25,16 +28,10 @@ type EmptyMessageCardBaseProps = {
   ref?: React.Ref<HTMLDivElement>;
 };
 
-type EmptyMessageCardProps =
-  | (EmptyMessageCardBaseProps & {
-      /** @default "secondary" */
-      sizePreset?: "secondary";
-    })
-  | (EmptyMessageCardBaseProps & {
-      sizePreset: "main-ui";
-      /** Description text. Only supported when `sizePreset` is `"main-ui"`. */
-      description?: string | RichStr;
-    });
+type EmptyMessageCardProps = EmptyMessageCardBaseProps & {
+  /** @default "secondary" */
+  sizePreset?: "secondary" | "main-ui";
+};
 
 // ---------------------------------------------------------------------------
 // EmptyMessageCard
@@ -45,6 +42,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
     sizePreset = "secondary",
     icon = SvgEmpty,
     title,
+    description,
     padding = "md",
     ref,
   } = props;
@@ -69,7 +67,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
         <Content
           icon={icon}
           title={title}
-          description={"description" in props ? props.description : undefined}
+          description={description}
           sizePreset={sizePreset}
           variant="section"
         />

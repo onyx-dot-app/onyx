@@ -8,7 +8,7 @@ import {
 } from "@/lib/search/interfaces";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
@@ -334,7 +334,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           )}
         >
           {error ? (
-            <EmptyMessage title="Search failed" description={error} />
+            <EmptyMessageCard
+              sizePreset="main-ui"
+              title="Search failed"
+              description={error}
+            />
           ) : paginatedResults.length > 0 ? (
             <>
               {paginatedResults.map((doc) => (

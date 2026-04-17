@@ -33,7 +33,7 @@ import {
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Section } from "@/layouts/general-layouts";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
@@ -312,7 +312,8 @@ function FormContent({
             </Section>
           </>
         ) : (
-          <EmptyMessage
+          <EmptyMessageCard
+            sizePreset="main-ui"
             title="No Actions Found"
             icon={SvgActions}
             description="Provide OpenAPI schema to preview actions here."
