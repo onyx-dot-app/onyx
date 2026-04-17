@@ -16,12 +16,14 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult
 from mcp.types import TextContent
+from pydantic import AnyUrl
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -34,6 +36,7 @@ from tests.integration.common_utils.test_models import DATestUser
 # Constants
 MCP_SEARCH_TOOL = "search_indexed_documents"
 INDEXED_SOURCES_RESOURCE_URI = "resource://indexed_sources"
+DOCUMENT_SETS_RESOURCE_URI = "resource://document_sets"
 DEFAULT_SEARCH_LIMIT = 5
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
@@ -73,19 +76,22 @@ def _extract_tool_payload(result: CallToolResult) -> dict[str, Any]:
 
 
 def _call_search_tool(
-    headers: dict[str, str], query: str, limit: int = DEFAULT_SEARCH_LIMIT
+    headers: dict[str, str],
+    query: str,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    document_set_names: list[str] | None = None,
 ) -> CallToolResult:
     """Call the search_indexed_documents tool via MCP."""
 
     async def _action(session: ClientSession) -> CallToolResult:
         await session.initialize()
-        return await session.call_tool(
-            MCP_SEARCH_TOOL,
-            {
-                "query": query,
-                "limit": limit,
-            },
-        )
+        arguments: dict[str, Any] = {
+            "query": query,
+            "limit": limit,
+        }
+        if document_set_names is not None:
+            arguments["document_set_names"] = document_set_names
+        return await session.call_tool(MCP_SEARCH_TOOL, arguments)
 
     return _run_with_mcp_session(headers, _action)
 
@@ -238,3 +244,106 @@ def test_mcp_search_respects_acl_filters(
     blocked_payload = _extract_tool_payload(blocked_result)
     assert blocked_payload["total_results"] == 0
     assert blocked_payload["documents"] == []
+
+
+def test_mcp_search_filters_by_document_set(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Passing document_set_names should scope results to the named set."""
+    LLMProviderManager.create(user_performing_action=admin_user)
+
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cc_pair_in_set = CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+    )
+    cc_pair_out_of_set = CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+    )
+
+    shared_phrase = "document-set-filter-shared-phrase"
+    in_set_content = f"{shared_phrase} inside curated set"
+    out_of_set_content = f"{shared_phrase} outside curated set"
+
+    _seed_document_and_wait_for_indexing(
+        cc_pair=cc_pair_in_set,
+        content=in_set_content,
+        api_key=api_key,
+        user_performing_action=admin_user,
+    )
+    _seed_document_and_wait_for_indexing(
+        cc_pair=cc_pair_out_of_set,
+        content=out_of_set_content,
+        api_key=api_key,
+        user_performing_action=admin_user,
+    )
+
+    doc_set = DocumentSetManager.create(
+        cc_pair_ids=[cc_pair_in_set.id],
+        user_performing_action=admin_user,
+    )
+    DocumentSetManager.wait_for_sync(
+        user_performing_action=admin_user,
+        document_sets_to_check=[doc_set],
+    )
+
+    headers = _auth_headers(admin_user, name="mcp-doc-set-filter")
+
+    # The document_sets resource should surface the newly created set so MCP
+    # clients can discover which values to pass to document_set_names.
+    async def _list_resources(session: ClientSession) -> Any:
+        await session.initialize()
+        resources = await session.list_resources()
+        contents = await session.read_resource(AnyUrl(DOCUMENT_SETS_RESOURCE_URI))
+        return resources, contents
+
+    resources_result, doc_sets_contents = _run_with_mcp_session(
+        headers, _list_resources
+    )
+    resource_uris = {str(resource.uri) for resource in resources_result.resources}
+    assert DOCUMENT_SETS_RESOURCE_URI in resource_uris
+    doc_sets_payload = json.loads(doc_sets_contents.contents[0].text)
+    exposed_names = {entry["name"] for entry in doc_sets_payload}
+    assert doc_set.name in exposed_names
+
+    # Without the filter both documents are visible.
+    unfiltered_payload = _extract_tool_payload(
+        _call_search_tool(headers, shared_phrase, limit=10)
+    )
+    unfiltered_contents = [
+        doc.get("content") or "" for doc in unfiltered_payload["documents"]
+    ]
+    assert any(in_set_content in content for content in unfiltered_contents)
+    assert any(out_of_set_content in content for content in unfiltered_contents)
+
+    # With the document set filter only the in-set document is returned.
+    filtered_payload = _extract_tool_payload(
+        _call_search_tool(
+            headers,
+            shared_phrase,
+            limit=10,
+            document_set_names=[doc_set.name],
+        )
+    )
+    filtered_contents = [
+        doc.get("content") or "" for doc in filtered_payload["documents"]
+    ]
+    assert filtered_payload["total_results"] >= 1
+    assert any(in_set_content in content for content in filtered_contents)
+    assert all(out_of_set_content not in content for content in filtered_contents)
+
+    # An empty document_set_names should behave like "no filter" (normalized
+    # to None), not "match zero sets".
+    empty_list_payload = _extract_tool_payload(
+        _call_search_tool(
+            headers,
+            shared_phrase,
+            limit=10,
+            document_set_names=[],
+        )
+    )
+    empty_list_contents = [
+        doc.get("content") or "" for doc in empty_list_payload["documents"]
+    ]
+    assert any(in_set_content in content for content in empty_list_contents)
+    assert any(out_of_set_content in content for content in empty_list_contents)

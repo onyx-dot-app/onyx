@@ -126,7 +126,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Chat Preferences",
   },
   LLM_MODELS: {
-    path: "/admin/configuration/llm",
+    path: "/admin/configuration/language-models",
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
