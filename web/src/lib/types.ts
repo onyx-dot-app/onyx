@@ -433,6 +433,7 @@ export interface ChannelConfig {
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
   disabled?: boolean;
+  disable_ai_feedback?: boolean;
 }
 
 export type SlackBotResponseType = "quotes" | "citations";

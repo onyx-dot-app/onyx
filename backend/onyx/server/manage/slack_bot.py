@@ -107,6 +107,10 @@ def _form_channel_config(
 
     channel_config["disabled"] = slack_channel_config_creation_request.disabled
 
+    channel_config["disable_ai_feedback"] = (
+        slack_channel_config_creation_request.disable_ai_feedback
+    )
+
     return channel_config
 
 

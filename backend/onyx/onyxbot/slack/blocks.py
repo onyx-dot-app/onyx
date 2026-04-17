@@ -152,6 +152,7 @@ def _build_ephemeral_publication_block(
             answer_filters=channel_conf.get("answer_filters"),
             follow_up_tags=channel_conf.get("follow_up_tags"),
             show_continue_in_web_ui=channel_conf.get("show_continue_in_web_ui", False),
+            disable_ai_feedback=channel_conf.get("disable_ai_feedback", False),
         )
     )
 
