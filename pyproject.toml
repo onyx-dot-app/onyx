@@ -237,7 +237,7 @@ line-length = 130
 target-version = "py311"
 
 [tool.ruff.lint]
-ignore = []
+ignore = ["E501"]
 select = [
   "ARG",
   "E",

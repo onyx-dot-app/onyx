@@ -1516,6 +1516,10 @@
     "display_name": "Claude Opus 4.6",
     "model_vendor": "anthropic"
   },
+  "claude-opus-4-7": {
+    "display_name": "Claude Opus 4.7",
+    "model_vendor": "anthropic"
+  },
   "claude-opus-4-5-20251101": {
     "display_name": "Claude Opus 4.5",
     "model_vendor": "anthropic",
