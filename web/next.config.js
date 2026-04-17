@@ -152,6 +152,11 @@ const nextConfig = {
         destination: "/ee/agents/:path*",
         permanent: true,
       },
+      {
+        source: "/admin/configuration/search",
+        destination: "/admin/configuration/index-settings",
+        permanent: true,
+      },
     ];
   },
 };
