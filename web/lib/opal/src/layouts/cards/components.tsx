@@ -72,7 +72,8 @@ function Header({
   bottomRightChildren,
   bottomChildren,
 }: CardHeaderProps) {
-  const hasRight = topRightChildren || bottomRightChildren;
+  const hasRight =
+    topRightChildren !== undefined || bottomRightChildren !== undefined;
 
   return (
     <div className="flex flex-col w-full">

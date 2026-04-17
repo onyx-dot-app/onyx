@@ -77,7 +77,6 @@ import {
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -331,35 +330,45 @@ function MCPServerCard({
   let cardContent: React.ReactNode | undefined;
   if (isLoading) {
     cardContent = (
-      <ActionsLayouts.Content>
+      <div className="flex flex-col gap-2 p-2">
         <GeneralLayouts.Section padding={1}>
           <SimpleLoader />
         </GeneralLayouts.Section>
-      </ActionsLayouts.Content>
+      </div>
     );
   } else if (hasTools) {
     cardContent = (
-      <ActionsLayouts.Content>
-        {filteredTools.map((tool) => (
-          <ActionsLayouts.Tool
-            key={tool.id}
-            name={`${serverFieldName}.tool_${tool.id}`}
-            title={tool.name}
-            description={tool.description}
-            icon={tool.icon ?? SvgSliders}
-            disabled={
-              !tool.isAvailable ||
-              !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
-            }
-            rightChildren={
-              <SwitchField
-                name={`${serverFieldName}.tool_${tool.id}`}
-                disabled={!isServerEnabled}
-              />
-            }
-          />
-        ))}
-      </ActionsLayouts.Content>
+      <div className="flex flex-col gap-2 p-2">
+        {filteredTools.map((tool) => {
+          const toolDisabled =
+            !tool.isAvailable ||
+            !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
+          return (
+            <Disabled key={tool.id} disabled={toolDisabled}>
+              <Card border="solid" rounding="lg" padding="sm">
+                <CardLayout.Header
+                  headerChildren={
+                    <ContentAction
+                      icon={tool.icon ?? SvgSliders}
+                      title={tool.name}
+                      description={tool.description}
+                      sizePreset="main-ui"
+                      variant="section"
+                      paddingVariant="fit"
+                    />
+                  }
+                  topRightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              </Card>
+            </Disabled>
+          );
+        })}
+      </div>
     );
   }
 
