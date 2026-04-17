@@ -716,8 +716,8 @@ export default function ChatPreferencesPage() {
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
-                              <div className="w-[10rem]">
-                                <Card key={source} padding="sm" border="solid">
+                              <div key={source} className="w-[10rem]">
+                                <Card padding="sm" border="solid">
                                   <Content
                                     icon={meta.icon}
                                     title={meta.displayName}
