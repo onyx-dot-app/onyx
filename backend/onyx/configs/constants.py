@@ -213,6 +213,7 @@ class DocumentSource(str, Enum):
     OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
+    JIRA_SERVICE_DESK = "jira_service_desk"
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
@@ -673,6 +674,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.OUTLINE: "outline data",
     DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
     DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
+    DocumentSource.JIRA_SERVICE_DESK: "jira service management data (requests, tickets, projects, etc.)",
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
