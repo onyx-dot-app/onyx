@@ -52,6 +52,7 @@ from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
@@ -927,6 +928,26 @@ def delete_documents__no_commit(db_session: Session, document_ids: list[str]) ->
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 
 
+def get_file_ids_for_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> list[str]:
+    """Return the non-null `file_id` values attached to the given documents.
+
+    Used at deletion time to enumerate raw files that need to be reaped from
+    the file store once their owning document rows are gone.
+    """
+    if not document_ids:
+        return []
+    rows = (
+        db_session.query(DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return [row.file_id for row in rows]
+
+
 def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
@@ -970,6 +991,32 @@ def delete_documents_complete__no_commit(
     delete_documents__no_commit(db_session, document_ids)
 
 
+def delete_documents_complete(
+    db_session: Session,
+    document_ids: list[str],
+) -> None:
+    """Fully remove documents AND best-effort delete their attached files.
+
+    This is the canonical path for "I'm done with these docs" — it captures
+    file_ids, removes the rows + every FK they hold, commits, then reaps
+    files. The order matters: file deletion happens after commit so a DB
+    rollback can never leave a `document` row pointing at a missing file.
+
+    Use this instead of `delete_documents_complete__no_commit` unless you
+    specifically need to compose with other operations in one transaction.
+    """
+    file_ids_to_delete = get_file_ids_for_document_ids(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    delete_documents_complete__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    db_session.commit()
+    delete_files_best_effort(file_ids_to_delete)
+
+
 def delete_all_documents_for_connector_credential_pair(
     db_session: Session,
     connector_id: int,
@@ -1001,10 +1048,9 @@ def delete_all_documents_for_connector_credential_pair(
         if not document_ids:
             break
 
-        delete_documents_complete__no_commit(
+        delete_documents_complete(
             db_session=db_session, document_ids=list(document_ids)
         )
-        db_session.commit()
 
         if time.monotonic() - start_time > timeout:
             raise RuntimeError("Timeout reached while deleting documents")

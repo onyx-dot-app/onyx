@@ -66,6 +66,27 @@ def build_raw_file_callback(
     return _callback
 
 
+def delete_files_best_effort(file_ids: list[str]) -> None:
+    """Delete a list of files from the file store, logging individual
+    failures rather than raising.
+
+    Used at document-deletion time to reap raw files attached via
+    `Document.file_id`. The corresponding document rows have already been
+    deleted by the caller, so a failure here just leaves a recoverable
+    orphan rather than a broken pointer.
+    """
+    if not file_ids:
+        return
+    file_store = get_default_file_store()
+    for file_id in file_ids:
+        try:
+            file_store.delete_file(file_id, error_on_missing=False)
+        except Exception:
+            logger.exception(
+                f"Failed to delete file_id={file_id} during document cleanup"
+            )
+
+
 def promote_staged_file(db_session: Session, file_id: str) -> None:
     """Mark a previously-staged file as `FileOrigin.CONNECTOR`."""
     update_filerecord_origin(
