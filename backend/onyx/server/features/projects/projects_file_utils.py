@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.db.llm import fetch_default_llm_model
+from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -52,48 +53,6 @@ def get_upload_size_bytes(upload: UploadFile) -> int | None:
             f"error_type={type(e).__name__}, error={e})"
         )
         return None
-
-
-def count_pdf_embedded_images(upload: UploadFile, cap: int) -> int:
-    """Count embedded images in a PDF, short-circuiting at cap+1.
-
-    Used to reject PDFs whose image count would OOM the user-file-processing
-    worker during indexing. Returns ``cap + 1`` (or whatever the running count
-    is at the point we exceed) as a sentinel if the count exceeds the cap, so
-    callers do not iterate thousands of image objects just to report a number.
-    Returns 0 if the PDF cannot be parsed — the upstream extractor will raise
-    a clearer error in that case.
-
-    Always resets the file pointer before returning.
-    """
-    try:
-        from pypdf import PdfReader
-
-        upload.file.seek(0)
-        reader = PdfReader(upload.file)
-        if reader.is_encrypted:
-            # Encrypted PDFs cannot be inspected without the password. Let the
-            # password-protected check (which runs before this one) handle them
-            # and rely on the extraction-time cap as the backstop.
-            return 0
-        count = 0
-        for page in reader.pages:
-            for _ in page.images:
-                count += 1
-                if count > cap:
-                    return count
-        return count
-    except Exception as e:
-        logger.warning(
-            f"Failed to count embedded images in PDF "
-            f"'{get_safe_filename(upload)}': {type(e).__name__}: {e}"
-        )
-        return 0
-    finally:
-        try:
-            upload.file.seek(0)
-        except Exception:
-            pass
 
 
 def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
@@ -311,7 +270,10 @@ def categorize_uploaded_files(
                     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
                     # Use the larger of the two caps as the short-circuit
                     # threshold so we get a useful count for both checks.
-                    count = count_pdf_embedded_images(upload, max(file_cap, batch_cap))
+                    # count_pdf_embedded_images restores the stream position.
+                    count = count_pdf_embedded_images(
+                        upload.file, max(file_cap, batch_cap)
+                    )
                     if count > file_cap:
                         results.rejected.append(
                             RejectedFile(

@@ -192,6 +192,56 @@ def read_text_file(
     return file_content_raw, metadata
 
 
+def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
+    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
+
+    Used to reject PDFs whose image count would OOM the user-file-processing
+    worker during indexing. Returns a value > cap as a sentinel once the count
+    exceeds the cap, so callers do not iterate thousands of image objects just
+    to report a number. Returns 0 if the PDF cannot be parsed.
+
+    Owner-password-only PDFs (permission restrictions but no open password) are
+    counted normally — they decrypt with an empty string. Truly password-locked
+    PDFs are skipped (return 0) since we can't inspect them; the caller should
+    ensure the password-protected check runs first.
+
+    Always restores the file pointer to its original position before returning.
+    """
+    from pypdf import PdfReader
+
+    try:
+        start_pos = file.tell()
+    except Exception:
+        start_pos = None
+    try:
+        if start_pos is not None:
+            file.seek(0)
+        reader = PdfReader(file)
+        if reader.is_encrypted:
+            # Try empty password first (owner-password-only PDFs); give up if that fails.
+            try:
+                if reader.decrypt("") == 0:
+                    return 0
+            except Exception:
+                return 0
+        count = 0
+        for page in reader.pages:
+            for _ in page.images:
+                count += 1
+                if count > cap:
+                    return count
+        return count
+    except Exception:
+        logger.warning("Failed to count embedded images in PDF", exc_info=True)
+        return 0
+    finally:
+        if start_pos is not None:
+            try:
+                file.seek(start_pos)
+            except Exception:
+                pass
+
+
 def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.

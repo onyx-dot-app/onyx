@@ -55,6 +55,7 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
@@ -132,34 +133,17 @@ class DeleteFileResponse(BaseModel):
 # =============================================================================
 
 
-def _count_pdf_embedded_images(content: bytes, cap: int) -> int:
-    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
+def _looks_like_pdf(filename: str, content_type: str | None) -> bool:
+    """True if either the filename or the content-type indicates a PDF.
 
-    Used to reject PDFs whose image count would OOM the user-file-processing
-    worker during indexing. Returns ``cap + 1`` as a sentinel if the count
-    exceeds the cap, so callers do not iterate thousands of image objects just
-    to report a number. Returns 0 if the PDF cannot be parsed — the downstream
-    indexing pipeline handles malformed PDFs separately.
+    Client-supplied ``content_type`` can be spoofed (e.g. a PDF uploaded with
+    ``Content-Type: application/octet-stream``), so we also fall back to
+    extension-based detection via ``mimetypes.guess_type`` on the filename.
     """
-    try:
-        from pypdf import PdfReader
-
-        reader = PdfReader(BytesIO(content))
-        if reader.is_encrypted:
-            # Encrypted PDFs cannot be inspected without the password. Let the
-            # indexing pipeline handle them (it has decrypt-with-empty-password
-            # fallback) and rely on the extraction-time cap as the backstop.
-            return 0
-        count = 0
-        for page in reader.pages:
-            for _ in page.images:
-                count += 1
-                if count > cap:
-                    return count
-        return count
-    except Exception:
-        logger.exception("Failed to count embedded images in PDF")
-        return 0
+    if content_type == "application/pdf":
+        return True
+    guessed, _ = mimetypes.guess_type(filename)
+    return guessed == "application/pdf"
 
 
 def _check_pdf_image_caps(
@@ -171,12 +155,12 @@ def _check_pdf_image_caps(
     callers can update their running batch total. Raises OnyxError(INVALID_INPUT)
     if either cap is exceeded.
     """
-    if content_type != "application/pdf":
+    if not _looks_like_pdf(filename, content_type):
         return 0
     file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
     # Short-circuit at the larger cap so we get a useful count for both checks.
-    count = _count_pdf_embedded_images(content, max(file_cap, batch_cap))
+    count = count_pdf_embedded_images(BytesIO(content), max(file_cap, batch_cap))
     if count > file_cap:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -592,8 +576,8 @@ async def upload_zip(
                 zip_file_name = zip_info.filename.split("/")[-1]
                 zip_content_type, _ = mimetypes.guess_type(zip_file_name)
                 if zip_content_type == "application/pdf":
-                    image_count = _count_pdf_embedded_images(
-                        file_content,
+                    image_count = count_pdf_embedded_images(
+                        BytesIO(file_content),
                         max(
                             MAX_EMBEDDED_IMAGES_PER_FILE,
                             MAX_EMBEDDED_IMAGES_PER_UPLOAD,

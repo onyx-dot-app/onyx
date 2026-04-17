@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from onyx.file_processing import extract_file_text
+from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import pdf_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
@@ -134,6 +135,44 @@ class TestReadPdfFile:
             _load("with_image.pdf"), extract_images=True, image_callback=callback
         )
         assert collected == []
+
+
+# ── count_pdf_embedded_images ────────────────────────────────────────────
+
+
+class TestCountPdfEmbeddedImages:
+    def test_returns_count_for_normal_pdf(self) -> None:
+        assert count_pdf_embedded_images(_load("with_image.pdf"), cap=10) == 1
+
+    def test_short_circuits_above_cap(self) -> None:
+        # with_image.pdf has 1 image. cap=0 means "anything > 0 is over cap" —
+        # function returns on first increment as the over-cap sentinel.
+        assert count_pdf_embedded_images(_load("with_image.pdf"), cap=0) == 1
+
+    def test_returns_zero_for_pdf_without_images(self) -> None:
+        assert count_pdf_embedded_images(_load("simple.pdf"), cap=10) == 0
+
+    def test_returns_zero_for_invalid_pdf(self) -> None:
+        assert count_pdf_embedded_images(BytesIO(b"not a pdf"), cap=10) == 0
+
+    def test_returns_zero_for_password_locked_pdf(self) -> None:
+        # encrypted.pdf has an open password; we can't inspect without it, so
+        # the helper returns 0 — callers rely on the password-protected check
+        # that runs earlier in the upload pipeline.
+        assert count_pdf_embedded_images(_load("encrypted.pdf"), cap=10) == 0
+
+    def test_inspects_owner_password_only_pdf(self) -> None:
+        # owner_protected.pdf is encrypted but has no open password. It should
+        # decrypt with an empty string and count images normally. The fixture
+        # has zero images, so 0 is a real count (not the "bail on encrypted"
+        # path).
+        assert count_pdf_embedded_images(_load("owner_protected.pdf"), cap=10) == 0
+
+    def test_preserves_file_position(self) -> None:
+        pdf = _load("with_image.pdf")
+        pdf.seek(42)
+        count_pdf_embedded_images(pdf, cap=10)
+        assert pdf.tell() == 42
 
 
 # ── pdf_to_text ──────────────────────────────────────────────────────────
