@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -61,7 +61,8 @@ export function DiscordChannelsTable({
 }: Props) {
   if (channels.length === 0) {
     return (
-      <EmptyMessage
+      <EmptyMessageCard
+        sizePreset="main-ui"
         title="No channels configured"
         description="Run !sync-channels in Discord to add channels."
       />

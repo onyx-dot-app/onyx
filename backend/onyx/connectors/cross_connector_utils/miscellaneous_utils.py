@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from typing import TypeVar
 from urllib.parse import urljoin
@@ -10,7 +11,6 @@ from urllib.parse import urlparse
 
 import requests
 from dateutil.parser import parse
-from dateutil.parser import ParserError
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import DocumentSource
@@ -56,18 +56,16 @@ def time_str_to_utc(datetime_str: str) -> datetime:
             if fixed not in candidates:
                 candidates.append(fixed)
 
-    last_exception: Exception | None = None
-    for candidate in candidates:
-        try:
-            dt = parse(candidate)
-            return datetime_to_utc(dt)
-        except (ValueError, ParserError) as exc:
-            last_exception = exc
+    # dateutil is the primary; the stdlib RFC 2822 parser is a fallback for
+    # inputs dateutil rejects (e.g. headers concatenated without a CRLF —
+    # TZ may be dropped, datetime_to_utc then assumes UTC).
+    for parser in (parse, parsedate_to_datetime):
+        for candidate in candidates:
+            try:
+                return datetime_to_utc(parser(candidate))
+            except (TypeError, ValueError, OverflowError):
+                continue
 
-    if last_exception is not None:
-        raise last_exception
-
-    # Fallback in case parsing failed without raising (should not happen)
     raise ValueError(f"Unable to parse datetime string: {datetime_str}")
 
 

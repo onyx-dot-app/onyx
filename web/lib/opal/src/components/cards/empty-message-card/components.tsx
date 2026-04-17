@@ -1,5 +1,5 @@
 import { Card } from "@opal/components/cards/card/components";
-import { Content, SizePreset } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
 import type {
   IconFunctionComponent,
@@ -32,7 +32,7 @@ type EmptyMessageCardProps =
     })
   | (EmptyMessageCardBaseProps & {
       sizePreset: "main-ui";
-      /** Description text. Only supported when `sizePreset` is `"main-ui"`. */
+      /** Optional description text. */
       description?: string | RichStr;
     });
 

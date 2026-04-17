@@ -23,6 +23,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
+from onyx.llm.models import ANTHROPIC_ADAPTIVE_REASONING_EFFORT
 from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.request_context import get_llm_mock_response
@@ -67,7 +68,12 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
+    "claude-opus-4-7",
 )
+
+# Anthropic models that require the adaptive thinking API (thinking.type.adaptive
+# + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
+_ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
 
 
 class LLMTimeoutError(Exception):
@@ -227,6 +233,14 @@ def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     return any(
         blocked_model in normalized_model_name
         for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+    )
+
+
+def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        adaptive_model in normalized_model_name
+        for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
     )
 
 
@@ -509,10 +523,6 @@ class LitellmLLM(LLM):
                     }
 
             elif is_claude_model:
-                budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
-                    reasoning_effort
-                )
-
                 # Anthropic requires every assistant message with tool_use
                 # blocks to start with a thinking block that carries a
                 # cryptographic signature.  We don't preserve those blocks
@@ -520,24 +530,35 @@ class LitellmLLM(LLM):
                 # contains tool-calling assistant messages.  LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                can_enable_thinking = (
-                    budget_tokens is not None
-                    and not _prompt_contains_tool_call_history(prompt)
-                )
+                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if can_enable_thinking:
-                    assert budget_tokens is not None  # mypy
-                    if max_tokens is not None:
-                        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                        # and the minimum budget tokens is 1024
-                        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                        # call as compared to reducing the budget for reasoning.
-                        max_tokens = max(budget_tokens + 1, max_tokens)
-                    optional_kwargs["thinking"] = {
-                        "type": "enabled",
-                        "budget_tokens": budget_tokens,
-                    }
+                if _anthropic_uses_adaptive_thinking(self.config.model_name):
+                    # Newer Anthropic models (Claude Opus 4.7+) reject
+                    # thinking.type.enabled — they require the adaptive
+                    # thinking config with output_config.effort.
+                    if not has_tool_call_history:
+                        optional_kwargs["thinking"] = {"type": "adaptive"}
+                        optional_kwargs["output_config"] = {
+                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
+                                reasoning_effort
+                            ],
+                        }
+                else:
+                    budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
+                        reasoning_effort
+                    )
+                    if budget_tokens is not None and not has_tool_call_history:
+                        if max_tokens is not None:
+                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+                            # and the minimum budget tokens is 1024
+                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
+                            # call as compared to reducing the budget for reasoning.
+                            max_tokens = max(budget_tokens + 1, max_tokens)
+                        optional_kwargs["thinking"] = {
+                            "type": "enabled",
+                            "budget_tokens": budget_tokens,
+                        }
 
                 # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
                 optional_kwargs.pop("reasoning_effort", None)

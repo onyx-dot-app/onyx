@@ -1958,8 +1958,7 @@ class SharepointConnector(
         self._graph_client = GraphClient(
             _acquire_token_for_graph, environment=self._azure_environment
         )
-        if auth_method == SharepointAuthMethod.CERTIFICATE.value:
-            self.sp_tenant_domain = self._resolve_tenant_domain()
+        self.sp_tenant_domain = self._resolve_tenant_domain()
         return None
 
     def _get_drive_names_for_site(self, site_url: str) -> list[str]:

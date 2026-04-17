@@ -1,5 +1,5 @@
 .opal-message-card {
-  @apply flex flex-col self-stretch rounded-16 border p-2;
+  @apply flex flex-col w-full self-stretch rounded-16 border;
 }
 
 /* Variant colors */

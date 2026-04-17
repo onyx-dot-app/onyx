@@ -271,6 +271,22 @@ export default function UserLibraryModal({
                   />
                 </Section>
 
+                {/* The exact cap is controlled by the backend env var
+                    MAX_EMBEDDED_IMAGES_PER_FILE (default 500). This copy is
+                    deliberately vague so it doesn't drift if the limit is
+                    tuned per-deployment; the precise number is surfaced in
+                    the rejection error the server returns. */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  padding={0.5}
+                  height="fit"
+                >
+                  <Text secondaryBody text03>
+                    PDFs with many embedded images may be rejected.
+                  </Text>
+                </Section>
+
                 {isLoading ? (
                   <Section padding={2} height="fit">
                     <Text secondaryBody text03>

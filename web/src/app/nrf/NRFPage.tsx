@@ -671,7 +671,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = "/admin/configuration/llm";
+            window.location.href = "/admin/configuration/language-models";
           }}
         >
           Set up an LLM.

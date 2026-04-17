@@ -502,6 +502,9 @@ class GoogleDriveConnector(
         files: list[RetrievedDriveFile],
         seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
         fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
+        failed_folder_ids_by_email: (
+            ThreadSafeDict[str, ThreadSafeSet[str]] | None
+        ) = None,
         permission_sync_context: PermissionSyncContext | None = None,
         add_prefix: bool = False,
     ) -> list[HierarchyNode]:
@@ -525,6 +528,9 @@ class GoogleDriveConnector(
             seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
             fully_walked_hierarchy_node_raw_ids: Set of node IDs where the walk to root
                 succeeded (modified in place)
+            failed_folder_ids_by_email: Map of email → folder IDs where that email
+                previously confirmed no accessible parent. Skips the API call if the same
+                (folder, email) is encountered again (modified in place).
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
             add_prefix: When True, prefix group IDs with source type (for indexing path).
@@ -569,7 +575,7 @@ class GoogleDriveConnector(
 
                 # Fetch folder metadata
                 folder = self._get_folder_metadata(
-                    current_id, file.user_email, field_type
+                    current_id, file.user_email, field_type, failed_folder_ids_by_email
                 )
                 if not folder:
                     # Can't access this folder - stop climbing
@@ -653,7 +659,13 @@ class GoogleDriveConnector(
         return new_nodes
 
     def _get_folder_metadata(
-        self, folder_id: str, retriever_email: str, field_type: DriveFileFieldType
+        self,
+        folder_id: str,
+        retriever_email: str,
+        field_type: DriveFileFieldType,
+        failed_folder_ids_by_email: (
+            ThreadSafeDict[str, ThreadSafeSet[str]] | None
+        ) = None,
     ) -> GoogleDriveFileType | None:
         """
         Fetch metadata for a folder by ID.
@@ -667,6 +679,17 @@ class GoogleDriveConnector(
 
         # Use a set to deduplicate if retriever_email == primary_admin_email
         for email in {retriever_email, self.primary_admin_email}:
+            failed_ids = (
+                failed_folder_ids_by_email.get(email)
+                if failed_folder_ids_by_email
+                else None
+            )
+            if failed_ids and folder_id in failed_ids:
+                logger.debug(
+                    f"Skipping folder {folder_id} using {email} (previously confirmed no parents)"
+                )
+                continue
+
             service = get_drive_service(self.creds, email)
             folder = get_folder_metadata(service, folder_id, field_type)
 
@@ -682,6 +705,10 @@ class GoogleDriveConnector(
 
             # Folder has no parents - could be a root OR user lacks access to parent
             # Keep this as a fallback but try admin to see if they can see parents
+            if failed_folder_ids_by_email is not None:
+                failed_folder_ids_by_email.setdefault(email, ThreadSafeSet()).add(
+                    folder_id
+                )
             if best_folder is None:
                 best_folder = folder
                 logger.debug(
@@ -1089,6 +1116,13 @@ class GoogleDriveConnector(
             for email in non_completed_org_emails
         ]
         yield from parallel_yield(user_retrieval_gens, max_workers=MAX_DRIVE_WORKERS)
+
+        # Free per-user cache entries now that this batch is done.
+        # Skip the admin email — it is shared across all user batches and must
+        # persist for the duration of the run.
+        for email in non_completed_org_emails:
+            if email != self.primary_admin_email:
+                checkpoint.failed_folder_ids_by_email.pop(email, None)
 
         # if there are more emails to process, don't mark as complete
         if not email_batch_takes_us_to_completion:
@@ -1546,6 +1580,7 @@ class GoogleDriveConnector(
             files=files_batch,
             seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
             fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
             permission_sync_context=permission_sync_context,
             add_prefix=True,
         )
@@ -1782,6 +1817,7 @@ class GoogleDriveConnector(
                 files=files_batch,
                 seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
                 fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
                 permission_sync_context=permission_sync_context,
             )
 

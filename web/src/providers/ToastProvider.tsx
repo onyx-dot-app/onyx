@@ -2,7 +2,8 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { MessageCard, type MessageCardVariant } from "@opal/components";
+import { MessageCard } from "@opal/components";
+import type { StatusVariants } from "@opal/types";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
 import type { Toast, ToastLevel } from "@/hooks/useToast";
@@ -10,7 +11,7 @@ import type { Toast, ToastLevel } from "@/hooks/useToast";
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 
-const LEVEL_TO_VARIANT: Record<ToastLevel, MessageCardVariant> = {
+const LEVEL_TO_VARIANT: Record<ToastLevel, StatusVariants> = {
   success: "success",
   error: "error",
   warning: "warning",
@@ -50,11 +51,7 @@ function ToastContainer() {
   return (
     <div
       data-testid="toast-container"
-      className={cn(
-        "fixed bottom-4 right-4 z-[10000]",
-        "flex flex-col gap-2 items-end",
-        "max-w-[420px]"
-      )}
+      className="fixed bottom-4 right-4 z-[var(--z-toast)] flex flex-col gap-2 items-end max-w-[var(--toast-width)] w-full"
     >
       {visible.map((t) => {
         const text =
@@ -65,7 +62,7 @@ function ToastContainer() {
           <div
             key={t.id}
             className={cn(
-              "shadow-02 rounded-12",
+              "w-full",
               t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
@@ -73,6 +70,7 @@ function ToastContainer() {
               variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
               title={text}
               description={buildDescription(t)}
+              padding="xs"
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             />
           </div>

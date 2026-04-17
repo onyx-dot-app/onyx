@@ -29,6 +29,7 @@ from onyx.llm.utils import get_max_input_tokens
 VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
+    "claude-opus-4-7",
 ]
 
 
