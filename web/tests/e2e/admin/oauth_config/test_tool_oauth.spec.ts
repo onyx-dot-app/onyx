@@ -226,14 +226,14 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await expect(actionsHeading).toBeVisible({ timeout: 10000 });
   await actionsHeading.scrollIntoViewIfNeeded();
 
-  // Look for our tool in the list
-  // The tool display_name is the tool name we created
-  const toolLabel = page.locator(`label:has-text("${toolName}")`);
-  await expect(toolLabel).toBeVisible({ timeout: 10000 });
-  await toolLabel.scrollIntoViewIfNeeded();
-
-  // Turn it on
-  await toolLabel.click();
+  // Look for our tool's card and toggle it on
+  const toolCard = page
+    .locator(".opal-card")
+    .filter({ hasText: toolName })
+    .first();
+  await expect(toolCard).toBeVisible({ timeout: 10000 });
+  await toolCard.scrollIntoViewIfNeeded();
+  await toolCard.getByRole("switch").click();
 
   // Submit the assistant creation form
   const createButton = page.locator('button[type="submit"]:has-text("Create")');
