@@ -10,7 +10,7 @@ logger = setup_logger()
 
 
 # (content, content_type) -> file_id
-RawFileCallback = Callable[[IO, str], str]
+RawFileCallback = Callable[[IO[bytes], str], str]
 
 
 def stage_raw_file(
@@ -53,7 +53,7 @@ def build_raw_file_callback(
         "tenant_id": tenant_id,
     }
 
-    def _callback(content: IO, content_type: str) -> str:
+    def _callback(content: IO[bytes], content_type: str) -> str:
         return stage_raw_file(
             content=content,
             content_type=content_type,
