@@ -12,12 +12,14 @@ from unittest.mock import patch
 
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 
 def _make_done_checkpoint() -> GoogleDriveCheckpoint:
@@ -198,3 +200,90 @@ class TestCeleryUtilsRouting:
 
         mock_slim.assert_called_once()
         mock_perm_sync.assert_not_called()
+
+
+class TestFailedFolderIdsByEmail:
+    def _make_failed_map(
+        self, entries: dict[str, set[str]]
+    ) -> ThreadSafeDict[str, ThreadSafeSet[str]]:
+        return ThreadSafeDict({k: ThreadSafeSet(v) for k, v in entries.items()})
+
+    def test_skips_api_call_for_known_failed_pair(self) -> None:
+        """_get_folder_metadata must skip the API call for a (folder, email) pair
+        that previously confirmed no accessible parent."""
+        connector = _make_connector()
+        failed_map = self._make_failed_map(
+            {
+                "retriever@example.com": {"folder1"},
+                "admin@example.com": {"folder1"},
+            }
+        )
+
+        with patch(
+            "onyx.connectors.google_drive.connector.get_folder_metadata"
+        ) as mock_api:
+            result = connector._get_folder_metadata(
+                folder_id="folder1",
+                retriever_email="retriever@example.com",
+                field_type=DriveFileFieldType.SLIM,
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        mock_api.assert_not_called()
+        assert result is None
+
+    def test_records_failed_pair_when_no_parents(self) -> None:
+        """_get_folder_metadata must record (email → folder_id) in the map
+        when the API returns a folder with no parents."""
+        connector = _make_connector()
+        failed_map: ThreadSafeDict[str, ThreadSafeSet[str]] = ThreadSafeDict()
+        folder_no_parents: dict = {"id": "folder1", "name": "Orphaned"}
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_folder_metadata",
+                return_value=folder_no_parents,
+            ),
+        ):
+            connector._get_folder_metadata(
+                folder_id="folder1",
+                retriever_email="retriever@example.com",
+                field_type=DriveFileFieldType.SLIM,
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        assert "folder1" in failed_map.get("retriever@example.com", ThreadSafeSet())
+        assert "folder1" in failed_map.get("admin@example.com", ThreadSafeSet())
+
+    def test_does_not_record_when_parents_found(self) -> None:
+        """_get_folder_metadata must NOT record a pair when parents are found."""
+        connector = _make_connector()
+        failed_map: ThreadSafeDict[str, ThreadSafeSet[str]] = ThreadSafeDict()
+        folder_with_parents: dict = {
+            "id": "folder1",
+            "name": "Normal",
+            "parents": ["root"],
+        }
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_folder_metadata",
+                return_value=folder_with_parents,
+            ),
+        ):
+            connector._get_folder_metadata(
+                folder_id="folder1",
+                retriever_email="retriever@example.com",
+                field_type=DriveFileFieldType.SLIM,
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        assert len(failed_map) == 0
