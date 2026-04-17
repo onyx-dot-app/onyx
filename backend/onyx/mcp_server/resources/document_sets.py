@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
 
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import get_accessible_document_sets
@@ -22,7 +22,7 @@ logger = setup_logger()
     ),
     mime_type="application/json",
 )
-async def document_sets_resource() -> dict[str, Any]:
+async def document_sets_resource() -> str:
     """Return the list of document sets the user can filter searches by."""
 
     access_token = require_access_token()
@@ -36,6 +36,6 @@ async def document_sets_resource() -> dict[str, Any]:
         len(document_sets),
     )
 
-    return {
-        "document_sets": [entry.model_dump(mode="json") for entry in document_sets],
-    }
+    # FastMCP 3.2+ requires str/bytes/list[ResourceContent] — it no longer
+    # auto-serializes; serialize to JSON ourselves.
+    return json.dumps([entry.model_dump(mode="json") for entry in document_sets])

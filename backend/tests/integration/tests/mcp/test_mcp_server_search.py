@@ -303,7 +303,7 @@ def test_mcp_search_filters_by_document_set(
     resource_uris = {str(resource.uri) for resource in resources_result.resources}
     assert DOCUMENT_SETS_RESOURCE_URI in resource_uris
     doc_sets_payload = json.loads(doc_sets_contents.contents[0].text)
-    exposed_names = {entry["name"] for entry in doc_sets_payload["document_sets"]}
+    exposed_names = {entry["name"] for entry in doc_sets_payload}
     assert doc_set.name in exposed_names
 
     # Without the filter both documents are visible.

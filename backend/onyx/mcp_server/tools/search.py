@@ -31,8 +31,16 @@ from onyx.utils.variable_functionality import global_version
 logger = setup_logger()
 
 
+# CE search falls through to the chat endpoint, which invokes an LLM — the
+# default 60s client timeout is not enough for a real RAG-backed response.
+_CE_SEARCH_TIMEOUT_SECONDS = 300.0
+
+
 async def _post_model(
-    url: str, body: BaseModel, access_token: AccessToken
+    url: str,
+    body: BaseModel,
+    access_token: AccessToken,
+    timeout: float | None = None,
 ) -> httpx.Response:
     """POST a Pydantic model as JSON to the Onyx backend."""
     return await get_http_client().post(
@@ -42,6 +50,7 @@ async def _post_model(
             "Authorization": f"Bearer {access_token.token}",
             "Content-Type": "application/json",
         },
+        timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT,
     )
 
 
@@ -213,7 +222,12 @@ async def search_indexed_documents(
         endpoint = f"{base_url}/chat/send-chat-message"
 
     try:
-        response = await _post_model(endpoint, request, access_token)
+        response = await _post_model(
+            endpoint,
+            request,
+            access_token,
+            timeout=None if is_ee else _CE_SEARCH_TIMEOUT_SECONDS,
+        )
         if not response.is_success:
             return {
                 "documents": [],
