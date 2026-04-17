@@ -333,10 +333,11 @@ function FileSizeLimitFields({
   maxAllowedUploadSizeMb,
 }: FileSizeLimitFieldsProps) {
   return (
-    <div className="flex gap-4 w-full items-start">
+    <div className="flex gap-4 w-full items-start pt-2">
       <div className="flex-1">
         <InputVertical
-          title="File Size Limit (MB)"
+          title="File Size Limit"
+          suffix="(MB)"
           subDescription={
             maxAllowedUploadSizeMb
               ? `Max: ${maxAllowedUploadSizeMb} MB`
@@ -354,7 +355,11 @@ function FileSizeLimitFields({
         </InputVertical>
       </div>
       <div className="flex-1">
-        <InputVertical title="File Token Limit (thousand tokens)" withLabel>
+        <InputVertical
+          title="File Token Limit"
+          withLabel
+          suffix="(thousand tokens)"
+        >
           <NumericLimitField
             name="file_token_count_threshold_k"
             initialValue={initialTokenThresholdK}
@@ -924,7 +929,7 @@ export default function ChatPreferencesPage() {
             <SimpleCollapsible.Header title="Advanced Options" />
             <SimpleCollapsible.Content>
               <Section gap={1}>
-                <Card>
+                <Card border="solid" rounding="lg">
                   <InputHorizontal
                     title="Keep Chat History"
                     description="Specify how long Onyx should retain chats in your organization."
@@ -957,7 +962,7 @@ export default function ChatPreferencesPage() {
                   </InputHorizontal>
                 </Card>
 
-                <Card>
+                <Card border="solid" rounding="lg">
                   <InputVertical
                     title="File Attachment Size Limit"
                     description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
@@ -992,35 +997,39 @@ export default function ChatPreferencesPage() {
                   </InputVertical>
                 </Card>
 
-                <Card>
-                  <InputHorizontal
-                    title="Allow Anonymous Users"
-                    description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
-                    withLabel
-                  >
-                    <Switch
-                      checked={s.anonymous_user_enabled ?? false}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({ anonymous_user_enabled: checked });
-                      }}
-                    />
-                  </InputHorizontal>
+                <Card border="solid" rounding="lg">
+                  <Section>
+                    <InputHorizontal
+                      title="Allow Anonymous Users"
+                      description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
+                      withLabel
+                    >
+                      <Switch
+                        checked={s.anonymous_user_enabled ?? false}
+                        onCheckedChange={(checked) => {
+                          void saveSettings({
+                            anonymous_user_enabled: checked,
+                          });
+                        }}
+                      />
+                    </InputHorizontal>
 
-                  <InputHorizontal
-                    title="Always Start with an Agent"
-                    description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
-                    withLabel
-                  >
-                    <Switch
-                      id="disable_default_assistant"
-                      checked={s.disable_default_assistant ?? false}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({
-                          disable_default_assistant: checked,
-                        });
-                      }}
-                    />
-                  </InputHorizontal>
+                    <InputHorizontal
+                      title="Always Start with an Agent"
+                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                      withLabel
+                    >
+                      <Switch
+                        id="disable_default_assistant"
+                        checked={s.disable_default_assistant ?? false}
+                        onCheckedChange={(checked) => {
+                          void saveSettings({
+                            disable_default_assistant: checked,
+                          });
+                        }}
+                      />
+                    </InputHorizontal>
+                  </Section>
                 </Card>
               </Section>
             </SimpleCollapsible.Content>
