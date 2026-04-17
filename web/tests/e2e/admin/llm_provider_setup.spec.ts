@@ -3,7 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const LLM_SETUP_URL = "/admin/configuration/llm";
+const LLM_SETUP_URL = "/admin/configuration/language-models";
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -120,7 +120,7 @@ async function createPublicProviderWithModels(
 
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
-  await page.waitForURL("**/admin/configuration/llm**");
+  await page.waitForURL("**/admin/configuration/language-models**");
   await expect(page.getByLabel("admin-page-title")).toHaveText(
     /^Language Models/
   );
