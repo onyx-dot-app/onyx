@@ -6,9 +6,8 @@ import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
@@ -323,7 +322,9 @@ export default function MemoriesModal({
                       setHighlightMemoryId(null);
                     }}
                   />
-                  {memory.isNew && <Separator noPadding />}
+                  {memory.isNew && (
+                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  )}
                 </Fragment>
               ))}
             </Section>

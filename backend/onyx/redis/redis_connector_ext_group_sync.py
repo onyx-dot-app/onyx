@@ -96,9 +96,7 @@ class RedisConnectorExternalGroupSync:
 
         fence_bytes = cast(bytes, fence_raw)
         fence_str = fence_bytes.decode("utf-8")
-        payload = RedisConnectorExternalGroupSyncPayload.model_validate_json(
-            cast(str, fence_str)
-        )
+        payload = RedisConnectorExternalGroupSyncPayload.model_validate_json(fence_str)
 
         return payload
 

@@ -9,7 +9,6 @@ from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from typing import cast
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -994,8 +993,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             parent_to_relationship_queryable_fields[parent_type] = {}
 
             for child_type, child_relationship in child_types_working.items():
-                child_type = cast(str, child_type)
-
                 # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
 
                 # map parent name to child name

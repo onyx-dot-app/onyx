@@ -406,47 +406,27 @@ textarea {
   /* Preserves whitespace and wraps text */
 }
 
-.loading-text {
-  color: #e5e5e5;
-
-  background: linear-gradient(
-    -90deg,
-    #a3a3a3 0%,
-    #000000 5%,
-    #a3a3a3 10%,
-    #a3a3a3 100%
-  );
-  background-size: 200% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmerTransition 1.8s ease-out infinite;
-}
-
-.dark .loading-text {
-  color: #1a1a1a;
-
-  background: linear-gradient(
-    -90deg,
-    #5c5c5c 0%,
-    #ffffff 5%,
-    #5c5c5c 10%,
-    #5c5c5c 100%
-  );
-  background-size: 200% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-@keyframes shimmerTransition {
+@keyframes shimmer {
   0% {
     background-position: 100% 0;
   }
-
   100% {
-    background-position: -100% 0;
+    background-position: 0% 0;
   }
+}
+
+.shimmer-text {
+  animation: shimmer 1s ease-out infinite;
+  background-size: 300% 100%;
+  background-image: linear-gradient(
+    90deg,
+    var(--shimmer-base) 35%,
+    var(--shimmer-highlight) 50%,
+    var(--shimmer-base) 65%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 .collapsible {

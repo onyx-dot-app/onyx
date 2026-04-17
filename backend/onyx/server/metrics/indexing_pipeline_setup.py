@@ -6,8 +6,6 @@ Called once by the monitoring celery worker after Redis and DB are ready.
 from celery import Celery
 from prometheus_client.registry import REGISTRY
 
-from onyx.server.metrics.indexing_pipeline import ConnectorHealthCollector
-from onyx.server.metrics.indexing_pipeline import IndexAttemptCollector
 from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
 from onyx.server.metrics.indexing_pipeline import RedisHealthCollector
 from onyx.server.metrics.indexing_pipeline import WorkerHealthCollector
@@ -21,8 +19,6 @@ logger = setup_logger()
 # module level ensures they survive the lifetime of the worker process and are
 # only registered with the Prometheus registry once.
 _queue_collector = QueueDepthCollector()
-_attempt_collector = IndexAttemptCollector()
-_connector_collector = ConnectorHealthCollector()
 _redis_health_collector = RedisHealthCollector()
 _worker_health_collector = WorkerHealthCollector()
 _heartbeat_monitor: WorkerHeartbeatMonitor | None = None
@@ -34,6 +30,9 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
     Args:
         celery_app: The Celery application instance. Used to obtain a
             broker Redis client on each scrape for queue depth metrics.
+
+    Note: connector health and index attempt metrics are push-based
+    (see connector_health_metrics.py) and do not use collectors.
     """
     _queue_collector.set_celery_app(celery_app)
     _redis_health_collector.set_celery_app(celery_app)
@@ -47,13 +46,8 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
         _heartbeat_monitor.start()
     _worker_health_collector.set_monitor(_heartbeat_monitor)
 
-    _attempt_collector.configure()
-    _connector_collector.configure()
-
     for collector in (
         _queue_collector,
-        _attempt_collector,
-        _connector_collector,
         _redis_health_collector,
         _worker_health_collector,
     ):

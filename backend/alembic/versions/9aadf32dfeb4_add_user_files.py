@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(),
-            default=datetime.datetime.utcnow,
+            default=lambda: datetime.datetime.now(datetime.timezone.utc),
         ),
         sa.Column(
             "cc_pair_id",

@@ -141,14 +141,23 @@ def get_all_users(
     stmt = select(User)
 
     # Exclude system users (anonymous user, no-auth placeholder)
-    stmt = stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
-    stmt = stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
+    stmt = stmt.where(
+        User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
+    stmt = stmt.where(
+        User.email
+        != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
 
     if not include_external:
         stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        stmt = stmt.where(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
+        stmt = stmt.where(
+            User.email.ilike(  # ty: ignore[unresolved-attribute]
+                f"%{email_filter_string}%"
+            )
+        )
 
     return db_session.scalars(stmt).unique().all()
 
@@ -311,7 +320,11 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
 
 
 def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
-    return db_session.query(User).filter(User.id == user_id).first()  # type: ignore
+    return (
+        db_session.query(User)
+        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .first()
+    )
 
 
 def _generate_slack_user(email: str) -> User:

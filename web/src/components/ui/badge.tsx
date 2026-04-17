@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
@@ -103,7 +103,7 @@ function Badge({
     </div>
   );
 
-  return <SimpleTooltip tooltip={tooltip}>{BadgeContent}</SimpleTooltip>;
+  return <Tooltip tooltip={tooltip}>{BadgeContent}</Tooltip>;
 }
 
 export { Badge, badgeVariants };

@@ -153,7 +153,11 @@ class LocalEvalProvider(EvalProvider):
         }
 
         message = eval_input.get("message", "(no message)")
-        truncated_message = message[:50] + "..." if len(message) > 50 else message
+        truncated_message = (
+            message[:50] + "..."  # ty: ignore[not-subscriptable]
+            if len(message) > 50  # ty: ignore[invalid-argument-type]
+            else message
+        )
 
         # Show model if specified
         model_info = ""

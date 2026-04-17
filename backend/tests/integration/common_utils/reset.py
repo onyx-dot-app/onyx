@@ -48,8 +48,8 @@ def _run_migrations(
     alembic_cfg.attributes["configure_logger"] = False
     alembic_cfg.config_ini_section = config_name
 
-    alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
-    alembic_cfg.cmd_opts.x = [f"schema={schema}"]  # type: ignore
+    alembic_cfg.cmd_opts = SimpleNamespace()  # ty: ignore[invalid-assignment]
+    alembic_cfg.cmd_opts.x = [f"schema={schema}"]  # ty: ignore[invalid-assignment]
 
     # Set the SQLAlchemy URL in the Alembic configuration
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)

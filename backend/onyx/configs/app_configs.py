@@ -324,6 +324,9 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
     ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
+DISABLE_OPENSEARCH_MIGRATION_TASK = (
+    os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
+)
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
@@ -840,6 +843,29 @@ MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
 
+# Maximum embedded images allowed in a single file. PDFs (and other formats)
+# with thousands of embedded images can OOM the user-file-processing worker
+# because every image is decoded with PIL and then sent to the vision LLM.
+# Enforced both at upload time (rejects the file) and during extraction
+# (defense-in-depth: caps the number of images materialized).
+#
+# Clamped to >= 0; a negative env value would turn upload validation into
+# always-fail and extraction into always-stop, which is never desired. 0
+# disables image extraction entirely, which is a valid (if aggressive) setting.
+MAX_EMBEDDED_IMAGES_PER_FILE = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Maximum embedded images allowed across all files in a single upload batch.
+# Protects against the scenario where a user uploads many files that each
+# fall under MAX_EMBEDDED_IMAGES_PER_FILE but aggregate to enough work
+# (serial-ish celery fan-out plus per-image vision-LLM calls) to OOM the
+# worker under concurrency or run up surprise latency/cost. Also clamped
+# to >= 0.
+MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_UPLOAD") or 1000)
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
@@ -1124,6 +1150,32 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
+
+# Master switch for the tenant work-gating feature. Controls the `enabled`
+# axis only — flipping this True puts the feature in shadow mode (compute
+# the gate, log skip counts, but do not actually skip). The `enforce` axis
+# is Redis-only with a hard-coded default of False, so this env flag alone
+# cannot cause real tenants to be skipped. Default off.
+ENABLE_TENANT_WORK_GATING = (
+    os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
+)
+
+# Membership TTL for the `active_tenants` sorted set. Members older than this
+# are treated as inactive by the gate read path. Must be > the full-fanout
+# interval so self-healing re-adds a genuinely-working tenant before their
+# membership expires. Default 30 min.
+TENANT_WORK_GATING_TTL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_TTL_SECONDS", 30 * 60)
+)
+
+# Minimum wall-clock interval between full-fanout cycles. When this many
+# seconds have elapsed since the last bypass, the generator ignores the gate
+# on the next invocation and dispatches to every non-gated tenant, letting
+# consumers re-populate the active set. Schedule-independent so beat drift
+# or backlog can't make the self-heal bursty or sparse. Default 20 min.
+TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
+    os.environ.get("TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS", 20 * 60)
+)
 
 
 # Image summarization configuration

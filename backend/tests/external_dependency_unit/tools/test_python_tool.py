@@ -120,7 +120,7 @@
 
 #     # Verify streaming packets were emitted
 #     mock_emitter = mock_run_context.context.run_dependencies.emitter
-#     emitter_calls = mock_emitter.emit.call_args_list  # type: ignore
+#     emitter_calls = mock_emitter.emit.call_args_list
 #     assert len(emitter_calls) >= 2  # At least start and delta
 
 #     # Check for PythonToolStart packet
@@ -408,7 +408,7 @@
 
 #     # Verify packets were emitted with correct index
 #     mock_emitter = mock_run_context.context.run_dependencies.emitter
-#     emitter_calls = mock_emitter.emit.call_args_list  # type: ignore
+#     emitter_calls = mock_emitter.emit.call_args_list
 #     for call in emitter_calls:
 #         packet = call[0][0]
 #         assert isinstance(packet, Packet)
@@ -459,8 +459,8 @@
 #             mock_client_class.return_value = code_interpreter_client
 
 #             # Call the function tool wrapper
-#             result_coro = python.on_invoke_tool(mock_run_context, json.dumps({"code": code}))  # type: ignore
-#             result_json: str = asyncio.run(result_coro)  # type: ignore
+#             result_coro = python.on_invoke_tool(mock_run_context, json.dumps({"code": code}))
+#             result_json: str = asyncio.run(result_coro)
 
 #     # Verify result is JSON string
 #     assert isinstance(result_json, str)
@@ -604,7 +604,7 @@
 
 #     # Verify error delta was emitted
 #     mock_emitter = mock_run_context.context.run_dependencies.emitter
-#     emitter_calls = mock_emitter.emit.call_args_list  # type: ignore
+#     emitter_calls = mock_emitter.emit.call_args_list
 #     delta_packets = [
 #         call[0][0]
 #         for call in emitter_calls
@@ -720,8 +720,8 @@
 #     # Verify some sample data
 #     segments = [row[0] for row in rows]
 #     countries = [row[1] for row in rows]
-#     units_sold = [float(row[3]) if row[3] is not None else 0.0 for row in rows]  # type: ignore
-#     profits = [float(row[10]) if row[10] is not None else 0.0 for row in rows]  # type: ignore
+#     units_sold = [float(row[3]) if row[3] is not None else 0.0 for row in rows]
+#     profits = [float(row[10]) if row[10] is not None else 0.0 for row in rows]
 
 #     assert "Government" in segments
 #     assert "Canada" in countries
@@ -1083,7 +1083,7 @@ class MockCodeInterpreterServer(HTTPServer):
 
     @property
     def url(self) -> str:
-        host, port = self.server_address
+        host, port = self.server_address  # ty: ignore[invalid-assignment]
         return f"http://{host!s}:{port}"
 
     def start(self) -> None:

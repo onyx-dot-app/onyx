@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 import jwt
 from fastapi import HTTPException
@@ -19,8 +20,8 @@ def generate_data_plane_token() -> str:
 
     payload = {
         "iss": "data_plane",
-        "exp": datetime.utcnow() + timedelta(minutes=5),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(tz=timezone.utc) + timedelta(minutes=5),
+        "iat": datetime.now(tz=timezone.utc),
         "scope": "api_access",
     }
 

@@ -33,7 +33,7 @@ def get_permissions_by_ids(
 
     # Fetch all permissions for the document
     fetched_permissions = execute_paginated_retrieval(
-        retrieval_function=drive_service.permissions().list,
+        retrieval_function=drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
         list_key="permissions",
         fileId=doc_id,
         fields="permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails),nextPageToken",

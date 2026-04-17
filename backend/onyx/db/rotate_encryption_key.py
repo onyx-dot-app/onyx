@@ -96,7 +96,7 @@ def rotate_encryption_key(
     totals: dict[str, int] = {}
 
     for model_cls, col_name, pk_names, is_json in encrypted_columns:
-        table_name: str = model_cls.__tablename__  # type: ignore[attr-defined]
+        table_name: str = model_cls.__tablename__  # ty: ignore[unresolved-attribute]
         col_attr = getattr(model_cls, col_name)
         pk_attrs = [getattr(model_cls, pk) for pk in pk_names]
 

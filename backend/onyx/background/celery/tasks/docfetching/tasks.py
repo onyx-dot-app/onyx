@@ -34,6 +34,7 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
@@ -135,10 +136,13 @@ def _docfetching_task(
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
+        from onyx.configs.sentry import _add_instance_tags
+
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             traces_sample_rate=0.1,
             release=__version__,
+            before_send=_add_instance_tags,
         )
         logger.info("Sentry initialized")
     else:
@@ -465,6 +469,15 @@ def docfetching_proxy_task(
 
             result.connector_source = (
                 index_attempt.connector_credential_pair.connector.source.value
+            )
+
+            cc_pair = index_attempt.connector_credential_pair
+            on_index_attempt_status_change(
+                tenant_id=tenant_id,
+                source=result.connector_source,
+                cc_pair_id=cc_pair_id,
+                connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
+                status="in_progress",
             )
 
         while True:

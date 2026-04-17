@@ -17,6 +17,7 @@ def documents_to_indexing_documents(
         processed_sections = []
         for section in document.sections:
             processed_section = Section(
+                type=section.type,
                 text=section.text or "",
                 link=section.link,
                 image_file_id=None,

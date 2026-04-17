@@ -26,7 +26,7 @@ aiolimiter==1.2.1
     # via voyageai
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.10.4
+alembic==1.18.4
 amqp==5.3.1
     # via kombu
 annotated-doc==0.0.4
@@ -60,7 +60,7 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.9
+authlib==1.6.11
     # via fastmcp
 azure-cognitiveservices-speech==1.38.0
 babel==2.17.0
@@ -174,7 +174,7 @@ coloredlogs==15.0.1
     # via onnxruntime
 courlan==1.3.2
     # via trafilatura
-cryptography==46.0.6
+cryptography==46.0.7
     # via
     #   authlib
     #   google-auth
@@ -299,7 +299,7 @@ h11==0.16.0
     #   uvicorn
 h2==4.3.0
     # via httpx
-hf-xet==1.2.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
 hpack==4.1.0
     # via h2
@@ -322,6 +322,7 @@ httpx==0.28.1
     #   fastmcp
     #   google-genai
     #   httpx-oauth
+    #   huggingface-hub
     #   langfuse
     #   langsmith
     #   litellm
@@ -334,7 +335,7 @@ httpx-sse==0.4.3
     #   cohere
     #   mcp
 hubspot-api-client==11.1.0
-huggingface-hub==0.35.3
+huggingface-hub==1.10.2
     # via tokenizers
 humanfriendly==10.0
     # via coloredlogs
@@ -408,11 +409,11 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-langchain-core==1.2.22
+langchain-core==1.2.28
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
-langsmith==0.3.45
+langsmith==0.7.32
     # via langchain-core
 lazy-imports==1.0.1
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
@@ -442,7 +443,7 @@ magika==0.6.3
     # via markitdown
 makefun==1.16.0
     # via fastapi-users
-mako==1.2.4
+mako==1.3.11
     # via alembic
 mammoth==1.11.0
     # via markitdown
@@ -486,14 +487,10 @@ multidict==6.7.0
     #   yarl
 mwparserfromhell==0.7.2
     # via pywikibot
-mypy==1.13.0
-    # via sqlalchemy
 mypy-boto3-s3==1.39.5
     # via boto3-stubs
 mypy-extensions==1.0.0
-    # via
-    #   mypy
-    #   typing-inspect
+    # via typing-inspect
 nest-asyncio==1.6.0
 nltk==3.9.4
     # via unstructured
@@ -583,13 +580,13 @@ pathable==0.4.4
     # via jsonschema-path
 pdfminer-six==20251107
     # via markitdown
-pillow==12.1.1
+pillow==12.2.0
     # via python-pptx
 platformdirs==4.5.0
     # via
     #   fastmcp
     #   zeep
-playwright==1.55.0
+playwright==1.58.0
     # via pytest-playwright
 pluggy==1.6.0
     # via pytest
@@ -666,7 +663,9 @@ pyee==13.0.0
     # via playwright
 pygithub==2.5.0
 pygments==2.20.0
-    # via rich
+    # via
+    #   pytest
+    #   rich
 pyjwt==2.12.0
     # via
     #   fastapi-users
@@ -680,13 +679,13 @@ pynacl==1.6.2
 pypandoc-binary==1.16.2
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.9.2
+pypdf==6.10.2
     # via unstructured-client
 pyperclip==1.11.0
     # via fastmcp
 pyreadline3==3.5.4 ; sys_platform == 'win32'
     # via humanfriendly
-pytest==8.3.5
+pytest==9.0.3
     # via
     #   pytest-base-url
     #   pytest-mock
@@ -694,7 +693,7 @@ pytest==8.3.5
 pytest-base-url==2.1.0
     # via pytest-playwright
 pytest-mock==3.12.0
-pytest-playwright==0.7.0
+pytest-playwright==0.7.2
 python-dateutil==2.8.2
     # via
     #   aiobotocore
@@ -782,7 +781,6 @@ requests==2.33.0
     #   google-api-core
     #   google-genai
     #   hubspot-api-client
-    #   huggingface-hub
     #   jira
     #   jsonschema-path
     #   kubernetes
@@ -909,7 +907,7 @@ tiktoken==0.7.0
 timeago==1.0.16
 tld==0.13.1
     # via courlan
-tokenizers==0.21.4
+tokenizers==0.22.2
     # via
     #   chonkie
     #   cohere
@@ -931,7 +929,9 @@ tqdm==4.67.1
     #   unstructured
 trafilatura==1.12.2
 typer==0.20.0
-    # via mcp
+    # via
+    #   huggingface-hub
+    #   mcp
 types-awscrt==0.28.4
     # via botocore-stubs
 types-openpyxl==3.0.4.7
@@ -956,7 +956,6 @@ typing-extensions==4.15.0
     #   jira
     #   langchain-core
     #   mcp
-    #   mypy
     #   mypy-boto3-s3
     #   office365-rest-python-client
     #   openai
@@ -1021,7 +1020,9 @@ urllib3==2.6.3
     #   trafilatura
     #   types-requests
 uuid-utils==0.14.0
-    # via langchain-core
+    # via
+    #   langchain-core
+    #   langsmith
 uvicorn==0.35.0
     # via
     #   fastmcp
@@ -1065,6 +1066,8 @@ xmlsec==1.3.14
     # via python3-saml
 xmltodict==1.0.2
     # via ddtrace
+xxhash==3.6.0
+    # via langsmith
 yarl==1.22.0
     # via aiohttp
 zeep==4.3.2

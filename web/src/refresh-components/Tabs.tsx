@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
@@ -663,11 +663,11 @@ const TabsTrigger = React.forwardRef<
         {...props}
       >
         {tooltip && !disabled ? (
-          <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
+          <Tooltip tooltip={tooltip} side={tooltipSide}>
             <span className="inline-flex items-center gap-inherit">
               {inner}
             </span>
-          </SimpleTooltip>
+          </Tooltip>
         ) : (
           inner
         )}
@@ -679,11 +679,11 @@ const TabsTrigger = React.forwardRef<
     // only when disabled so layout stays unchanged for the enabled case.
     if (tooltip && disabled) {
       return (
-        <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
+        <Tooltip tooltip={tooltip} side={tooltipSide}>
           <span className="flex-1 inline-flex align-middle justify-center">
             {trigger}
           </span>
-        </SimpleTooltip>
+        </Tooltip>
       );
     }
 

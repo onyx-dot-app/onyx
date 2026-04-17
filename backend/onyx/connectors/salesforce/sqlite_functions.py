@@ -73,7 +73,9 @@ class OnyxSalesforceSQLite:
 
         conn = sqlite3.connect(self.filename, timeout=60.0)
         if self.isolation_level is not None:
-            conn.isolation_level = self.isolation_level
+            conn.isolation_level = (  # ty: ignore[invalid-assignment]
+                self.isolation_level
+            )
 
         self._conn = conn
 

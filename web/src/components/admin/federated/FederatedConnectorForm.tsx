@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, Divider } from "@opal/components";
 import {
   ConfigurableSources,
   CredentialFieldSpec,
@@ -30,10 +30,9 @@ import { toast } from "@/hooks/useToast";
 
 import { Badge } from "@/components/ui/badge";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import Separator from "@/refresh-components/Separator";
 import { SvgSettings } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
@@ -781,7 +780,7 @@ export function FederatedConnectorForm({
             <Badge variant="outline" className="text-xs">
               Federated
             </Badge>
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 sourceMetadata.federatedTooltip ||
                 "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
@@ -789,7 +788,7 @@ export function FederatedConnectorForm({
               side="bottom"
             >
               <Info className="cursor-help" size={16} />
-            </SimpleTooltip>
+            </Tooltip>
           </div>
         </div>
 
@@ -833,7 +832,7 @@ export function FederatedConnectorForm({
               Enter the credentials for this connector.
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
-            <Separator />
+            <Divider />
             <Text as="p" headingH3>
               Configuration
             </Text>

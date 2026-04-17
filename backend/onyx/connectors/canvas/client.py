@@ -27,16 +27,19 @@ _STATUS_TO_ERROR_CODE: dict[int, OnyxErrorCode] = {
     401: OnyxErrorCode.CREDENTIAL_EXPIRED,
     403: OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
     404: OnyxErrorCode.BAD_GATEWAY,
-    429: OnyxErrorCode.RATE_LIMITED,
 }
 
 
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     """Map an HTTP status code to the appropriate OnyxErrorCode.
 
-    Expects a >= 400 status code. Known codes (401, 403, 404, 429) are
+    Expects a >= 400 status code. Known codes (401, 403, 404) are
     mapped to specific error codes; all other codes (unrecognised 4xx
     and 5xx) map to BAD_GATEWAY as unexpected upstream errors.
+
+    Note: 429 is intentionally omitted — the rl_requests wrapper
+    handles rate limits transparently at the HTTP layer, so 429
+    responses never reach this function.
     """
     if status_code in _STATUS_TO_ERROR_CODE:
         return _STATUS_TO_ERROR_CODE[status_code]

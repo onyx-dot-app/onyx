@@ -23,6 +23,7 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image
 
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -191,6 +192,56 @@ def read_text_file(
     return file_content_raw, metadata
 
 
+def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
+    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
+
+    Used to reject PDFs whose image count would OOM the user-file-processing
+    worker during indexing. Returns a value > cap as a sentinel once the count
+    exceeds the cap, so callers do not iterate thousands of image objects just
+    to report a number. Returns 0 if the PDF cannot be parsed.
+
+    Owner-password-only PDFs (permission restrictions but no open password) are
+    counted normally — they decrypt with an empty string. Truly password-locked
+    PDFs are skipped (return 0) since we can't inspect them; the caller should
+    ensure the password-protected check runs first.
+
+    Always restores the file pointer to its original position before returning.
+    """
+    from pypdf import PdfReader
+
+    try:
+        start_pos = file.tell()
+    except Exception:
+        start_pos = None
+    try:
+        if start_pos is not None:
+            file.seek(0)
+        reader = PdfReader(file)
+        if reader.is_encrypted:
+            # Try empty password first (owner-password-only PDFs); give up if that fails.
+            try:
+                if reader.decrypt("") == 0:
+                    return 0
+            except Exception:
+                return 0
+        count = 0
+        for page in reader.pages:
+            for _ in page.images:
+                count += 1
+                if count > cap:
+                    return count
+        return count
+    except Exception:
+        logger.warning("Failed to count embedded images in PDF", exc_info=True)
+        return 0
+    finally:
+        if start_pos is not None:
+            try:
+                file.seek(start_pos)
+            except Exception:
+                pass
+
+
 def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
@@ -254,8 +305,27 @@ def read_pdf_file(
         )
 
         if extract_images:
+            image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+            images_processed = 0
+            cap_reached = False
             for page_num, page in enumerate(pdf_reader.pages):
+                if cap_reached:
+                    break
                 for image_file_object in page.images:
+                    if images_processed >= image_cap:
+                        # Defense-in-depth backstop. Upload-time validation
+                        # should have rejected files exceeding the cap, but
+                        # we also break here so a single oversized file can
+                        # never pin a worker.
+                        logger.warning(
+                            "PDF embedded image cap reached (%d). "
+                            "Skipping remaining images on page %d and beyond.",
+                            image_cap,
+                            page_num + 1,
+                        )
+                        cap_reached = True
+                        break
+
                     image = Image.open(io.BytesIO(image_file_object.data))
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format=image.format)
@@ -268,6 +338,7 @@ def read_pdf_file(
                         image_callback(img_bytes, image_name)
                     else:
                         extracted_images.append((img_bytes, image_name))
+                    images_processed += 1
 
         return text, metadata, extracted_images
 
@@ -379,12 +450,24 @@ def _worksheet_to_matrix(
     worksheet: Worksheet,
 ) -> list[list[str]]:
     """
-    Converts a singular worksheet to a matrix of values
+    Converts a singular worksheet to a matrix of values.
+
+    Rows are padded to a uniform width. In openpyxl's read_only mode,
+    iter_rows can yield rows of differing lengths (trailing empty cells
+    are sometimes omitted), and downstream column cleanup assumes a
+    rectangular matrix.
     """
     rows: list[list[str]] = []
+    max_len = 0
     for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
         row = ["" if cell is None else str(cell) for cell in worksheet_row]
+        if len(row) > max_len:
+            max_len = len(row)
         rows.append(row)
+
+    for row in rows:
+        if len(row) < max_len:
+            row.extend([""] * (max_len - len(row)))
 
     return rows
 
@@ -463,29 +546,13 @@ def _remove_empty_runs(
     return result
 
 
-def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    # TODO: switch back to this approach in a few months when markitdown
-    # fixes their handling of excel files
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
 
-    # md = get_markitdown_converter()
-    # stream_info = StreamInfo(
-    #     mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
-    # )
-    # try:
-    #     workbook = md.convert(to_bytesio(file), stream_info=stream_info)
-    # except (
-    #     BadZipFile,
-    #     ValueError,
-    #     FileConversionException,
-    #     UnsupportedFormatException,
-    # ) as e:
-    #     error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
-    #     if file_name.startswith("~"):
-    #         logger.debug(error_str + " (this is expected for files with ~)")
-    #     else:
-    #         logger.warning(error_str)
-    #     return ""
-    # return workbook.markdown
+    Returns a list of (csv_text, sheet)
+    """
     try:
         workbook = openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
@@ -494,23 +561,30 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return ""
+        return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
-            return ""
+            return []
         raise
 
-    text_content = []
+    sheets: list[tuple[str, str]] = []
     for sheet in workbook.worksheets:
         sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerows(sheet_matrix)
-        text_content.append(buf.getvalue().rstrip("\n"))
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+        csv_text = buf.getvalue().rstrip("\n")
+        if csv_text.strip():
+            sheets.append((csv_text, sheet.title))
+    return sheets
+
+
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    sheets = xlsx_sheet_extraction(file, file_name)
+    return TEXT_SECTION_SEPARATOR.join(csv_text for csv_text, _title in sheets)
 
 
 def eml_to_text(file: IO[Any]) -> str:

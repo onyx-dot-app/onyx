@@ -3,13 +3,12 @@
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Tabs from "@/refresh-components/Tabs";
-import Separator from "@/refresh-components/Separator";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { useFormikContext } from "formik";
 import {
   forwardRef,
@@ -325,7 +324,7 @@ export const AppearanceThemeSettings = forwardRef<
         </FormField>
       </div>
 
-      <Separator className="my-4" />
+      <Divider />
 
       <Preview
         className="mb-8"
@@ -442,7 +441,7 @@ export const AppearanceThemeSettings = forwardRef<
         />
       </FormField>
 
-      <Separator className="my-4" />
+      <Divider />
 
       <div className="flex flex-col gap-4 p-4 bg-background-tint-00 rounded-16">
         <FormField state="idle" className="gap-0">

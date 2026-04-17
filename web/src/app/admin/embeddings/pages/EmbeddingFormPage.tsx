@@ -40,7 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { SvgAlertTriangle, SvgArrowLeft, SvgArrowRight } from "@opal/icons";
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -287,31 +287,31 @@ export default function EmbeddingForm() {
                     setSwitchoverType(SwitchoverType.REINDEX);
                   }}
                 >
-                  <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
+                  <Tooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
                     <span className="w-full text-left">
                       (Recommended) Re-index
                     </span>
-                  </SimpleTooltip>
+                  </Tooltip>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     setSwitchoverType(SwitchoverType.ACTIVE_ONLY);
                   }}
                 >
-                  <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
+                  <Tooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
                     <span className="w-full text-left">
                       Active Connectors Only
                     </span>
-                  </SimpleTooltip>
+                  </Tooltip>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     setSwitchoverType(SwitchoverType.INSTANT);
                   }}
                 >
-                  <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
+                  <Tooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
                     <span className="w-full text-left">Instant Switch</span>
-                  </SimpleTooltip>
+                  </Tooltip>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputDivider } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -12,6 +12,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues as BaseLLMModalValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
@@ -61,7 +62,13 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    formikProps.setFieldValue("model_configurations", data.models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        data.models,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
   return (
@@ -79,12 +86,12 @@ function LMStudioModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -92,7 +99,7 @@ function LMStudioModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

@@ -30,7 +30,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-def get_client() -> OpenSearch:
+def get_client() -> OpenSearch:  # ty: ignore[possibly-unresolved-reference]
     """Create OpenSearch client from environment variables."""
     host = os.environ.get("OPENSEARCH_HOST", "localhost")
     port = int(os.environ.get("OPENSEARCH_PORT", "9200"))
@@ -41,7 +41,11 @@ def get_client() -> OpenSearch:
     )
 
 
-def query_document(client: OpenSearch, index: str, doc_id: str) -> None:
+def query_document(
+    client: OpenSearch,  # ty: ignore[possibly-unresolved-reference]
+    index: str,
+    doc_id: str,
+) -> None:
     """Query a specific document and view its hierarchy ancestor node IDs."""
     query = {"query": {"term": {"document_id": doc_id}}, "size": 10}
 
@@ -68,7 +72,11 @@ def query_document(client: OpenSearch, index: str, doc_id: str) -> None:
         print()
 
 
-def list_with_hierarchy(client: OpenSearch, index: str, limit: int = 10) -> None:
+def list_with_hierarchy(
+    client: OpenSearch,  # ty: ignore[possibly-unresolved-reference]
+    index: str,
+    limit: int = 10,
+) -> None:
     """List documents that have hierarchy data."""
     query = {
         "query": {"exists": {"field": "ancestor_hierarchy_node_ids"}},
@@ -95,7 +103,9 @@ def list_with_hierarchy(client: OpenSearch, index: str, limit: int = 10) -> None
         print(f"    Ancestors: {ancestor_ids}\n")
 
 
-def list_indices(client: OpenSearch) -> None:
+def list_indices(
+    client: OpenSearch,  # ty: ignore[possibly-unresolved-reference]
+) -> None:
     """List available indices."""
     indices = client.indices.get_alias(index="*")
     print("Available indices:")

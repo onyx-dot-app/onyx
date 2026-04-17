@@ -3,7 +3,7 @@ from abc import ABC
 from abc import abstractmethod
 from copy import copy
 
-from tokenizers import Encoding  # type: ignore[import-untyped]
+from tokenizers import Encoding
 from tokenizers import Tokenizer
 
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
@@ -199,6 +199,33 @@ def count_tokens(
         if token_limit is not None and total > token_limit:
             return total  # Already over — skip remaining chunks
     return total
+
+
+def split_text_by_tokens(
+    text: str,
+    tokenizer: BaseTokenizer,
+    max_tokens: int,
+) -> list[str]:
+    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens each, via
+    encode/decode at token-id boundaries.
+
+    Note: the returned pieces are not strictly guaranteed to re-tokenize to
+    ≤ max_tokens. BPE merges at window boundaries may drift by a few tokens,
+    and cuts landing mid-multi-byte-UTF-8-character produce replacement
+    characters on decode. Good enough for "best-effort" splitting of
+    oversized content, not for hard limit enforcement.
+    """
+    if not text:
+        return []
+
+    token_ids: list[int] = []
+    for start in range(0, len(text), _ENCODE_CHUNK_SIZE):
+        token_ids.extend(tokenizer.encode(text[start : start + _ENCODE_CHUNK_SIZE]))
+
+    return [
+        tokenizer.decode(token_ids[start : start + max_tokens])
+        for start in range(0, len(token_ids), max_tokens)
+    ]
 
 
 def tokenizer_trim_content(

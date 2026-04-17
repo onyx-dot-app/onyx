@@ -11,6 +11,9 @@ from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id
 from onyx.db.notification import get_notifications
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
+from onyx.server.features.notifications.utils import (
+    ensure_permissions_migration_notification,
+)
 from onyx.server.features.release_notes.utils import (
     ensure_release_notes_fresh_and_notify,
 )
@@ -48,6 +51,13 @@ def get_notifications_api(
         ensure_release_notes_fresh_and_notify(db_session)
     except Exception:
         logger.exception("Failed to check for release notes in notifications endpoint")
+
+    try:
+        ensure_permissions_migration_notification(user, db_session)
+    except Exception:
+        logger.exception(
+            "Failed to create permissions_migration_v1 announcement in notifications endpoint"
+        )
 
     notifications = [
         NotificationModel.from_model(notif)

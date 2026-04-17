@@ -104,7 +104,7 @@ class RedisConnectorPrune:
             return None
 
         fence_str = fence_bytes.decode("utf-8")
-        payload = RedisConnectorPrunePayload.model_validate_json(cast(str, fence_str))
+        payload = RedisConnectorPrunePayload.model_validate_json(fence_str)
 
         return payload
 

@@ -61,7 +61,9 @@ def load_checkpoint(
     checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
     checkpoint_data = checkpoint_io.read().decode("utf-8")
     if isinstance(connector, CheckpointedConnector):
-        return connector.validate_checkpoint_json(checkpoint_data)
+        return connector.validate_checkpoint_json(  # ty: ignore[invalid-return-type]
+            checkpoint_data
+        )
     return ConnectorCheckpoint.model_validate_json(checkpoint_data)
 
 

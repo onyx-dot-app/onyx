@@ -123,6 +123,30 @@ export interface BaseLLMFormValues {
   custom_config?: Record<string, string>;
 }
 
+// ─── mergeFetchedModelConfigurations ──────────────────────────────────────
+
+/**
+ * Merges a freshly-fetched model list with the current form state so that
+ * refreshing the model list does not clobber the user's selections.
+ *
+ * - If the form has no models yet (first fetch / onboarding), the fetched
+ *   list is returned as-is so each provider's own default `is_visible` applies.
+ * - Otherwise, models that already exist in the form keep their prior
+ *   `is_visible` value, and newly-discovered models are added unselected so
+ *   the user can opt-in explicitly.
+ */
+export function mergeFetchedModelConfigurations(
+  fetched: ModelConfiguration[],
+  existing: ModelConfiguration[]
+): ModelConfiguration[] {
+  if (existing.length === 0) return fetched;
+  const priorByName = new Map(existing.map((m) => [m.name, m]));
+  return fetched.map((model) => {
+    const prior = priorByName.get(model.name);
+    return { ...model, is_visible: prior ? prior.is_visible : false };
+  });
+}
+
 // ─── Misc ─────────────────────────────────────────────────────────────────
 
 export type TestApiKeyResult =

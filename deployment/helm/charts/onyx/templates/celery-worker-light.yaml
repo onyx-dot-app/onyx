@@ -70,6 +70,10 @@ spec:
               "-Q",
               "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
             ]
+          ports:
+            - name: metrics
+              containerPort: 9095
+              protocol: TCP
           resources:
             {{- toYaml .Values.celery_worker_light.resources | nindent 12 }}
           envFrom:

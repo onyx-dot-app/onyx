@@ -93,12 +93,16 @@ export default function ProviderCard({
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
       <Card.Header
-        sizePreset="main-ui"
-        variant="section"
-        icon={icon}
-        title={title}
-        description={description}
-        rightChildren={
+        headerChildren={
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={icon}
+            title={title}
+            description={description}
+          />
+        }
+        topRightChildren={
           isDisconnected && onConnect ? (
             <Button
               prominence="tertiary"

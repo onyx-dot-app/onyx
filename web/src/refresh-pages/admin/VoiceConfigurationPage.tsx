@@ -8,7 +8,6 @@ import {
   OpenAIIcon,
 } from "@/components/icons/icons";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -25,7 +24,7 @@ import { toast } from "@/hooks/useToast";
 import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
 import { SvgMicrophone, SvgSlash, SvgUnplug } from "@opal/icons";
-import { Button, Text } from "@opal/components";
+import { Button, MessageCard, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Section } from "@/layouts/general-layouts";
@@ -585,13 +584,9 @@ export default function VoiceConfigurationPage() {
           )}
 
           {!hasActiveSTTProvider && (
-            <Message
-              info
-              static
-              large
-              close={false}
-              text="Connect a speech to text provider to use in chat."
-              className="w-full"
+            <MessageCard
+              variant="info"
+              title="Connect a speech to text provider to use in chat."
             />
           )}
 
@@ -615,13 +610,9 @@ export default function VoiceConfigurationPage() {
           )}
 
           {!hasActiveTTSProvider && (
-            <Message
-              info
-              static
-              large
-              close={false}
-              text="Connect a text to speech provider to use in chat."
-              className="w-full"
+            <MessageCard
+              variant="info"
+              title="Connect a text to speech provider to use in chat."
             />
           )}
 

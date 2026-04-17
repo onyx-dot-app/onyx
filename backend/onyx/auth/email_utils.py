@@ -7,8 +7,8 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
 
-import sendgrid  # type: ignore
-from sendgrid.helpers.mail import Attachment  # type: ignore
+import sendgrid
+from sendgrid.helpers.mail import Attachment
 from sendgrid.helpers.mail import Content
 from sendgrid.helpers.mail import ContentId
 from sendgrid.helpers.mail import Disposition

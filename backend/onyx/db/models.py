@@ -181,8 +181,10 @@ class EncryptedString(_EncryptedBase):
             # Handle both raw strings and SensitiveValue wrappers
             if isinstance(value, SensitiveValue):
                 # Get raw value for storage
-                value = value.get_value(apply_mask=False)
-            return encrypt_string_to_bytes(value)
+                value = value.get_value(  # ty: ignore[invalid-assignment]
+                    apply_mask=False
+                )
+            return encrypt_string_to_bytes(value)  # ty: ignore[invalid-argument-type]
         return value
 
     def process_result_value(
@@ -210,7 +212,9 @@ class EncryptedJson(_EncryptedBase):
     ) -> bytes | None:
         if value is not None:
             if isinstance(value, SensitiveValue):
-                value = value.get_value(apply_mask=False)
+                value = value.get_value(  # ty: ignore[invalid-assignment]
+                    apply_mask=False
+                )
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
         return value
@@ -294,8 +298,8 @@ Auth/Authz (users, permissions, access) Tables
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     # even an almost empty token from keycloak will not fit the default 1024 bytes
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
-    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
@@ -2422,6 +2426,8 @@ class IndexAttemptError(Base):
     failure_message: Mapped[str] = mapped_column(Text)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    error_type: Mapped[str | None] = mapped_column(String, nullable=True)
+
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -4502,7 +4508,7 @@ class UserFile(Base):
     file_id: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        default=datetime.datetime.utcnow
+        default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
     user: Mapped["User"] = relationship(back_populates="files")
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

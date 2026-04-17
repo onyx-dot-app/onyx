@@ -602,7 +602,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         """OpenAI supports real-time streaming TTS via Realtime API."""
         return True
 
-    async def create_streaming_transcriber(
+    async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
         self, _audio_format: str = "webm"
     ) -> OpenAIStreamingTranscriber:
         """Create a streaming transcription session using Realtime API."""

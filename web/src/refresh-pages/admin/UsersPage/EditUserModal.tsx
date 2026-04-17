@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
@@ -9,9 +9,8 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
@@ -273,12 +272,9 @@ export default function EditUserModal({
                           group.users.length === 1 ? "user" : "users"
                         }`}
                         rightChildren={
-                          <SimpleTooltip
-                            tooltip="Remove from group"
-                            side="left"
-                          >
+                          <Tooltip tooltip="Remove from group" side="left">
                             <SvgLogOut height={16} width={16} />
-                          </SimpleTooltip>
+                          </Tooltip>
                         }
                         onClick={() => toggleGroup(group.id)}
                       >
@@ -291,7 +287,7 @@ export default function EditUserModal({
             </Section>
             {user.role && (
               <>
-                <Separator noPadding />
+                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                 <ContentAction
                   title="User Role"

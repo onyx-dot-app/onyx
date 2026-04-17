@@ -11,7 +11,7 @@ import { Hoverable } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
@@ -153,12 +153,10 @@ export default function GroupsCell({
               </Text>
             </div>
           ) : (
-            <SimpleTooltip
+            <Tooltip
               side="bottom"
               align="start"
-              tooltip={allGroupsTooltip}
-              disabled={!hasOverflow}
-              className="bg-background-neutral-01 shadow-sm"
+              tooltip={hasOverflow ? allGroupsTooltip : undefined}
               delayDuration={200}
             >
               <div
@@ -167,7 +165,7 @@ export default function GroupsCell({
               >
                 {tagsContent}
               </div>
-            </SimpleTooltip>
+            </Tooltip>
           )}
           {user.id && (
             <Hoverable.Item group="tags" variant="opacity-on-hover">

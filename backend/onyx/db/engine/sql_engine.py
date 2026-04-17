@@ -11,6 +11,7 @@ from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
@@ -85,7 +86,7 @@ def build_connection_string(
 if LOG_POSTGRES_LATENCY:
 
     @event.listens_for(Engine, "before_cursor_execute")
-    def before_cursor_execute(  # type: ignore
+    def before_cursor_execute(
         conn,
         cursor,  # noqa: ARG001
         statement,  # noqa: ARG001
@@ -96,7 +97,7 @@ if LOG_POSTGRES_LATENCY:
         conn.info["query_start_time"] = time.time()
 
     @event.listens_for(Engine, "after_cursor_execute")
-    def after_cursor_execute(  # type: ignore
+    def after_cursor_execute(
         conn,
         cursor,  # noqa: ARG001
         statement,
@@ -116,7 +117,9 @@ if LOG_POSTGRES_CONN_COUNTS:
     checkin_count = 0
 
     @event.listens_for(Engine, "checkout")
-    def log_checkout(dbapi_connection, connection_record, connection_proxy):  # type: ignore  # noqa: ARG001
+    def log_checkout(
+        dbapi_connection, connection_record, connection_proxy  # noqa: ARG001
+    ):
         global checkout_count
         checkout_count += 1
 
@@ -132,7 +135,7 @@ if LOG_POSTGRES_CONN_COUNTS:
         )
 
     @event.listens_for(Engine, "checkin")
-    def log_checkin(dbapi_connection, connection_record):  # type: ignore  # noqa: ARG001
+    def log_checkin(dbapi_connection, connection_record):  # noqa: ARG001
         global checkin_count
         checkin_count += 1
         logger.debug(f"Total connection checkins: {checkin_count}")
@@ -346,6 +349,25 @@ def get_session_with_shared_schema() -> Generator[Session, None, None]:
     CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+def _safe_close_session(session: Session) -> None:
+    """Close a session, catching connection-closed errors during cleanup.
+
+    Long-running operations (e.g. multi-model LLM loops) can hold a session
+    open for minutes.  If the underlying connection is dropped by cloud
+    infrastructure (load-balancer timeouts, PgBouncer, idle-in-transaction
+    timeouts, etc.), the implicit rollback in Session.close() raises
+    OperationalError or InterfaceError.  Since the work is already complete,
+    we log and move on — SQLAlchemy internally invalidates the connection
+    for pool recycling.
+    """
+    try:
+        session.close()
+    except DBAPIError:
+        logger.warning(
+            "DB connection lost during session cleanup — the connection will be invalidated and recycled by the pool."
+        )
+
+
 @contextmanager
 def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
     """
@@ -358,8 +380,11 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
-        with Session(bind=engine, expire_on_commit=False) as session:
+        session = Session(bind=engine, expire_on_commit=False)
+        try:
             yield session
+        finally:
+            _safe_close_session(session)
         return
 
     # Create connection with schema translation to handle querying the right schema
@@ -367,8 +392,11 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     with engine.connect().execution_options(
         schema_translate_map=schema_translate_map
     ) as connection:
-        with Session(bind=connection, expire_on_commit=False) as session:
+        session = Session(bind=connection, expire_on_commit=False)
+        try:
             yield session
+        finally:
+            _safe_close_session(session)
 
 
 def get_session() -> Generator[Session, None, None]:

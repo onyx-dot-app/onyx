@@ -6,6 +6,7 @@ from itertools import chain
 from itertools import groupby
 
 import httpx
+import sentry_sdk
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import DocumentFailure
@@ -88,6 +89,12 @@ def write_chunks_to_vector_db_with_backoff(
                 )
             )
         except Exception as e:
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("stage", "vector_db_write")
+                scope.set_tag("doc_id", doc_id)
+                scope.set_tag("tenant_id", index_batch_params.tenant_id)
+                scope.fingerprint = ["vector-db-write-failure", type(e).__name__]
+                sentry_sdk.capture_exception(e)
             logger.exception(
                 f"Failed to write document chunks for '{doc_id}' to vector db"
             )

@@ -4,12 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Button, Text } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
@@ -254,7 +253,7 @@ export default function HookStatusPopover({
 
                 {topErrors.length > 0 ? (
                   <>
-                    <Separator noPadding className="px-2" />
+                    <Divider paddingPerpendicular="fit" />
 
                     <Section
                       flexDirection="column"
@@ -274,7 +273,7 @@ export default function HookStatusPopover({
                     </Section>
                   </>
                 ) : (
-                  <Separator noPadding className="px-2" />
+                  <Divider paddingPerpendicular="fit" />
                 )}
 
                 <LineItem
@@ -311,7 +310,7 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Separator noPadding className="px-2" />
+                <Divider paddingPerpendicular="fit" />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
@@ -356,7 +355,7 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Separator noPadding className="px-2" />
+                <Divider paddingPerpendicular="fit" />
 
                 {/* View Older Errors */}
                 <LineItem

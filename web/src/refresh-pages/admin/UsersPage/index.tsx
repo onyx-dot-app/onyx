@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
-import { Button } from "@opal/components";
-import Message from "@/refresh-components/messages/Message";
+import { Button, MessageCard } from "@opal/components";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { useScimToken } from "@/hooks/useScimToken";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -78,24 +77,24 @@ export default function UsersPage() {
           </Button>
         }
       >
-        <Message
-          info
-          static
-          large
-          close={false}
-          icon
-          text="Upcoming changes to permissions"
+        <MessageCard
+          variant="info"
+          title="Upcoming changes to permissions"
           description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
-          actions="Learn more"
-          actionIcon={SvgExternalLink}
-          onAction={() =>
-            window.open(
-              "https://docs.onyx.app/admins/permissions/whats_changing",
-              "_blank",
-              "noopener,noreferrer"
-            )
+          rightChildren={
+            <Button
+              icon={SvgExternalLink}
+              onClick={() =>
+                window.open(
+                  "https://docs.onyx.app/admins/permissions/whats_changing",
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+            >
+              Learn more
+            </Button>
           }
-          className="w-full"
         />
       </SettingsLayouts.Header>
       <SettingsLayouts.Body>

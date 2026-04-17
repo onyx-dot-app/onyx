@@ -244,12 +244,20 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                     doc_batch = []
 
                             except HighspotClientError as e:
-                                item_id = "ID" if not item_id else item_id
+                                item_id = (
+                                    "ID"
+                                    if not item_id  # ty: ignore[possibly-unresolved-reference]
+                                    else item_id  # ty: ignore[possibly-unresolved-reference]
+                                )
                                 logger.error(
                                     f"Error retrieving item {item_id}: {str(e)}"
                                 )
                             except Exception as e:
-                                item_id = "ID" if not item_id else item_id
+                                item_id = (
+                                    "ID"
+                                    if not item_id  # ty: ignore[possibly-unresolved-reference]
+                                    else item_id  # ty: ignore[possibly-unresolved-reference]
+                                )
                                 logger.error(
                                     f"Unexpected error for item {item_id}: {str(e)}"
                                 )

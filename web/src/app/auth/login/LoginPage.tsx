@@ -7,8 +7,7 @@ import EmailPasswordForm from "./EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
-import Message from "@/refresh-components/messages/Message";
+import { Button, MessageCard } from "@opal/components";
 
 interface LoginPageProps {
   authUrl: string | null;
@@ -36,11 +35,9 @@ export default function LoginPage({
   return (
     <div className="flex flex-col w-full justify-center">
       {verified && (
-        <Message
-          success
-          close={false}
-          text="Your email has been verified! Please sign in to continue."
-          className="w-full mb-4"
+        <MessageCard
+          variant="success"
+          title="Your email has been verified! Please sign in to continue."
         />
       )}
       {authUrl &&

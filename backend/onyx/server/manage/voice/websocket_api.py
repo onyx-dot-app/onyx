@@ -502,7 +502,7 @@ async def handle_streaming_synthesis(
                 logger.info("Streaming synthesis: client disconnected")
                 break
 
-            msg_type = message.get("type", "unknown")  # type: ignore[possibly-undefined]
+            msg_type = message.get("type", "unknown")
 
             if msg_type == "websocket.disconnect":
                 logger.info("Streaming synthesis: client disconnected")
@@ -650,7 +650,7 @@ async def handle_chunked_synthesis(
                 )
                 continue
 
-            msg_data_type = data.get("type")  # type: ignore[possibly-undefined]
+            msg_data_type = data.get("type")
             if msg_data_type == "synthesize":
                 text = data.get("text", "")
                 # Enforce per-text size limit

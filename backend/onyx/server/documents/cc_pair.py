@@ -60,6 +60,7 @@ from onyx.db.permission_sync_attempt import (
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import CCPairFullInfo
 from onyx.server.documents.models import CCPropertyUpdateRequest
 from onyx.server.documents.models import CCStatusUpdateRequest
@@ -580,6 +581,10 @@ def associate_credential_to_connector(
             groups=metadata.groups,
             processing_mode=metadata.processing_mode,
         )
+
+        # Tenant-work-gating lifecycle hook: keep new-tenant latency to
+        # seconds instead of one full-fanout interval.
+        maybe_mark_tenant_active(tenant_id)
 
         # trigger indexing immediately
         client_app.send_task(

@@ -292,7 +292,9 @@ def is_cache_populated(redis_client: Redis, source: DocumentSource) -> bool:
     """Check if the cache has any entries for this source."""
     cache_key = _cache_key(source)
     # redis.exists returns int (number of keys that exist)
-    exists_result: int = redis_client.exists(cache_key)  # type: ignore[assignment]
+    exists_result: int = redis_client.exists(  # ty: ignore[invalid-assignment]
+        cache_key
+    )
     return exists_result > 0
 
 

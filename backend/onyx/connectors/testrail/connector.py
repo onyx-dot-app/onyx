@@ -420,8 +420,12 @@ class TestRailConnector(LoadConnector, PollConnector):
         if isinstance(steps_separated, list) and steps_separated:
             rendered_steps: list[str] = []
             for idx, step_item in enumerate(steps_separated, start=1):
-                step_content = self._sanitize_rich_text(step_item.get("content"))
-                step_expected = self._sanitize_rich_text(step_item.get("expected"))
+                step_content = self._sanitize_rich_text(
+                    step_item.get("content")  # ty: ignore[unresolved-attribute]
+                )
+                step_expected = self._sanitize_rich_text(
+                    step_item.get("expected")  # ty: ignore[unresolved-attribute]
+                )
                 parts: list[str] = []
                 if step_content:
                     parts.append(f"Step {idx}: {step_content}")

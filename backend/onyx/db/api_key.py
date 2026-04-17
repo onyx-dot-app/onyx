@@ -139,7 +139,9 @@ def update_api_key(
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(
-        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
+        select(User).where(
+            User.id == existing_api_key.user_id  # ty: ignore[invalid-argument-type]
+        )
     )
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
@@ -191,7 +193,9 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
     api_key_user = db_session.scalar(
-        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
+        select(User).where(
+            User.id == existing_api_key.user_id  # ty: ignore[invalid-argument-type]
+        )
     )
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
@@ -220,7 +224,9 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
 
     user_associated_with_key = db_session.scalar(
-        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
+        select(User).where(
+            User.id == existing_api_key.user_id  # ty: ignore[invalid-argument-type]
+        )
     )
     if user_associated_with_key is None:
         raise ValueError(

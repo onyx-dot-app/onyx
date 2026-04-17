@@ -98,8 +98,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
         return NormalizationResult(normalized_url=None, use_default=True)
 
     def build_dummy_checkpoint(self) -> CT:
-        # TODO: find a way to make this work without type: ignore
-        return ConnectorCheckpoint(has_more=True)  # type: ignore
+        return ConnectorCheckpoint(has_more=True)  # ty: ignore[invalid-return-type]
 
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
@@ -123,6 +122,9 @@ class SlimConnector(BaseConnector):
     @abc.abstractmethod
     def retrieve_all_slim_docs(
         self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
 

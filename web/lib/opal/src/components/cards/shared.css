@@ -1,0 +1,32 @@
+/* ============================================================================
+   Shared status-border palette for card components.
+
+   Sets the `border-color` per `StatusVariants` value. Components opt in by
+   setting the `data-opal-status-border` attribute on their root element
+   (and, separately, declaring an actual border via Tailwind's `border` /
+   `border-dashed` utility).
+
+   Used by:
+     - Card           (`borderColor` prop)
+     - MessageCard    (`variant` prop, in addition to its own background)
+============================================================================ */
+
+[data-opal-status-border="default"] {
+  @apply border-border-01;
+}
+
+[data-opal-status-border="info"] {
+  @apply border-status-info-02;
+}
+
+[data-opal-status-border="success"] {
+  @apply border-status-success-02;
+}
+
+[data-opal-status-border="warning"] {
+  @apply border-status-warning-02;
+}
+
+[data-opal-status-border="error"] {
+  @apply border-status-error-02;
+}

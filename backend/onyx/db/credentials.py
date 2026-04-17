@@ -305,7 +305,7 @@ def alter_credential(
         if credential.credential_json
         else {}
     )
-    credential.credential_json = {  # type: ignore[assignment]
+    credential.credential_json = {  # ty: ignore[invalid-assignment]
         **existing_json,
         **credential_json,
     }
@@ -327,7 +327,9 @@ def update_credential(
     if credential is None:
         return None
 
-    credential.credential_json = credential_data.credential_json  # type: ignore[assignment]
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        credential_data.credential_json
+    )
     credential.user_id = user.id if user is not None else None
 
     db_session.commit()
@@ -346,7 +348,7 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json  # type: ignore[assignment]
+    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -359,7 +361,7 @@ def backend_update_credential_json(
     db_session: Session,
 ) -> None:
     """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json  # type: ignore[assignment]
+    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
     db_session.commit()
 
 

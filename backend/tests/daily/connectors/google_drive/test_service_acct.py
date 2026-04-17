@@ -4,6 +4,7 @@ from unittest.mock import patch
 from urllib.parse import urlparse
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
@@ -699,3 +700,43 @@ def test_specific_user_email_shared_with_me(
 
     doc_titles = set(doc.semantic_identifier for doc in output.documents)
     assert doc_titles == set(expected)
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_slim_retrieval_does_not_call_permissions_list(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    """retrieve_all_slim_docs() must not call permissions().list for any file.
+
+    Pruning only needs file IDs — fetching permissions per file causes O(N) API
+    calls that time out for tenants with large numbers of externally-owned files.
+    """
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=True,
+        include_my_drives=True,
+        include_files_shared_with_me=False,
+        shared_folder_urls=None,
+        shared_drive_urls=None,
+        my_drive_emails=None,
+    )
+
+    with patch(
+        "onyx.connectors.google_drive.connector.execute_paginated_retrieval",
+        wraps=execute_paginated_retrieval,
+    ) as mock_paginated:
+        for batch in connector.retrieve_all_slim_docs():
+            pass
+
+    permissions_calls = [
+        c
+        for c in mock_paginated.call_args_list
+        if "permissions" in str(c.kwargs.get("retrieval_function", ""))
+    ]
+    assert (
+        len(permissions_calls) == 0
+    ), f"permissions().list was called {len(permissions_calls)} time(s) during pruning"

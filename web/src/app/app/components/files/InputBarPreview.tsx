@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 export interface InputBarPreviewImageProviderProps {
@@ -114,14 +114,14 @@ export function InputBarPreview({
           </div>
         </div>
 
-        <SimpleTooltip tooltip={file.name ?? undefined}>
+        <Tooltip tooltip={file.name ?? undefined}>
           <div
             ref={fileNameRef}
             className={`font-medium text-sm line-clamp-1 break-all ellipses max-w-48`}
           >
             {file.name}
           </div>
-        </SimpleTooltip>
+        </Tooltip>
 
         <Button
           onClick={onDelete}

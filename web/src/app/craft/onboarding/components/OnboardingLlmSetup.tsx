@@ -4,7 +4,7 @@ import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";
 
 // Provider configurations
@@ -34,7 +34,8 @@ export const PROVIDERS: ProviderConfig[] = [
     providerName: LLMProviderName.ANTHROPIC,
     recommended: true,
     models: [
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
@@ -115,7 +116,7 @@ function SelectableButton({
   );
 
   if (tooltip) {
-    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
+    return <Tooltip tooltip={tooltip}>{button}</Tooltip>;
   }
 
   return button;

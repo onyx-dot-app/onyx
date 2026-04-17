@@ -520,7 +520,9 @@ class SlackbotHandler:
 
         # Append the event handler
         process_slack_event = create_process_slack_event()
-        socket_client.socket_mode_request_listeners.append(process_slack_event)  # type: ignore
+        socket_client.socket_mode_request_listeners.append(
+            process_slack_event  # ty: ignore[invalid-argument-type]
+        )
 
         # Establish a WebSocket connection to the Socket Mode servers
         # logger.debug(

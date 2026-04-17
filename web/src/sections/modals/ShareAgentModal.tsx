@@ -12,11 +12,10 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Message from "@/refresh-components/messages/Message";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
@@ -27,7 +26,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
 
@@ -285,12 +284,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               </Section>
               {values.isPublic && (
                 <Section>
-                  <Message
-                    iconComponent={SvgOrganization}
-                    close={false}
-                    static
-                    className="w-full"
-                    text="This agent is public to your organization."
+                  <MessageCard
+                    icon={SvgOrganization}
+                    title="This agent is public to your organization."
                     description="Everyone in your organization has access to this agent."
                   />
                 </Section>
@@ -299,23 +295,25 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
               <Section gap={1} alignItems="stretch">
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."
+                  withLabel
                 >
                   <SwitchField name="isPublic" />
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
 
                 {canUpdateFeaturedStatus && (
                   <>
                     <div className="border-t border-border-02" />
 
-                    <InputLayouts.Horizontal
+                    <InputHorizontal
                       title="Feature This Agent"
                       description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                      withLabel
                     >
                       <SwitchField name="isFeatured" />
-                    </InputLayouts.Horizontal>
+                    </InputHorizontal>
                   </>
                 )}
 

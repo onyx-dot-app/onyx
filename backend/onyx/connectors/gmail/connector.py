@@ -7,7 +7,7 @@ from typing import Dict
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -253,7 +253,17 @@ def thread_to_document(
 
     updated_at_datetime = None
     if updated_at:
-        updated_at_datetime = time_str_to_utc(updated_at)
+        try:
+            updated_at_datetime = time_str_to_utc(updated_at)
+        except (ValueError, OverflowError) as e:
+            # Old mailboxes contain RFC-violating Date headers. Drop the
+            # timestamp instead of aborting the indexing run.
+            logger.warning(
+                "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                full_thread.get("id"),
+                updated_at,
+                e,
+            )
 
     id = full_thread.get("id")
     if not id:
@@ -296,7 +306,9 @@ def _full_thread_from_id(
     try:
         thread = next(
             execute_single_retrieval(
-                retrieval_function=gmail_service.users().threads().get,
+                retrieval_function=gmail_service.users()  # ty: ignore[unresolved-attribute]
+                .threads()
+                .get,
                 list_key=None,
                 userId=user_email,
                 fields=THREAD_FIELDS,
@@ -394,7 +406,7 @@ class GmailConnector(
             admin_service = get_admin_service(self.creds, self.primary_admin_email)
             emails = []
             for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,
+                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
                 list_key="users",
                 fields=USER_FIELDS,
                 domain=self.google_domain,
@@ -438,7 +450,9 @@ class GmailConnector(
         try:
             for thread in execute_paginated_retrieval_with_max_pages(
                 max_num_pages=PAGES_PER_CHECKPOINT,
-                retrieval_function=gmail_service.users().threads().list,
+                retrieval_function=gmail_service.users()  # ty: ignore[unresolved-attribute]
+                .threads()
+                .list,
                 list_key="threads",
                 userId=user_email,
                 fields=THREAD_LIST_FIELDS,

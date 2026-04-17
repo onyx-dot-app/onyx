@@ -41,7 +41,7 @@ def _timed_request(label: str, fn: object) -> requests.Response:
     t = threading.Thread(target=_elapsed_printer, args=(label, stop), daemon=True)
     t.start()
     try:
-        resp = fn()  # type: ignore[operator]
+        resp = fn()  # ty: ignore[call-non-callable]
     finally:
         stop.set()
         t.join()

@@ -218,7 +218,9 @@ class OnyxTokenStorage(TokenStorage):
                         )
             return None
 
-    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+    async def set_client_info(  # ty: ignore[invalid-method-override]
+        self, info: OAuthClientInformationFull
+    ) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)

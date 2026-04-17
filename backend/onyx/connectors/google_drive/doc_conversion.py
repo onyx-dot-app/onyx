@@ -6,13 +6,17 @@ from typing import cast
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
-from googleapiclient.errors import HttpError  # type: ignore
-from googleapiclient.http import MediaIoBaseDownload  # type: ignore
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.models import GDriveMimeType
@@ -28,15 +32,16 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_docx_file
 from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.extract_file_text import xlsx_to_text
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -60,7 +65,7 @@ def _get_folder_info(
 
     try:
         folder = (
-            service.files()
+            service.files()  # ty: ignore[unresolved-attribute]
             .get(
                 fileId=folder_id,
                 fields="name, parents",
@@ -86,7 +91,11 @@ def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
         return _folder_cache[cache_key][0]
 
     try:
-        drive = service.drives().get(driveId=drive_id).execute()
+        drive = (
+            service.drives()  # ty: ignore[unresolved-attribute]
+            .get(driveId=drive_id)
+            .execute()
+        )
         drive_name = drive.get("name", f"Shared Drive {drive_id}")
         _folder_cache[cache_key] = (drive_name, None)
         return drive_name
@@ -253,7 +262,9 @@ def download_request(
     """
     # For other file types, download the file
     # Use the correct API call for downloading files
-    request = service.files().get_media(fileId=file_id)
+    request = service.files().get_media(  # ty: ignore[unresolved-attribute]
+        fileId=file_id
+    )
     return _download_request(request, file_id, size_threshold)
 
 
@@ -289,7 +300,7 @@ def _download_and_extract_sections_basic(
     service: GoogleDriveService,
     allow_images: bool,
     size_threshold: int,
-) -> list[TextSection | ImageSection]:
+) -> list[TextSection | ImageSection | TabularSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
     file_name = file["name"]
@@ -308,7 +319,7 @@ def _download_and_extract_sections_basic(
             return []
 
         # Store images for later processing
-        sections: list[TextSection | ImageSection] = []
+        sections: list[TextSection | ImageSection | TabularSection] = []
         try:
             section, embedded_id = store_image_and_create_section(
                 image_data=response_call(),
@@ -323,17 +334,27 @@ def _download_and_extract_sections_basic(
             logger.error(f"Failed to process image {file_name}: {e}")
         return sections
 
-    # For Google Docs, Sheets, and Slides, export as plain text
+    # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
         export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
-        # Use the correct API call for exporting files
-        request = service.files().export_media(
+        request = service.files().export_media(  # ty: ignore[unresolved-attribute]
             fileId=file_id, mimeType=export_mime_type
         )
         response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
             return []
+
+        if export_mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
+            # Synthesize an extension on the filename
+            ext = ".xlsx" if export_mime_type == SPREADSHEET_MIME_TYPE else ".csv"
+            return list(
+                tabular_file_to_sections(
+                    io.BytesIO(response),
+                    file_name=f"{file_name}{ext}",
+                    link=link,
+                )
+            )
 
         text = response.decode("utf-8")
         return [TextSection(link=link, text=text)]
@@ -356,9 +377,15 @@ def _download_and_extract_sections_basic(
 
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        or is_tabular_file(file_name)
     ):
-        text = xlsx_to_text(io.BytesIO(response_call()), file_name=file_name)
-        return [TextSection(link=link, text=text)] if text else []
+        return list(
+            tabular_file_to_sections(
+                io.BytesIO(response_call()),
+                file_name=file_name,
+                link=link,
+            )
+        )
 
     elif (
         mime_type
@@ -369,7 +396,7 @@ def _download_and_extract_sections_basic(
 
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
-        pdf_sections: list[TextSection | ImageSection] = [
+        pdf_sections: list[TextSection | ImageSection | TabularSection] = [
             TextSection(link=link, text=text)
         ]
 
@@ -410,8 +437,9 @@ def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
 
 
 def align_basic_advanced(
-    basic_sections: list[TextSection | ImageSection], adv_sections: list[TextSection]
-) -> list[TextSection | ImageSection]:
+    basic_sections: list[TextSection | ImageSection | TabularSection],
+    adv_sections: list[TextSection],
+) -> list[TextSection | ImageSection | TabularSection]:
     """Align the basic sections with the advanced sections.
     In particular, the basic sections contain all content of the file,
     including smart chips like dates and doc links. The advanced sections
@@ -428,12 +456,14 @@ def align_basic_advanced(
     basic_full_text = "".join(
         [section.text for section in basic_sections if isinstance(section, TextSection)]
     )
-    new_sections: list[TextSection | ImageSection] = []
+    new_sections: list[TextSection | ImageSection | TabularSection] = []
     heading_start = 0
     for adv_ind in range(1, len(adv_sections)):
         heading = adv_sections[adv_ind].text.split(HEADING_DELIMITER)[0]
         # retrieve the longest part of the heading that is not a smart chip
-        heading_key = max(heading.split(SMART_CHIP_CHAR), key=len).strip()
+        heading_key = max(  # ty: ignore[unresolved-attribute]
+            heading.split(SMART_CHIP_CHAR), key=len
+        ).strip()
         if heading_key == "":
             logger.warning(
                 f"Cannot match heading: {heading}, its link will come from the following section"
@@ -599,7 +629,7 @@ def _convert_drive_item_to_document(
     """
     Main entry point for converting a Google Drive file => Document object.
     """
-    sections: list[TextSection | ImageSection] = []
+    sections: list[TextSection | ImageSection | TabularSection] = []
 
     # Only construct these services when needed
     def _get_drive_service() -> GoogleDriveService:
@@ -639,7 +669,9 @@ def _convert_drive_item_to_document(
                     doc_id=file.get("id", ""),
                 )
                 if doc_sections:
-                    sections = cast(list[TextSection | ImageSection], doc_sections)
+                    sections = cast(
+                        list[TextSection | ImageSection | TabularSection], doc_sections
+                    )
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
                             f"found smart chips in {file.get('name')}, aligning with basic sections"

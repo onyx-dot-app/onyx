@@ -26,7 +26,9 @@ from shared_configs.configs import (
     TENANT_ID_PREFIX,
 )
 from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
+from celery.backends.database.session import (  # ty: ignore[unresolved-import]
+    ResultModelBase,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
@@ -208,7 +210,7 @@ def do_run_migrations(
 
     context.configure(
         connection=connection,
-        target_metadata=target_metadata,  # type: ignore
+        target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
         compare_type=True,
@@ -380,7 +382,7 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -421,7 +423,7 @@ def run_migrations_offline() -> None:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -464,7 +466,7 @@ def run_migrations_online() -> None:
 
             context.configure(
                 connection=connection,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 version_table_schema=schema_name,
                 include_schemas=True,
                 compare_type=True,

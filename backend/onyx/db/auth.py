@@ -55,11 +55,20 @@ def _add_live_user_count_where_clause(
     - System users (anonymous user, no-auth placeholder)
     - External permission users (unless only_admin_users is True)
     """
-    select_stmt = select_stmt.where(~User.email.endswith(get_api_key_email_pattern()))  # type: ignore
+    select_stmt = select_stmt.where(
+        ~User.email.endswith(
+            get_api_key_email_pattern()
+        )  # ty: ignore[invalid-argument-type]
+    )
 
     # Exclude system users (anonymous user, no-auth placeholder)
-    select_stmt = select_stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
-    select_stmt = select_stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
+    select_stmt = select_stmt.where(
+        User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
+    select_stmt = select_stmt.where(
+        User.email
+        != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
 
     if only_admin_users:
         return select_stmt.where(User.role == UserRole.ADMIN)

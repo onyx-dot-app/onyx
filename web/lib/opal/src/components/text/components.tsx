@@ -1,5 +1,4 @@
 import type { HTMLAttributes } from "react";
-
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";

@@ -138,7 +138,7 @@ def update_sync_record_status(
         sync_record.num_docs_synced = num_docs_synced
 
     if sync_status.is_terminal():
-        sync_record.sync_end_time = func.now()  # type: ignore
+        sync_record.sync_end_time = func.now()
 
     db_session.commit()
 

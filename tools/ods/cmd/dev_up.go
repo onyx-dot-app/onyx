@@ -154,11 +154,11 @@ func worktreeGitMount(root string) (string, bool) {
 func sshAgentMount() (string, bool) {
 	sock := os.Getenv("SSH_AUTH_SOCK")
 	if sock == "" {
-		log.Debug("SSH_AUTH_SOCK not set — skipping SSH agent forwarding")
+		log.Warn("SSH_AUTH_SOCK not set — SSH agent forwarding disabled (git over SSH won't work inside the container)")
 		return "", false
 	}
 	if _, err := os.Stat(sock); err != nil {
-		log.Debugf("SSH_AUTH_SOCK=%s not accessible: %v", sock, err)
+		log.Warnf("SSH_AUTH_SOCK=%s not accessible — SSH agent forwarding disabled: %v", sock, err)
 		return "", false
 	}
 	mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", sock)

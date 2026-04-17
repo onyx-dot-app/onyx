@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import Dict
 
-import asana  # type: ignore
+import asana
 
 from onyx.utils.logger import setup_logger
 

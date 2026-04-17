@@ -1,5 +1,5 @@
 # Base stage with dependencies
-FROM python:3.11.7-slim-bookworm AS base
+FROM python:3.11-slim-bookworm@sha256:9c6f90801e6b68e772b7c0ca74260cbf7af9f320acec894e26fccdaccfbe3b47 AS base
 
 ENV DANSWER_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface
@@ -49,6 +49,10 @@ WORKDIR /app
 COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
 COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 COPY ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
+
+# Sentry configuration (used when SENTRY_DSN is set)
+COPY ./onyx/configs/__init__.py /app/onyx/configs/__init__.py
+COPY ./onyx/configs/sentry.py /app/onyx/configs/sentry.py
 
 # Place to fetch version information
 COPY ./onyx/__init__.py /app/onyx/__init__.py

@@ -205,7 +205,9 @@ test.describe("File preview modal from chat file links", () => {
 
     // Hover to verify the download tooltip appears
     await downloadButton.hover();
-    await expect(page.getByText("Download")).toBeVisible({ timeout: 3000 });
+    await expect(
+      page.getByText("Download", { exact: true }).first()
+    ).toBeVisible({ timeout: 3000 });
   });
 
   test("download button triggers file download", async ({ page }) => {

@@ -12,10 +12,10 @@ from types import TracebackType
 from typing import Any
 from typing import cast
 
-import aioboto3  # type: ignore
+import aioboto3
 import httpx
 import requests
-import voyageai  # type: ignore[import-untyped]
+import voyageai
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from google.oauth2 import service_account

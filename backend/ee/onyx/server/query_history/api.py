@@ -97,7 +97,7 @@ def fetch_and_process_chat_session_history(
             break
 
         paged_snapshots = parallel_yield(
-            [
+            [  # ty: ignore[invalid-argument-type]
                 yield_snapshot_from_chat_session(
                     db_session=db_session,
                     chat_session=chat_session,

@@ -4,7 +4,7 @@ import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputDivider, InputVertical } from "@opal/layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -15,6 +15,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
@@ -83,7 +84,13 @@ function OllamaModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue("model_configurations", models);
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        models,
+        formikProps.values.model_configurations
+      )
+    );
   };
 
   return (
@@ -97,8 +104,8 @@ function OllamaModalInternals({
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
-            <InputLayouts.Vertical
-              name="api_base"
+            <InputVertical
+              withLabel="api_base"
               title="API Base URL"
               subDescription="The base URL for your Ollama instance."
             >
@@ -106,12 +113,12 @@ function OllamaModalInternals({
                 name="api_base"
                 placeholder="Your Ollama API base URL"
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Tabs.Content>
 
           <Tabs.Content value={Tab.TAB_CLOUD}>
-            <InputLayouts.Vertical
-              name="custom_config.OLLAMA_API_KEY"
+            <InputVertical
+              withLabel="custom_config.OLLAMA_API_KEY"
               title="API Key"
               subDescription="Your Ollama Cloud API key."
             >
@@ -119,19 +126,19 @@ function OllamaModalInternals({
                 name="custom_config.OLLAMA_API_KEY"
                 placeholder="API Key"
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Tabs.Content>
         </Tabs>
       </Card>
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <InputLayouts.FieldSeparator />
+      <InputDivider />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -139,7 +146,7 @@ function OllamaModalInternals({
 
       {!isOnboarding && (
         <>
-          <InputLayouts.FieldSeparator />
+          <InputDivider />
           <ModelAccessField />
         </>
       )}

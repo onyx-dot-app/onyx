@@ -18,7 +18,7 @@ from urllib.parse import urlunparse
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -75,6 +75,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -207,6 +208,7 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
+    SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
     Resolver,
@@ -432,7 +434,7 @@ class GoogleDriveConnector(
         for is_admin in [True, False]:
             query = "isAdmin=true" if is_admin else "isAdmin=false"
             for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,
+                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
                 list_key="users",
                 fields=USER_FIELDS,
                 domain=self.google_domain,
@@ -500,6 +502,9 @@ class GoogleDriveConnector(
         files: list[RetrievedDriveFile],
         seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
         fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
+        failed_folder_ids_by_email: (
+            ThreadSafeDict[str, ThreadSafeSet[str]] | None
+        ) = None,
         permission_sync_context: PermissionSyncContext | None = None,
         add_prefix: bool = False,
     ) -> list[HierarchyNode]:
@@ -523,6 +528,9 @@ class GoogleDriveConnector(
             seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
             fully_walked_hierarchy_node_raw_ids: Set of node IDs where the walk to root
                 succeeded (modified in place)
+            failed_folder_ids_by_email: Map of email → folder IDs where that email
+                previously confirmed no accessible parent. Skips the API call if the same
+                (folder, email) is encountered again (modified in place).
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
             add_prefix: When True, prefix group IDs with source type (for indexing path).
@@ -567,7 +575,7 @@ class GoogleDriveConnector(
 
                 # Fetch folder metadata
                 folder = self._get_folder_metadata(
-                    current_id, file.user_email, field_type
+                    current_id, file.user_email, field_type, failed_folder_ids_by_email
                 )
                 if not folder:
                     # Can't access this folder - stop climbing
@@ -651,7 +659,13 @@ class GoogleDriveConnector(
         return new_nodes
 
     def _get_folder_metadata(
-        self, folder_id: str, retriever_email: str, field_type: DriveFileFieldType
+        self,
+        folder_id: str,
+        retriever_email: str,
+        field_type: DriveFileFieldType,
+        failed_folder_ids_by_email: (
+            ThreadSafeDict[str, ThreadSafeSet[str]] | None
+        ) = None,
     ) -> GoogleDriveFileType | None:
         """
         Fetch metadata for a folder by ID.
@@ -665,6 +679,17 @@ class GoogleDriveConnector(
 
         # Use a set to deduplicate if retriever_email == primary_admin_email
         for email in {retriever_email, self.primary_admin_email}:
+            failed_ids = (
+                failed_folder_ids_by_email.get(email)
+                if failed_folder_ids_by_email
+                else None
+            )
+            if failed_ids and folder_id in failed_ids:
+                logger.debug(
+                    f"Skipping folder {folder_id} using {email} (previously confirmed no parents)"
+                )
+                continue
+
             service = get_drive_service(self.creds, email)
             folder = get_folder_metadata(service, folder_id, field_type)
 
@@ -680,6 +705,10 @@ class GoogleDriveConnector(
 
             # Folder has no parents - could be a root OR user lacks access to parent
             # Keep this as a fallback but try admin to see if they can see parents
+            if failed_folder_ids_by_email is not None:
+                failed_folder_ids_by_email.setdefault(email, ThreadSafeSet()).add(
+                    folder_id
+                )
             if best_folder is None:
                 best_folder = folder
                 logger.debug(
@@ -717,7 +746,7 @@ class GoogleDriveConnector(
         )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
-            retrieval_function=drive_service.drives().list,
+            retrieval_function=drive_service.drives().list,  # ty: ignore[unresolved-attribute]
             list_key="drives",
             useDomainAdminAccess=is_service_account,
             fields="drives(id),nextPageToken",
@@ -905,7 +934,9 @@ class GoogleDriveConnector(
             # resume from a checkpoint
             if resuming and (drive_id := curr_stage.current_folder_or_drive_id):
                 resume_start = curr_stage.completed_until
-                for file_or_token in _yield_from_drive(drive_id, resume_start):
+                for file_or_token in _yield_from_drive(
+                    drive_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                ):
                     if isinstance(file_or_token, str):
                         checkpoint.completion_map[user_email].next_page_token = (
                             file_or_token
@@ -1085,6 +1116,13 @@ class GoogleDriveConnector(
             for email in non_completed_org_emails
         ]
         yield from parallel_yield(user_retrieval_gens, max_workers=MAX_DRIVE_WORKERS)
+
+        # Free per-user cache entries now that this batch is done.
+        # Skip the admin email — it is shared across all user batches and must
+        # persist for the duration of the run.
+        for email in non_completed_org_emails:
+            if email != self.primary_admin_email:
+                checkpoint.failed_folder_ids_by_email.pop(email, None)
 
         # if there are more emails to process, don't mark as complete
         if not email_batch_takes_us_to_completion:
@@ -1300,7 +1338,9 @@ class GoogleDriveConnector(
             resume_start = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until
-            yield from _yield_from_folder_crawl(folder_id, resume_start)
+            yield from _yield_from_folder_crawl(
+                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+            )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
         # instead, the traversed_parent_ids are used to determine what we have left to retrieve
@@ -1540,6 +1580,7 @@ class GoogleDriveConnector(
             files=files_batch,
             seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
             fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
             permission_sync_context=permission_sync_context,
             add_prefix=True,
         )
@@ -1754,6 +1795,7 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         files_batch: list[RetrievedDriveFile] = []
         slim_batch: list[SlimDocument | HierarchyNode] = []
@@ -1763,14 +1805,19 @@ class GoogleDriveConnector(
             nonlocal files_batch, slim_batch
 
             # Get new ancestor hierarchy nodes first
-            permission_sync_context = PermissionSyncContext(
-                primary_admin_email=self.primary_admin_email,
-                google_domain=self.google_domain,
+            permission_sync_context = (
+                PermissionSyncContext(
+                    primary_admin_email=self.primary_admin_email,
+                    google_domain=self.google_domain,
+                )
+                if include_permissions
+                else None
             )
             new_ancestors = self._get_new_ancestors_for_files(
                 files=files_batch,
                 seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
                 fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
                 permission_sync_context=permission_sync_context,
             )
 
@@ -1779,10 +1826,7 @@ class GoogleDriveConnector(
                 if doc := build_slim_document(
                     self.creds,
                     file.drive_file,
-                    PermissionSyncContext(
-                        primary_admin_email=self.primary_admin_email,
-                        google_domain=self.google_domain,
-                    ),
+                    permission_sync_context,
                     retriever_email=file.user_email,
                 ):
                     slim_batch.append(doc)
@@ -1822,11 +1866,12 @@ class GoogleDriveConnector(
         if files_batch:
             yield _yield_slim_batch()
 
-    def retrieve_all_slim_docs_perm_sync(
+    def _retrieve_all_slim_docs_impl(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         try:
             checkpoint = self.build_dummy_checkpoint()
@@ -1836,13 +1881,34 @@ class GoogleDriveConnector(
                     start=start,
                     end=end,
                     callback=callback,
+                    include_permissions=include_permissions,
                 )
-            logger.info("Drive perm sync: Slim doc retrieval complete")
-
+            logger.info("Drive slim doc retrieval complete")
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise e
+            raise
+
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=False
+        )
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_all_slim_docs_impl(
+            start=start, end=end, callback=callback, include_permissions=True
+        )
 
     def validate_connector_settings(self) -> None:
         if self._creds is None:
@@ -1857,7 +1923,9 @@ class GoogleDriveConnector(
 
         try:
             drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            drive_service.files().list(pageSize=1, fields="files(id)").execute()
+            drive_service.files().list(  # ty: ignore[unresolved-attribute]
+                pageSize=1, fields="files(id)"
+            ).execute()
 
             if isinstance(self._creds, ServiceAccountCredentials):
                 # default is ~17mins of retries, don't do that here since this is called from

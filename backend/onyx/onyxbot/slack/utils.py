@@ -451,7 +451,9 @@ def fetch_slack_user_ids_from_emails(
     for email in user_emails:
         try:
             user = client.users_lookupByEmail(email=email)
-            user_ids.append(user.data["user"]["id"])  # type: ignore
+            user_ids.append(
+                user.data["user"]["id"]  # ty: ignore[invalid-argument-type]
+            )
         except Exception:
             logger.error(f"Was not able to find slack user by email: {email}")
             failed_to_find.append(email)
@@ -612,7 +614,11 @@ def read_slack_thread(
                 # useful portion is
                 message = reply.get("text")
                 if not message:
-                    message = blocks[0].get("text", {}).get("text")
+                    message = (
+                        blocks[0]  # ty: ignore[possibly-unresolved-reference]
+                        .get("text", {})
+                        .get("text")
+                    )
 
             if not message:
                 logger.warning("Skipping Slack thread message, no text found")
@@ -633,7 +639,8 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
     onyx_user = None
     sender_email = None
     try:
-        sender_email = client.users_info(user=sender_id).data["user"]["profile"]["email"]  # type: ignore
+        resp = client.users_info(user=sender_id)  # ty: ignore[invalid-argument-type]
+        sender_email = resp.data["user"]["profile"]["email"]  # type: ignore
     except Exception:
         logger.warning("Unable to find sender email")
 

@@ -38,4 +38,17 @@ metadata:
 data:
   onyx-redis-queues.json: |
     {{- .Files.Get "dashboards/redis-queues.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-indexing-pruning-dashboard
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-indexing-pruning.json: |
+    {{- .Files.Get "dashboards/indexing-pruning.json" | nindent 4 }}
 {{- end }}

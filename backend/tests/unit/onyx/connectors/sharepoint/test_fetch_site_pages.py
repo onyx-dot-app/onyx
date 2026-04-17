@@ -64,7 +64,9 @@ def _setup_connector(
             ),
         },
     )()
-    connector._graph_client = type("FakeGraphClient", (), {"sites": mock_sites})()
+    connector._graph_client = type(  # ty: ignore[invalid-assignment]
+        "FakeGraphClient", (), {"sites": mock_sites}
+    )()
 
     return connector
 

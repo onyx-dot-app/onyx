@@ -12,12 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip } from "@opal/components";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
@@ -96,33 +91,31 @@ function SourceTileTooltipWrapper({
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div>
-            <SourceTile
-              sourceMetadata={sourceMetadata}
-              preSelect={preSelect}
-              navigationUrl={navigationUrl}
-              hasExistingSlackCredentials={!!hasExistingSlackCredentials}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-sm">
-          {existingFederatedConnector ? (
-            <Text as="p" textLight05 secondaryBody>
-              <strong>Federated connector already configured.</strong> Click to
-              edit the existing connector.
-            </Text>
-          ) : hasExistingSlackCredentials ? (
-            <Text as="p" textLight05 secondaryBody>
-              <strong>Existing Slack credentials found.</strong> Click to manage
-              your Slack connector.
-            </Text>
-          ) : null}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip
+      side="top"
+      tooltip={
+        existingFederatedConnector ? (
+          <Text as="p" textLight05 secondaryBody>
+            <strong>Federated connector already configured.</strong> Click to
+            edit the existing connector.
+          </Text>
+        ) : hasExistingSlackCredentials ? (
+          <Text as="p" textLight05 secondaryBody>
+            <strong>Existing Slack credentials found.</strong> Click to manage
+            your Slack connector.
+          </Text>
+        ) : undefined
+      }
+    >
+      <div>
+        <SourceTile
+          sourceMetadata={sourceMetadata}
+          preSelect={preSelect}
+          navigationUrl={navigationUrl}
+          hasExistingSlackCredentials={!!hasExistingSlackCredentials}
+        />
+      </div>
+    </Tooltip>
   );
 }
 

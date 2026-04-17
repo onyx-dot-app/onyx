@@ -8,7 +8,7 @@ import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import {
   useDiscordBotConfig,
   useDiscordGuilds,
@@ -119,11 +119,10 @@ export function BotConfigCard() {
             )}
           </Section>
           {isConfigured && (
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 hasServerConfigs ? "Delete server configs first" : undefined
               }
-              disabled={!hasServerConfigs}
             >
               <Button
                 disabled={isSubmitting || hasServerConfigs}
@@ -132,7 +131,7 @@ export function BotConfigCard() {
               >
                 Delete Discord Token
               </Button>
-            </SimpleTooltip>
+            </Tooltip>
           )}
         </Section>
 

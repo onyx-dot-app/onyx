@@ -18,7 +18,7 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError
-from requests_oauthlib import OAuth2Session  # type:ignore
+from requests_oauthlib import OAuth2Session
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -429,7 +429,7 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         # Add cookies to the context
         for cookie in cookies:
             try:
-                context.add_cookies([cookie])  # type: ignore
+                context.add_cookies([cookie])  # ty: ignore[invalid-argument-type]
             except Exception as e:
                 logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
     except Exception:

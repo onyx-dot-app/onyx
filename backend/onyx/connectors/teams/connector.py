@@ -4,14 +4,13 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import cast
 
-import msal  # type: ignore
-from office365.graph_client import GraphClient  # type: ignore
-from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
-from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
-from office365.teams.channels.channel import Channel  # type: ignore
-from office365.teams.team import Team  # type: ignore
+import msal
+from office365.graph_client import GraphClient
+from office365.runtime.client_request_exception import ClientRequestException
+from office365.runtime.http.request_options import RequestOptions
+from office365.teams.channels.channel import Channel
+from office365.teams.team import Team
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -205,7 +204,7 @@ class TeamsConnector(
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams")
 
-        checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
+        checkpoint = copy.deepcopy(checkpoint)
 
         todos = checkpoint.todo_team_ids
 
@@ -282,7 +281,7 @@ class TeamsConnector(
         start = start or 0
 
         teams = _collect_all_teams(
-            graph_client=self.graph_client,
+            graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
             requested=self.requested_team_list,
         )
 
@@ -305,11 +304,12 @@ class TeamsConnector(
                     continue
 
                 external_access = fetch_external_access(
-                    graph_client=self.graph_client, channel=channel
+                    graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
+                    channel=channel,
                 )
 
                 messages = fetch_messages(
-                    graph_client=self.graph_client,
+                    graph_client=self.graph_client,  # ty: ignore[invalid-argument-type]
                     team_id=team.id,
                     channel_id=channel.id,
                     start=start,

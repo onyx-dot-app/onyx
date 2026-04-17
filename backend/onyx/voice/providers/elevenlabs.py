@@ -830,7 +830,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         """ElevenLabs supports real-time streaming TTS via WebSocket."""
         return True
 
-    async def create_streaming_transcriber(
+    async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
         self, _audio_format: str = "webm"
     ) -> ElevenLabsStreamingTranscriber:
         """Create a streaming transcription session."""

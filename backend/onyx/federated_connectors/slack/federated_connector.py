@@ -300,7 +300,9 @@ class SlackFederatedConnector(FederatedConnector):
             auth_response.validate()
 
             # Cast response.data to dict for type checking
-            auth_data: dict[str, Any] = auth_response.data  # type: ignore
+            auth_data: dict[str, Any] = (  # ty: ignore[invalid-assignment]
+                auth_response.data
+            )
             team_id = auth_data.get("team_id")
             logger.debug(f"Slack team_id: {team_id}")
         except Exception as e:
