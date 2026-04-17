@@ -4,12 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import {
-  Button,
-  Card as OpalCard,
-  Divider,
-  MessageCard,
-} from "@opal/components";
+import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -42,7 +37,6 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Tooltip } from "@opal/components";
@@ -285,7 +279,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <OpalCard border="solid" rounding="lg" padding="fit">
+    <Card border="solid" rounding="lg" padding="sm">
       <CardLayout.Header
         headerChildren={
           <ContentAction
@@ -299,7 +293,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
         }
         topRightChildren={<SwitchField name={toolFieldName} />}
       />
-    </OpalCard>
+    </Card>
   );
 }
 
@@ -350,7 +344,7 @@ function MCPServerCard({
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <OpalCard border="solid" rounding="lg" padding="fit">
+              <Card border="solid" rounding="lg" padding="xs">
                 <CardLayout.Header
                   headerChildren={
                     <ContentAction
@@ -360,16 +354,16 @@ function MCPServerCard({
                       sizePreset="main-ui"
                       variant="section"
                       paddingVariant="fit"
-                    />
-                  }
-                  topRightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
+                      rightChildren={
+                        <SwitchField
+                          name={`${serverFieldName}.tool_${tool.id}`}
+                          disabled={!isServerEnabled}
+                        />
+                      }
                     />
                   }
                 />
-              </OpalCard>
+              </Card>
             </Disabled>
           );
         })}
@@ -378,12 +372,12 @@ function MCPServerCard({
   }
 
   return (
-    <OpalCard
+    <Card
       expandable
       expanded={!isFolded}
       border="solid"
       rounding="lg"
-      padding="fit"
+      padding="sm"
       expandedContent={cardContent}
     >
       <CardLayout.Header
@@ -443,7 +437,7 @@ function MCPServerCard({
           </GeneralLayouts.Section>
         }
       />
-    </OpalCard>
+    </Card>
   );
 }
 
@@ -1428,7 +1422,7 @@ export default function AgentEditorPage({
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
                             >
-                              <OpalCard border="solid" rounding="lg">
+                              <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="image_generation"
                                   title="Image Generation"
@@ -1440,11 +1434,11 @@ export default function AgentEditorPage({
                                     disabled={!isImageGenerationAvailable}
                                   />
                                 </InputHorizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!webSearchTool}>
-                              <OpalCard border="solid" rounding="lg">
+                              <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="web_search"
                                   title="Web Search"
@@ -1456,11 +1450,11 @@ export default function AgentEditorPage({
                                     disabled={!webSearchTool}
                                   />
                                 </InputHorizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!openURLTool}>
-                              <OpalCard border="solid" rounding="lg">
+                              <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="open_url"
                                   title="Open URL"
@@ -1472,11 +1466,11 @@ export default function AgentEditorPage({
                                     disabled={!openURLTool}
                                   />
                                 </InputHorizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             <Disabled disabled={!codeInterpreterTool}>
-                              <OpalCard border="solid" rounding="lg">
+                              <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="code_interpreter"
                                   title="Code Interpreter"
@@ -1488,7 +1482,7 @@ export default function AgentEditorPage({
                                     disabled={!codeInterpreterTool}
                                   />
                                 </InputHorizontal>
-                              </OpalCard>
+                              </Card>
                             </Disabled>
 
                             {/* Tools */}
@@ -1546,7 +1540,7 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <OpalCard border="solid" rounding="lg">
+                            <Card border="solid" rounding="lg">
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   title="Share This Agent"
@@ -1576,9 +1570,9 @@ export default function AgentEditorPage({
                                   </>
                                 )}
                               </GeneralLayouts.Section>
-                            </OpalCard>
+                            </Card>
 
-                            <OpalCard border="solid" rounding="lg">
+                            <Card border="solid" rounding="lg">
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   withLabel="llm_model"
@@ -1617,7 +1611,7 @@ export default function AgentEditorPage({
                                   <SwitchField name="replace_base_system_prompt" />
                                 </InputHorizontal>
                               </GeneralLayouts.Section>
-                            </OpalCard>
+                            </Card>
 
                             <GeneralLayouts.Section gap={0.25}>
                               <InputVertical
@@ -1649,7 +1643,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular="fit"
                           />
 
-                          <OpalCard border="solid" rounding="lg">
+                          <Card border="solid" rounding="lg">
                             <InputHorizontal
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."
@@ -1663,7 +1657,7 @@ export default function AgentEditorPage({
                                 Delete Agent
                               </Button>
                             </InputHorizontal>
-                          </OpalCard>
+                          </Card>
                         </>
                       )}
                     </SettingsLayouts.Body>

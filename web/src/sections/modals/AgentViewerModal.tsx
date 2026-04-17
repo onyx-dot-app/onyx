@@ -7,7 +7,12 @@ import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import {
+  Card as CardLayout,
+  Content,
+  ContentAction,
+  InputHorizontal,
+} from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
@@ -21,7 +26,6 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
@@ -61,7 +65,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       padding="fit"
       expandedContent={
         tools.length > 0 ? (
-          <ActionsLayouts.Content>
+          <div className="flex flex-col gap-2 p-2">
             {tools.map((tool) => (
               <Section key={tool.id} padding={0.25}>
                 <Content
@@ -72,28 +76,31 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
                 />
               </Section>
             ))}
-          </ActionsLayouts.Content>
+          </div>
         ) : undefined
       }
     >
-      <div className="p-2">
-        <ContentAction
-          icon={serverIcon}
-          title={server.name}
-          description={server.description}
-          sizePreset="main-ui"
-          variant="section"
-          rightChildren={
-            <Button
-              prominence="internal"
-              rightIcon={expanded ? SvgFold : SvgExpand}
-              onClick={() => setExpanded((prev) => !prev)}
-            >
-              {expanded ? "Fold" : "Expand"}
-            </Button>
-          }
-        />
-      </div>
+      <CardLayout.Header
+        headerChildren={
+          <ContentAction
+            icon={serverIcon}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+          />
+        }
+        topRightChildren={
+          <Button
+            prominence="internal"
+            rightIcon={expanded ? SvgFold : SvgExpand}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? "Fold" : "Expand"}
+          </Button>
+        }
+      />
     </Card>
   );
 }
@@ -105,15 +112,17 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
     <Card border="solid" rounding="lg" padding="fit">
-      <div className="p-2">
-        <Content
-          icon={SvgActions}
-          title={tool.display_name}
-          description={tool.description}
-          sizePreset="main-ui"
-          variant="section"
-        />
-      </div>
+      <CardLayout.Header
+        headerChildren={
+          <Content
+            icon={SvgActions}
+            title={tool.display_name}
+            description={tool.description}
+            sizePreset="main-ui"
+            variant="section"
+          />
+        }
+      />
     </Card>
   );
 }
