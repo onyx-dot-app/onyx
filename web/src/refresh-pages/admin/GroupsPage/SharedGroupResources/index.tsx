@@ -146,6 +146,7 @@ function SharedGroupResources({
               interactive={!dimmed}
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
+              strokeIcon={false}
               rightChildren={
                 p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
