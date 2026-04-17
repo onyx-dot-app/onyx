@@ -3,6 +3,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -49,6 +50,7 @@ def get_opensearch_retrieval_status(
     enable_opensearch_retrieval = get_opensearch_retrieval_state(db_session)
     return OpenSearchRetrievalStatusResponse(
         enable_opensearch_retrieval=enable_opensearch_retrieval,
+        toggling_retrieval_is_disabled=ONYX_DISABLE_VESPA,
     )
 
 
@@ -63,4 +65,5 @@ def set_opensearch_retrieval_status(
     )
     return OpenSearchRetrievalStatusResponse(
         enable_opensearch_retrieval=request.enable_opensearch_retrieval,
+        toggling_retrieval_is_disabled=ONYX_DISABLE_VESPA,
     )

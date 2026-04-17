@@ -124,7 +124,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
-    app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
+    app_base.wait_for_document_index_or_shutdown()
 
     logger.info(f"Running as the primary celery worker: pid={os.getpid()}")
 
