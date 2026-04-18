@@ -7,7 +7,7 @@ from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
 
 def test_jsm_connector_source_override():
-    mock_checkpoint = JiraConnectorCheckpoint()
+    mock_checkpoint = JiraConnectorCheckpoint(has_more=False)
 
     mock_doc = Document(
         id="test-issue",
@@ -37,4 +37,3 @@ def test_jsm_connector_source_override():
 
 if __name__ == "__main__":
     test_jsm_connector_source_override()
-    print("Test passed!")

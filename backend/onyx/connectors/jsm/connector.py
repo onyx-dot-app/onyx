@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from collections.abc import Generator
 from typing import Any
 
 from typing_extensions import override
