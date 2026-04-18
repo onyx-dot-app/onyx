@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Button, Divider, MessageCard } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import { Button, Card, Divider, MessageCard } from "@opal/components";
+import { Hoverable, Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -14,7 +14,12 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
-import { InputHorizontal, InputVertical } from "@opal/layouts";
+import {
+  Card as CardLayout,
+  ContentAction,
+  InputHorizontal,
+  InputVertical,
+} from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
@@ -32,7 +37,7 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-import { Card } from "@/refresh-components/cards";
+
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Tooltip } from "@opal/components";
@@ -72,8 +77,6 @@ import {
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -221,7 +224,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
                 <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
-                  <Button size="md" prominence="secondary">
+                  <Button prominence="secondary" size="md">
                     Edit
                   </Button>
                 </Hoverable.Item>
@@ -277,14 +280,21 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <ExpandableCard.Root defaultFolded>
-      <ActionsLayouts.Header
-        title={tool.display_name || tool.name}
-        description={tool.description}
-        icon={SvgActions}
-        rightChildren={<SwitchField name={toolFieldName} />}
+    <Card border="solid" rounding="lg" padding="sm">
+      <CardLayout.Header
+        headerChildren={
+          <ContentAction
+            icon={SvgActions}
+            title={tool.display_name || tool.name}
+            description={tool.description}
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+          />
+        }
+        topRightChildren={<SwitchField name={toolFieldName} />}
       />
-    </ExpandableCard.Root>
+    </Card>
   );
 }
 
@@ -315,87 +325,120 @@ function MCPServerCard({
     return toolFieldValue === true;
   }).length;
 
+  const hasTools = enabledTools.length > 0 && filteredTools.length > 0;
+
+  let cardContent: React.ReactNode | undefined;
+  if (isLoading) {
+    cardContent = (
+      <div className="flex flex-col gap-2 p-2">
+        <GeneralLayouts.Section padding={1}>
+          <SimpleLoader />
+        </GeneralLayouts.Section>
+      </div>
+    );
+  } else if (hasTools) {
+    cardContent = (
+      <div className="flex flex-col gap-2 p-2">
+        {filteredTools.map((tool) => {
+          const toolDisabled =
+            !tool.isAvailable ||
+            !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
+          return (
+            <Disabled key={tool.id} disabled={toolDisabled}>
+              <Card border="solid" rounding="lg" padding="sm">
+                <CardLayout.Header
+                  headerChildren={
+                    <ContentAction
+                      icon={tool.icon ?? SvgSliders}
+                      title={tool.name}
+                      description={tool.description}
+                      sizePreset="main-ui"
+                      variant="section"
+                      paddingVariant="fit"
+                    />
+                  }
+                  topRightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              </Card>
+            </Disabled>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
-    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description}
-        icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={
-          <GeneralLayouts.Section
-            flexDirection="row"
-            gap={0.5}
-            alignItems="start"
-          >
-            <EnabledCount
-              enabledCount={enabledCount}
-              totalCount={enabledTools.length}
+    <Card
+      expandable
+      expanded={!isFolded}
+      border="solid"
+      rounding="lg"
+      padding="sm"
+      expandedContent={cardContent}
+    >
+      <CardLayout.Header
+        headerChildren={
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+            rightChildren={
+              <GeneralLayouts.Section
+                flexDirection="row"
+                gap={0.5}
+                alignItems="start"
+              >
+                <EnabledCount
+                  enabledCount={enabledCount}
+                  totalCount={enabledTools.length}
+                />
+                <SwitchField
+                  name={`${serverFieldName}.enabled`}
+                  onCheckedChange={(checked) => {
+                    enabledTools.forEach((tool) => {
+                      setFieldValue(
+                        `${serverFieldName}.tool_${tool.id}`,
+                        checked
+                      );
+                    });
+                    if (!checked) return;
+                    setIsFolded(false);
+                  }}
+                />
+              </GeneralLayouts.Section>
+            }
+          />
+        }
+        bottomChildren={
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search tools..."
+              variant="internal"
+              leftSearchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
-            <SwitchField
-              name={`${serverFieldName}.enabled`}
-              onCheckedChange={(checked) => {
-                enabledTools.forEach((tool) => {
-                  setFieldValue(`${serverFieldName}.tool_${tool.id}`, checked);
-                });
-                if (!checked) return;
-                setIsFolded(false);
-              }}
-            />
+            {enabledTools.length > 0 && (
+              <Button
+                prominence="internal"
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
           </GeneralLayouts.Section>
         }
-      >
-        <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-          <InputTypeIn
-            placeholder="Search tools..."
-            variant="internal"
-            leftSearchIcon
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {enabledTools.length > 0 && (
-            <Button
-              prominence="internal"
-              rightIcon={isFolded ? SvgExpand : SvgFold}
-              onClick={() => setIsFolded((prev) => !prev)}
-            >
-              {isFolded ? "Expand" : "Fold"}
-            </Button>
-          )}
-        </GeneralLayouts.Section>
-      </ActionsLayouts.Header>
-      {isLoading ? (
-        <ActionsLayouts.Content>
-          <GeneralLayouts.Section padding={1}>
-            <SimpleLoader />
-          </GeneralLayouts.Section>
-        </ActionsLayouts.Content>
-      ) : (
-        enabledTools.length > 0 &&
-        filteredTools.length > 0 && (
-          <ActionsLayouts.Content>
-            {filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                name={`${serverFieldName}.tool_${tool.id}`}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon ?? SvgSliders}
-                disabled={
-                  !tool.isAvailable ||
-                  !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
-                }
-                rightChildren={
-                  <SwitchField
-                    name={`${serverFieldName}.tool_${tool.id}`}
-                    disabled={!isServerEnabled}
-                  />
-                }
-              />
-            ))}
-          </ActionsLayouts.Content>
-        )
-      )}
-    </ExpandableCard.Root>
+      />
+    </Card>
   );
 }
 
@@ -1376,17 +1419,11 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section gap={0.5}>
-                            <Tooltip
+                            <Disabled
+                              disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
-                              side="top"
                             >
-                              <Card
-                                variant={
-                                  isImageGenerationAvailable
-                                    ? undefined
-                                    : "disabled"
-                                }
-                              >
+                              <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="image_generation"
                                   title="Image Generation"
@@ -1399,57 +1436,55 @@ export default function AgentEditorPage({
                                   />
                                 </InputHorizontal>
                               </Card>
-                            </Tooltip>
+                            </Disabled>
 
-                            <Card
-                              variant={!!webSearchTool ? undefined : "disabled"}
-                            >
-                              <InputHorizontal
-                                withLabel="web_search"
-                                title="Web Search"
-                                description="Search the web for real-time information and up-to-date results."
-                                disabled={!webSearchTool}
-                              >
-                                <SwitchField
-                                  name="web_search"
+                            <Disabled disabled={!webSearchTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="web_search"
+                                  title="Web Search"
+                                  description="Search the web for real-time information and up-to-date results."
                                   disabled={!webSearchTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="web_search"
+                                    disabled={!webSearchTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
 
-                            <Card
-                              variant={!!openURLTool ? undefined : "disabled"}
-                            >
-                              <InputHorizontal
-                                withLabel="open_url"
-                                title="Open URL"
-                                description="Fetch and read content from web URLs."
-                                disabled={!openURLTool}
-                              >
-                                <SwitchField
-                                  name="open_url"
+                            <Disabled disabled={!openURLTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="open_url"
+                                  title="Open URL"
+                                  description="Fetch and read content from web URLs."
                                   disabled={!openURLTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="open_url"
+                                    disabled={!openURLTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
 
-                            <Card
-                              variant={
-                                !!codeInterpreterTool ? undefined : "disabled"
-                              }
-                            >
-                              <InputHorizontal
-                                withLabel="code_interpreter"
-                                title="Code Interpreter"
-                                description="Generate and run code."
-                                disabled={!codeInterpreterTool}
-                              >
-                                <SwitchField
-                                  name="code_interpreter"
+                            <Disabled disabled={!codeInterpreterTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="code_interpreter"
+                                  title="Code Interpreter"
+                                  description="Generate and run code."
                                   disabled={!codeInterpreterTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
+                                >
+                                  <SwitchField
+                                    name="code_interpreter"
+                                    disabled={!codeInterpreterTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
 
                             {/* Tools */}
                             <>
@@ -1506,73 +1541,77 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <Card>
-                              <InputHorizontal
-                                title="Share This Agent"
-                                description="with other users, groups, or everyone in your organization."
-                                center
-                              >
-                                <Button
-                                  prominence="secondary"
-                                  icon={isShared ? SvgUsers : SvgLock}
-                                  onClick={() => shareAgentModal.toggle(true)}
+                            <Card border="solid" rounding="lg">
+                              <GeneralLayouts.Section>
+                                <InputHorizontal
+                                  title="Share This Agent"
+                                  description="with other users, groups, or everyone in your organization."
+                                  center
                                 >
-                                  Share
-                                </Button>
-                              </InputHorizontal>
-                              {canUpdateFeaturedStatus && (
-                                <>
-                                  <InputHorizontal
-                                    withLabel="is_featured"
-                                    title="Feature This Agent"
-                                    description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                  <Button
+                                    prominence="secondary"
+                                    icon={isShared ? SvgUsers : SvgLock}
+                                    onClick={() => shareAgentModal.toggle(true)}
                                   >
-                                    <SwitchField name="is_featured" />
-                                  </InputHorizontal>
-                                  {values.is_featured && !isShared && (
-                                    <MessageCard title="This agent is private to you and will only be featured for yourself." />
-                                  )}
-                                </>
-                              )}
+                                    Share
+                                  </Button>
+                                </InputHorizontal>
+                                {canUpdateFeaturedStatus && (
+                                  <>
+                                    <InputHorizontal
+                                      withLabel="is_featured"
+                                      title="Feature This Agent"
+                                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                    >
+                                      <SwitchField name="is_featured" />
+                                    </InputHorizontal>
+                                    {values.is_featured && !isShared && (
+                                      <MessageCard title="This agent is private to you and will only be featured for yourself." />
+                                    )}
+                                  </>
+                                )}
+                              </GeneralLayouts.Section>
                             </Card>
 
-                            <Card>
-                              <InputHorizontal
-                                withLabel="llm_model"
-                                title="Default Model"
-                                description="This model will be used by Onyx by default in your chats."
-                              >
-                                <LLMSelector
-                                  name="llm_model"
-                                  llmProviders={llmProviders ?? []}
-                                  currentLlm={getCurrentLlm(
-                                    values,
-                                    llmProviders
-                                  )}
-                                  onSelect={(selected) =>
-                                    onLlmSelect(selected, setFieldValue)
-                                  }
-                                />
-                              </InputHorizontal>
-                              <InputHorizontal
-                                withLabel="knowledge_cutoff_date"
-                                title="Knowledge Cutoff Date"
-                                suffix="optional"
-                                description="Documents with a last-updated date prior to this will be ignored."
-                              >
-                                <InputDatePickerField
-                                  name="knowledge_cutoff_date"
-                                  maxDate={new Date()}
-                                />
-                              </InputHorizontal>
-                              <InputHorizontal
-                                withLabel="replace_base_system_prompt"
-                                title="Overwrite System Prompt"
-                                suffix="(Not Recommended)"
-                                description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                              >
-                                <SwitchField name="replace_base_system_prompt" />
-                              </InputHorizontal>
+                            <Card border="solid" rounding="lg">
+                              <GeneralLayouts.Section>
+                                <InputHorizontal
+                                  withLabel="llm_model"
+                                  title="Default Model"
+                                  description="This model will be used by Onyx by default in your chats."
+                                >
+                                  <LLMSelector
+                                    name="llm_model"
+                                    llmProviders={llmProviders ?? []}
+                                    currentLlm={getCurrentLlm(
+                                      values,
+                                      llmProviders
+                                    )}
+                                    onSelect={(selected) =>
+                                      onLlmSelect(selected, setFieldValue)
+                                    }
+                                  />
+                                </InputHorizontal>
+                                <InputHorizontal
+                                  withLabel="knowledge_cutoff_date"
+                                  title="Knowledge Cutoff Date"
+                                  suffix="optional"
+                                  description="Documents with a last-updated date prior to this will be ignored."
+                                >
+                                  <InputDatePickerField
+                                    name="knowledge_cutoff_date"
+                                    maxDate={new Date()}
+                                  />
+                                </InputHorizontal>
+                                <InputHorizontal
+                                  withLabel="replace_base_system_prompt"
+                                  title="Overwrite System Prompt"
+                                  suffix="(Not Recommended)"
+                                  description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
+                                >
+                                  <SwitchField name="replace_base_system_prompt" />
+                                </InputHorizontal>
+                              </GeneralLayouts.Section>
                             </Card>
 
                             <GeneralLayouts.Section gap={0.25}>
@@ -1605,7 +1644,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular="fit"
                           />
 
-                          <Card>
+                          <Card border="solid" rounding="lg">
                             <InputHorizontal
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."

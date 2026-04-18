@@ -1,48 +1,62 @@
-import { Content, type ContentProps } from "@opal/layouts/content/components";
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type CardHeaderProps = ContentProps & {
-  /** Content rendered to the right of the Content block. */
-  rightChildren?: React.ReactNode;
+interface CardHeaderProps {
+  /** Content rendered in the top-left header slot — typically a {@link Content} block. */
+  headerChildren?: React.ReactNode;
 
-  /** Content rendered below `rightChildren` in the same column. */
+  /** Content rendered to the right of `headerChildren` (top of right column). */
+  topRightChildren?: React.ReactNode;
+
+  /** Content rendered below `topRightChildren`, in the same column. */
   bottomRightChildren?: React.ReactNode;
 
   /**
-   * Content rendered below the header row, full-width.
-   * Use for expandable sections, search bars, or any content
-   * that should appear beneath the icon/title/actions row.
+   * Content rendered below the entire header (left + right columns),
+   * spanning the full width. Use for expandable sections, search bars, or
+   * any content that should appear beneath the icon/title/actions row.
    */
-  children?: React.ReactNode;
-};
+  bottomChildren?: React.ReactNode;
+}
 
 // ---------------------------------------------------------------------------
 // Card.Header
 // ---------------------------------------------------------------------------
 
 /**
- * A card header layout that pairs a {@link Content} block (with `p-2`)
- * with a right-side column.
+ * A card header layout with three optional slots arranged in two independent
+ * columns, plus a full-width `bottomChildren` slot below.
  *
- * The right column contains two vertically stacked slots —
- * `rightChildren` on top, `bottomRightChildren` below — with no
- * padding or gap between them.
+ * ```
+ * +------------------+----------------+
+ * | headerChildren   | topRight       |
+ * +                  +----------------+
+ * |                  | bottomRight    |
+ * +------------------+----------------+
+ * | bottomChildren (full width)       |
+ * +-----------------------------------+
+ * ```
  *
- * The optional `children` slot renders below the full header row,
- * spanning the entire width.
+ * The left column grows to fill available space; the right column shrinks
+ * to fit its content. The two columns are independent in height.
+ *
+ * For the typical icon/title/description pattern, pass a {@link Content}
+ * (or {@link ContentAction}) into `headerChildren`.
  *
  * @example
  * ```tsx
  * <Card.Header
- *   icon={SvgGlobe}
- *   title="Google"
- *   description="Search engine"
- *   sizePreset="main-ui"
- *   variant="section"
- *   rightChildren={<Button>Connect</Button>}
+ *   headerChildren={
+ *     <Content
+ *       icon={SvgGlobe}
+ *       title="Google"
+ *       description="Search engine"
+ *       sizePreset="main-ui"
+ *       variant="section"
+ *     />
+ *   }
+ *   topRightChildren={<Button>Connect</Button>}
  *   bottomRightChildren={
  *     <>
  *       <Button icon={SvgUnplug} size="sm" prominence="tertiary" />
@@ -53,29 +67,29 @@ type CardHeaderProps = ContentProps & {
  * ```
  */
 function Header({
-  rightChildren,
+  headerChildren,
+  topRightChildren,
   bottomRightChildren,
-  children,
-  ...contentProps
+  bottomChildren,
 }: CardHeaderProps) {
-  const hasRight = rightChildren || bottomRightChildren;
+  const hasRight = topRightChildren != null || bottomRightChildren != null;
 
   return (
     <div className="flex flex-col w-full">
-      <div className="flex flex-row items-stretch w-full">
-        <div className="flex-1 min-w-0 self-start p-2">
-          <Content {...contentProps} />
-        </div>
+      <div className="flex flex-row items-start w-full">
+        {headerChildren != null && (
+          <div className="self-start p-2 grow min-w-0">{headerChildren}</div>
+        )}
         {hasRight && (
           <div className="flex flex-col items-end shrink-0">
-            {rightChildren && <div className="flex-1">{rightChildren}</div>}
-            {bottomRightChildren && (
+            {topRightChildren != null && <div>{topRightChildren}</div>}
+            {bottomRightChildren != null && (
               <div className="flex flex-row">{bottomRightChildren}</div>
             )}
           </div>
         )}
       </div>
-      {children && <div className="w-full">{children}</div>}
+      {bottomChildren != null && <div className="w-full">{bottomChildren}</div>}
     </div>
   );
 }

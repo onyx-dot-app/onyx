@@ -843,6 +843,29 @@ MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
 
+# Maximum embedded images allowed in a single file. PDFs (and other formats)
+# with thousands of embedded images can OOM the user-file-processing worker
+# because every image is decoded with PIL and then sent to the vision LLM.
+# Enforced both at upload time (rejects the file) and during extraction
+# (defense-in-depth: caps the number of images materialized).
+#
+# Clamped to >= 0; a negative env value would turn upload validation into
+# always-fail and extraction into always-stop, which is never desired. 0
+# disables image extraction entirely, which is a valid (if aggressive) setting.
+MAX_EMBEDDED_IMAGES_PER_FILE = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Maximum embedded images allowed across all files in a single upload batch.
+# Protects against the scenario where a user uploads many files that each
+# fall under MAX_EMBEDDED_IMAGES_PER_FILE but aggregate to enough work
+# (serial-ish celery fan-out plus per-image vision-LLM calls) to OOM the
+# worker under concurrency or run up surprise latency/cost. Also clamped
+# to >= 0.
+MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_UPLOAD") or 1000)
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
