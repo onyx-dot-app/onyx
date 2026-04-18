@@ -7,6 +7,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
@@ -126,10 +127,11 @@ def setup_onyx(
             "DISABLE_VECTOR_DB is set — skipping document index setup and embedding model warm-up."
         )
     else:
-        # Ensure Vespa is setup correctly, this step is relatively near the end
-        # because Vespa takes a bit of time to start up
+        # Ensure the document indices are setup correctly. This step is
+        # relatively near the end because Vespa takes a bit of time to start up.
         logger.notice("Verifying Document Index(s) is/are available.")
-        # This flow is for setting up the document index so we get all indices here.
+        # This flow is for setting up the document index so we get all indices
+        # here.
         document_indices = get_all_document_indices(
             search_settings,
             secondary_search_settings,
@@ -335,7 +337,7 @@ def setup_multitenant_onyx() -> None:
 
     # For Managed Vespa, the schema is sent over via the Vespa Console manually.
     # NOTE: Pretty sure this code is never hit in any production environment.
-    if not MANAGED_VESPA:
+    if not MANAGED_VESPA and not ONYX_DISABLE_VESPA:
         setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)
 
 

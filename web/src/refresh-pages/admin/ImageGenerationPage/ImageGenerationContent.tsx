@@ -18,7 +18,7 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
-import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
+import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, SelectCard, Text } from "@opal/components";
@@ -256,17 +256,21 @@ export default function ImageGenerationContent() {
                     }
                   >
                     <Card.Header
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={() => (
-                        <ModelIcon
-                          provider={provider.provider_name}
-                          size={16}
+                      headerChildren={
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          icon={() => (
+                            <ModelIcon
+                              provider={provider.provider_name}
+                              size={16}
+                            />
+                          )}
+                          title={provider.title}
+                          description={provider.description}
                         />
-                      )}
-                      title={provider.title}
-                      description={provider.description}
-                      rightChildren={
+                      }
+                      topRightChildren={
                         isDisconnected ? (
                           <Button
                             prominence="tertiary"

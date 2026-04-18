@@ -42,6 +42,12 @@ export {
   type SidebarTabProps,
 } from "@opal/components/buttons/sidebar-tab/components";
 
+/* LinkButton */
+export {
+  LinkButton,
+  type LinkButtonProps,
+} from "@opal/components/buttons/link-button/components";
+
 /* Text */
 export {
   Text,
@@ -87,7 +93,6 @@ export {
 export {
   MessageCard,
   type MessageCardProps,
-  type MessageCardVariant,
 } from "@opal/components/cards/message-card/components";
 
 /* Pagination */

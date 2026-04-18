@@ -15,10 +15,19 @@ from onyx.connectors.models import Section
 from onyx.connectors.models import TabularSection
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
+from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
+from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
+    build_total_descriptor_chunks,
+)
+from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
+    TOTALS_HEADER,
+)
 from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.utils.csv_utils import parse_csv_string
+from onyx.utils.csv_utils import read_csv_header
 
 
 class CharTokenizer(BaseTokenizer):
@@ -587,7 +596,7 @@ class TestTabularChunkerChunkSection:
         content_chunk = (
             "sheet:T\n" "Columns: Name, Age\n" "Name=Alice, Age=30\n" "Name=Bob, Age=25"
         )
-        metadata_chunk = (
+        descriptor_chunk = (
             "sheet:T\n"
             "Sheet overview.\n"
             "This sheet has 2 rows and 2 columns.\n"
@@ -596,7 +605,17 @@ class TestTabularChunkerChunkSection:
             "Categorical columns (groupable, can be counted by value): Name\n"
             "Values seen in Name: Alice, Bob"
         )
-        expected_texts = [content_chunk, metadata_chunk]
+        totals_chunk = (
+            "sheet:T\n"
+            "Totals and overall aggregates across all rows. This sheet can answer "
+            "whole-dataset questions about total, overall, grand total, sum across "
+            "all, average, combined, mean, minimum, maximum, and count of values.\n"
+            "Column Age: total (sum across all rows) = 55, average = 27.5, "
+            "minimum = 25, maximum = 30, count = 2.\n"
+            "Column Name most frequent value: Alice (1 occurrences).\n"
+            "Total row count: 2."
+        )
+        expected_texts = [content_chunk, descriptor_chunk, totals_chunk]
 
         # --- ACT -------------------------------------------------------
         out = _make_chunker_with_metadata().chunk_section(
@@ -607,8 +626,8 @@ class TestTabularChunkerChunkSection:
 
         # --- ASSERT ----------------------------------------------------
         assert [p.text for p in out.payloads] == expected_texts
-        # Content first, metadata second — only the first chunk is fresh.
-        assert [p.is_continuation for p in out.payloads] == [False, True]
+        # Content first, metadata chunks follow as continuations.
+        assert [p.is_continuation for p in out.payloads] == [False, True, True]
 
 
 class TestBuildSheetDescriptorChunks:
@@ -627,9 +646,14 @@ class TestBuildSheetDescriptorChunks:
         heading: str | None = "sheet:T",
         max_tokens: int = 500,
     ) -> list[str]:
-        section = TabularSection(text=csv_text, link=_DEFAULT_LINK, heading=heading)
+        parsed_rows = list(parse_csv_string(csv_text))
+        headers = parsed_rows[0].header if parsed_rows else read_csv_header(csv_text)
+        if not headers:
+            return []
         return build_sheet_descriptor_chunks(
-            section=section,
+            headers=headers,
+            analysis=analyze_sheet(headers, parsed_rows),
+            heading=heading or "",
             tokenizer=CharTokenizer(),
             max_tokens=max_tokens,
         )
@@ -837,3 +861,174 @@ class TestBuildSheetDescriptorChunks:
 
         # --- ACT / ASSERT ---------------------------------------------
         assert self._build(csv_text, heading="", max_tokens=30) == expected
+
+
+class TestBuildTotalDescriptorChunks:
+    """Direct tests of `build_total_descriptor_chunks` — emits the totals
+    chunk that names aggregate vocabulary (total/sum/average/min/max/
+    count/most frequent) plus per-column aggregates so whole-dataset
+    questions retrieve a chunk whose text actually contains the answer.
+    """
+
+    @staticmethod
+    def _build(
+        csv_text: str,
+        heading: str | None = "sheet:T",
+        max_tokens: int = 1000,
+    ) -> list[str]:
+        parsed_rows = list(parse_csv_string(csv_text))
+        headers = parsed_rows[0].header if parsed_rows else read_csv_header(csv_text)
+        if not headers:
+            return []
+        return build_total_descriptor_chunks(
+            headers=headers,
+            analysis=analyze_sheet(headers, parsed_rows),
+            heading=heading or "",
+            tokenizer=CharTokenizer(),
+            max_tokens=max_tokens,
+        )
+
+    def test_numeric_and_categorical_columns_emit_every_line(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # amount → numeric (total=600, avg=200, min=100, max=300, count=3)
+        # region → categorical (US appears twice, EU once → top=US (2))
+        csv_text = "amount,region\n100,US\n200,EU\n300,US\n"
+
+        # --- EXPECTED --------------------------------------------------
+        expected = [
+            "sheet:T\n"
+            f"{TOTALS_HEADER}\n"
+            "Column amount: total (sum across all rows) = 600, average = 200, "
+            "minimum = 100, maximum = 300, count = 3.\n"
+            "Column region most frequent value: US (2 occurrences).\n"
+            "Total row count: 3."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text) == expected
+
+    def test_numeric_only_sheet_has_no_categorical_line(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Both columns are all-numeric → no "most frequent value" lines.
+        csv_text = "x,y\n1,2\n3,4\n"
+
+        # --- EXPECTED --------------------------------------------------
+        expected = [
+            "sheet:T\n"
+            f"{TOTALS_HEADER}\n"
+            "Column x: total (sum across all rows) = 4, average = 2, "
+            "minimum = 1, maximum = 3, count = 2.\n"
+            "Column y: total (sum across all rows) = 6, average = 3, "
+            "minimum = 2, maximum = 4, count = 2.\n"
+            "Total row count: 2."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text) == expected
+
+    def test_categorical_only_sheet_has_no_numeric_line(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Non-numeric low-cardinality column → categorical only. "red"
+        # wins over "blue" 2-to-1.
+        csv_text = "color\nred\nblue\nred\n"
+
+        # --- EXPECTED --------------------------------------------------
+        expected = [
+            "sheet:T\n"
+            f"{TOTALS_HEADER}\n"
+            "Column color most frequent value: red (2 occurrences).\n"
+            "Total row count: 3."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text) == expected
+
+    def test_underscored_column_names_get_friendly_alias(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Underscored headers get the same `name (name with spaces)` alias
+        # used elsewhere so retrieval matches either surface form.
+        csv_text = "total_cost\n100\n200\n"
+
+        # --- EXPECTED --------------------------------------------------
+        expected = [
+            "sheet:T\n"
+            f"{TOTALS_HEADER}\n"
+            "Column total_cost (total cost): total (sum across all rows) = 300, "
+            "average = 150, minimum = 100, maximum = 200, count = 2.\n"
+            "Total row count: 2."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text) == expected
+
+    def test_non_integer_averages_format_with_decimals(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Whole-number inputs but a fractional average. `_fmt` drops the
+        # ".0" when the value is integral and falls back to `:.6g` when
+        # it isn't — verify both surfaces on the same line.
+        csv_text = "rate\n1\n2\n"
+
+        # --- EXPECTED --------------------------------------------------
+        # total=3 (int), avg=1.5 (fractional), min=1, max=2, count=2.
+        expected = [
+            "sheet:T\n"
+            f"{TOTALS_HEADER}\n"
+            "Column rate: total (sum across all rows) = 3, average = 1.5, "
+            "minimum = 1, maximum = 2, count = 2.\n"
+            "Total row count: 2."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text) == expected
+
+    def test_empty_section_returns_no_chunks(self) -> None:
+        # No parsed rows → no totals to report; builder bails out early.
+        assert self._build("") == []
+
+    def test_header_only_csv_returns_no_chunks(self) -> None:
+        # Header-only CSV yields zero data rows → `parse_csv_string`
+        # returns nothing, so the builder returns an empty list.
+        assert self._build("col1,col2\n") == []
+
+    def test_no_heading_omits_prefix_line(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # heading=None → prefix is just TOTALS_HEADER, no leading heading
+        # line in the emitted chunk.
+        csv_text = "n\n5\n"
+
+        # --- EXPECTED --------------------------------------------------
+        expected = [
+            f"{TOTALS_HEADER}\n"
+            "Column n: total (sum across all rows) = 5, average = 5, "
+            "minimum = 5, maximum = 5, count = 1.\n"
+            "Total row count: 1."
+        ]
+
+        # --- ACT / ASSERT ---------------------------------------------
+        assert self._build(csv_text, heading=None) == expected
+
+    def test_tight_budget_splits_into_multiple_chunks_each_with_header(self) -> None:
+        # --- INPUT -----------------------------------------------------
+        # Three numeric columns under a tight budget force pack_lines to
+        # split across multiple chunks. Every emitted chunk must still
+        # start with `heading + TOTALS_HEADER` so retrieval keeps context
+        # on whichever chunk wins.
+        csv_text = "a,b,c\n1,2,3\n4,5,6\n"
+
+        # --- ACT -------------------------------------------------------
+        # Budget chosen so the three aggregate lines can't all fit under
+        # TOTALS_HEADER in a single chunk.
+        out = self._build(csv_text, heading="S", max_tokens=len(TOTALS_HEADER) + 120)
+
+        # --- ASSERT ----------------------------------------------------
+        # Split actually happened.
+        assert len(out) > 1
+        # Each chunk carries the full prefix (heading + totals header).
+        assert all(c.startswith(f"S\n{TOTALS_HEADER}\n") for c in out)
+        # Collectively, every per-column aggregate and the row count line
+        # must appear somewhere in the output.
+        body = "\n".join(out)
+        assert "Column a: total (sum across all rows) = 5" in body
+        assert "Column b: total (sum across all rows) = 7" in body
+        assert "Column c: total (sum across all rows) = 9" in body
+        assert "Total row count: 2." in body

@@ -68,6 +68,7 @@ repos:
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
+        alias: ty
         name: ty
         args: ["ty", "check"]
         pass_filenames: true
@@ -84,6 +85,17 @@ repos:
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
     hooks:
       - id: actionlint
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        exclude: >-
+          (?x)^(
+            backend/scripts/setup_craft_templates\.sh|
+            deployment/docker_compose/init-letsencrypt\.sh|
+            deployment/docker_compose/install\.sh
+          )$
 
   - repo: https://github.com/psf/black
     rev: 8a737e727ac5ab2f1d4cf5876720ed276dc8dc4b # frozen: 25.1.0

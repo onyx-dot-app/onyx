@@ -184,6 +184,7 @@ export { default as SvgUserSpeaker } from "@opal/icons/user-speaker";
 export { default as SvgUserSync } from "@opal/icons/user-sync";
 export { default as SvgUserX } from "@opal/icons/user-x";
 export { default as SvgUsers } from "@opal/icons/users";
+export { default as SvgVector } from "@opal/icons/vector";
 export { default as SvgVolume } from "@opal/icons/volume";
 export { default as SvgVolumeOff } from "@opal/icons/volume-off";
 export { default as SvgWallet } from "@opal/icons/wallet";

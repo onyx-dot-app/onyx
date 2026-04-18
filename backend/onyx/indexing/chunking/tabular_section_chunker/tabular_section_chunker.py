@@ -7,14 +7,19 @@ from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
+from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
+)
+from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
+    build_total_descriptor_chunks,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens
 from onyx.utils.csv_utils import parse_csv_string
 from onyx.utils.csv_utils import ParsedRow
+from onyx.utils.csv_utils import read_csv_header
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -230,24 +235,38 @@ class TabularChunker(SectionChunker):
     ) -> SectionChunkerOutput:
         payloads = accumulator.flush_to_list()
 
-        parsed_rows = list(parse_csv_string(section.text or ""))
-        sheet_header = section.heading or ""
+        text = section.text or ""
+        parsed_rows = list(parse_csv_string(text))
+        headers = parsed_rows[0].header if parsed_rows else read_csv_header(text)
+        heading = section.heading or ""
 
         chunk_texts: list[str] = []
         if parsed_rows:
             chunk_texts.extend(
                 parse_to_chunks(
                     rows=parsed_rows,
-                    sheet_header=sheet_header,
+                    sheet_header=heading,
                     tokenizer=self.tokenizer,
                     max_tokens=content_token_limit,
                 )
             )
 
-        if not self.ignore_metadata_chunks:
+        if not self.ignore_metadata_chunks and headers:
+            analysis = analyze_sheet(headers, parsed_rows)
             chunk_texts.extend(
                 build_sheet_descriptor_chunks(
-                    section=section,
+                    headers=headers,
+                    analysis=analysis,
+                    heading=heading,
+                    tokenizer=self.tokenizer,
+                    max_tokens=content_token_limit,
+                )
+            )
+            chunk_texts.extend(
+                build_total_descriptor_chunks(
+                    headers=headers,
+                    analysis=analysis,
+                    heading=heading,
                     tokenizer=self.tokenizer,
                     max_tokens=content_token_limit,
                 )

@@ -68,9 +68,7 @@ SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # Run the conversion into a temp file so a failed run doesn't destroy an existing .tsx
 TMPFILE="${BASE_NAME}.tsx.tmp"
-bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "$TMPFILE"
-
-if [ $? -eq 0 ]; then
+if bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "$TMPFILE"; then
   # Verify the temp file has content before replacing the destination
   if [ ! -s "$TMPFILE" ]; then
     rm -f "$TMPFILE"
@@ -84,16 +82,14 @@ if [ $? -eq 0 ]; then
   # Using perl for cross-platform compatibility (works on macOS, Linux, Windows with WSL)
   # Note: perl -i returns 0 even on some failures, so we validate the output
 
-  perl -i -pe 's/<svg/<svg width={size} height={size}/g' "${BASE_NAME}.tsx"
-  if [ $? -ne 0 ]; then
+  if ! perl -i -pe 's/<svg/<svg width={size} height={size}/g' "${BASE_NAME}.tsx"; then
     echo "Error: Failed to add width/height attributes" >&2
     exit 1
   fi
 
   # Icons additionally get stroke="currentColor"
   if [ "$MODE" = "icon" ]; then
-    perl -i -pe 's/\{\.\.\.props\}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
-    if [ $? -ne 0 ]; then
+    if ! perl -i -pe 's/\{\.\.\.props\}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"; then
       echo "Error: Failed to add stroke attribute" >&2
       exit 1
     fi

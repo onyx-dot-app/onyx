@@ -46,7 +46,7 @@ stop_and_remove_containers
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
 if [[ -n "$POSTGRES_VOLUME" ]]; then
-    docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d -v $POSTGRES_VOLUME:/var/lib/postgresql/data postgres -c max_connections=250
+    docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d -v "$POSTGRES_VOLUME":/var/lib/postgresql/data postgres -c max_connections=250
 else
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d postgres -c max_connections=250
 fi
@@ -54,7 +54,7 @@ fi
 # Start the Vespa container with optional volume
 echo "Starting Vespa container..."
 if [[ -n "$VESPA_VOLUME" ]]; then
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v $VESPA_VOLUME:/opt/vespa/var vespaengine/vespa:8
+    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v "$VESPA_VOLUME":/opt/vespa/var vespaengine/vespa:8
 else
     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
@@ -85,7 +85,7 @@ docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-en
 # Start the Redis container with optional volume
 echo "Starting Redis container..."
 if [[ -n "$REDIS_VOLUME" ]]; then
-    docker run --detach --name onyx_redis --publish 6379:6379 -v $REDIS_VOLUME:/data redis
+    docker run --detach --name onyx_redis --publish 6379:6379 -v "$REDIS_VOLUME":/data redis
 else
     docker run --detach --name onyx_redis --publish 6379:6379 redis
 fi
@@ -93,7 +93,7 @@ fi
 # Start the MinIO container with optional volume
 echo "Starting MinIO container..."
 if [[ -n "$MINIO_VOLUME" ]]; then
-    docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -v $MINIO_VOLUME:/data minio/minio server /data --console-address ":9001"
+    docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -v "$MINIO_VOLUME":/data minio/minio server /data --console-address ":9001"
 else
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
 fi
@@ -111,6 +111,7 @@ sleep 1
 
 # Alembic should be configured in the virtualenv for this repo
 if [[ -f "../.venv/bin/activate" ]]; then
+    # shellcheck source=/dev/null
     source ../.venv/bin/activate
 else
     echo "Warning: Python virtual environment not found at .venv/bin/activate; alembic may not work."

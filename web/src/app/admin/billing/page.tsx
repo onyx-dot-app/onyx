@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { mutate } from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -19,7 +18,7 @@ import {
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { MessageCard } from "@opal/components";
+import { LinkButton, MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -72,25 +71,10 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <Button action tertiary onClick={onActivateLicense}>
-            <Text secondaryBody text05 className="underline">
-              {licenseText}
-            </Text>
-          </Button>
+          <LinkButton onClick={onActivateLicense}>{licenseText}</LinkButton>
         </>
       )}
-      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-      <Button
-        action
-        tertiary
-        href={billingHelpHref}
-        className="billing-text-link"
-      >
-        <Text secondaryBody text03 className="underline">
-          Billing Help
-        </Text>
-      </Button>
+      <LinkButton href={billingHelpHref}>Billing Help</LinkButton>
     </Section>
   );
 }

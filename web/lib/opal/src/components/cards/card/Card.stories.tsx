@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Card } from "@opal/components";
+import { useState } from "react";
+import { Button, Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
@@ -99,4 +100,84 @@ export const AllCombinations: Story = {
       ))}
     </div>
   ),
+};
+
+// ─── Expandable mode ─────────────────────────────────────────────────────────
+
+export const Expandable: Story = {
+  render: function ExpandableStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="w-96">
+        <Card
+          expandable
+          expanded={open}
+          border="solid"
+          expandedContent={
+            <div className="flex flex-col gap-2">
+              <p>First model</p>
+              <p>Second model</p>
+              <p>Third model</p>
+            </div>
+          }
+        >
+          <Button
+            prominence="tertiary"
+            width="full"
+            onClick={() => setOpen((v) => !v)}
+          >
+            Toggle (expanded={String(open)})
+          </Button>
+        </Card>
+      </div>
+    );
+  },
+};
+
+export const ExpandableNoContent: Story = {
+  render: function ExpandableNoContentStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="w-96">
+        <Card expandable expanded={open} border="solid">
+          <Button
+            prominence="tertiary"
+            width="full"
+            onClick={() => setOpen((v) => !v)}
+          >
+            Toggle (no content — renders like a plain card)
+          </Button>
+        </Card>
+      </div>
+    );
+  },
+};
+
+export const ExpandableRoundingVariants: Story = {
+  render: function ExpandableRoundingStory() {
+    const [openKey, setOpenKey] =
+      useState<(typeof ROUNDING_VARIANTS)[number]>("md");
+    return (
+      <div className="flex flex-col gap-4 w-96">
+        {ROUNDING_VARIANTS.map((rounding) => (
+          <Card
+            key={rounding}
+            expandable
+            expanded={openKey === rounding}
+            rounding={rounding}
+            border="solid"
+            expandedContent={<p>content for rounding={rounding}</p>}
+          >
+            <Button
+              prominence="tertiary"
+              width="full"
+              onClick={() => setOpenKey(rounding)}
+            >
+              rounding={rounding} (click to expand)
+            </Button>
+          </Card>
+        ))}
+      </div>
+    );
+  },
 };

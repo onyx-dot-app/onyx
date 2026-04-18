@@ -15,7 +15,7 @@ import {
 } from "@/interfaces/llm";
 import { getProvider } from "@/lib/llmConfig";
 import { Disabled } from "@opal/core";
-import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
+import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
@@ -162,7 +162,7 @@ const LLMStep = memo(
                   disabled={disabled}
                   prominence="tertiary"
                   rightIcon={SvgExternalLink}
-                  href="/admin/configuration/llm"
+                  href="/admin/configuration/language-models"
                 >
                   View in Admin Panel
                 </Button>

@@ -62,17 +62,19 @@ def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
 def extract_text_from_adf(adf: dict | None) -> str:
     """Extracts plain text from Atlassian Document Format:
     https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/
-
-    WARNING: This function is incomplete and will e.g. skip lists!
     """
-    # TODO: complete this function
-    texts = []
-    if adf is not None and "content" in adf:
-        for block in adf["content"]:
-            if "content" in block:
-                for item in block["content"]:
-                    if item["type"] == "text":
-                        texts.append(item["text"])
+    texts: list[str] = []
+
+    def _extract(node: dict) -> None:
+        if node.get("type") == "text":
+            text = node.get("text", "")
+            if text:
+                texts.append(text)
+        for child in node.get("content", []):
+            _extract(child)
+
+    if adf is not None:
+        _extract(adf)
     return " ".join(texts)
 
 

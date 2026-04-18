@@ -282,6 +282,7 @@ OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
+OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -327,6 +328,7 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
 DISABLE_OPENSEARCH_MIGRATION_TASK = (
     os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
 )
+ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
@@ -842,6 +844,29 @@ MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
+
+# Maximum embedded images allowed in a single file. PDFs (and other formats)
+# with thousands of embedded images can OOM the user-file-processing worker
+# because every image is decoded with PIL and then sent to the vision LLM.
+# Enforced both at upload time (rejects the file) and during extraction
+# (defense-in-depth: caps the number of images materialized).
+#
+# Clamped to >= 0; a negative env value would turn upload validation into
+# always-fail and extraction into always-stop, which is never desired. 0
+# disables image extraction entirely, which is a valid (if aggressive) setting.
+MAX_EMBEDDED_IMAGES_PER_FILE = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Maximum embedded images allowed across all files in a single upload batch.
+# Protects against the scenario where a user uploads many files that each
+# fall under MAX_EMBEDDED_IMAGES_PER_FILE but aggregate to enough work
+# (serial-ish celery fan-out plus per-image vision-LLM calls) to OOM the
+# worker under concurrency or run up surprise latency/cost. Also clamped
+# to >= 0.
+MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_UPLOAD") or 1000)
+)
 
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"

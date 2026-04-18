@@ -1,3 +1,7 @@
+/* ============================================================================
+   Plain Card
+============================================================================ */
+
 .opal-card {
   @apply w-full overflow-clip;
 }
@@ -15,7 +19,8 @@
   @apply bg-background-tint-01;
 }
 
-/* Border variants */
+/* Border variants. Border *color* lives in `cards/shared.css` and is keyed
+   off the `data-opal-status-border` attribute. */
 .opal-card[data-border="none"] {
   border: none;
 }
@@ -26,4 +31,102 @@
 
 .opal-card[data-border="solid"] {
   @apply border;
+}
+
+/* ============================================================================
+   Expandable Card
+
+   Structure:
+     .opal-card-expandable                 (flex-col wrapper, no styling)
+       .opal-card-expandable-header        (bg + border + padding + rounding)
+       .opal-card-expandable-wrapper       (grid animation, overflow clip)
+         .opal-card-expandable-inner       (min-h:0, overflow clip for grid)
+           .opal-card-expandable-body      (bg + border-minus-top + padding)
+
+   Animation: pure CSS grid `0fr ↔ 1fr` with opacity fade on the wrapper.
+   No JS state machine, no Radix.
+============================================================================ */
+
+.opal-card-expandable {
+  @apply w-full flex flex-col;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.opal-card-expandable-header {
+  @apply w-full overflow-clip transition-[border-radius] duration-200 ease-out;
+}
+
+.opal-card-expandable-header[data-background="none"] {
+  @apply bg-transparent;
+}
+
+.opal-card-expandable-header[data-background="light"] {
+  @apply bg-background-tint-00;
+}
+
+.opal-card-expandable-header[data-background="heavy"] {
+  @apply bg-background-tint-01;
+}
+
+.opal-card-expandable-header[data-border="none"] {
+  border: none;
+}
+
+.opal-card-expandable-header[data-border="dashed"] {
+  @apply border border-dashed;
+}
+
+.opal-card-expandable-header[data-border="solid"] {
+  @apply border;
+}
+
+/* ── Content wrapper: grid 0fr↔1fr animation ─────────────────────────── */
+
+.opal-card-expandable-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    grid-template-rows 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+.opal-card-expandable-wrapper[data-expanded="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* ── Content inner: clips the grid child so it collapses to 0 cleanly ── */
+
+.opal-card-expandable-inner {
+  @apply overflow-hidden;
+  min-height: 0;
+}
+
+/* ── Content body: carries border + padding. Background is always
+      transparent so the page background shows through the content slot,
+      keeping it visually distinct from the header. ─ */
+
+.opal-card-expandable-body {
+  @apply w-full bg-transparent;
+}
+
+.opal-card-expandable-body[data-content-height="md"] {
+  @apply max-h-[20rem] overflow-y-auto;
+}
+
+/* "fit" = no constraint; natural height, no scroll. */
+
+.opal-card-expandable-body[data-border="none"] {
+  border: none;
+}
+
+.opal-card-expandable-body[data-border="dashed"] {
+  @apply border border-t-0 border-dashed;
+}
+
+.opal-card-expandable-body[data-border="solid"] {
+  @apply border border-t-0;
 }
