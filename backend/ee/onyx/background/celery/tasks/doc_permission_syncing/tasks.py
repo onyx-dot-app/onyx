@@ -513,7 +513,7 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
-            connector_type = source_type
+            connector_type = source_type.value
             sync_config = get_source_perm_sync_config(source_type)
             if sync_config is None:
                 error_msg = f"No sync config found for {source_type}"
@@ -599,7 +599,7 @@ def connector_permission_sync_generator_task(
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
-                    source_string=source_type,
+                    source_string=connector_type,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                     task_logger=task_logger,

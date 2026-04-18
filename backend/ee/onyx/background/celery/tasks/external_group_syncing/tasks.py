@@ -489,13 +489,12 @@ def _perform_external_group_sync(
         )
 
     try:
-        _timed_perform_external_group_sync(
+        connector_type = _timed_perform_external_group_sync(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
             timeout_seconds=timeout_seconds,
             attempt_id=attempt_id,
         )
-
     finally:
         observe_group_sync_duration(time.monotonic() - sync_start, connector_type)
 
@@ -505,7 +504,7 @@ def _timed_perform_external_group_sync(
     tenant_id: str,
     attempt_id: int,
     timeout_seconds: int = JOB_TIMEOUT,
-) -> None:
+) -> str:
     start_time = time.monotonic()
 
     with get_session_with_current_tenant() as db_session:
@@ -518,7 +517,7 @@ def _timed_perform_external_group_sync(
             raise ValueError(f"No connector credential pair found for id: {cc_pair_id}")
 
         source_type = cc_pair.connector.source
-        connector_type = source_type
+        connector_type = source_type.value
         sync_config = get_source_perm_sync_config(source_type)
         if sync_config is None:
             msg = f"No sync config found for {source_type} for cc_pair: {cc_pair_id}"
@@ -643,6 +642,8 @@ def _timed_perform_external_group_sync(
         inc_group_sync_users_processed(connector_type, total_users_processed)
 
         mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
+
+    return connector_type
 
 
 def validate_external_group_sync_fences(
