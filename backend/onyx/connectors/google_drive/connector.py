@@ -1635,6 +1635,7 @@ class GoogleDriveConnector(
                 [retrieved_file.user_email, self.primary_admin_email]
                 + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
                 retrieved_file.drive_file,
+                self.raw_file_callback,
             )
         except Exception as e:
             logger.exception(
