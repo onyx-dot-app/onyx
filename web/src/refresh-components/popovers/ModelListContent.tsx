@@ -187,21 +187,22 @@ export default function ModelListContent({
                                 title={group.displayName}
                                 padding="fit"
                                 rightChildren={
-                                  <div className="flex flex-col h-full justify-center">
+                                  <Section>
                                     <Button
                                       icon={(props) => (
                                         <SvgChevronRight
                                           {...props}
                                           className={cn(
-                                            "text-text-03 transition-all",
-                                            open && "rotate-90"
+                                            "transition-all",
+                                            open && "rotate-90",
+                                            props.className
                                           )}
                                         />
                                       )}
                                       prominence="tertiary"
                                       size="sm"
                                     />
-                                  </div>
+                                  </Section>
                                 }
                               />
                             </div>
