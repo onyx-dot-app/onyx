@@ -491,11 +491,11 @@ class TestOpenSearchClient:
         current_settings = test_client.get_settings()
 
         # Postcondition.
-        assert "settings" in current_settings
+        assert "index" in current_settings
         # These are always present for any index.
-        assert "number_of_shards" in current_settings["settings"]
-        assert "number_of_replicas" in current_settings["settings"]
-        assert current_settings["settings"]["index"] == test_client._index_name
+        assert "number_of_shards" in current_settings["index"]
+        assert "number_of_replicas" in current_settings["index"]
+        assert current_settings["index"]["provided_name"] == test_client._index_name
 
     def test_get_settings_on_nonexistent_index(
         self, test_client: OpenSearchIndexClient
