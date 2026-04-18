@@ -1,0 +1,8 @@
+{{- range .Values.extraManifests }}
+---
+{{- if kindIs "string" . }}
+{{ tpl . $ }}
+{{- else }}
+{{ tpl (toYaml .) $ }}
+{{- end }}
+{{- end }}
