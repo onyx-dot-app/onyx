@@ -300,11 +300,13 @@ test.describe("LLM Runtime Selection", () => {
 
     const regenerateDialog = page.locator('[role="dialog"]');
     const alternateModelOption = regenerateDialog
-      .locator('[data-selected="false"]')
+      .locator('[data-interactive-state="empty"]')
       .first();
 
     test.skip(
-      (await regenerateDialog.locator('[data-selected="false"]').count()) === 0,
+      (await regenerateDialog
+        .locator('[data-interactive-state="empty"]')
+        .count()) === 0,
       "Regenerate model picker requires at least two runtime model options"
     );
 
@@ -408,12 +410,12 @@ test.describe("LLM Runtime Selection", () => {
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("[data-selected]");
+    const sharedModelOptions = dialog.locator("[data-interactive-state]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
       .getByRole("button", { name: /openai/i })
       .locator("..")
-      .locator("[data-selected]")
+      .locator("[data-interactive-state]")
       .first();
     await expect(openAiModelOption).toBeVisible();
     await openAiModelOption.click();
@@ -434,12 +436,14 @@ test.describe("LLM Runtime Selection", () => {
       .getByPlaceholder("Search models...")
       .fill(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator("[data-selected]");
+    const secondSharedModelOptions = secondDialog.locator(
+      "[data-interactive-state]"
+    );
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
       .getByRole("button", { name: /anthropic/i })
       .locator("..")
-      .locator("[data-selected]")
+      .locator("[data-interactive-state]")
       .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
@@ -451,7 +455,7 @@ test.describe("LLM Runtime Selection", () => {
     const selectedAnthropicOption = verifyDialog
       .getByRole("button", { name: /anthropic/i })
       .locator("..")
-      .locator('[data-selected="true"]');
+      .locator('[data-interactive-state="selected"]');
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
@@ -518,7 +522,7 @@ test.describe("LLM Runtime Selection", () => {
     await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
 
     const restrictedModelOption = dialog
-      .locator("[data-selected]")
+      .locator("[data-interactive-state]")
       .filter({ hasText: restrictedModelName });
 
     await expect(restrictedModelOption).toHaveCount(0);
