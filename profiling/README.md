@@ -18,15 +18,18 @@ docker compose up -d
 
 - **Onyx DB Pool Health** — PostgreSQL connection pool utilization
 - **Onyx Indexing Pipeline v2** — Per-connector indexing throughput, queue depth, task latency
+- **Onyx Permission Sync** — Doc permission sync and external group sync duration, throughput, errors, and Celery task metrics
 
 ## Scrape targets
 
-| Job                      | Port  | Source                        |
-|--------------------------|-------|-------------------------------|
-| `onyx-api-server`        | 8080  | FastAPI `/metrics` (matches `.vscode/launch.json`) |
-| `onyx-monitoring-worker` | 9096  | Celery monitoring worker      |
-| `onyx-docfetching-worker`| 9092  | Celery docfetching worker     |
-| `onyx-docprocessing-worker`| 9093 | Celery docprocessing worker  |
+| Job                        | Port  | Source                        |
+|----------------------------|-------|-------------------------------|
+| `onyx-api-server`          | 8080  | FastAPI `/metrics` (matches `.vscode/launch.json`) |
+| `onyx-monitoring-worker`   | 9096  | Celery monitoring worker      |
+| `onyx-docfetching-worker`  | 9092  | Celery docfetching worker     |
+| `onyx-docprocessing-worker`| 9093  | Celery docprocessing worker   |
+| `onyx-heavy-worker`        | 9094  | Celery heavy worker (pruning, perm sync, group sync) |
+| `onyx-light-worker`        | 9095  | Celery light worker (vespa sync, deletion, permissions upsert) |
 
 ## Environment variables
 
