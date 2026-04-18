@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { LineItemButton, Text } from "@opal/components";
+import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
@@ -15,6 +15,8 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import { cn } from "@opal/utils";
+import { Interactive } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
 
 export interface ModelListContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
@@ -117,6 +119,7 @@ export default function ModelListContent({
       <LineItemButton
         key={`${option.provider}:${option.modelName}`}
         state={selected ? "selected" : "empty"}
+        icon={(props) => <div {...(props as any)} />}
         title={option.displayName}
         description={description}
         onClick={() => onSelect(option)}
@@ -169,26 +172,41 @@ export default function ModelListContent({
                       onOpenChange={() => toggleGroup(group.key)}
                     >
                       <CollapsibleTrigger asChild>
-                        <LineItemButton
-                          sizePreset="secondary"
-                          variant="body"
-                          prominence="muted"
-                          icon={group.Icon}
-                          title={group.displayName}
-                          rightChildren={
-                            <div className="flex flex-col h-full justify-center">
-                              <SvgChevronRight
-                                className={cn(
-                                  "text-text-04 transition-all",
-                                  open && "rotate-90"
-                                )}
-                                size={16}
+                        <Interactive.Stateless prominence="tertiary">
+                          <Interactive.Container
+                            size="fit"
+                            rounding="sm"
+                            width="full"
+                          >
+                            <div className="pl-2 pr-1 py-1 w-full">
+                              <ContentAction
+                                sizePreset="secondary"
+                                variant="body"
+                                prominence="muted"
+                                icon={group.Icon}
+                                title={group.displayName}
+                                padding="fit"
+                                rightChildren={
+                                  <div className="flex flex-col h-full justify-center">
+                                    <Button
+                                      icon={(props) => (
+                                        <SvgChevronRight
+                                          {...props}
+                                          className={cn(
+                                            "text-text-03 transition-all",
+                                            open && "rotate-90"
+                                          )}
+                                        />
+                                      )}
+                                      prominence="tertiary"
+                                      size="sm"
+                                    />
+                                  </div>
+                                }
                               />
                             </div>
-                          }
-                          rounding="sm"
-                          nonInteractive
-                        />
+                          </Interactive.Container>
+                        </Interactive.Stateless>
                       </CollapsibleTrigger>
 
                       <CollapsibleContent>
