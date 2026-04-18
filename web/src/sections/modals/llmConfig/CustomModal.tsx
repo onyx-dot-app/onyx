@@ -409,7 +409,7 @@ export default function CustomModal({
             description={markdown(
               "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
             )}
-            widthVariant="full"
+            width="full"
             variant="section"
             sizePreset="main-content"
           />
@@ -433,7 +433,7 @@ export default function CustomModal({
             description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
             variant="section"
             sizePreset="main-content"
-            widthVariant="full"
+            width="full"
           />
         </InputPadder>
 

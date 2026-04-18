@@ -70,7 +70,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    roundingVariant?: InteractiveContainerRoundingVariant;
+    rounding?: InteractiveContainerRoundingVariant;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -89,7 +89,7 @@ function OpenButton({
   justifyContent,
   tooltip,
   tooltipSide = "top",
-  roundingVariant: roundingVariantOverride,
+  rounding: roundingOverride,
   interaction,
   variant = "select-heavy",
   disabled,
@@ -123,11 +123,10 @@ function OpenButton({
     >
       <Interactive.Container
         type="button"
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={
-          roundingVariantOverride ??
-          (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
+        size={size}
+        width={width}
+        rounding={
+          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
         }
       >
         <div

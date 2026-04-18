@@ -241,7 +241,7 @@ function FormContent({
             `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
           )}
         >
-          <Hoverable.Root group="definitionField" widthVariant="full">
+          <Hoverable.Root group="definitionField" width="full">
             <div className="relative w-full">
               {values.definition.trim() && (
                 <div className="absolute z-[100000] top-2 right-2 bg-background-tint-00">

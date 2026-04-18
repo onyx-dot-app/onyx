@@ -212,7 +212,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.
         if cc_pair_ids_to_sync:
-            maybe_mark_tenant_active(tenant_id)
+            maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
 
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:

@@ -71,7 +71,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         sizePreset="secondary"
         variant="body"
         prominence="muted"
-        widthVariant="fit"
+        width="fit"
       />
     );
   }
@@ -87,7 +87,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         sizePreset="secondary"
         variant="body"
         prominence="muted"
-        widthVariant="fit"
+        width="fit"
       />
       {cloudProvider.costslink && (
         <LinkButton href={cloudProvider.costslink} target="_blank">

@@ -78,7 +78,7 @@ export default function FileTile({
   const isMuted = state === "processing" || state === "disabled";
 
   return (
-    <Hoverable.Root group="fileTile" widthVariant="fit">
+    <Hoverable.Root group="fileTile" width="fit">
       <div
         onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
         className={cn(

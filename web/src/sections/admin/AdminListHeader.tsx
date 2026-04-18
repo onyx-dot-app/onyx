@@ -74,7 +74,7 @@ export default function AdminListHeader({
             sizePreset="main-ui"
             variant="body"
             prominence="muted"
-            widthVariant="fit"
+            width="fit"
           />
           {actionButton}
         </div>

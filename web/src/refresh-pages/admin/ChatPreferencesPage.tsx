@@ -21,7 +21,6 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
-  SvgAlertCircle,
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -49,7 +48,7 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card } from "@opal/components";
+import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
@@ -157,7 +156,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
                 <Switch
@@ -287,7 +286,7 @@ function NumericLimitField({
   };
 
   return (
-    <Hoverable.Root group="numericLimit" widthVariant="full">
+    <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
         showClearButton={false}
@@ -1091,14 +1090,11 @@ export default function ChatPreferencesPage() {
                       )}
                     </Text>
                   </Section>
-                  <Card background="none" border="solid" padding="sm">
-                    <Content
-                      sizePreset="main-ui"
-                      icon={SvgAlertCircle}
-                      title="Modify with caution."
-                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                    />
-                  </Card>
+                  <MessageCard
+                    title="Modify with caution."
+                    description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                    padding="xs"
+                  />
                 </Modal.Body>
                 <Modal.Footer>
                   <Button

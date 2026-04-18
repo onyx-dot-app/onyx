@@ -167,11 +167,7 @@ function FoldableDivider({
         interaction={isOpen ? "hover" : "rest"}
         onClick={toggle}
       >
-        <Interactive.Container
-          roundingVariant="sm"
-          heightVariant="fit"
-          widthVariant="full"
-        >
+        <Interactive.Container rounding="sm" size="fit" width="full">
           <div className="opal-divider">
             <div className="opal-divider-row">
               <div className="opal-divider-title">

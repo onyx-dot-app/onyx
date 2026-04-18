@@ -209,7 +209,7 @@ export const PaddingVariants: Story = {
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title={`paddingVariant: ${padding}`}
+            title={`padding: ${padding}`}
             description="Shows padding differences."
           />
         </SelectCard>
@@ -227,7 +227,7 @@ export const RoundingVariants: Story = {
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title={`roundingVariant: ${rounding}`}
+            title={`rounding: ${rounding}`}
             description="Shows rounding differences."
           />
         </SelectCard>

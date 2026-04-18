@@ -181,7 +181,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
         # nearly every tenant in the active set since most have cc_pairs
         # but almost none are actively being deleted on any given cycle.
         if has_deleting_cc_pair:
-            maybe_mark_tenant_active(tenant_id)
+            maybe_mark_tenant_active(tenant_id, caller="connector_deletion")
 
         # try running cleanup on the cc_pair_ids
         for cc_pair_id in cc_pair_ids:

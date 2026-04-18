@@ -17,6 +17,7 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
+from onyx.configs.app_configs import OPENSEARCH_USE_SSL
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import DocumentChunk
@@ -132,7 +133,7 @@ class OpenSearchClient(AbstractContextManager):
         host: str = OPENSEARCH_HOST,
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
-        use_ssl: bool = True,
+        use_ssl: bool = OPENSEARCH_USE_SSL,
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
@@ -302,7 +303,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         host: str = OPENSEARCH_HOST,
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
-        use_ssl: bool = True,
+        use_ssl: bool = OPENSEARCH_USE_SSL,
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,

@@ -45,7 +45,7 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
         [ -d "$MOUNT_HOME/$item" ] || continue
         if [ -e "$ACTIVE_HOME/$item" ] && [ ! -L "$ACTIVE_HOME/$item" ]; then
             echo "warning: replacing $ACTIVE_HOME/$item with symlink to $MOUNT_HOME/$item" >&2
-            rm -rf "$ACTIVE_HOME/$item"
+            rm -rf "${ACTIVE_HOME:?}/$item"
         fi
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"
     done

@@ -379,10 +379,20 @@ def _download_and_extract_sections_basic(
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         or is_tabular_file(file_name)
     ):
+        # Google Drive doesn't enforce file extensions, so the filename may not
+        # end in .xlsx even when the mime type says it's one. Synthesize the
+        # extension so tabular_file_to_sections dispatches correctly.
+        tabular_file_name = file_name
+        if (
+            mime_type
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            and not is_tabular_file(file_name)
+        ):
+            tabular_file_name = f"{file_name}.xlsx"
         return list(
             tabular_file_to_sections(
                 io.BytesIO(response_call()),
-                file_name=file_name,
+                file_name=tabular_file_name,
                 link=link,
             )
         )

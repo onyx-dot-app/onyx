@@ -184,7 +184,7 @@ export const SmMuted: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// widthVariant: full
+// width: full
 // ---------------------------------------------------------------------------
 
 export const WidthFull: Story = {
@@ -192,7 +192,7 @@ export const WidthFull: Story = {
     sizePreset: "main-content",
     variant: "section",
     title: "Full Width Content",
-    widthVariant: "full",
+    width: "full",
   },
   decorators: [
     (Story) => (

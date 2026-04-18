@@ -88,7 +88,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
           />
         }
         topRightChildren={
@@ -267,7 +267,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 title="Featured"
                 sizePreset="main-ui"
                 variant="body"
-                widthVariant="fit"
+                width="fit"
               />
             )}
             <Content
@@ -276,7 +276,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               sizePreset="main-ui"
               variant="body"
               prominence="muted"
-              widthVariant="fit"
+              width="fit"
             />
             {agent.is_public && (
               <Content
@@ -285,7 +285,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 sizePreset="main-ui"
                 variant="body"
                 prominence="muted"
-                widthVariant="fit"
+                width="fit"
               />
             )}
           </Section>
@@ -425,7 +425,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         sizePreset="main-ui"
                         variant="body"
                         prominence="muted"
-                        widthVariant="full"
+                        width="full"
                       />
                     </Interactive.Container>
                   </Interactive.Stateless>
