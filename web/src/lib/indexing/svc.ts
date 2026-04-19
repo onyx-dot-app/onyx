@@ -1,3 +1,4 @@
+import type { Settings } from "@/interfaces/settings";
 import {
   AdvancedSearchConfiguration,
   EmbeddingModelDescriptor,
@@ -49,6 +50,19 @@ export async function testEmbedding({
       deployment_name: deploymentName,
     }),
   });
+}
+
+export async function saveAdminSettings(settings: Settings) {
+  const response = await fetch("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
 }
 
 export async function updateSearchSettings(

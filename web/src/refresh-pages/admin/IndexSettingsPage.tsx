@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -44,6 +44,7 @@ import {
   getFormattedProviderName,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
+import { saveAdminSettings } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -55,6 +56,7 @@ import {
   useLLMContextualCosts,
 } from "@/hooks/useSearchSettings";
 import Spacer from "@/refresh-components/Spacer";
+import useFilter from "@/hooks/useFilter";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -72,6 +74,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         variant="body"
         prominence="muted"
         width="fit"
+        nonInteractive
       />
     );
   }
@@ -88,6 +91,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         variant="body"
         prominence="muted"
         width="fit"
+        nonInteractive
       />
       {cloudProvider.costslink && (
         <LinkButton href={cloudProvider.costslink} target="_blank">
@@ -109,9 +113,10 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 
 interface ProviderGroupProps {
   provider: CloudEmbeddingProvider;
+  models: CloudEmbeddingModel[];
 }
 
-function ProviderGroup({ provider }: ProviderGroupProps) {
+function ProviderGroup({ provider, models }: ProviderGroupProps) {
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
       <div className="px-1 pt-1 w-full">
@@ -129,13 +134,15 @@ function ProviderGroup({ provider }: ProviderGroupProps) {
               variant="body"
             />
             <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
+              {/* TODO(@raunakab): wire up */}
               <Button icon={SvgUnplug} prominence="tertiary" size="sm" />
+              {/* TODO(@raunakab): wire up */}
               <Button icon={SvgSettings} prominence="tertiary" size="sm" />
             </GeneralLayouts.Section>
           </div>
         </GeneralLayouts.Section>
       </div>
-      {provider.embedding_models.map((model) => (
+      {models.map((model) => (
         <EmbeddingModelCard
           key={model.model_name}
           model={model}
@@ -180,24 +187,55 @@ export default function IndexSettingsPage() {
   const editEmbeddingModelModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
 
+  const allCloudProviders = useMemo(
+    () =>
+      Object.values(CLOUD_EMBEDDING_PROVIDERS).filter(
+        (p) => p.embedding_models.length > 0
+      ),
+    []
+  );
+
+  const allCloudModels = useMemo(
+    () =>
+      allCloudProviders.flatMap((p) =>
+        p.embedding_models.map((m) => ({ model: m, provider: p }))
+      ),
+    [allCloudProviders]
+  );
+
+  const {
+    query: modelSearchQuery,
+    setQuery: setModelSearchQuery,
+    filtered: filteredCloudModels,
+  } = useFilter(
+    allCloudModels,
+    (item) =>
+      `${item.model.model_name} ${
+        item.model.description
+      } ${getFormattedProviderName(item.provider.provider_type)}`
+  );
+
+  const filteredProviders = useMemo(() => {
+    const modelsByProvider = new Map<string, CloudEmbeddingModel[]>();
+    for (const { model, provider } of filteredCloudModels) {
+      const key = provider.provider_type;
+      if (!modelsByProvider.has(key)) modelsByProvider.set(key, []);
+      modelsByProvider.get(key)!.push(model);
+    }
+    return allCloudProviders
+      .filter((p) => modelsByProvider.has(p.provider_type))
+      .map((p) => ({
+        provider: p,
+        models: modelsByProvider.get(p.provider_type)!,
+      }));
+  }, [filteredCloudModels, allCloudProviders]);
+
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
       if (!settings.settings) return;
 
-      const newSettings = { ...settings.settings, ...updates };
-
       try {
-        const response = await fetch("/api/admin/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newSettings),
-        });
-
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
-        }
-
+        await saveAdminSettings({ ...settings.settings, ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
@@ -313,14 +351,13 @@ export default function IndexSettingsPage() {
                 padding={viewAllModelsOpen ? "fit" : "sm"}
                 expandedContent={
                   <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                    {Object.values(CLOUD_EMBEDDING_PROVIDERS)
-                      .filter((p) => p.embedding_models.length > 0)
-                      .map((provider) => (
-                        <ProviderGroup
-                          key={provider.provider_type}
-                          provider={provider}
-                        />
-                      ))}
+                    {filteredProviders.map(({ provider, models }) => (
+                      <ProviderGroup
+                        key={provider.provider_type}
+                        provider={provider}
+                        models={models}
+                      />
+                    ))}
                   </GeneralLayouts.Section>
                 }
               >
@@ -332,6 +369,8 @@ export default function IndexSettingsPage() {
                           placeholder="Search models..."
                           variant="internal"
                           leftSearchIcon
+                          value={modelSearchQuery}
+                          onChange={(e) => setModelSearchQuery(e.target.value)}
                         />
                         <Button
                           prominence="internal"
@@ -392,9 +431,7 @@ export default function IndexSettingsPage() {
                   }
                   bottomChildren={
                     viewAllModelsOpen ? (
-                      <div>
-                        {/* TODO: Tab component — Cloud-hosted | Self-hosted */}
-                      </div>
+                      <div>{/* TODO(@raunakab): wire up */}</div>
                     ) : undefined
                   }
                 />
@@ -532,15 +569,14 @@ export default function IndexSettingsPage() {
                   disabled={!imageProcessingEnabled}
                   withLabel
                 >
+                  {/* TODO(@raunakab): wire up */}
                   <InputSelect
                     value=""
                     onValueChange={() => {}}
                     disabled={!imageProcessingEnabled}
                   >
                     <InputSelect.Trigger placeholder="Select a model" />
-                    <InputSelect.Content>
-                      {/* TODO: Populate with available LLM models */}
-                    </InputSelect.Content>
+                    <InputSelect.Content />
                   </InputSelect>
                 </InputHorizontal>
               </Disabled>
