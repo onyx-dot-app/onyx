@@ -22,7 +22,7 @@ import { Button } from "@opal/components";
    ============================================================================= */
 
 interface TabsContextValue {
-  variant: "contained" | "pill";
+  variant: "contained" | "pill" | "underline";
 }
 
 const TabsContext = React.createContext<TabsContextValue | undefined>(
@@ -72,18 +72,22 @@ const useTabsContext = () => {
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
   pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
+  underline:
+    "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
 } as const;
 
 /** Base style classes for TabsTrigger variants */
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
   pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
+  underline: "p-1 font-secondary-action transition-all duration-200 ease-out",
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
 const iconVariants = {
   contained: "stroke-text-03",
   pill: "stroke-current",
+  underline: "stroke-current",
 } as const;
 
 /* =============================================================================
@@ -297,16 +301,20 @@ function useHorizontalScroll(
 function PillIndicator({
   style,
   rightOffset = 0,
+  hideBaseLine = false,
 }: {
   style: IndicatorStyle;
   rightOffset?: number;
+  hideBaseLine?: boolean;
 }) {
   return (
     <>
-      <div
-        className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
-        style={{ right: rightOffset }}
-      />
+      {!hideBaseLine && (
+        <div
+          className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
+          style={{ right: rightOffset }}
+        />
+      )}
       <div
         className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 pointer-events-none transition-all duration-200 ease-out"
         style={{
@@ -360,7 +368,7 @@ interface TabsListProps
    * - `pill`: Transparent background with a sliding underline indicator.
    *   Best for secondary navigation or filter-style tabs with flexible widths.
    */
-  variant?: "contained" | "pill";
+  variant?: "contained" | "pill" | "underline";
 
   /**
    * Content to render on the right side of the tab list.
@@ -415,7 +423,7 @@ const TabsList = React.forwardRef<
     const scrollArrowsRef = useRef<HTMLDivElement>(null);
     const rightContentRef = useRef<HTMLDivElement>(null);
     const [rightOffset, setRightOffset] = useState(0);
-    const isPill = variant === "pill";
+    const isPill = variant === "pill" || variant === "underline";
     const { style: indicatorStyle } = usePillIndicator(
       listRef,
       isPill,
@@ -529,7 +537,11 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && (
-            <PillIndicator style={indicatorStyle} rightOffset={rightOffset} />
+            <PillIndicator
+              style={indicatorStyle}
+              rightOffset={rightOffset}
+              hideBaseLine={variant === "underline"}
+            />
           )}
         </TabsContext.Provider>
       </TabsPrimitive.List>
@@ -558,7 +570,7 @@ interface TabsTriggerProps
    * - `contained` (default): White background with shadow when active
    * - `pill`: Dark pill background when active, transparent when inactive
    */
-  variant?: "contained" | "pill";
+  variant?: "contained" | "pill" | "underline";
 
   /** Optional tooltip text to display on hover */
   tooltip?: string;
@@ -649,6 +661,7 @@ const TabsTrigger = React.forwardRef<
             "data-[state=active]:bg-background-tint-inverted-03",
             "data-[state=active]:text-text-inverted-05",
           ],
+          variant === "underline" && ["data-[state=active]:text-text-05"],
           variant === "contained" && [
             "data-[state=inactive]:text-text-03",
             "data-[state=inactive]:bg-transparent",
@@ -658,7 +671,8 @@ const TabsTrigger = React.forwardRef<
           variant === "pill" && [
             "data-[state=inactive]:bg-background-tint-00",
             "data-[state=inactive]:text-text-03",
-          ]
+          ],
+          variant === "underline" && ["data-[state=inactive]:text-text-03"]
         )}
         {...props}
       >

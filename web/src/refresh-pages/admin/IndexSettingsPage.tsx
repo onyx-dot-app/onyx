@@ -468,7 +468,7 @@ export default function IndexSettingsPage() {
                           </div>
 
                           <div className="px-2">
-                            <Tabs.List variant="pill">
+                            <Tabs.List variant="underline">
                               <Tabs.Trigger value="cloud">
                                 Cloud Hosted
                               </Tabs.Trigger>
