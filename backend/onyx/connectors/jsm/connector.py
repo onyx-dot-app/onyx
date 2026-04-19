@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from typing import Any
+from typing import Any, cast
 
 from typing_extensions import override
 
@@ -11,9 +11,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
-from onyx.utils.logger import setup_logger
 
-logger = setup_logger()
 
 class JsmConnector(JiraConnector):
     """
@@ -45,26 +43,30 @@ class JsmConnector(JiraConnector):
         self, generator: Generator[Any, None, JiraConnectorCheckpoint]
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """
-        Wraps the standard Jira generator to ensure all yielding Documents 
+        Wraps the standard Jira generator to ensure all yielding Documents
         have the JIRA_SERVICE_MANAGEMENT source and enriched JSM metadata.
         """
         try:
             while True:
                 item = next(generator)
                 if isinstance(item, Document):
-                    item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
-                    
+                    item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT  # noqa
+
                     # Refine metadata for JSM specific context if available
                     # Note: These fields are common in JSM environments
                     if "request-type" in item.metadata:
-                        item.metadata["jsm_request_type"] = item.metadata.pop("request-type")
-                    
+                        item.metadata["jsm_request_type"] = item.metadata.pop(
+                            "request-type"
+                        )
+
                     if "customer-satisfaction" in item.metadata:
-                        item.metadata["jsm_satisfaction_score"] = item.metadata.pop("customer-satisfaction")
+                        item.metadata["jsm_satisfaction_score"] = item.metadata.pop(
+                            "customer-satisfaction"
+                        )
 
                 yield item
         except StopIteration as e:
-            return e.value
+            return cast(JiraConnectorCheckpoint, e.value)
 
     @override
     def load_from_checkpoint(
