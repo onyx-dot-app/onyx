@@ -570,6 +570,10 @@ export default function IndexSettingsPage() {
             </Disabled>
           </Card>
 
+          {/* TODO(@raunakab): enable_contextual_rag is in PRESERVED_SEARCH_FIELDS
+             (backend/shared_configs/configs.py), so the update-inference-settings
+             endpoint silently ignores it. The backend returns 200 but never persists
+             the change. Needs a backend fix to remove it from the preserved list. */}
           <Card border="solid" rounding="lg">
             <GeneralLayouts.Section width="full">
               <InputHorizontal
