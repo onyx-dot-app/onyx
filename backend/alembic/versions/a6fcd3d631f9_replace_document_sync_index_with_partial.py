@@ -12,8 +12,8 @@ The partial index makes count_documents_by_needs_sync ~4000x faster for tenants
 with no stale documents (161ms -> 0.04ms on a 929K row table) and ~17x faster
 for tenants with large backlogs (846ms -> 50ms on a 164K row table).
 
-Revision ID: a1b2c3d4e5f6
-Revises: d8cdfee5df80
+Revision ID: a6fcd3d631f9
+Revises: d129f37b3d87
 Create Date: 2026-04-17 16:00:00.000000
 
 """
@@ -22,8 +22,8 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision = "a1b2c3d4e5f6"
-down_revision = "d8cdfee5df80"
+revision = "a6fcd3d631f9"
+down_revision = "d129f37b3d87"
 branch_labels = None
 depends_on = None
 
