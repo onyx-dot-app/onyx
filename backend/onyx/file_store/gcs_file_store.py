@@ -92,7 +92,7 @@ class GCSBackedFileStore(FileStore):
 
             except Exception as e:
                 logger.error(f"Failed to initialize GCS client: {e}")
-                raise RuntimeError(f"Failed to initialize GCS client: {e}")
+                raise RuntimeError(f"Failed to initialize GCS client: {e}") from e
 
         return self._gcs_client
 
@@ -111,28 +111,22 @@ class GCSBackedFileStore(FileStore):
         if len(key) == 1024:
             logger.info(f"File name was too long and was truncated: {file_name}")
         return key
-
+    
     def initialize(self) -> None:
         """Initialize the GCS file store by ensuring the bucket exists."""
-        client = self._get_gcs_client()
+        from google.api_core.exceptions import Forbidden, NotFound
 
+        client = self._get_gcs_client()
         try:
             client.get_bucket(self._bucket_name)
             logger.info(f"GCS bucket '{self._bucket_name}' already exists")
-        except Exception as e:
-            from google.api_core.exceptions import Forbidden
-            from google.api_core.exceptions import NotFound
-
-            if isinstance(e, NotFound):
-                logger.info(f"Creating GCS bucket '{self._bucket_name}'")
-                client.create_bucket(self._bucket_name)
-                logger.info(f"Successfully created GCS bucket '{self._bucket_name}'")
-            elif isinstance(e, Forbidden):
-                logger.warning(f"GCS bucket '{self._bucket_name}' exists but access is forbidden")
-                raise RuntimeError(f"Access denied to GCS bucket '{self._bucket_name}'. Check permissions.")
-            else:
-                logger.error(f"Failed to check GCS bucket '{self._bucket_name}': {e}")
-                raise RuntimeError(f"Failed to check GCS bucket '{self._bucket_name}': {e}")
+        except NotFound:
+            logger.info(f"Creating GCS bucket '{self._bucket_name}'")
+            client.create_bucket(self._bucket_name)
+            logger.info(f"Successfully created GCS bucket '{self._bucket_name}'")
+        except Forbidden:
+            logger.warning(f"GCS bucket '{self._bucket_name}' exists but access is forbidden")
+            raise RuntimeError(f"Access denied to GCS bucket '{self._bucket_name}'. Check permissions.")
 
     def has_file(
         self,
