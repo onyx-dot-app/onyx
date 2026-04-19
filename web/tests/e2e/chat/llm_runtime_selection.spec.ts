@@ -413,9 +413,8 @@ test.describe("LLM Runtime Selection", () => {
     const sharedModelOptions = dialog.locator("[data-interactive-state]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
-      .getByRole("button", { name: /openai/i })
-      .locator("..")
       .locator("[data-interactive-state]")
+      .filter({ hasText: /openai/i })
       .first();
     await expect(openAiModelOption).toBeVisible();
     await openAiModelOption.click();
@@ -441,9 +440,8 @@ test.describe("LLM Runtime Selection", () => {
     );
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
-      .getByRole("button", { name: /anthropic/i })
-      .locator("..")
       .locator("[data-interactive-state]")
+      .filter({ hasText: /anthropic/i })
       .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
@@ -453,9 +451,8 @@ test.describe("LLM Runtime Selection", () => {
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
-      .getByRole("button", { name: /anthropic/i })
-      .locator("..")
-      .locator('[data-interactive-state="selected"]');
+      .locator('[data-interactive-state="selected"]')
+      .filter({ hasText: /anthropic/i });
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
