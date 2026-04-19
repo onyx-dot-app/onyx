@@ -348,7 +348,9 @@ def get_last_successful_attempt_poll_range_end(
         .filter(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
-            IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.status.in_(
+                [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+            ),
         )
         .order_by(IndexAttempt.poll_range_end.desc())
         .first()
