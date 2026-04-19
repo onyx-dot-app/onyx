@@ -705,11 +705,14 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   SectionProps & { value: string }
->(({ children, value, ...props }, ref) => (
+>(({ children, value, className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     value={value}
-    className="pt-4 focus:outline-none focus:border-theme-primary-05 w-full"
+    className={cn(
+      "pt-4 focus:outline-none focus:border-theme-primary-05 w-full",
+      className
+    )}
   >
     <Section padding={0} {...props}>
       {children}

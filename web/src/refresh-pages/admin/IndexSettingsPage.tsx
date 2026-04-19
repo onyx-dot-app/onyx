@@ -447,24 +447,37 @@ export default function IndexSettingsPage() {
                   <CardLayout.Header
                     headerChildren={
                       viewAllModelsOpen ? (
-                        <GeneralLayouts.Section flexDirection="row">
-                          <InputTypeIn
-                            placeholder="Search models..."
-                            variant="internal"
-                            leftSearchIcon
-                            value={modelSearchQuery}
-                            onChange={(e) =>
-                              setModelSearchQuery(e.target.value)
-                            }
-                          />
-                          <Button
-                            prominence="internal"
-                            onClick={() => setViewAllModelsOpen(false)}
-                            rightIcon={SvgFold}
-                          >
-                            Fold Models
-                          </Button>
-                        </GeneralLayouts.Section>
+                        <div className="pt-1 px-1">
+                          <div className="pt-2 px-2 flex flex-row items-center justify-between">
+                            <InputTypeIn
+                              placeholder="Search models..."
+                              variant="internal"
+                              leftSearchIcon
+                              value={modelSearchQuery}
+                              onChange={(e) =>
+                                setModelSearchQuery(e.target.value)
+                              }
+                            />
+                            <Button
+                              prominence="internal"
+                              onClick={() => setViewAllModelsOpen(false)}
+                              rightIcon={SvgFold}
+                            >
+                              Fold Models
+                            </Button>
+                          </div>
+
+                          <div className="px-2">
+                            <Tabs.List variant="pill">
+                              <Tabs.Trigger value="cloud">
+                                Cloud Hosted
+                              </Tabs.Trigger>
+                              <Tabs.Trigger value="self">
+                                Self Hosted
+                              </Tabs.Trigger>
+                            </Tabs.List>
+                          </div>
+                        </div>
                       ) : (
                         <GeneralLayouts.Section alignItems="start" gap={0}>
                           <Content
@@ -490,6 +503,7 @@ export default function IndexSettingsPage() {
                         </GeneralLayouts.Section>
                       )
                     }
+                    headerPadding={viewAllModelsOpen ? "fit" : undefined}
                     topRightChildren={
                       viewAllModelsOpen ? undefined : (
                         <div className="flex flex-col items-end justify-between p-2 gap-1">
@@ -513,16 +527,6 @@ export default function IndexSettingsPage() {
                           )}
                         </div>
                       )
-                    }
-                    bottomChildren={
-                      viewAllModelsOpen ? (
-                        <Tabs.List variant="pill">
-                          <Tabs.Trigger value="cloud">
-                            Cloud Hosted
-                          </Tabs.Trigger>
-                          <Tabs.Trigger value="self">Self Hosted</Tabs.Trigger>
-                        </Tabs.List>
-                      ) : undefined
                     }
                   />
                 </Card>
