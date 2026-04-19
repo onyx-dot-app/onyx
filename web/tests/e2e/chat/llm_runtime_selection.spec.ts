@@ -412,9 +412,10 @@ test.describe("LLM Runtime Selection", () => {
 
     const sharedModelOptions = dialog.locator("[data-interactive-state]");
     await expect(sharedModelOptions).toHaveCount(2);
-    // Two results with the same model name under different providers.
-    // Groups are sorted alphabetically, so OpenAI (index 1) comes after Anthropic (index 0).
-    const openAiModelOption = sharedModelOptions.nth(1);
+    const openAiModelOption = dialog
+      .locator("[data-interactive-state]")
+      .filter({ hasText: /openai/i })
+      .first();
     await expect(openAiModelOption).toBeVisible();
     await openAiModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
@@ -438,8 +439,10 @@ test.describe("LLM Runtime Selection", () => {
       "[data-interactive-state]"
     );
     await expect(secondSharedModelOptions).toHaveCount(2);
-    // Anthropic is index 0 (alphabetically first).
-    const anthropicModelOption = secondSharedModelOptions.nth(0);
+    const anthropicModelOption = secondDialog
+      .locator("[data-interactive-state]")
+      .filter({ hasText: /anthropic/i })
+      .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
@@ -447,11 +450,10 @@ test.describe("LLM Runtime Selection", () => {
     await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
-    // Verify the Anthropic option (index 0) is selected.
-    const selectedOption = verifyDialog.locator(
-      '[data-interactive-state="selected"]'
-    );
-    await expect(selectedOption).toHaveCount(1);
+    const selectedAnthropicOption = verifyDialog
+      .locator('[data-interactive-state="selected"]')
+      .filter({ hasText: /anthropic/i });
+    await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
