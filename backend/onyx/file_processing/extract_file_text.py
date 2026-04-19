@@ -49,6 +49,7 @@ KNOWN_OPENPYXL_BUGS = [
     "Unable to read workbook: could not read stylesheet from None",
     "Colors must be aRGB hex values",
     "Max value is",
+    "There is no item named",
 ]
 
 
