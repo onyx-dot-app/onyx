@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Content, Card as CardLayout } from "@opal/layouts";
+import {
+  Content,
+  Card as CardLayout,
+  IllustrationContent,
+} from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
@@ -350,15 +355,23 @@ export default function IndexSettingsPage() {
                 rounding="lg"
                 padding={viewAllModelsOpen ? "fit" : "sm"}
                 expandedContent={
-                  <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                    {filteredProviders.map(({ provider, models }) => (
-                      <ProviderGroup
-                        key={provider.provider_type}
-                        provider={provider}
-                        models={models}
-                      />
-                    ))}
-                  </GeneralLayouts.Section>
+                  filteredProviders.length > 0 ? (
+                    <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                      {filteredProviders.map(({ provider, models }) => (
+                        <ProviderGroup
+                          key={provider.provider_type}
+                          provider={provider}
+                          models={models}
+                        />
+                      ))}
+                    </GeneralLayouts.Section>
+                  ) : (
+                    <IllustrationContent
+                      illustration={SvgNoResult}
+                      title="No models found"
+                      description="Try a different search term."
+                    />
+                  )
                 }
               >
                 <CardLayout.Header
