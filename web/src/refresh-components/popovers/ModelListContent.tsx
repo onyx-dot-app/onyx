@@ -3,18 +3,20 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Text } from "@opal/components";
-import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
+import { Button, LineItemButton, Text } from "@opal/components";
+import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import { cn } from "@opal/utils";
+import { Interactive } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
 
 export interface ModelListContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
@@ -114,20 +116,21 @@ export default function ModelListContent({
       capabilities.length > 0 ? capabilities.join(", ") : undefined;
 
     return (
-      <LineItem
+      <LineItemButton
         key={`${option.provider}:${option.modelName}`}
-        selected={selected}
-        disabled={disabled}
+        state={selected ? "selected" : "empty"}
+        icon={(props) => <div {...(props as any)} />}
+        title={option.displayName}
         description={description}
         onClick={() => onSelect(option)}
         rightChildren={
           selected ? (
-            <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+            <SvgCheck className="text-action-link-05" size={16} />
           ) : null
         }
-      >
-        {option.displayName}
-      </LineItem>
+        sizePreset="main-ui"
+        rounding="sm"
+      />
     );
   };
 
@@ -169,20 +172,42 @@ export default function ModelListContent({
                       onOpenChange={() => toggleGroup(group.key)}
                     >
                       <CollapsibleTrigger asChild>
-                        <LineItem
-                          muted
-                          icon={group.Icon}
-                          strokeIcon={false}
-                          rightChildren={
-                            open ? (
-                              <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
-                            ) : (
-                              <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
-                            )
-                          }
-                        >
-                          {group.displayName}
-                        </LineItem>
+                        <Interactive.Stateless prominence="tertiary">
+                          <Interactive.Container
+                            size="fit"
+                            rounding="sm"
+                            width="full"
+                          >
+                            <div className="pl-2 pr-1 py-1 w-full">
+                              <ContentAction
+                                sizePreset="secondary"
+                                variant="body"
+                                prominence="muted"
+                                icon={group.Icon}
+                                title={group.displayName}
+                                padding="fit"
+                                rightChildren={
+                                  <Section>
+                                    <Button
+                                      icon={(props) => (
+                                        <SvgChevronRight
+                                          {...props}
+                                          className={cn(
+                                            "transition-all",
+                                            open && "rotate-90",
+                                            props.className
+                                          )}
+                                        />
+                                      )}
+                                      prominence="tertiary"
+                                      size="sm"
+                                    />
+                                  </Section>
+                                }
+                              />
+                            </div>
+                          </Interactive.Container>
+                        </Interactive.Stateless>
                       </CollapsibleTrigger>
 
                       <CollapsibleContent>
