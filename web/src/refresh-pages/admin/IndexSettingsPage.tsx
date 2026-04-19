@@ -43,12 +43,15 @@ import {
 } from "@/lib/indexing/interfaces";
 import {
   CLOUD_EMBEDDING_PROVIDERS,
+  SELF_HOSTED_MODELS,
   findCloudProvider,
   getCurrentModelCopy,
   getEmbeddingProvider,
   getFormattedProviderName,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
+import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
+import Tabs from "@/refresh-components/Tabs";
 import { saveAdminSettings } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
@@ -186,11 +189,44 @@ function EmbeddingModelCard({ model, providerIcon }: EmbeddingModelCardProps) {
   );
 }
 
+interface SelfHostedModelCardProps {
+  model: SelfHostedEmbeddingModel;
+}
+
+function SelfHostedModelCard({ model }: SelfHostedModelCardProps) {
+  return (
+    <SelectCard state="filled" rounding="md" padding="xs">
+      <CardLayout.Header
+        headerChildren={
+          <div className="flex flex-col">
+            <Content
+              icon={SvgServer}
+              title={model.model_name}
+              description={model.description}
+              sizePreset="main-ui"
+              variant="section"
+            />
+            <div className="flex flex-row px-6 pt-2 gap-4">
+              <EmbeddingProviderInfo providerType={null} />
+              {model.link && (
+                <LinkButton href={model.link} target="_blank">
+                  Docs
+                </LinkButton>
+              )}
+            </div>
+          </div>
+        }
+      />
+    </SelectCard>
+  );
+}
+
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const editEmbeddingModelModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
+  const [activeModelTab, setActiveModelTab] = useState("cloud");
 
   const allCloudProviders = useMemo(
     () =>
@@ -234,6 +270,16 @@ export default function IndexSettingsPage() {
         models: modelsByProvider.get(p.provider_type)!,
       }));
   }, [filteredCloudModels, allCloudProviders]);
+
+  const filteredSelfHostedModels = useMemo(() => {
+    const trimmed = modelSearchQuery.trim().toLowerCase();
+    if (!trimmed) return SELF_HOSTED_MODELS;
+    return SELF_HOSTED_MODELS.filter(
+      (m) =>
+        m.model_name.toLowerCase().includes(trimmed) ||
+        m.description.toLowerCase().includes(trimmed)
+    );
+  }, [modelSearchQuery]);
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
@@ -348,107 +394,139 @@ export default function IndexSettingsPage() {
                 </editEmbeddingModelModal.Provider>
               )}
 
-              <Card
-                expandable
-                expanded={viewAllModelsOpen}
-                border="solid"
-                rounding="lg"
-                padding={viewAllModelsOpen ? "fit" : "sm"}
-                expandedContent={
-                  filteredProviders.length > 0 ? (
-                    <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                      {filteredProviders.map(({ provider, models }) => (
-                        <ProviderGroup
-                          key={provider.provider_type}
-                          provider={provider}
-                          models={models}
-                        />
-                      ))}
-                    </GeneralLayouts.Section>
-                  ) : (
-                    <IllustrationContent
-                      illustration={SvgNoResult}
-                      title="No models found"
-                      description="Try a different search term."
-                    />
-                  )
-                }
-              >
-                <CardLayout.Header
-                  headerChildren={
-                    viewAllModelsOpen ? (
-                      <GeneralLayouts.Section flexDirection="row">
-                        <InputTypeIn
-                          placeholder="Search models..."
-                          variant="internal"
-                          leftSearchIcon
-                          value={modelSearchQuery}
-                          onChange={(e) => setModelSearchQuery(e.target.value)}
-                        />
-                        <Button
-                          prominence="internal"
-                          onClick={() => setViewAllModelsOpen(false)}
-                          rightIcon={SvgFold}
-                        >
-                          Fold Models
-                        </Button>
-                      </GeneralLayouts.Section>
-                    ) : (
-                      <GeneralLayouts.Section alignItems="start" gap={0}>
-                        <Content
-                          icon={
-                            getEmbeddingProvider(
-                              currentEmbeddingModel.provider_type
-                            ).icon
-                          }
-                          title={currentEmbeddingModel.model_name}
-                          description={
-                            getCurrentModelCopy(
-                              currentEmbeddingModel.model_name
-                            )?.description
-                          }
-                          sizePreset="main-ui"
-                          variant="section"
-                        />
-                        <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                          <EmbeddingProviderInfo
-                            providerType={currentEmbeddingModel.provider_type}
+              <Tabs value={activeModelTab} onValueChange={setActiveModelTab}>
+                <Card
+                  expandable
+                  expanded={viewAllModelsOpen}
+                  border="solid"
+                  rounding="lg"
+                  padding={viewAllModelsOpen ? "fit" : "sm"}
+                  expandedContent={
+                    <>
+                      <Tabs.Content value="cloud" className="pt-0">
+                        {filteredProviders.length > 0 ? (
+                          <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                            {filteredProviders.map(({ provider, models }) => (
+                              <ProviderGroup
+                                key={provider.provider_type}
+                                provider={provider}
+                                models={models}
+                              />
+                            ))}
+                          </GeneralLayouts.Section>
+                        ) : (
+                          <IllustrationContent
+                            illustration={SvgNoResult}
+                            title="No cloud models found"
+                            description="Try a different search term."
                           />
-                        </div>
-                      </GeneralLayouts.Section>
-                    )
+                        )}
+                      </Tabs.Content>
+
+                      <Tabs.Content value="self" className="pt-0">
+                        {filteredSelfHostedModels.length > 0 ? (
+                          <GeneralLayouts.Section gap={0.25} padding={0.5}>
+                            {filteredSelfHostedModels.map((model) => (
+                              <SelfHostedModelCard
+                                key={model.model_name}
+                                model={model}
+                              />
+                            ))}
+                          </GeneralLayouts.Section>
+                        ) : (
+                          <IllustrationContent
+                            illustration={SvgNoResult}
+                            title="No self-hosted models found"
+                            description="Try a different search term."
+                          />
+                        )}
+                      </Tabs.Content>
+                    </>
                   }
-                  topRightChildren={
-                    viewAllModelsOpen ? undefined : (
-                      <div className="flex flex-col items-end justify-between p-2 gap-1">
-                        <Button
-                          prominence="secondary"
-                          onClick={() => setViewAllModelsOpen(true)}
-                        >
-                          View All Models
-                        </Button>
-                        {currentCloudProvider && (
-                          <div className="p-1">
-                            <Button
-                              icon={SvgSettings}
-                              prominence="tertiary"
-                              size="md"
-                              onClick={() =>
-                                editEmbeddingModelModal.toggle(true)
-                              }
+                >
+                  <CardLayout.Header
+                    headerChildren={
+                      viewAllModelsOpen ? (
+                        <GeneralLayouts.Section flexDirection="row">
+                          <InputTypeIn
+                            placeholder="Search models..."
+                            variant="internal"
+                            leftSearchIcon
+                            value={modelSearchQuery}
+                            onChange={(e) =>
+                              setModelSearchQuery(e.target.value)
+                            }
+                          />
+                          <Button
+                            prominence="internal"
+                            onClick={() => setViewAllModelsOpen(false)}
+                            rightIcon={SvgFold}
+                          >
+                            Fold Models
+                          </Button>
+                        </GeneralLayouts.Section>
+                      ) : (
+                        <GeneralLayouts.Section alignItems="start" gap={0}>
+                          <Content
+                            icon={
+                              getEmbeddingProvider(
+                                currentEmbeddingModel.provider_type
+                              ).icon
+                            }
+                            title={currentEmbeddingModel.model_name}
+                            description={
+                              getCurrentModelCopy(
+                                currentEmbeddingModel.model_name
+                              )?.description
+                            }
+                            sizePreset="main-ui"
+                            variant="section"
+                          />
+                          <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                            <EmbeddingProviderInfo
+                              providerType={currentEmbeddingModel.provider_type}
                             />
                           </div>
-                        )}
-                      </div>
-                    )
-                  }
-                  bottomChildren={
-                    viewAllModelsOpen ? (
-                      <div>{/* TODO(@raunakab): wire up */}</div>
-                    ) : undefined
-                  }
-                />
-              </Card>
+                        </GeneralLayouts.Section>
+                      )
+                    }
+                    topRightChildren={
+                      viewAllModelsOpen ? undefined : (
+                        <div className="flex flex-col items-end justify-between p-2 gap-1">
+                          <Button
+                            prominence="secondary"
+                            onClick={() => setViewAllModelsOpen(true)}
+                          >
+                            View All Models
+                          </Button>
+                          {currentCloudProvider && (
+                            <div className="p-1">
+                              <Button
+                                icon={SvgSettings}
+                                prominence="tertiary"
+                                size="md"
+                                onClick={() =>
+                                  editEmbeddingModelModal.toggle(true)
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    bottomChildren={
+                      viewAllModelsOpen ? (
+                        <Tabs.List variant="pill">
+                          <Tabs.Trigger value="cloud">
+                            Cloud Hosted
+                          </Tabs.Trigger>
+                          <Tabs.Trigger value="self">Self Hosted</Tabs.Trigger>
+                        </Tabs.List>
+                      ) : undefined
+                    }
+                  />
+                </Card>
+              </Tabs>
             </>
           )}
         </GeneralLayouts.Section>
