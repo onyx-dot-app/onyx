@@ -446,10 +446,107 @@ class TestOpenSearchClient:
             test_client.create_index(mappings=mappings, settings=settings)
 
     def test_update_settings(self, test_client: OpenSearchIndexClient) -> None:
-        """Tests that update_settings raises NotImplementedError."""
+        """Tests updating index settings on an existing index."""
+        # Precondition.
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+        # Assert that the current number of replicas is not the desired test
+        # number we are updating to.
+        test_num_replicas = 0
+        current_settings = test_client.get_settings()
+        assert current_settings["index"]["number_of_replicas"] != f"{test_num_replicas}"
+
+        # Under test.
+        # Should not raise. number_of_replicas is a dynamic setting that can be
+        # changed without closing the index.
+        test_client.update_settings(
+            settings={"index": {"number_of_replicas": test_num_replicas}}
+        )
+
+        # Postcondition.
+        current_settings = test_client.get_settings()
+        assert current_settings["index"]["number_of_replicas"] == f"{test_num_replicas}"
+
+    def test_update_settings_on_nonexistent_index(
+        self, test_client: OpenSearchIndexClient
+    ) -> None:
+        """Tests updating settings on a nonexistent index raises an error."""
         # Under test and postcondition.
-        with pytest.raises(NotImplementedError):
-            test_client.update_settings(settings={})
+        with pytest.raises(Exception, match="index_not_found_exception|404"):
+            test_client.update_settings(settings={"index": {"number_of_replicas": 0}})
+
+    def test_get_settings(self, test_client: OpenSearchIndexClient) -> None:
+        """Tests getting index settings."""
+        # Precondition.
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test.
+        current_settings = test_client.get_settings()
+
+        # Postcondition.
+        assert "index" in current_settings
+        # These are always present for any index.
+        assert "number_of_shards" in current_settings["index"]
+        assert "number_of_replicas" in current_settings["index"]
+        assert current_settings["index"]["provided_name"] == test_client._index_name
+
+    def test_get_settings_on_nonexistent_index(
+        self, test_client: OpenSearchIndexClient
+    ) -> None:
+        """Tests getting settings on a nonexistent index raises an error."""
+        # Under test and postcondition.
+        with pytest.raises(Exception, match="index_not_found_exception|404"):
+            test_client.get_settings()
+
+    def test_close_and_open_index(self, test_client: OpenSearchIndexClient) -> None:
+        """Tests closing and reopening an index."""
+        # Precondition.
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test.
+        # Closing should not raise.
+        test_client.close_index()
+
+        # Postcondition.
+        # Searches on a closed index should fail.
+        with pytest.raises(Exception, match="index_closed_exception|closed"):
+            test_client.search_for_document_ids(
+                body={"_source": False, "query": {"match_all": {}}}
+            )
+
+        # Under test.
+        # Reopening should not raise.
+        test_client.open_index()
+
+        # Postcondition.
+        # Searches should work again after reopening.
+        result = test_client.search_for_document_ids(
+            body={"_source": False, "query": {"match_all": {}}}
+        )
+        assert result == []
+
+    def test_close_nonexistent_index(self, test_client: OpenSearchIndexClient) -> None:
+        """Tests closing a nonexistent index raises an error."""
+        # Under test and postcondition.
+        with pytest.raises(Exception, match="index_not_found_exception|404"):
+            test_client.close_index()
+
+    def test_open_nonexistent_index(self, test_client: OpenSearchIndexClient) -> None:
+        """Tests opening a nonexistent index raises an error."""
+        # Under test and postcondition.
+        with pytest.raises(Exception, match="index_not_found_exception|404"):
+            test_client.open_index()
 
     def test_create_and_delete_search_pipeline(
         self, test_client: OpenSearchIndexClient

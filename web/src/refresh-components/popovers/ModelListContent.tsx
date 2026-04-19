@@ -118,6 +118,7 @@ export default function ModelListContent({
     return (
       <LineItemButton
         key={`${option.provider}:${option.modelName}`}
+        selectVariant="select-heavy"
         state={selected ? "selected" : "empty"}
         icon={(props) => <div {...(props as any)} />}
         title={option.displayName}
@@ -159,7 +160,7 @@ export default function ModelListContent({
               ]
             : groupedOptions.length === 1
               ? [
-                  <Section key="single-provider" gap={0.25}>
+                  <Section key="single-provider" gap={1}>
                     {groupedOptions[0]!.options.map(renderModelItem)}
                   </Section>,
                 ]
@@ -170,6 +171,7 @@ export default function ModelListContent({
                       key={group.key}
                       open={open}
                       onOpenChange={() => toggleGroup(group.key)}
+                      className="flex flex-col gap-1"
                     >
                       <CollapsibleTrigger asChild>
                         <Interactive.Stateless prominence="tertiary">

@@ -147,7 +147,7 @@ export async function switchModel(page: Page, modelName: string) {
 
   const modelButton = page
     .locator('[role="dialog"]')
-    .locator('[role="button"]')
+    .getByRole("button")
     .filter({ hasText: modelName })
     .first();
 

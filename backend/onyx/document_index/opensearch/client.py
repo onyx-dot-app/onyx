@@ -508,8 +508,55 @@ class OpenSearchIndexClient(OpenSearchClient):
         Raises:
             Exception: There was an error updating the settings of the index.
         """
-        # TODO(andrei): Implement this.
-        raise NotImplementedError
+        logger.debug(f"Updating settings of index {self._index_name} with {settings}.")
+        response = self._client.indices.put_settings(
+            index=self._index_name, body=settings
+        )
+        if not response.get("acknowledged", False):
+            raise RuntimeError(
+                f"Failed to update settings of index {self._index_name}."
+            )
+        logger.debug(f"Settings of index {self._index_name} updated successfully.")
+
+    @log_function_time(print_only=True, debug_only=True)
+    def get_settings(self) -> dict[str, Any]:
+        """Gets the settings of the index.
+
+        Returns:
+            The settings of the index.
+
+        Raises:
+            Exception: There was an error getting the settings of the index.
+        """
+        logger.debug(f"Getting settings of index {self._index_name}.")
+        response = self._client.indices.get_settings(index=self._index_name)
+        return response[self._index_name]["settings"]
+
+    @log_function_time(print_only=True, debug_only=True)
+    def open_index(self) -> None:
+        """Opens the index.
+
+        Raises:
+            Exception: There was an error opening the index.
+        """
+        logger.debug(f"Opening index {self._index_name}.")
+        response = self._client.indices.open(index=self._index_name)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to open index {self._index_name}.")
+        logger.debug(f"Index {self._index_name} opened successfully.")
+
+    @log_function_time(print_only=True, debug_only=True)
+    def close_index(self) -> None:
+        """Closes the index.
+
+        Raises:
+            Exception: There was an error closing the index.
+        """
+        logger.debug(f"Closing index {self._index_name}.")
+        response = self._client.indices.close(index=self._index_name)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to close index {self._index_name}.")
+        logger.debug(f"Index {self._index_name} closed successfully.")
 
     @log_function_time(
         print_only=True,
