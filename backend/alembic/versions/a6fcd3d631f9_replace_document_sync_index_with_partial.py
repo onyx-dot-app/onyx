@@ -19,6 +19,7 @@ Create Date: 2026-04-17 16:00:00.000000
 """
 
 from alembic import op
+import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -33,7 +34,7 @@ def upgrade() -> None:
         "ix_document_needs_sync",
         "document",
         ["id"],
-        postgresql_where="last_modified > last_synced OR last_synced IS NULL",
+        postgresql_where=sa.text("last_modified > last_synced OR last_synced IS NULL"),
     )
     op.drop_index("ix_document_sync_status", table_name="document")
 
