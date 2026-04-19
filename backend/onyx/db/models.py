@@ -1054,9 +1054,9 @@ class Document(Base):
 
     __table_args__ = (
         Index(
-            "ix_document_sync_status",
-            last_modified,
-            last_synced,
+            "ix_document_needs_sync",
+            "id",
+            postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
         ),
     )
 

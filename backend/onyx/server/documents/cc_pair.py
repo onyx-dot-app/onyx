@@ -584,7 +584,7 @@ def associate_credential_to_connector(
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.
-        maybe_mark_tenant_active(tenant_id)
+        maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
 
         # trigger indexing immediately
         client_app.send_task(

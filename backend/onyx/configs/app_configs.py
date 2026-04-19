@@ -282,6 +282,7 @@ OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
+OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -327,6 +328,7 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
 DISABLE_OPENSEARCH_MIGRATION_TASK = (
     os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
 )
+ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (

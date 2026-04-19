@@ -263,7 +263,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             # since most tenants have cc_pairs but almost none are due on
             # any given cycle.
             if prune_dispatched:
-                maybe_mark_tenant_active(tenant_id)
+                maybe_mark_tenant_active(tenant_id, caller="check_for_pruning")
             r.set(OnyxRedisSignals.BLOCK_PRUNING, 1, ex=_get_pruning_block_expiration())
 
         # we want to run this less frequently than the overall task

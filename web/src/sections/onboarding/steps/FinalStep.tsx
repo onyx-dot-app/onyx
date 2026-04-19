@@ -30,7 +30,7 @@ const FinalStepItem = React.memo(
           description={description}
           sizePreset="main-ui"
           variant="section"
-          paddingVariant="sm"
+          padding="sm"
           rightChildren={
             <Link href={buttonHref as Route} {...linkProps}>
               <Button prominence="tertiary" rightIcon={SvgExternalLink}>

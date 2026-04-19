@@ -7,4 +7,6 @@
   --container-md: 54.5rem;
   --container-lg: 62rem;
   --container-full: 100%;
+
+  --toast-width: 25rem;
 }

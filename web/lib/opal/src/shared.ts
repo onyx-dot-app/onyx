@@ -57,9 +57,9 @@ const containerSizeVariants: Record<
 // A named scale of width/height presets that map to Tailwind width/height utility classes.
 //
 // Consumers (for width):
-//   - Interactive.Container  (widthVariant)
+//   - Interactive.Container  (width)
 //   - Button                 (width)
-//   - Content                (widthVariant)
+//   - Content                (width)
 // ---------------------------------------------------------------------------
 
 /**
@@ -96,8 +96,8 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 // Shared padding and rounding scales for card components (Card, SelectCard).
 //
 // Consumers:
-//   - Card          (paddingVariant, roundingVariant)
-//   - SelectCard    (paddingVariant, roundingVariant)
+//   - Card          (padding, rounding)
+//   - SelectCard    (padding, rounding)
 // ---------------------------------------------------------------------------
 
 const paddingVariants: Record<PaddingVariants, string> = {

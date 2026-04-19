@@ -173,7 +173,7 @@ export default function InputImage({
   const dropzoneProps = onDrop ? getRootProps() : {};
 
   return (
-    <Hoverable.Root group="inputImage" widthVariant="fit">
+    <Hoverable.Root group="inputImage" width="fit">
       <div
         className={cn("relative", className)}
         style={{ width: size, height: size }}

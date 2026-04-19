@@ -186,6 +186,7 @@ export default function UserFilters({
                 <LineItem
                   key={role}
                   icon={isSelected ? SvgCheck : roleIcon}
+                  strokeIcon={isSelected || role !== UserRole.SLACK_USER}
                   selected={isSelected}
                   emphasized={isSelected}
                   onClick={() => toggleRole(role)}

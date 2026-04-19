@@ -82,7 +82,10 @@ ARG NODE_OPTIONS
 # SENTRY_AUTH_TOKEN is injected via BuildKit secret mount so it is never written
 # to any image layer, build cache, or registry manifest.
 # Use NODE_OPTIONS in the build command
-RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
+RUN --mount=type=secret,id=sentry_auth_token \
+    if [ -f /run/secrets/sentry_auth_token ]; then \
+        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Step 2. Production image, copy all the files and run next

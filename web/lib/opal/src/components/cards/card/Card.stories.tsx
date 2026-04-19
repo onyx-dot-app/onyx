@@ -55,7 +55,7 @@ export const PaddingVariants: Story = {
     <div className="flex flex-col gap-4 w-96">
       {PADDING_VARIANTS.map((padding) => (
         <Card key={padding} padding={padding} border="solid">
-          <p>paddingVariant: {padding}</p>
+          <p>padding: {padding}</p>
         </Card>
       ))}
     </div>
@@ -67,7 +67,7 @@ export const RoundingVariants: Story = {
     <div className="flex flex-col gap-4 w-96">
       {ROUNDING_VARIANTS.map((rounding) => (
         <Card key={rounding} rounding={rounding} border="solid">
-          <p>roundingVariant: {rounding}</p>
+          <p>rounding: {rounding}</p>
         </Card>
       ))}
     </div>
@@ -79,7 +79,7 @@ export const AllCombinations: Story = {
     <div className="flex flex-col gap-8">
       {PADDING_VARIANTS.map((padding) => (
         <div key={padding}>
-          <p className="font-bold pb-2">paddingVariant: {padding}</p>
+          <p className="font-bold pb-2">padding: {padding}</p>
           <div className="grid grid-cols-3 gap-4">
             {BACKGROUND_VARIANTS.map((bg) =>
               BORDER_VARIANTS.map((border) => (

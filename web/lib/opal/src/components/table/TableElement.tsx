@@ -22,7 +22,7 @@ interface TableProps
   /** Row selection behavior. @default "no-select" */
   selectionBehavior?: SelectionBehavior;
   /** Height behavior. `"fit"` = shrink to content, `"full"` = fill available space. */
-  heightVariant?: ExtremaSizeVariants;
+  size?: ExtremaSizeVariants;
   /** Explicit pixel width for the table (e.g. from `table.getTotalSize()`).
    *  When provided the table uses exactly this width instead of stretching
    *  to fill its container, which prevents `table-layout: fixed` from
@@ -38,7 +38,7 @@ function Table({
   ref,
   variant = "cards",
   selectionBehavior = "no-select",
-  heightVariant,
+  size: heightVariant,
   width,
   ...props
 }: TableProps) {

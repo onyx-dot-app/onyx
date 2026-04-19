@@ -21,7 +21,7 @@ function Removable({ onRemove, children }: RemovableProps) {
   }
 
   return (
-    <Hoverable.Root group="fileCard" widthVariant="fit">
+    <Hoverable.Root group="fileCard" width="fit">
       <div className="relative">
         <div
           className={cn(
@@ -184,7 +184,7 @@ export function FileCard({
       }
     >
       <div className="min-w-0 max-w-[12rem]">
-        <Interactive.Container border heightVariant="fit" widthVariant="full">
+        <Interactive.Container border size="fit" width="full">
           <AttachmentItemLayout
             icon={isProcessing ? SimpleLoader : SvgFileText}
             title={file.name}

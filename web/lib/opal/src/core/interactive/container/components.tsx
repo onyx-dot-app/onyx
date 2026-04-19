@@ -63,21 +63,21 @@ interface InteractiveContainerProps
    *
    * @default "default"
    */
-  roundingVariant?: InteractiveContainerRoundingVariant;
+  rounding?: InteractiveContainerRoundingVariant;
 
   /**
    * Size preset controlling the container's height, min-width, and padding.
    *
    * @default "lg"
    */
-  heightVariant?: ContainerSizeVariants;
+  size?: ContainerSizeVariants;
 
   /**
    * Width preset controlling the container's horizontal size.
    *
    * @default "fit"
    */
-  widthVariant?: ExtremaSizeVariants;
+  width?: ExtremaSizeVariants;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,9 +96,9 @@ function InteractiveContainer({
   ref,
   type,
   border,
-  roundingVariant = "md",
-  heightVariant = "lg",
-  widthVariant = "fit",
+  rounding = "md",
+  size = "lg",
+  width = "fit",
   ...props
 }: InteractiveContainerProps) {
   const {
@@ -115,16 +115,16 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
-  const { height, minWidth, padding } = containerSizeVariants[heightVariant];
+  const { height, minWidth, padding } = containerSizeVariants[size];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
-      interactiveContainerRoundingVariants[roundingVariant],
+      interactiveContainerRoundingVariants[rounding],
       height,
       minWidth,
       padding,
-      widthVariants[widthVariant],
+      widthVariants[width],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,

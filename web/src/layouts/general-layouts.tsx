@@ -202,7 +202,7 @@ function AttachmentItemLayout({
             description={description}
             sizePreset="main-ui"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
         </div>
         {middleText && (

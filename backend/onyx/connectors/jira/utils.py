@@ -59,35 +59,52 @@ def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
         return None
 
 
-def extract_text_from_adf(adf: dict | None) -> str:
-    """Extracts plain text from Atlassian Document Format:
-    https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/
-    """
+def extract_text_from_adf(adf: dict[str, Any] | None) -> str:
+    """Extracts plain text from Atlassian Document Format with improved formatting."""
     if adf is None:
         return ""
 
-    texts = []
+    texts: list[str] = []
 
     def _traverse(node: Any) -> None:
         if not isinstance(node, dict):
             return
 
         node_type = node.get("type")
+
         if node_type == "text":
-            if "text" in node:
-                texts.append(node["text"])
+            text = node.get("text", "")
+            if text:
+                texts.append(text)
+
         elif node_type == "hardBreak":
             texts.append("\n")
+
         elif node_type == "paragraph":
-            texts.append("\n")
+            pass
+
+        elif node_type == "heading":
+            if texts and texts[-1] != "\n":
+                texts.append("\n")
+
+        elif node_type == "listItem":
+            if texts and texts[-1] != "\n":
+                texts.append("\n")
+            texts.append("- ")
 
         # Recursively traverse content
-        if "content" in node:
-            for child in node["content"]:
+        content = node.get("content")
+        if isinstance(content, list):
+            for child in content:
                 _traverse(child)
 
+        # Add final newline for block types
+        if node_type in ("paragraph", "heading", "bulletList", "orderedList"):
+            if texts and texts[-1] != "\n":
+                texts.append("\n")
+
     _traverse(adf)
-    return "".join(texts).strip()
+    return str("".join(texts).strip())
 
 
 def build_jira_url(jira_base_url: str, issue_key: str) -> str:
@@ -171,7 +188,7 @@ def get_jira_project_key_from_issue(issue: Issue) -> str | None:
     if not hasattr(issue.fields.project, "key"):
         return None
 
-    return issue.fields.project.key
+    return str(issue.fields.project.key)
 
 
 class CustomFieldExtractor:
@@ -186,7 +203,7 @@ class CustomFieldExtractor:
             elif isinstance(value, CustomFieldOption):
                 return value.value
             elif isinstance(value, User):
-                return value.displayName
+                return str(value.displayName)
             elif isinstance(value, List):
                 return " ".join(
                     [CustomFieldExtractor._process_custom_field_value(v) for v in value]
@@ -199,8 +216,8 @@ class CustomFieldExtractor:
 
     @staticmethod
     def get_issue_custom_fields(
-        jira: Issue, custom_fields: dict, max_value_length: int = 250
-    ) -> dict:
+        jira: Issue, custom_fields: dict[str, str], max_value_length: int = 250
+    ) -> dict[str, str]:
         """
         Process all custom fields of an issue to a dictionary of strings
         :param jira: jira_issue, bug or similar
@@ -227,7 +244,7 @@ class CustomFieldExtractor:
         return processed_fields
 
     @staticmethod
-    def get_all_custom_fields(jira_client: JIRA) -> dict:
+    def get_all_custom_fields(jira_client: JIRA) -> dict[str, str]:
         """Get all custom fields from Jira"""
         fields = jira_client.fields()
         fields_dct = {
@@ -238,7 +255,7 @@ class CustomFieldExtractor:
 
 class CommonFieldExtractor:
     @staticmethod
-    def get_issue_common_fields(jira: Issue) -> dict:
+    def get_issue_common_fields(jira: Issue) -> dict[str, Any]:
         return {
             "Priority": jira.fields.priority.name if jira.fields.priority else None,
             "Reporter": (

@@ -276,7 +276,7 @@ export function ModelAccessField() {
                     Always shared
                   </Text>
                 }
-                paddingVariant="fit"
+                padding="fit"
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -304,7 +304,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          paddingVariant="fit"
+                          padding="fit"
                         />
                       </Card>
                     </div>
@@ -341,7 +341,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          paddingVariant="fit"
+                          padding="fit"
                         />
                       </Card>
                     </div>
@@ -548,7 +548,7 @@ export function ModelSelectionField({
                       prominence="tertiary"
                       onClick={() => setIsExpanded(!isExpanded)}
                     >
-                      <Interactive.Container type="button" widthVariant="full">
+                      <Interactive.Container type="button" width="full">
                         <Content
                           sizePreset="secondary"
                           variant="body"

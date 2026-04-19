@@ -152,7 +152,7 @@ function Horizontal({
             tag={tag}
             sizePreset="main-ui"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
         </div>
         <div className="flex flex-col items-end">{children}</div>

@@ -37,7 +37,6 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Tooltip } from "@opal/components";
@@ -212,7 +211,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
-          <Hoverable.Root group="inputAvatar" widthVariant="fit">
+          <Hoverable.Root group="inputAvatar" width="fit">
             <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
               <CustomAgentAvatar
@@ -289,7 +288,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
             description={tool.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
           />
         }
         topRightChildren={<SwitchField name={toolFieldName} />}
@@ -354,7 +353,7 @@ function MCPServerCard({
                       description={tool.description}
                       sizePreset="main-ui"
                       variant="section"
-                      paddingVariant="fit"
+                      padding="fit"
                     />
                   }
                   topRightChildren={
@@ -389,7 +388,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <GeneralLayouts.Section
                 flexDirection="row"

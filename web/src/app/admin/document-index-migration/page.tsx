@@ -15,6 +15,9 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
+const TOGGLE_DISABLED_MESSAGE =
+  "Changing the retrieval source is not currently possible for this instance of Onyx.";
+
 interface MigrationStatus {
   total_chunks_migrated: number;
   created_at: string | null;
@@ -24,6 +27,7 @@ interface MigrationStatus {
 
 interface RetrievalStatus {
   enable_opensearch_retrieval: boolean;
+  toggling_retrieval_is_disabled?: boolean;
 }
 
 function formatTimestamp(iso: string): string {
@@ -133,6 +137,7 @@ function RetrievalSourceSection() {
     : "vespa";
   const currentValue = selectedSource ?? serverValue;
   const hasChanges = selectedSource !== null && selectedSource !== serverValue;
+  const togglingDisabled = data?.toggling_retrieval_is_disabled ?? false;
 
   async function handleUpdate() {
     setUpdating(true);
@@ -188,7 +193,7 @@ function RetrievalSourceSection() {
       <InputSelect
         value={currentValue}
         onValueChange={setSelectedSource}
-        disabled={updating}
+        disabled={updating || togglingDisabled}
       >
         <InputSelect.Trigger placeholder="Select retrieval source" />
         <InputSelect.Content>
@@ -196,6 +201,12 @@ function RetrievalSourceSection() {
           <InputSelect.Item value="opensearch">OpenSearch</InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
+
+      {togglingDisabled && (
+        <Text mainUiBody text03>
+          {TOGGLE_DISABLED_MESSAGE}
+        </Text>
+      )}
 
       {hasChanges && (
         // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved

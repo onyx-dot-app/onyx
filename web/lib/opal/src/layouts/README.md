@@ -46,7 +46,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
   description="Some description"
   sizePreset="main-content"
   variant="section"
-  paddingVariant="lg"
+  padding="lg"
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" />
   }

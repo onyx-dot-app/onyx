@@ -51,11 +51,7 @@ function ToastContainer() {
   return (
     <div
       data-testid="toast-container"
-      className={cn(
-        "fixed bottom-4 right-4 z-[10000]",
-        "flex flex-col gap-2 items-end",
-        "max-w-[420px]"
-      )}
+      className="fixed bottom-4 right-4 z-[var(--z-toast)] flex flex-col gap-2 items-end max-w-[var(--toast-width)] w-full"
     >
       {visible.map((t) => {
         const text =
@@ -66,7 +62,7 @@ function ToastContainer() {
           <div
             key={t.id}
             className={cn(
-              "shadow-02 rounded-12",
+              "w-full",
               t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
             )}
           >
@@ -74,6 +70,7 @@ function ToastContainer() {
               variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
               title={text}
               description={buildDescription(t)}
+              padding="xs"
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             />
           </div>
