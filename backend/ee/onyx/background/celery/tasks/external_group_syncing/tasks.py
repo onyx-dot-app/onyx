@@ -506,6 +506,18 @@ def _perform_external_group_sync(
 
         ext_group_sync_func = sync_config.group_sync_config.group_sync_func
 
+        # Clean up stale rows from previous cycle BEFORE marking new ones.
+        # This ensures cleanup always runs regardless of whether the current
+        # sync succeeds — previously, cleanup only ran at the END of the sync,
+        # so if the sync failed (e.g. DB connection killed by
+        # idle_in_transaction_session_timeout during long API calls), stale
+        # rows would accumulate indefinitely.
+        logger.info(
+            f"Removing stale external groups from prior cycle for {source_type} "
+            f"for cc_pair: {cc_pair_id}"
+        )
+        remove_stale_external_groups(db_session, cc_pair_id)
+
         logger.info(
             f"Marking old external groups as stale for {source_type} for cc_pair: {cc_pair_id}"
         )
