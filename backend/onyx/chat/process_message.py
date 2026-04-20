@@ -87,9 +87,6 @@ from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.image_summarization import (
-    summarize_image_with_error_handling,
-)
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -99,7 +96,6 @@ from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingPayload
 from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
@@ -133,16 +129,12 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 APPROX_CHARS_PER_TOKEN = 4
-# Cap for inline vision-LLM summarization of image-only files at chat time.
-# Each summary is a serial vision-LLM call (~seconds), so we bound latency for
-# files with many embedded images. Upload-time extraction/indexing summarizes
-# every embedded image (up to MAX_EMBEDDED_IMAGES_PER_FILE).
-_CHAT_TIME_IMAGE_SUMMARIZATION_CAP = 20
 
 
 def _collect_available_file_ids(
@@ -277,7 +269,10 @@ def _fetch_cached_image_captions(
     try:
         chunks = document_index.id_based_retrieval(
             chunk_requests=[VespaChunkRequest(document_id=str(user_file.id))],
-            filters=IndexFilters(access_control_list=None),
+            filters=IndexFilters(
+                access_control_list=None,
+                tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+            ),
         )
     except Exception:
         logger.warning(
@@ -285,10 +280,16 @@ def _fetch_cached_image_captions(
             exc_info=True,
         )
         return []
+
+    # An image can be spread across multiple chunks; combine by image_file_id
+    # so a single caption appears once in the context.
+    combined: dict[str, list[str]] = {}
+    for chunk in chunks:
+        if chunk.image_file_id and chunk.content:
+            combined.setdefault(chunk.image_file_id, []).append(chunk.content)
     return [
-        f"[Image — {chunk.image_file_id}]\n{chunk.content}"
-        for chunk in chunks
-        if chunk.image_file_id and chunk.content
+        f"[Image — {image_file_id}]\n" + "\n".join(contents)
+        for image_file_id, contents in combined.items()
     ]
 
 
@@ -305,10 +306,10 @@ def _extract_text_from_in_memory_file(
     use extract_file_text which handles encoding detection and format parsing.
     When image extraction is enabled and the file has embedded images, cached
     captions are pulled from the document index and appended to the text.
-    The index fetch is skipped for files with no embedded images. If nothing
-    is cached yet (e.g. indexing is still in flight) and there is no text, a
-    bounded number of images are summarized inline via a vision LLM so the
-    chat turn still has something meaningful.
+    The index fetch is skipped for files with no embedded images. We do not
+    re-summarize images inline here — this path is hot and the indexing
+    pipeline writes chunks atomically, so a missed caption means the file
+    is mid-indexing and will be picked up on the next turn.
     """
     try:
         if f.file_type == ChatFileType.PLAIN_TEXT:
@@ -350,33 +351,7 @@ def _extract_text_from_in_memory_file(
             parts.append(text)
         parts.extend(cached_captions)
 
-        if parts:
-            return "\n\n".join(parts).strip() or None
-
-        # Nothing cached and no text — file is likely mid-indexing. Fall
-        # back to inline vision summarization for a bounded number of
-        # images so the chat turn still has something meaningful.
-        images = extraction.embedded_images[:_CHAT_TIME_IMAGE_SUMMARIZATION_CAP]
-        truncated = len(extraction.embedded_images) > len(images)
-        vision_llm = get_default_llm_with_vision()
-        inline_parts: list[str] = []
-        for idx, (img_bytes, img_name) in enumerate(images, start=1):
-            summary = summarize_image_with_error_handling(
-                llm=vision_llm,
-                image_data=img_bytes,
-                context_name=img_name,
-            )
-            if summary:
-                inline_parts.append(f"[Image {idx} — {img_name}]\n{summary}")
-
-        if truncated and inline_parts:
-            inline_parts.append(
-                f"[Note: only the first {len(images)} of "
-                f"{len(extraction.embedded_images)} embedded images were "
-                f"summarized at chat time.]"
-            )
-
-        return "\n\n".join(inline_parts).strip() or None
+        return "\n\n".join(parts).strip() or None
     except Exception:
         logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
         return None

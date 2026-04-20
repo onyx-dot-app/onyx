@@ -13,6 +13,7 @@ from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
+from onyx.file_processing.extract_file_text import count_docx_embedded_images
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -264,29 +265,33 @@ def categorize_uploaded_files(
                     )
                     continue
 
-                # Reject PDFs with an unreasonable number of embedded images
-                # (either per-file or accumulated across this upload batch).
-                # A PDF with thousands of embedded images can OOM the
+                # Reject documents with an unreasonable number of embedded
+                # images (either per-file or accumulated across this upload
+                # batch). A file with thousands of embedded images can OOM the
                 # user-file-processing celery worker because every image is
                 # decoded with PIL and then sent to the vision LLM.
                 count: int = 0
-                if extension == ".pdf":
+                image_bearing_ext = extension in (".pdf", ".docx")
+                if image_bearing_ext:
                     file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
                     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
                     # Use the larger of the two caps as the short-circuit
                     # threshold so we get a useful count for both checks.
-                    # count_pdf_embedded_images restores the stream position.
-                    count = count_pdf_embedded_images(
-                        upload.file, max(file_cap, batch_cap)
+                    # These helpers restore the stream position.
+                    counter = (
+                        count_pdf_embedded_images
+                        if extension == ".pdf"
+                        else count_docx_embedded_images
                     )
+                    count = counter(upload.file, max(file_cap, batch_cap))
                     if count > file_cap:
                         results.rejected.append(
                             RejectedFile(
                                 filename=filename,
                                 reason=(
-                                    f"PDF contains too many embedded images "
-                                    f"(more than {file_cap}). Try splitting "
-                                    f"the document into smaller files."
+                                    f"Document contains too many embedded "
+                                    f"images (more than {file_cap}). Try "
+                                    f"splitting it into smaller files."
                                 ),
                             )
                         )
@@ -313,10 +318,11 @@ def categorize_uploaded_files(
                     extension=extension,
                 )
                 if not text_content:
-                    # PDFs with embedded images (e.g. scans) have no extractable
-                    # text but can still be indexed via the vision-LLM
-                    # captioning path when image analysis is enabled.
-                    if extension == ".pdf" and count > 0 and image_extraction_enabled:
+                    # Documents with embedded images (e.g. scans) have no
+                    # extractable text but can still be indexed via the
+                    # vision-LLM captioning path when image analysis is
+                    # enabled.
+                    if image_bearing_ext and count > 0 and image_extraction_enabled:
                         results.acceptable.append(upload)
                         results.acceptable_file_to_token_count[filename] = 0
                         try:
