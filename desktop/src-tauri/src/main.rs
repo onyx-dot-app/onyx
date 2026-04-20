@@ -584,6 +584,27 @@ fn open_in_default_browser(url: &str) -> bool {
 }
 
 #[tauri::command]
+async fn check_server_reachable(url: String) -> Result<(), String> {
+    let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return Err("URL must use http or https".to_string()),
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    client
+        .head(parsed)
+        .send()
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn open_in_browser(url: String) -> Result<(), String> {
     let parsed_url = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
     match parsed_url.scheme() {
@@ -1294,6 +1315,7 @@ fn main() {
             get_bootstrap_state,
             set_server_url,
             get_config_path_cmd,
+            check_server_reachable,
             open_in_browser,
             open_config_file,
             open_config_directory,
