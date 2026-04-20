@@ -356,6 +356,8 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             else {}
         )
 
+        newly_stashed: list[str] = []
+
         for transcript in transcripts:
             call_id = transcript.get("callId")
 
@@ -374,17 +376,19 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
                 continue
 
             # Details not available yet — stash for retry on next invocation.
-            logger.warning(
-                f"Call details not yet available for call_id={call_id} "
-                f"(Gong race condition); deferring to next checkpoint invocation"
-            )
             checkpoint.pending_transcripts[call_id] = transcript
+            newly_stashed.append(call_id)
 
-        # First attempt on any newly-stashed transcripts counts as attempt #1.
-        # pending_call_details_attempts is guaranteed 0 here because
-        # load_from_checkpoint only reaches _process_transcripts when
-        # pending_transcripts was empty at entry (see early-return above).
-        if checkpoint.pending_transcripts:
+        if newly_stashed:
+            logger.warning(
+                f"Gong call details not yet available (race condition); "
+                f"deferring to next checkpoint invocation: "
+                f"call_ids={newly_stashed}"
+            )
+            # First attempt on any newly-stashed transcripts counts as attempt #1.
+            # pending_call_details_attempts is guaranteed 0 here because
+            # load_from_checkpoint only reaches _process_transcripts when
+            # pending_transcripts was empty at entry (see early-return above).
             checkpoint.pending_call_details_attempts = 1
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
