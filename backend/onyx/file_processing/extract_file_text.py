@@ -472,7 +472,7 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     bitmap so column trimming needs no transpose or copy. Runs of empty
     rows/columns longer than 2 are collapsed; shorter runs are preserved.
 
-    Scanning stops once ``MAX_CELLS_PER_SHEET`` non-empty cells have been
+    Scanning stops once ``MAX_XLSX_CELLS_PER_SHEET`` non-empty cells have been
     seen; the output gets a truncation marker row appended so downstream
     indexing sees that the sheet was cut off.
     """
