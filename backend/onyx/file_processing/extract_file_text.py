@@ -553,7 +553,9 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     sheets = xlsx_sheet_extraction(file, file_name)
-    return TEXT_SECTION_SEPARATOR.join(csv_text for csv_text, _title in sheets)
+    return TEXT_SECTION_SEPARATOR.join(
+        csv_text for csv_text, _title in sheets if csv_text
+    )
 
 
 def eml_to_text(file: IO[Any]) -> str:
