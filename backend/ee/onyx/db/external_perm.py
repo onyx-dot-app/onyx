@@ -155,9 +155,19 @@ def upsert_external_groups(
                 }
             )
 
+    # Deduplicate to avoid "ON CONFLICT DO UPDATE command cannot affect row
+    # a second time" when duplicate emails or overlapping groups produce
+    # identical (user_id, external_user_group_id, cc_pair_id) tuples.
+    user_group_mappings_deduped = list(
+        {
+            (m["user_id"], m["external_user_group_id"], m["cc_pair_id"]): m
+            for m in user_group_mappings
+        }.values()
+    )
+
     # Batch upsert user-group mappings
-    for i in range(0, len(user_group_mappings), _UPSERT_BATCH_SIZE):
-        chunk = user_group_mappings[i : i + _UPSERT_BATCH_SIZE]
+    for i in range(0, len(user_group_mappings_deduped), _UPSERT_BATCH_SIZE):
+        chunk = user_group_mappings_deduped[i : i + _UPSERT_BATCH_SIZE]
         stmt = pg_insert(User__ExternalUserGroupId).values(chunk)
         stmt = stmt.on_conflict_do_update(
             index_elements=["user_id", "external_user_group_id", "cc_pair_id"],
@@ -166,8 +176,9 @@ def upsert_external_groups(
         db_session.execute(stmt)
 
     # Batch upsert public group mappings
-    if public_group_mappings:
-        stmt = pg_insert(PublicExternalUserGroup).values(public_group_mappings)
+    for i in range(0, len(public_group_mappings), _UPSERT_BATCH_SIZE):
+        chunk = public_group_mappings[i : i + _UPSERT_BATCH_SIZE]
+        stmt = pg_insert(PublicExternalUserGroup).values(chunk)
         stmt = stmt.on_conflict_do_update(
             index_elements=["external_user_group_id", "cc_pair_id"],
             set_={"stale": False},
