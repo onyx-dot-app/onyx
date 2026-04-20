@@ -1069,6 +1069,12 @@ MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
+# When true, GET /users is restricted to callers with READ_USERS so non-admins
+# cannot enumerate the tenant directory. Off by default to preserve sharing UX.
+USER_DIRECTORY_ADMIN_ONLY = (
+    os.environ.get("USER_DIRECTORY_ADMIN_ONLY", "").lower() == "true"
+)
+
 # Limit on number of users a free trial tenant can invite (cloud only)
 NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
 

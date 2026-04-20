@@ -44,6 +44,7 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -81,6 +82,8 @@ from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
@@ -672,15 +675,24 @@ def get_valid_domains(
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
     include_api_keys: bool = False,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
+    if (
+        USER_DIRECTORY_ADMIN_ONLY
+        and Permission.READ_USERS not in get_effective_permissions(user)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have the required permissions for this action.",
+        )
+
     users = get_all_users(db_session)
     return [
-        MinimalUserSnapshot(id=user.id, email=user.email)
-        for user in users
-        if user.account_type != AccountType.BOT
-        and (include_api_keys or not is_api_key_email_address(user.email))
+        MinimalUserSnapshot(id=u.id, email=u.email)
+        for u in users
+        if u.account_type != AccountType.BOT
+        and (include_api_keys or not is_api_key_email_address(u.email))
     ]
 
 

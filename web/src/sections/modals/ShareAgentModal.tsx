@@ -27,8 +27,10 @@ import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import { Button, MessageCard } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
+import { FetchError } from "@/lib/fetcher";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -56,8 +58,12 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty, isSubmitting } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useShareableUsers({ includeApiKeys: true });
+  const { data: usersData, error: usersError } = useShareableUsers({
+    includeApiKeys: true,
+  });
   const { data: groupsData } = useShareableGroups();
+  const userDirectoryRestricted =
+    usersError instanceof FetchError && usersError.status === 403;
   const { user: currentUser, isAdmin, isCurator } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
@@ -70,12 +76,14 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
-    const userOptions = acceptedUsers
-      .filter((user) => user.id !== currentUser?.id)
-      .map((user) => ({
-        value: `user-${user.id}`,
-        label: user.email,
-      }));
+    const userOptions = userDirectoryRestricted
+      ? []
+      : acceptedUsers
+          .filter((user) => user.id !== currentUser?.id)
+          .map((user) => ({
+            value: `user-${user.id}`,
+            label: user.email,
+          }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
@@ -83,7 +91,10 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     }));
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups, currentUser?.id]);
+  }, [acceptedUsers, groups, currentUser?.id, userDirectoryRestricted]);
+
+  const comboBoxDisabled =
+    userDirectoryRestricted && comboBoxOptions.length === 0;
 
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
@@ -214,14 +225,31 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
             <Tabs.Content value={USERS_AND_GROUPS_TAB}>
               <Section gap={0.5} alignItems="start">
-                <InputComboBox
-                  placeholder="Add users and groups"
-                  value=""
-                  onChange={() => {}}
-                  onValueChange={handleComboBoxSelect}
-                  options={comboBoxOptions}
-                  strict
-                />
+                <Disabled
+                  disabled={comboBoxDisabled}
+                  tooltip={
+                    comboBoxDisabled
+                      ? "Your administrator has restricted the user directory. Contact an admin to share this agent with other users."
+                      : undefined
+                  }
+                  tooltipSide="bottom"
+                >
+                  <div className="w-full">
+                    <InputComboBox
+                      placeholder={
+                        userDirectoryRestricted
+                          ? "Add groups"
+                          : "Add users and groups"
+                      }
+                      value=""
+                      onChange={() => {}}
+                      onValueChange={handleComboBoxSelect}
+                      options={comboBoxOptions}
+                      strict
+                      disabled={comboBoxDisabled}
+                    />
+                  </div>
+                </Disabled>
                 {(displayedUsers.length > 0 || displayedGroups.length > 0) && (
                   <Section gap={0} alignItems="stretch">
                     {/* Shared Users */}
