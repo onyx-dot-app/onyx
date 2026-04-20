@@ -69,6 +69,8 @@ class TestGongConnectorCheckpoint:
             workspace_ids=["ws1", None],
             workspace_index=1,
             cursor="abc123",
+            pending_transcripts={"call1": _make_transcript("call1")},
+            pending_call_details_attempts=2,
         )
         json_str = original.model_dump_json()
         restored = connector.validate_checkpoint_json(json_str)
@@ -231,7 +233,10 @@ class TestGongConnectorCheckpoint:
         mock_request: MagicMock,
         connector: GongConnector,
     ) -> None:
-        """When call details are missing after retries, yield ConnectorFailure."""
+        """Missing call details persist across checkpoint invocations and
+        eventually yield ConnectorFailure once MAX_CALL_DETAILS_ATTEMPTS is hit.
+        No in-call sleep — retries happen on subsequent invocations.
+        """
         transcript_response = MagicMock()
         transcript_response.status_code = 200
         transcript_response.json.return_value = {
@@ -257,7 +262,12 @@ class TestGongConnectorCheckpoint:
         failures: list[ConnectorFailure] = []
         docs: list[Document] = []
 
-        with patch("onyx.connectors.gong.connector.time.sleep"):
+        # Each invocation tries pending once; loop until has_more=False.
+        # Safety cap: well beyond MAX_CALL_DETAILS_ATTEMPTS to catch runaways.
+        invocation_cap = GongConnector.MAX_CALL_DETAILS_ATTEMPTS + 5
+        for _ in range(invocation_cap):
+            if not checkpoint.has_more:
+                break
             generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
             try:
                 while True:
@@ -274,6 +284,12 @@ class TestGongConnectorCheckpoint:
         assert failures[0].failed_document is not None
         assert failures[0].failed_document.document_id == "call1"
         assert checkpoint.has_more is False
+        assert checkpoint.pending_transcripts == {}
+        assert checkpoint.pending_call_details_attempts == 0
+        # time.sleep should NOT have been used to pace retries — the point of
+        # this refactor is that worker cadence provides spacing, not in-call
+        # blocking.
+        assert mock_request.call_count == 1 + GongConnector.MAX_CALL_DETAILS_ATTEMPTS
 
     @patch.object(GongConnector, "_throttled_request")
     def test_multi_workspace_iteration(
@@ -381,12 +397,14 @@ class TestGongConnectorCheckpoint:
         assert checkpoint.workspace_index == 1
 
     @patch.object(GongConnector, "_throttled_request")
-    def test_retry_only_fetches_missing_ids(
+    def test_partial_details_defers_and_resolves_next_invocation(
         self,
         mock_request: MagicMock,
         connector: GongConnector,
     ) -> None:
-        """Retry for missing call details should only re-request the missing IDs."""
+        """A transcript whose call details are missing gets stashed into
+        pending_transcripts and resolves on a later checkpoint invocation.
+        Resolved docs are yielded in the order they become available."""
         transcript_response = MagicMock()
         transcript_response.status_code = 200
         transcript_response.json.return_value = {
@@ -404,7 +422,7 @@ class TestGongConnectorCheckpoint:
             "calls": [_make_call_detail("call1", "Call One")]
         }
 
-        # Second fetch (retry): returns call2
+        # Second fetch (next invocation): returns call2
         missing_details = MagicMock()
         missing_details.status_code = 200
         missing_details.json.return_value = {
@@ -424,25 +442,91 @@ class TestGongConnectorCheckpoint:
         )
 
         docs: list[Document] = []
-        with patch("onyx.connectors.gong.connector.time.sleep"):
-            generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
-            try:
-                while True:
-                    item = next(generator)
-                    if isinstance(item, Document):
-                        docs.append(item)
-            except StopIteration:
-                pass
+
+        # Invocation 1: fetches page + details, yields call1, stashes call2
+        generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(generator)
+                if isinstance(item, Document):
+                    docs.append(item)
+        except StopIteration as e:
+            checkpoint = e.value
+
+        assert len(docs) == 1
+        assert docs[0].semantic_identifier == "Call One"
+        assert "call2" in checkpoint.pending_transcripts
+        assert checkpoint.pending_call_details_attempts == 1
+        assert checkpoint.has_more is True
+
+        # Invocation 2: retries missing (only call2), yields it, clears pending
+        generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(generator)
+                if isinstance(item, Document):
+                    docs.append(item)
+        except StopIteration as e:
+            checkpoint = e.value
 
         assert len(docs) == 2
-        assert docs[0].semantic_identifier == "Call One"
         assert docs[1].semantic_identifier == "Call Two"
+        assert checkpoint.pending_transcripts == {}
+        assert checkpoint.pending_call_details_attempts == 0
 
         # Verify: 3 API calls total (1 transcript + 1 full details + 1 retry for missing only)
         assert mock_request.call_count == 3
         # The retry call should only request call2, not both
         retry_call_body = mock_request.call_args_list[2][1]["json"]
         assert retry_call_body["filter"]["callIds"] == ["call2"]
+
+    @patch.object(GongConnector, "_throttled_request")
+    def test_pending_retry_does_not_block_on_time_sleep(
+        self,
+        mock_request: MagicMock,
+        connector: GongConnector,
+    ) -> None:
+        """Pending-transcript retry must never call time.sleep() with a
+        non-trivial delay — the whole point of the checkpoint-based retry is
+        that worker cadence provides spacing, not blocking."""
+        transcript_response = MagicMock()
+        transcript_response.status_code = 200
+        transcript_response.json.return_value = {
+            "callTranscripts": [_make_transcript("call1")],
+            "records": {},
+        }
+        empty_details = MagicMock()
+        empty_details.status_code = 200
+        empty_details.json.return_value = {"calls": []}
+
+        mock_request.side_effect = [transcript_response] + [
+            empty_details
+        ] * GongConnector.MAX_CALL_DETAILS_ATTEMPTS
+
+        checkpoint = GongConnectorCheckpoint(
+            has_more=True,
+            workspace_ids=[None],
+            workspace_index=0,
+        )
+
+        with patch("onyx.connectors.gong.connector.time.sleep") as mock_sleep:
+            invocation_cap = GongConnector.MAX_CALL_DETAILS_ATTEMPTS + 5
+            for _ in range(invocation_cap):
+                if not checkpoint.has_more:
+                    break
+                generator = connector.load_from_checkpoint(0, time.time(), checkpoint)
+                try:
+                    while True:
+                        next(generator)
+                except StopIteration as e:
+                    checkpoint = e.value
+
+            # The only legitimate sleep is the sub-second throttle in
+            # _throttled_request (<= MIN_REQUEST_INTERVAL). Assert we never
+            # sleep for anything close to the old per-retry delays (30s+).
+            for call in mock_sleep.call_args_list:
+                delay_arg = call.args[0] if call.args else 0
+                assert delay_arg <= GongConnector.MIN_REQUEST_INTERVAL
 
     @patch.object(GongConnector, "_throttled_request")
     def test_expired_cursor_restarts_workspace(
