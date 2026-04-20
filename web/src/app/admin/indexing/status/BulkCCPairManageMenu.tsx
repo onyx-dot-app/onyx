@@ -20,6 +20,7 @@ interface BulkCCPairManageMenuProps {
 }
 
 type BulkAction = "pause" | "resume" | "reindex" | "delete";
+type BulkStatusAction = "pause" | "resume";
 
 interface CCPairInfoResponse {
   connector: {
@@ -28,6 +29,15 @@ interface CCPairInfoResponse {
   credential: {
     id: number;
   };
+}
+
+interface BulkCCPairStatusResponse {
+  action: BulkStatusAction;
+  matched_count: number;
+  eligible_count: number;
+  updated_count: number;
+  skipped_count: number;
+  skipped_reasons: Record<string, number>;
 }
 
 function isConnectorStatus(
@@ -57,47 +67,36 @@ async function fetchCCPairInfo(
   };
 }
 
-async function updateCCPairStatus(
-  ccPairId: number,
-  status: ConnectorCredentialPairStatus
-): Promise<void> {
-  const response = await fetch(`/api/manage/admin/cc-pair/${ccPairId}/status`, {
-    method: "PUT",
+async function bulkUpdateCCPairStatus(
+  action: BulkStatusAction,
+  filters: IndexingStatusRequest
+): Promise<BulkCCPairStatusResponse> {
+  const response = await fetch("/api/manage/admin/connector/bulk/status", {
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({
+      action,
+      filters,
+    }),
   });
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null);
     throw new Error(
       errorBody?.detail ||
-        `Failed to update status for cc_pair ${ccPairId}`
+        `Failed to bulk ${action} connectors matching the current filters`
     );
   }
+
+  return response.json();
 }
 
 function getEligibleStatuses(
   statuses: ConnectorIndexingStatusLite[],
-  action: BulkAction
+  action: "reindex" | "delete"
 ): ConnectorIndexingStatusLite[] {
-  if (action === "pause") {
-    return statuses.filter(
-      (status) =>
-        status.cc_pair_status !== ConnectorCredentialPairStatus.PAUSED &&
-        status.cc_pair_status !== ConnectorCredentialPairStatus.DELETING
-    );
-  }
-
-  if (action === "resume") {
-    return statuses.filter(
-      (status) =>
-        status.cc_pair_status === ConnectorCredentialPairStatus.PAUSED ||
-        status.cc_pair_status === ConnectorCredentialPairStatus.INVALID
-    );
-  }
-
   if (action === "reindex") {
     return statuses.filter(
       (status) =>
@@ -114,22 +113,32 @@ function getEligibleStatuses(
   );
 }
 
+function formatSkippedReasons(skippedReasons: Record<string, number>): string {
+  const labels: Record<string, string> = {
+    forbidden: "not editable",
+    already_in_target_state: "already in target state",
+    missing_cc_pair_status: "missing status",
+    not_eligible_for_action: "not eligible",
+    update_failed: "update failed",
+  };
+
+  return Object.entries(skippedReasons)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => `${count} ${labels[key] ?? key}`)
+    .join(", ");
+}
+
+function buildBulkStatusConfirmationMessage(action: BulkStatusAction) {
+  return `Are you sure you want to bulk ${action} all editable connectors matching the current search and filters?`;
+}
+
 function buildConfirmationMessage(
-  action: BulkAction,
-  totalCount: number,
-  invalidResumeCount: number
+  action: "reindex" | "delete",
+  totalCount: number
 ) {
-  let message = `Are you sure you want to ${action} ${totalCount} connector${
+  return `Are you sure you want to ${action} ${totalCount} connector${
     totalCount === 1 ? "" : "s"
   } matching the current search and filters?`;
-
-  if (action === "resume" && invalidResumeCount > 0) {
-    message += `\n\nThis will also re-enable ${invalidResumeCount} invalid connector${
-      invalidResumeCount === 1 ? "" : "s"
-    }.`;
-  }
-
-  return message;
 }
 
 export function BulkCCPairManageMenu({
@@ -162,6 +171,37 @@ export function BulkCCPairManageMenu({
       setIsOpen(false);
       setIsRunning(true);
 
+      if (action === "pause" || action === "resume") {
+        const confirmed = window.confirm(
+          buildBulkStatusConfirmationMessage(action)
+        );
+
+        if (!confirmed) {
+          return;
+        }
+
+        const result = await bulkUpdateCCPairStatus(action, filters);
+        onSuccess();
+
+        const skippedSummary = formatSkippedReasons(result.skipped_reasons);
+
+        if (result.updated_count > 0) {
+          toast.success(
+            skippedSummary
+              ? `Bulk ${action} complete: ${result.updated_count} updated, ${result.skipped_count} skipped (${skippedSummary}).`
+              : `Bulk ${action} complete: ${result.updated_count} updated.`
+          );
+        } else {
+          toast.error(
+            skippedSummary
+              ? `No connectors were updated for bulk ${action}. Skipped: ${skippedSummary}.`
+              : `No connectors were updated for bulk ${action}.`
+          );
+        }
+
+        return;
+      }
+
       const allResults = await fetchConnectorIndexingStatus({
         ...filters,
         get_all_connectors: true,
@@ -181,20 +221,8 @@ export function BulkCCPairManageMenu({
         return;
       }
 
-      const invalidResumeCount =
-        action === "resume"
-          ? eligibleStatuses.filter(
-              (status) =>
-                status.cc_pair_status === ConnectorCredentialPairStatus.INVALID
-            ).length
-          : 0;
-
       const confirmed = window.confirm(
-        buildConfirmationMessage(
-          action,
-          eligibleStatuses.length,
-          invalidResumeCount
-        )
+        buildConfirmationMessage(action, eligibleStatuses.length)
       );
 
       if (!confirmed) {
@@ -206,24 +234,6 @@ export function BulkCCPairManageMenu({
 
       for (const status of eligibleStatuses) {
         try {
-          if (action === "pause") {
-            await updateCCPairStatus(
-              status.cc_pair_id,
-              ConnectorCredentialPairStatus.PAUSED
-            );
-            successCount += 1;
-            continue;
-          }
-
-          if (action === "resume") {
-            await updateCCPairStatus(
-              status.cc_pair_id,
-              ConnectorCredentialPairStatus.ACTIVE
-            );
-            successCount += 1;
-            continue;
-          }
-
           if (action === "reindex") {
             const { connectorId, credentialId } = await fetchCCPairInfo(
               status.cc_pair_id
@@ -267,21 +277,22 @@ export function BulkCCPairManageMenu({
         }
       }
 
-      if (failureCount > 0) {
-        toast.warning(
-          `Bulk ${action} finished: ${successCount} succeeded, ${failureCount} failed.`
+      if (successCount > 0) {
+        onSuccess();
+        toast.success(
+          `Bulk ${action} complete: ${successCount} succeeded${
+            failureCount > 0 ? `, ${failureCount} failed` : ""
+          }.`
         );
       } else {
-        toast.success(
-          `Bulk ${action} finished: ${successCount} succeeded.`
-        );
+        toast.error(`Bulk ${action} failed for all eligible connectors.`);
       }
-
-      onSuccess();
     } catch (error) {
-      console.error(`Bulk ${action} failed`, error);
+      console.error(`Bulk action ${action} failed`, error);
       toast.error(
-        error instanceof Error ? error.message : `Bulk ${action} failed`
+        error instanceof Error
+          ? error.message
+          : `Bulk ${action} failed unexpectedly`
       );
     } finally {
       setIsRunning(false);
@@ -289,41 +300,46 @@ export function BulkCCPairManageMenu({
   };
 
   return (
-    <div className={`relative ${isDisabled ? "opacity-50 pointer-events-none" : ""}`} ref={menuRef}>
+    <div ref={menuRef} className="relative">
       <Button
         icon={SvgSettings}
-        prominence="tertiary"
         onClick={() => setIsOpen((prev) => !prev)}
-      />
+        disabled={isDisabled}
+      >
+        Bulk Manage
+      </Button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 rounded-md border border-border bg-background shadow-lg z-50">
+      {isOpen && !isDisabled && (
+        <div className="absolute right-0 z-20 mt-2 w-48 rounded-md border border-border bg-background shadow-lg">
           <button
-            className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-            onClick={() => runBulkAction("pause")}
+            className="block w-full px-4 py-2 text-left text-sm hover:bg-accent-background"
+            onClick={() => void runBulkAction("pause")}
           >
-            Bulk Pause
+            Pause
           </button>
+
           <button
-            className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-            onClick={() => runBulkAction("resume")}
+            className="block w-full px-4 py-2 text-left text-sm hover:bg-accent-background"
+            onClick={() => void runBulkAction("resume")}
           >
-            Bulk Resume
+            Resume
           </button>
+
           <button
-            className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
-            onClick={() => runBulkAction("reindex")}
+            className="block w-full px-4 py-2 text-left text-sm hover:bg-accent-background"
+            onClick={() => void runBulkAction("reindex")}
           >
-            Bulk Re-Index
+            Re-Index
           </button>
+
           <button
-            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-accent"
-            onClick={() => runBulkAction("delete")}
+            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-accent-background dark:text-red-400"
+            onClick={() => void runBulkAction("delete")}
           >
-            Bulk Delete
+            Delete
           </button>
         </div>
       )}
     </div>
   );
-}
+} 

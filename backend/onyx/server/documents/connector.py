@@ -1541,26 +1541,49 @@ def bulk_update_connector_status(
         if request.action == BulkCCPairStatusAction.PAUSE
         else ConnectorCredentialPairStatus.ACTIVE
     )
-
     skipped_reasons = {
         "forbidden": len(non_editable_statuses),
         "already_in_target_state": 0,
         "missing_cc_pair_status": 0,
+        "not_eligible_for_action": 0,
         "update_failed": 0,
     }
 
     eligible_statuses: list[ConnectorIndexingStatusLite] = []
 
     for status in editable_statuses:
-        if status.cc_pair_status is None:
+        current_status = status.cc_pair_status
+
+        if current_status is None:
             skipped_reasons["missing_cc_pair_status"] += 1
             continue
 
-        if status.cc_pair_status == target_status:
-            skipped_reasons["already_in_target_state"] += 1
+        if request.action == BulkCCPairStatusAction.PAUSE:
+            if current_status == ConnectorCredentialPairStatus.PAUSED:
+                skipped_reasons["already_in_target_state"] += 1
+                continue
+
+            if current_status == ConnectorCredentialPairStatus.DELETING:
+                skipped_reasons["not_eligible_for_action"] += 1
+                continue
+
+            eligible_statuses.append(status)
             continue
 
-        eligible_statuses.append(status)
+        if request.action == BulkCCPairStatusAction.RESUME:
+            if current_status == ConnectorCredentialPairStatus.ACTIVE:
+                skipped_reasons["already_in_target_state"] += 1
+                continue
+
+            if current_status not in {
+                ConnectorCredentialPairStatus.PAUSED,
+                ConnectorCredentialPairStatus.INVALID,
+            }:
+                skipped_reasons["not_eligible_for_action"] += 1
+                continue
+
+            eligible_statuses.append(status)
+            continue
 
     updated_count = 0
 
