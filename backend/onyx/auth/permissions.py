@@ -19,6 +19,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
@@ -65,6 +66,16 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.READ_AGENTS,
         Permission.READ_USERS,
         Permission.READ_USER_GROUPS,
+    }
+)
+
+# Permissions auto-granted to all users in Community Edition.
+# In CE there is no group-permission UI, so these capabilities must be
+# available without explicit grants.  In EE they are controlled normally
+# via group permissions.
+CE_UNGATED_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.ADD_AGENTS,
     }
 )
 
@@ -222,6 +233,10 @@ def get_effective_permissions(user: User) -> set[Permission]:
             logger.warning(f"Skipping unknown permission '{p}' for user {user.id}")
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
+
+    if not global_version.is_ee_version():
+        granted |= CE_UNGATED_PERMISSIONS
+
     expanded = resolve_effective_permissions({p.value for p in granted})
     return {Permission(p) for p in expanded}
 
