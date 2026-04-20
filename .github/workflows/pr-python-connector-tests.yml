@@ -116,6 +116,7 @@ jobs:
             CONFLUENCE_ACCESS_TOKEN, test/confluence-access-token
             CONFLUENCE_ACCESS_TOKEN_SCOPED, test/confluence-access-token-scoped
             JIRA_BASE_URL, test/jira-base-url
+            JIRA_ADMIN_USER_EMAIL, test/jira-admin-user-email
             JIRA_USER_EMAIL, test/jira-user-email
             JIRA_API_TOKEN, test/jira-api-token
             JIRA_API_TOKEN_SCOPED, test/jira-api-token-scoped
