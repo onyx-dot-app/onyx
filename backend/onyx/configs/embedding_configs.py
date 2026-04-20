@@ -127,8 +127,6 @@ _BASE_EMBEDDING_MODELS = [
 # Automatically generate both FLOAT and BFLOAT16 versions of all models
 SUPPORTED_EMBEDDING_MODELS = [
     # BFLOAT16 precision versions
-    # NOTE: kept for backwards compatibility with existing Vespa deployments
-    # that configured BFLOAT16 for memory savings.
     *[
         SupportedEmbeddingModel(
             name=model.name,
@@ -139,9 +137,8 @@ SUPPORTED_EMBEDDING_MODELS = [
         for model in _BASE_EMBEDDING_MODELS
     ],
     # FLOAT precision versions
-    # NOTE: FLOAT (float32) is the default. OpenSearch (the target document
-    # index) ignores embedding_precision and stores vectors as float32
-    # regardless.
+    # NOTE: need to keep this one for backwards compatibility. We now default to
+    # BFLOAT16.
     *[
         SupportedEmbeddingModel(
             name=model.name,
