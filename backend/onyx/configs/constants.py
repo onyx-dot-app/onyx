@@ -32,9 +32,7 @@ DEFAULT_BOOST = 0
 PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 # Cookies
-FASTAPI_USERS_AUTH_COOKIE_NAME = (
-    "fastapiusersauth"  # Currently a constant, but logic allows for configuration
-)
+FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth"  # Currently a constant, but logic allows for configuration
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
@@ -91,9 +89,7 @@ POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
-POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
-    "celery_worker_user_file_processing"
-)
+POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = "celery_worker_user_file_processing"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -213,6 +209,7 @@ class DocumentSource(str, Enum):
     OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
@@ -443,21 +440,15 @@ class OnyxRedisLocks:
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
-    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
-        "da_lock:check_connector_doc_permissions_sync_beat"
-    )
-    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
-        "da_lock:check_connector_external_group_sync_beat"
-    )
+    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = "da_lock:check_connector_doc_permissions_sync_beat"
+    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = "da_lock:check_connector_external_group_sync_beat"
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
-    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
-        "da_lock:connector_doc_permissions_sync"
-    )
+    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = "da_lock:connector_doc_permissions_sync"
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
@@ -497,18 +488,12 @@ class OnyxRedisLocks:
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
-    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
-        "signal:block_validate_external_group_sync_fences"
-    )
-    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
-        "signal:block_validate_permission_sync_fences"
-    )
+    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = "signal:block_validate_external_group_sync_fences"
+    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = "signal:block_validate_permission_sync_fences"
     BLOCK_PRUNING = "signal:block_pruning"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
-    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
-        "signal:block_validate_connector_deletion_fences"
-    )
+    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = "signal:block_validate_connector_deletion_fences"
 
 
 class OnyxRedisConstants:
@@ -539,15 +524,9 @@ class OnyxCeleryTask:
 
     CLOUD_BEAT_TASK_GENERATOR = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_generate_beat_tasks"
     CLOUD_MONITOR_ALEMBIC = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_alembic"
-    CLOUD_MONITOR_CELERY_QUEUES = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
-    )
-    CLOUD_CHECK_AVAILABLE_TENANTS = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
-    )
-    CLOUD_MONITOR_CELERY_PIDBOX = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
-    )
+    CLOUD_MONITOR_CELERY_QUEUES = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
+    CLOUD_CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    CLOUD_MONITOR_CELERY_PIDBOX = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -579,15 +558,9 @@ class OnyxCeleryTask:
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
-    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
-        "connector_permission_sync_generator_task"
-    )
-    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = (
-        "update_external_document_permissions_task"
-    )
-    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = (
-        "connector_external_group_sync_generator_task"
-    )
+    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = "connector_permission_sync_generator_task"
+    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = "update_external_document_permissions_task"
+    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = "connector_external_group_sync_generator_task"
 
     # New split indexing tasks
     CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
@@ -620,15 +593,9 @@ class OnyxCeleryTask:
     # Sandbox file sync
     SANDBOX_FILE_SYNC = "sandbox_file_sync"
 
-    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
-        "check_for_documents_for_opensearch_migration_task"
-    )
-    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
-    )
-    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
-    )
+    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = "check_for_documents_for_opensearch_migration_task"
+    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = "migrate_documents_from_vespa_to_opensearch_task"
+    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = "migrate_chunks_from_vespa_to_opensearch_task"
 
 
 # this needs to correspond to the matching entry in supervisord
