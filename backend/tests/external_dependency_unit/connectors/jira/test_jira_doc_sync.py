@@ -210,7 +210,7 @@ def test_jira_doc_sync_with_specific_permissions(
         assert len(docs) > 0, "Expected at least one document from SUP project"
 
         _EXPECTED_USER_EMAILS = set(
-            ["yuhong@onyx.app", "chris@onyx.app", "founders@onyx.app"]
+            ["yuhong@onyx.app", "chris@onyx.app", "founders@onyx.app", "oauth@onyx.app"]
         )
         _EXPECTED_USER_GROUP_IDS = set(["jira-users-danswerai"])
 
