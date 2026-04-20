@@ -578,8 +578,18 @@ class GoogleDriveConnector(
                     current_id, file.user_email, field_type, failed_folder_ids_by_email
                 )
                 if not folder:
-                    # Can't access this folder - stop climbing
-                    # Don't mark as fully walked since we didn't reach root
+                    # Can't access this folder - stop climbing.
+                    # If the terminal node is a confirmed orphan, backfill all
+                    # intermediate folders into failed_folder_ids_by_email so
+                    # future files short-circuit via _get_folder_metadata's
+                    # cache check instead of re-climbing the whole chain.
+                    if failed_folder_ids_by_email is not None:
+                        for email in {file.user_email, self.primary_admin_email}:
+                            email_failed_ids = failed_folder_ids_by_email.get(email)
+                            if email_failed_ids and current_id in email_failed_ids:
+                                failed_folder_ids_by_email.setdefault(
+                                    email, ThreadSafeSet()
+                                ).update(set(node_ids_in_walk))
                     break
 
                 folder_parent_id = _get_parent_id_from_file(folder)
