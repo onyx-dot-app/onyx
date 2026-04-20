@@ -2,11 +2,17 @@ import datetime
 from uuid import UUID
 
 from sqlalchemy import func
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import FileOrigin
+from onyx.db.models import ChatMessage
+from onyx.db.models import ChatSession
+from onyx.db.models import ChatSessionSharedStatus
+from onyx.db.models import FileRecord
 from onyx.db.models import Persona
 from onyx.db.models import Project__UserFile
 from onyx.db.models import UserFile
@@ -108,11 +114,71 @@ def update_last_accessed_at_for_user_files(
     db_session.commit()
 
 
-def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
-    user_file = db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+def get_file_id_by_user_file_id(
+    user_file_id: str, user_id: UUID, db_session: Session
+) -> str | None:
+    user_file = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == user_file_id, UserFile.user_id == user_id)
+        .first()
+    )
     if user_file:
         return user_file.file_id
     return None
+
+
+def user_can_access_chat_file(file_id: str, user_id: UUID, db_session: Session) -> bool:
+    """Return True if `user_id` is allowed to read the raw `file_id` served by
+    `GET /chat/file/{file_id}`. Access is granted when any of:
+
+    - The `file_id` is the storage id of a `UserFile` owned by the user.
+    - The `file_id` is a persona avatar (`Persona.uploaded_image_id`); avatars
+      are visible to any authenticated user.
+    - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
+      session the user owns or a session publicly shared via
+      `ChatSessionSharedStatus.PUBLIC`.
+    """
+    owns_user_file = db_session.query(
+        select(UserFile.id)
+        .where(UserFile.file_id == file_id, UserFile.user_id == user_id)
+        .exists()
+    ).scalar()
+    if owns_user_file:
+        return True
+
+    # TODO: move persona avatars to a dedicated endpoint (e.g.
+    # /assistants/{id}/avatar) so this branch can be removed. /chat/file is
+    # currently overloaded with multiple asset classes (user files, chat
+    # attachments, tool outputs, avatars), forcing this access-check fan-out.
+    #
+    # Restrict the avatar path to CHAT_UPLOAD-origin files so an attacker
+    # cannot bind another user's USER_FILE (or any other origin) to their
+    # own persona and read it through this check.
+    is_persona_avatar = db_session.query(
+        select(Persona.id)
+        .join(FileRecord, FileRecord.file_id == Persona.uploaded_image_id)
+        .where(
+            Persona.uploaded_image_id == file_id,
+            FileRecord.file_origin == FileOrigin.CHAT_UPLOAD,
+        )
+        .exists()
+    ).scalar()
+    if is_persona_avatar:
+        return True
+
+    chat_file_stmt = (
+        select(ChatMessage.id)
+        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatMessage.files.op("@>")([{"id": file_id}]))
+        .where(
+            or_(
+                ChatSession.user_id == user_id,
+                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+            )
+        )
+        .limit(1)
+    )
+    return db_session.execute(chat_file_stmt).first() is not None
 
 
 def get_file_ids_by_user_file_ids(
