@@ -25,6 +25,7 @@ from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
+from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -470,12 +471,19 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     Empty rows are never stored. Column occupancy is tracked as a ``bytearray``
     bitmap so column trimming needs no transpose or copy. Runs of empty
     rows/columns longer than 2 are collapsed; shorter runs are preserved.
+
+    Scanning stops once ``MAX_XLSX_CELLS_PER_SHEET`` non-empty cells have been
+    seen; the output gets a truncation marker row appended so downstream
+    indexing sees that the sheet was cut off.
     """
     MAX_EMPTY_ROWS_IN_OUTPUT = 2
     MAX_EMPTY_COLS_IN_OUTPUT = 2
+    TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
 
     non_empty_rows: list[tuple[int, list[str]]] = []
     col_has_data = bytearray()
+    total_non_empty = 0
+    truncated = False
 
     for row_idx, row_vals in enumerate(rows):
         # Fast-reject empty rows before allocating a list of "".
@@ -490,6 +498,11 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
         for i, v in enumerate(cells):
             if v:
                 col_has_data[i] = 1
+                total_non_empty += 1
+
+        if total_non_empty > MAX_XLSX_CELLS_PER_SHEET:
+            truncated = True
+            break
 
     if not non_empty_rows:
         return ""
@@ -509,6 +522,9 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
                 writer.writerow(blank_row)
         writer.writerow([cells[c] if c < len(cells) else "" for c in keep_cols])
         last_idx = row_idx
+
+    if truncated:
+        writer.writerow([TRUNCATION_MARKER])
 
     return buf.getvalue().rstrip("\n")
 
