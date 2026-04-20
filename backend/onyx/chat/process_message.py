@@ -62,6 +62,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
@@ -75,8 +76,12 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
@@ -255,18 +260,55 @@ def _empty_extracted_context_files() -> ExtractedContextFiles:
     )
 
 
-def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
+def _fetch_cached_image_captions(
+    user_file: UserFile | None,
+    document_index: DocumentIndex | None,
+) -> list[str]:
+    """Read image-caption chunks for a user file from the document index.
+
+    During indexing, embedded images are summarized via a vision LLM and
+    those summaries are stored as chunks whose `image_file_id` is set. Reading
+    them back at chat time avoids re-running vision-LLM calls per turn.
+    Returns an empty list if the index has no chunks yet (e.g. indexing is
+    still in flight) or on any fetch failure.
+    """
+    if user_file is None or document_index is None:
+        return []
+    try:
+        chunks = document_index.id_based_retrieval(
+            chunk_requests=[VespaChunkRequest(document_id=str(user_file.id))],
+            filters=IndexFilters(access_control_list=None),
+        )
+    except Exception:
+        logger.warning(
+            f"Failed to fetch cached captions for user_file {user_file.id}",
+            exc_info=True,
+        )
+        return []
+    return [
+        f"[Image — {chunk.image_file_id}]\n{chunk.content}"
+        for chunk in chunks
+        if chunk.image_file_id and chunk.content
+    ]
+
+
+def _extract_text_from_in_memory_file(
+    f: InMemoryChatFile,
+    user_file: UserFile | None = None,
+    document_index: DocumentIndex | None = None,
+) -> str | None:
     """Extract text content from an InMemoryChatFile.
 
     PLAIN_TEXT: the content is pre-extracted UTF-8 plaintext stored during
     ingestion — decode directly.
     DOC / CSV / other text types: the content is the original file bytes —
     use extract_file_text which handles encoding detection and format parsing.
-    When image extraction is enabled and the file has no extractable text
-    (e.g. a scanned PDF), embedded images are summarized inline via a vision
-    LLM so the content survives into the chat context. Files that already
-    have text are left untouched to avoid adding vision-LLM latency to the
-    common case.
+    When image extraction is enabled and the file has embedded images, cached
+    captions are pulled from the document index and appended to the text.
+    The index fetch is skipped for files with no embedded images. If nothing
+    is cached yet (e.g. indexing is still in flight) and there is no text, a
+    bounded number of images are summarized inline via a vision LLM so the
+    chat turn still has something meaningful.
     """
     try:
         if f.file_type == ChatFileType.PLAIN_TEXT:
@@ -284,18 +326,30 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
             file=io.BytesIO(f.content),
             file_name=filename,
         )
+        text = extraction.text_content
+        has_text = bool(text.strip())
+        has_images = bool(extraction.embedded_images)
 
-        if extraction.text_content.strip():
-            return extraction.text_content
+        if not has_images:
+            return text if has_text else None
 
-        if not extraction.embedded_images:
-            return None
+        cached_captions = _fetch_cached_image_captions(user_file, document_index)
 
+        parts: list[str] = []
+        if has_text:
+            parts.append(text)
+        parts.extend(cached_captions)
+
+        if parts:
+            return "\n\n".join(parts).strip() or None
+
+        # Nothing cached and no text — file is likely mid-indexing. Fall
+        # back to inline vision summarization for a bounded number of
+        # images so the chat turn still has something meaningful.
         images = extraction.embedded_images[:_CHAT_TIME_IMAGE_SUMMARIZATION_CAP]
         truncated = len(extraction.embedded_images) > len(images)
-
         vision_llm = get_default_llm_with_vision()
-        parts: list[str] = []
+        inline_parts: list[str] = []
         for idx, (img_bytes, img_name) in enumerate(images, start=1):
             summary = summarize_image_with_error_handling(
                 llm=vision_llm,
@@ -303,16 +357,16 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
                 context_name=img_name,
             )
             if summary:
-                parts.append(f"[Image {idx} — {img_name}]\n{summary}")
+                inline_parts.append(f"[Image {idx} — {img_name}]\n{summary}")
 
-        if truncated and parts:
-            parts.append(
+        if truncated and inline_parts:
+            inline_parts.append(
                 f"[Note: only the first {len(images)} of "
                 f"{len(extraction.embedded_images)} embedded images were "
                 f"summarized at chat time.]"
             )
 
-        return "\n\n".join(parts).strip() or None
+        return "\n\n".join(inline_parts).strip() or None
     except Exception:
         logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
         return None
@@ -394,6 +448,23 @@ def extract_context_files(
         db_session=db_session,
     )
 
+    # The document index is used at chat time to read cached image captions
+    # (produced during indexing) so vision-LLM calls don't re-run per turn.
+    document_index: DocumentIndex | None = None
+    if not DISABLE_VECTOR_DB and get_image_extraction_and_analysis_enabled():
+        try:
+            active_search_settings = get_active_search_settings(db_session)
+            document_index = get_default_document_index(
+                search_settings=active_search_settings.primary,
+                secondary_search_settings=None,
+                db_session=db_session,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to construct document index for caption lookup",
+                exc_info=True,
+            )
+
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
     file_metadata: list[ContextFileMetadata] = []
@@ -414,7 +485,9 @@ def extract_context_files(
                 continue
             tool_metadata.append(_build_tool_metadata(uf))
         elif f.file_type.is_text_file():
-            text_content = _extract_text_from_in_memory_file(f)
+            text_content = _extract_text_from_in_memory_file(
+                f, user_file=uf, document_index=document_index
+            )
             if not text_content:
                 continue
             if not uf:
