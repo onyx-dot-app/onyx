@@ -445,7 +445,7 @@ jobs:
         run: |
           npx playwright test --project ${PROJECT}
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           # Includes test results and trace.zip files
@@ -454,7 +454,7 @@ jobs:
           retention-days: 30
 
       - name: Upload screenshots
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
@@ -534,7 +534,7 @@ jobs:
             "s3://${PLAYWRIGHT_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
 
       - name: Upload visual diff summary
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: screenshot-diff-summary-${{ matrix.project }}
@@ -543,7 +543,7 @@ jobs:
           retention-days: 5
 
       - name: Upload visual diff report artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: screenshot-diff-report-${{ matrix.project }}-${{ github.run_id }}
@@ -590,7 +590,7 @@ jobs:
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
@@ -674,7 +674,7 @@ jobs:
         working-directory: ./web
         run: npx playwright test --project lite
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: playwright-test-results-lite-${{ github.run_id }}
@@ -692,7 +692,7 @@ jobs:
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-logs-lite-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
