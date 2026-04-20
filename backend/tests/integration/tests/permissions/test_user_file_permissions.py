@@ -8,8 +8,10 @@ import io
 from typing import NamedTuple
 
 import pytest
+import requests
 
 from onyx.file_store.models import FileDescriptor
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -119,3 +121,31 @@ def test_public_assistant_with_user_files(
     assert (
         len(chat_history) >= 2
     ), "Expected at least 2 messages (user message and assistant response)"
+
+
+def test_cannot_download_other_users_file_via_chat_file_endpoint(
+    user_file_setup: UserFileTestSetup,
+) -> None:
+    storage_file_id = user_file_setup.user1_file_descriptor["id"]
+    user_file_id = user_file_setup.user1_file_id
+
+    owner_response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{storage_file_id}",
+        headers=user_file_setup.user1_file_owner.headers,
+    )
+    assert owner_response.status_code == 200
+    assert owner_response.content, "Owner should receive the file contents"
+
+    for file_id in (storage_file_id, user_file_id):
+        user2_response = requests.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=user_file_setup.user2_non_owner.headers,
+        )
+        assert user2_response.status_code in (
+            403,
+            404,
+        ), (
+            f"Expected access denied for non-owner, got {user2_response.status_code} "
+            f"when fetching file_id={file_id}"
+        )
+        assert user2_response.content != owner_response.content
