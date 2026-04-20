@@ -81,8 +81,8 @@ def extract_text_from_adf(adf: dict[str, Any] | None) -> str:
             texts.append("\n")
 
         elif node_type == "paragraph":
-            if "content" in node:
-                for child in node["content"] or []:
+            if "content" in node and isinstance(node["content"], list):
+                for child in node["content"]:
                     _traverse(child)
             if texts and texts[-1] != "\n":
                 texts.append("\n")
