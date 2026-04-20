@@ -70,11 +70,13 @@ def mark_old_external_groups_as_stale(
     db_session.execute(
         update(User__ExternalUserGroupId)
         .where(User__ExternalUserGroupId.cc_pair_id == cc_pair_id)
+        .where(User__ExternalUserGroupId.stale.is_(False))
         .values(stale=True)
     )
     db_session.execute(
         update(PublicExternalUserGroup)
         .where(PublicExternalUserGroup.cc_pair_id == cc_pair_id)
+        .where(PublicExternalUserGroup.stale.is_(False))
         .values(stale=True)
     )
 
