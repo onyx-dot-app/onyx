@@ -1,7 +1,7 @@
 """Add file_id to documents
 
 Revision ID: 91d150c361f6
-Revises: d129f37b3d87
+Revises: a6fcd3d631f9
 Create Date: 2026-04-16 15:43:30.314823
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "91d150c361f6"
-down_revision = "d129f37b3d87"
+down_revision = "a6fcd3d631f9"
 branch_labels = None
 depends_on = None
 
