@@ -12,6 +12,7 @@ from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from typing import cast
 from typing import IO
 from typing import NamedTuple
 from typing import Optional
@@ -20,7 +21,7 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
@@ -448,104 +449,68 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     return presentation.markdown
 
 
-def _worksheet_to_matrix(
-    worksheet: Worksheet,
-) -> list[list[str]]:
-    """
-    Converts a singular worksheet to a matrix of values.
-
-    Rows are padded to a uniform width. In openpyxl's read_only mode,
-    iter_rows can yield rows of differing lengths (trailing empty cells
-    are sometimes omitted), and downstream column cleanup assumes a
-    rectangular matrix.
-    """
-    rows: list[list[str]] = []
-    max_len = 0
-    for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
-        row = ["" if cell is None else str(cell) for cell in worksheet_row]
-        if len(row) > max_len:
-            max_len = len(row)
-        rows.append(row)
-
-    for row in rows:
-        if len(row) < max_len:
-            row.extend([""] * (max_len - len(row)))
-
-    return rows
-
-
-def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
-    """
-    Cleans a worksheet matrix by removing rows if there are N consecutive empty
-    rows and removing cols if there are M consecutive empty columns
-    """
-    MAX_EMPTY_ROWS = 2  # Runs longer than this are capped to max_empty; shorter runs are preserved as-is
-    MAX_EMPTY_COLS = 2
-
-    # Row cleanup
-    matrix = _remove_empty_runs(matrix, max_empty=MAX_EMPTY_ROWS)
-
-    if not matrix:
-        return matrix
-
-    # Column cleanup — determine which columns to keep without transposing.
-    num_cols = len(matrix[0])
-    keep_cols = _columns_to_keep(matrix, num_cols, max_empty=MAX_EMPTY_COLS)
-    if len(keep_cols) < num_cols:
-        matrix = [[row[c] for c in keep_cols] for row in matrix]
-
-    return matrix
-
-
-def _columns_to_keep(
-    matrix: list[list[str]], num_cols: int, max_empty: int
-) -> list[int]:
-    """Return the indices of columns to keep after removing empty-column runs.
-
-    Uses the same logic as ``_remove_empty_runs`` but operates on column
-    indices so no transpose is needed.
-    """
+def _columns_to_keep(col_has_data: bytearray, max_empty: int) -> list[int]:
+    """Keep non-empty columns, plus runs of up to ``max_empty`` empty columns
+    between them. Trailing empty columns are dropped."""
     kept: list[int] = []
     empty_buffer: list[int] = []
-
-    for col_idx in range(num_cols):
-        col_is_empty = all(not row[col_idx] for row in matrix)
-        if col_is_empty:
-            empty_buffer.append(col_idx)
-        else:
+    for c, has in enumerate(col_has_data):
+        if has:
             kept.extend(empty_buffer[:max_empty])
-            kept.append(col_idx)
+            kept.append(c)
             empty_buffer = []
-
+        else:
+            empty_buffer.append(c)
     return kept
 
 
-def _remove_empty_runs(
-    rows: list[list[str]],
-    max_empty: int,
-) -> list[list[str]]:
-    """Removes entire runs of empty rows when the run length exceeds max_empty.
+def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
+    """Stream worksheet rows into CSV text without materializing a dense matrix.
 
-    Leading empty runs are capped to max_empty, just like interior runs.
-    Trailing empty rows are always dropped since there is no subsequent
-    non-empty row to flush them.
+    Empty rows are never stored. Column occupancy is tracked as a ``bytearray``
+    bitmap so column trimming needs no transpose or copy. Runs of empty
+    rows/columns longer than 2 are collapsed; shorter runs are preserved.
     """
-    result: list[list[str]] = []
-    empty_buffer: list[list[str]] = []
+    MAX_EMPTY_ROWS_IN_OUTPUT = 2
+    MAX_EMPTY_COLS_IN_OUTPUT = 2
 
-    for row in rows:
-        # Check if empty
-        if not any(row):
-            if len(empty_buffer) < max_empty:
-                empty_buffer.append(row)
-        else:
-            # Add upto max empty rows onto the result - that's what we allow
-            result.extend(empty_buffer[:max_empty])
-            # Add the new non-empty row
-            result.append(row)
-            empty_buffer = []
+    non_empty_rows: list[tuple[int, list[str]]] = []
+    col_has_data = bytearray()
 
-    return result
+    for row_idx, row_vals in enumerate(rows):
+        # Fast-reject empty rows before allocating a list of "".
+        if not any(v is not None and v != "" for v in row_vals):
+            continue
+
+        cells = ["" if v is None else str(v) for v in row_vals]
+        non_empty_rows.append((row_idx, cells))
+
+        if len(cells) > len(col_has_data):
+            col_has_data.extend(b"\x00" * (len(cells) - len(col_has_data)))
+        for i, v in enumerate(cells):
+            if v:
+                col_has_data[i] = 1
+
+    if not non_empty_rows:
+        return ""
+
+    keep_cols = _columns_to_keep(col_has_data, MAX_EMPTY_COLS_IN_OUTPUT)
+    if not keep_cols:
+        return ""
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    blank_row = [""] * len(keep_cols)
+    last_idx = -1
+    for row_idx, cells in non_empty_rows:
+        gap = row_idx - last_idx - 1
+        if gap > 0:
+            for _ in range(min(gap, MAX_EMPTY_ROWS_IN_OUTPUT)):
+                writer.writerow(blank_row)
+        writer.writerow([cells[c] if c < len(cells) else "" for c in keep_cols])
+        last_idx = row_idx
+
+    return buf.getvalue().rstrip("\n")
 
 
 def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
@@ -573,20 +538,24 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
         raise
 
     sheets: list[tuple[str, str]] = []
-    for sheet in workbook.worksheets:
-        sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
-        buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator="\n")
-        writer.writerows(sheet_matrix)
-        csv_text = buf.getvalue().rstrip("\n")
-        if csv_text.strip():
-            sheets.append((csv_text, sheet.title))
+    try:
+        for sheet in workbook.worksheets:
+            # Declared dimensions can be different to what is actually there
+            ro_sheet = cast(ReadOnlyWorksheet, sheet)
+            ro_sheet.reset_dimensions()
+            csv_text = _sheet_to_csv(ro_sheet.iter_rows(values_only=True))
+            sheets.append((csv_text.strip(), ro_sheet.title))
+    finally:
+        workbook.close()
+
     return sheets
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     sheets = xlsx_sheet_extraction(file, file_name)
-    return TEXT_SECTION_SEPARATOR.join(csv_text for csv_text, _title in sheets)
+    return TEXT_SECTION_SEPARATOR.join(
+        csv_text for csv_text, _title in sheets if csv_text
+    )
 
 
 def eml_to_text(file: IO[Any]) -> str:
