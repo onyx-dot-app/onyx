@@ -1063,26 +1063,6 @@ ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "tr
 # Limit on number of users a free trial tenant can invite (cloud only)
 NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
 
-# Redis-backed rate limits for admin invite + remove-invited endpoints.
-# These guard against compromised-admin invite-spam / email-bomb abuse
-# where nginx IP-keyed limits are insufficient (per-pod counters, IP rotation).
-# Set any of the below to 0 to disable that specific tier.
-INVITE_RATE_LIMIT_ADMIN_PER_MIN = int(
-    os.environ.get("INVITE_RATE_LIMIT_ADMIN_PER_MIN", "5")
-)
-INVITE_RATE_LIMIT_ADMIN_PER_DAY = int(
-    os.environ.get("INVITE_RATE_LIMIT_ADMIN_PER_DAY", "50")
-)
-INVITE_RATE_LIMIT_TENANT_PER_DAY = int(
-    os.environ.get("INVITE_RATE_LIMIT_TENANT_PER_DAY", "500")
-)
-INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN = int(
-    os.environ.get("INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN", "10")
-)
-INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY = int(
-    os.environ.get("INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY", "100")
-)
-
 # Security and authentication
 DATA_PLANE_SECRET = os.environ.get(
     "DATA_PLANE_SECRET", ""

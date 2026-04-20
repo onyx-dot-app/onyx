@@ -21,11 +21,6 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from onyx.configs.app_configs import INVITE_RATE_LIMIT_ADMIN_PER_DAY
-from onyx.configs.app_configs import INVITE_RATE_LIMIT_ADMIN_PER_MIN
-from onyx.configs.app_configs import INVITE_RATE_LIMIT_TENANT_PER_DAY
-from onyx.configs.app_configs import INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY
-from onyx.configs.app_configs import INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -34,6 +29,17 @@ logger = setup_logger()
 
 _SECONDS_PER_MINUTE = 60
 _SECONDS_PER_DAY = 24 * 60 * 60
+
+# These limits primarily matter for multi-tenant cloud. Self-hosted / Lite
+# deployments fail open when Redis is unavailable, so the limits are
+# effectively no-ops there. Tuned for the invite-spam attack pattern where
+# a compromised admin sends ~30/min of PUT+PATCH cycles; caps are well
+# above any legitimate human invite cadence.
+_INVITE_ADMIN_PER_MIN = 5
+_INVITE_ADMIN_PER_DAY = 50
+_INVITE_TENANT_PER_DAY = 500
+_REMOVE_ADMIN_PER_MIN = 10
+_REMOVE_ADMIN_PER_DAY = 100
 
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
@@ -164,21 +170,21 @@ def enforce_invite_rate_limit(
     buckets = [
         _Bucket(
             key=_INVITE_PUT_TENANT_DAY_KEY,
-            limit=INVITE_RATE_LIMIT_TENANT_PER_DAY,
+            limit=_INVITE_TENANT_PER_DAY,
             ttl_seconds=_SECONDS_PER_DAY,
             scope="tenant/day",
             increment=daily_increment,
         ),
         _Bucket(
             key=_INVITE_PUT_ADMIN_DAY_KEY.format(user_id=user_key),
-            limit=INVITE_RATE_LIMIT_ADMIN_PER_DAY,
+            limit=_INVITE_ADMIN_PER_DAY,
             ttl_seconds=_SECONDS_PER_DAY,
             scope="admin/day",
             increment=daily_increment,
         ),
         _Bucket(
             key=_INVITE_PUT_ADMIN_MIN_KEY.format(user_id=user_key),
-            limit=INVITE_RATE_LIMIT_ADMIN_PER_MIN,
+            limit=_INVITE_ADMIN_PER_MIN,
             ttl_seconds=_SECONDS_PER_MINUTE,
             scope="admin/minute",
             increment=1,
@@ -202,14 +208,14 @@ def enforce_remove_invited_rate_limit(
     buckets = [
         _Bucket(
             key=_INVITE_REMOVE_ADMIN_DAY_KEY.format(user_id=user_key),
-            limit=INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY,
+            limit=_REMOVE_ADMIN_PER_DAY,
             ttl_seconds=_SECONDS_PER_DAY,
             scope="admin/day",
             increment=1,
         ),
         _Bucket(
             key=_INVITE_REMOVE_ADMIN_MIN_KEY.format(user_id=user_key),
-            limit=INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN,
+            limit=_REMOVE_ADMIN_PER_MIN,
             ttl_seconds=_SECONDS_PER_MINUTE,
             scope="admin/minute",
             increment=1,

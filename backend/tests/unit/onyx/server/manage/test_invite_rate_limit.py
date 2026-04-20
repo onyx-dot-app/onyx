@@ -64,14 +64,10 @@ def test_invite_allows_under_all_tiers() -> None:
     user_id = uuid4()
 
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 5),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 50),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 5
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 50
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             500,
         ),
     ):
@@ -89,14 +85,10 @@ def test_invite_minute_bucket_blocks_request_flood() -> None:
     user_id = uuid4()
 
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 5),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 500),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 5
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 500
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             5000,
         ),
     ):
@@ -115,14 +107,10 @@ def test_invite_bulk_call_does_not_trip_minute_bucket() -> None:
     user_id = uuid4()
 
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 5),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 50),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 5
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 50
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             500,
         ),
     ):
@@ -138,14 +126,12 @@ def test_invite_admin_daily_cap_enforced() -> None:
 
     with (
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN",
+            "onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN",
             1000,
         ),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 50),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 50
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             5000,
         ),
     ):
@@ -160,16 +146,14 @@ def test_invite_tenant_daily_cap_enforced_across_admins() -> None:
 
     with (
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN",
+            "onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN",
             1000,
         ),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY",
             1000,
         ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY", 10
-        ),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 10),
     ):
         enforce_invite_rate_limit(redis_client, uuid4(), num_invites=6)
         enforce_invite_rate_limit(redis_client, uuid4(), num_invites=4)
@@ -183,15 +167,9 @@ def test_invite_rejected_request_does_not_consume_budget() -> None:
     user_id = uuid4()
 
     with (
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 5
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 50
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY", 10
-        ),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 5),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 50),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 10),
     ):
         enforce_invite_rate_limit(redis_client, user_id, num_invites=10)
         with pytest.raises(OnyxError):
@@ -209,14 +187,10 @@ def test_invite_zero_new_invites_still_ticks_minute_bucket() -> None:
     user_id = uuid4()
 
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 2),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 500),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 2
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 500
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             5000,
         ),
     ):
@@ -235,15 +209,9 @@ def test_invite_limit_zero_disables_tier() -> None:
     user_id = uuid4()
 
     with (
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 0
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 0
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY", 0
-        ),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 0),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 0),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 0),
     ):
         for _ in range(100):
             enforce_invite_rate_limit(redis_client, user_id, num_invites=10)
@@ -257,15 +225,9 @@ def test_invite_fails_open_when_redis_unavailable() -> None:
     user_id = uuid4()
 
     with (
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 1
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 1
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY", 1
-        ),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 1),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 1),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 1),
     ):
         enforce_invite_rate_limit(redis_client, user_id, num_invites=1_000_000)
 
@@ -277,11 +239,11 @@ def test_remove_minute_bucket_blocks_pattern_attack() -> None:
 
     with (
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN",
+            "onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_MIN",
             3,
         ),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_DAY",
             100,
         ),
     ):
@@ -297,11 +259,11 @@ def test_remove_daily_cap_enforced() -> None:
 
     with (
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_MIN",
+            "onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_MIN",
             1000,
         ),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_REMOVE_RATE_LIMIT_ADMIN_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_DAY",
             5,
         ),
     ):
@@ -317,14 +279,10 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
     user_id = uuid4()
 
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 100),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 500),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 100
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 500
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             5000,
         ),
     ):
@@ -337,14 +295,10 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
 
     stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] = 999
     with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 100),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 500),
         patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_MIN", 100
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_ADMIN_PER_DAY", 500
-        ),
-        patch(
-            "onyx.server.manage.invite_rate_limit.INVITE_RATE_LIMIT_TENANT_PER_DAY",
+            "onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY",
             5000,
         ),
     ):
