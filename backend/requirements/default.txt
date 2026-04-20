@@ -193,7 +193,7 @@ dataclasses-json==0.6.7
     # via unstructured
 dateparser==1.2.2
     # via htmldate
-ddtrace==3.10.0
+ddtrace==4.7.0
 decorator==5.2.1
     # via retry
 defusedxml==0.7.1
