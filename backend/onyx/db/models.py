@@ -894,7 +894,7 @@ class HierarchyNode(Base):
     # For hierarchy nodes that are also documents (e.g., Confluence pages)
     # SET NULL when document is deleted - node can exist without its document
     document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("document.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Self-referential FK for tree structure
@@ -2204,6 +2204,7 @@ class IndexAttempt(Base):
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     # Some index attempts that run from beginning will still have this as False
@@ -2407,10 +2408,12 @@ class IndexAttemptError(Base):
     index_attempt_id: Mapped[int] = mapped_column(
         ForeignKey("index_attempt.id"),
         nullable=False,
+        index=True,
     )
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     document_id: Mapped[str | None] = mapped_column(String, nullable=True)
