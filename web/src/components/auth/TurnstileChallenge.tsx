@@ -100,7 +100,14 @@ export default function TurnstileChallenge({
   }, [onError]);
 
   useEffect(() => {
-    if (!scriptReady || !window.turnstile || !containerRef.current) return;
+    if (
+      !scriptReady ||
+      !window.turnstile ||
+      !containerRef.current ||
+      stoppedRef.current
+    ) {
+      return;
+    }
     const container = containerRef.current;
 
     function stopWidget() {
@@ -170,10 +177,26 @@ export default function TurnstileChallenge({
         }
         onError?.(humanizeTurnstileError(code));
       },
-      "expired-callback": () =>
-        window.turnstile?.reset(widgetIdRef.current ?? undefined),
+      "expired-callback": () => {
+        // If we've exhausted retries, don't revive the widget on expiry.
+        if (stoppedRef.current) return;
+        window.turnstile?.reset(widgetIdRef.current ?? undefined);
+      },
       theme: "auto",
     });
+
+    // Clean up the widget on unmount or when deps change. Without this the
+    // old widget leaks its DOM + internal timers when the effect re-runs.
+    return () => {
+      if (widgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // ignore — widget may already be gone
+        }
+        widgetIdRef.current = null;
+      }
+    };
   }, [scriptReady, siteKey, onVerified, onError, maxAttempts]);
 
   return <div ref={containerRef} className="flex justify-center w-full" />;

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useCallback, useState } from "react";
 import TurnstileChallenge from "./TurnstileChallenge";
 import Text from "@/refresh-components/texts/Text";
 
@@ -20,6 +20,18 @@ export default function SignupChallengeGate({
   const [verified, setVerified] = useState(!siteKey);
   const [error, setError] = useState<string | null>(null);
 
+  // useCallback on both handlers keeps the props referentially stable across
+  // re-renders. Without this, TurnstileChallenge's useEffect would re-run
+  // every time setError bumps parent state, rendering a new widget on top of
+  // the old one — including after stopWidget() has tried to stop rendering.
+  const handleVerified = useCallback(() => {
+    setError(null);
+    setVerified(true);
+  }, []);
+  const handleError = useCallback((message: string) => {
+    setError(message);
+  }, []);
+
   if (!siteKey || verified) {
     return <>{children}</>;
   }
@@ -31,11 +43,8 @@ export default function SignupChallengeGate({
       </Text>
       <TurnstileChallenge
         siteKey={siteKey}
-        onVerified={() => {
-          setError(null);
-          setVerified(true);
-        }}
-        onError={(message) => setError(message)}
+        onVerified={handleVerified}
+        onError={handleError}
       />
       {error && (
         <Text as="p" mainUiMuted className="text-status-error-05">

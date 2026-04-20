@@ -6,7 +6,6 @@ from fastapi import Response
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
-from starlette.responses import JSONResponse
 
 from onyx.auth.turnstile import issue_turnstile_cookie_value
 from onyx.auth.turnstile import TURNSTILE_COOKIE_NAME
@@ -16,6 +15,7 @@ from onyx.auth.turnstile import verify_turnstile_token
 from onyx.configs.app_configs import TURNSTILE_COOKIE_TTL_SECONDS
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
@@ -90,13 +90,21 @@ class TurnstileMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path in GUARDED_SIGNUP_PATHS and turnstile_enforcement_enabled():
+        # Skip OPTIONS so CORS preflight is never blocked. Letting the real
+        # method (POST/GET) through is what we actually want to gate.
+        if (
+            request.method != "OPTIONS"
+            and request.url.path in GUARDED_SIGNUP_PATHS
+            and turnstile_enforcement_enabled()
+        ):
             cookie_value = request.cookies.get(TURNSTILE_COOKIE_NAME)
             if not validate_turnstile_cookie_value(cookie_value):
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "detail": "Turnstile challenge required. Refresh the page and try again."
-                    },
+                # Use the same JSON shape as the global OnyxError handler so
+                # clients see a consistent {error_code, detail} response.
+                return onyx_error_to_json_response(
+                    OnyxError(
+                        OnyxErrorCode.UNAUTHORIZED,
+                        "Turnstile challenge required. Refresh the page and try again.",
+                    )
                 )
         return await call_next(request)
