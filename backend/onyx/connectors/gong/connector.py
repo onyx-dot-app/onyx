@@ -42,11 +42,20 @@ class GongConnectorCheckpoint(ConnectorCheckpoint):
     time_range: tuple[str, str] | None = None
     # Transcripts whose call details were not yet available from /v2/calls/extensive
     # (Gong has a known race where transcript call IDs take time to propagate).
-    # Keyed by call_id. Retried on subsequent checkpoint invocations — the worker
-    # cadence between calls provides natural backoff without blocking this call.
+    # Keyed by call_id. Retried on subsequent checkpoint invocations.
+    #
+    # Invariant: all entries share one resolution session — they're stashed
+    # together from a single page and share the attempt counter and retry
+    # deadline. load_from_checkpoint only fetches a new page when this dict
+    # is empty, so entries from different pages can't mix.
     pending_transcripts: dict[str, dict[str, Any]] = {}
     # Number of resolution attempts made for pending_transcripts so far.
     pending_call_details_attempts: int = 0
+    # Unix timestamp before which we should not retry pending_transcripts.
+    # Enforces exponential backoff independent of worker cadence — Gong's
+    # transcript-ID propagation race can take tens of seconds to minutes,
+    # longer than typical worker reinvocation intervals.
+    pending_retry_after: float | None = None
 
 
 class _TranscriptPage(BaseModel):
@@ -70,9 +79,14 @@ class _CursorExpiredError(Exception):
 class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
     BASE_URL = "https://api.gong.io"
     # Max number of attempts to resolve missing call details across checkpoint
-    # invocations before giving up and emitting ConnectorFailure. Worker cadence
-    # between checkpoint calls provides the effective spacing between attempts.
+    # invocations before giving up and emitting ConnectorFailure.
     MAX_CALL_DETAILS_ATTEMPTS = 6
+    # Base delay for exponential backoff between pending-transcript retry
+    # attempts. Delay before attempt N (N >= 2) is CALL_DETAILS_DELAY * 2^(N-2)
+    # seconds (30, 60, 120, 240, 480 = ~15.5min total) — matching the original
+    # blocking-retry schedule, but enforced via checkpoint deadline rather
+    # than in-call time.sleep.
+    CALL_DETAILS_DELAY = 30
     # Gong API limit is 3 calls/sec — stay safely under it
     MIN_REQUEST_INTERVAL = 0.5  # seconds between requests
 
@@ -390,6 +404,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             # load_from_checkpoint only reaches _process_transcripts when
             # pending_transcripts was empty at entry (see early-return above).
             checkpoint.pending_call_details_attempts = 1
+            checkpoint.pending_retry_after = time.time() + self._next_retry_delay(1)
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         combined = (
@@ -502,6 +517,12 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         return checkpoint
 
+    def _next_retry_delay(self, attempts_done: int) -> float:
+        """Seconds to wait before attempt #(attempts_done + 1).
+        Matches the original exponential backoff: 30, 60, 120, 240, 480.
+        """
+        return self.CALL_DETAILS_DELAY * pow(2, attempts_done - 1)
+
     def _resolve_pending_transcripts(
         self,
         checkpoint: GongConnectorCheckpoint,
@@ -510,7 +531,19 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         in a prior invocation. Mutates checkpoint in place: resolved transcripts
         are removed from pending_transcripts; on attempt exhaustion, emits
         ConnectorFailure for each unresolved call_id and clears pending state.
+
+        If the backoff deadline hasn't elapsed yet, returns without issuing
+        any API call so the next invocation can try again later.
         """
+        if (
+            checkpoint.pending_retry_after is not None
+            and time.time() < checkpoint.pending_retry_after
+        ):
+            # Backoff still in effect — defer to a later invocation without
+            # burning an attempt or an API call.
+            checkpoint.has_more = True
+            return
+
         pending_call_ids = list(checkpoint.pending_transcripts.keys())
         resolved = self._get_call_details_by_ids(pending_call_ids)
 
@@ -522,6 +555,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         if not checkpoint.pending_transcripts:
             checkpoint.pending_call_details_attempts = 0
+            checkpoint.pending_retry_after = None
             return
 
         checkpoint.pending_call_details_attempts += 1
@@ -547,12 +581,15 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
                 )
             checkpoint.pending_transcripts = {}
             checkpoint.pending_call_details_attempts = 0
+            checkpoint.pending_retry_after = None
             # has_more is recomputed by the workspace iteration that follows;
             # reset to False here so a stale True from a prior invocation
             # can't leak out via any future early-return path.
             checkpoint.has_more = False
         else:
-            # Retry again on a future invocation; worker cadence provides gap.
+            checkpoint.pending_retry_after = time.time() + self._next_retry_delay(
+                checkpoint.pending_call_details_attempts
+            )
             checkpoint.has_more = True
 
 
