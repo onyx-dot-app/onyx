@@ -175,9 +175,17 @@ def upsert_external_groups(
         )
         db_session.execute(stmt)
 
+    # Deduplicate public group mappings as well
+    public_group_mappings_deduped = list(
+        {
+            (m["external_user_group_id"], m["cc_pair_id"]): m
+            for m in public_group_mappings
+        }.values()
+    )
+
     # Batch upsert public group mappings
-    for i in range(0, len(public_group_mappings), _UPSERT_BATCH_SIZE):
-        chunk = public_group_mappings[i : i + _UPSERT_BATCH_SIZE]
+    for i in range(0, len(public_group_mappings_deduped), _UPSERT_BATCH_SIZE):
+        chunk = public_group_mappings_deduped[i : i + _UPSERT_BATCH_SIZE]
         stmt = pg_insert(PublicExternalUserGroup).values(chunk)
         stmt = stmt.on_conflict_do_update(
             index_elements=["external_user_group_id", "cc_pair_id"],
