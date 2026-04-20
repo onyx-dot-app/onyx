@@ -35,6 +35,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/refresh", {"POST"}),
     ("/auth/register", {"POST"}),
     ("/auth/login", {"POST"}),
+    # Turnstile pre-auth challenge — user is not yet authenticated when
+    # they solve it, and the endpoint's own handler enforces the only
+    # thing that matters (valid Cloudflare siteverify response).
+    ("/auth/turnstile/verify", {"POST"}),
     ("/auth/logout", {"POST"}),
     ("/auth/forgot-password", {"POST"}),
     ("/auth/reset-password", {"POST"}),
