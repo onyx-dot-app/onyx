@@ -584,7 +584,8 @@ fn open_in_default_browser(url: &str) -> bool {
 }
 
 #[tauri::command]
-async fn check_server_reachable(url: String) -> Result<(), String> {
+async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Result<(), String> {
+    let url = state.config.read().unwrap().server_url.clone();
     let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
     match parsed.scheme() {
         "http" | "https" => {}
@@ -596,12 +597,15 @@ async fn check_server_reachable(url: String) -> Result<(), String> {
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
-    client
-        .head(parsed)
-        .send()
-        .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    match client.head(parsed).send().await {
+        Ok(_) => Ok(()),
+        // Only definitive "server didn't answer" errors count as unreachable.
+        // TLS / decode / redirect errors imply the server is listening — the
+        // webview, which has its own trust store, is likely to succeed even
+        // when rustls rejects a self-signed cert.
+        Err(e) if e.is_connect() || e.is_timeout() => Err(e.to_string()),
+        Err(_) => Ok(()),
+    }
 }
 
 #[tauri::command]

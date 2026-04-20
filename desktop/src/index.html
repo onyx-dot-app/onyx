@@ -463,7 +463,7 @@
           // is reachable before handing the webview over. Otherwise the user
           // lands on a native "connection refused" page with no way back.
           try {
-            await invoke("check_server_reachable", { url: currentServerUrl });
+            await invoke("check_server_reachable");
           } catch (reachErr) {
             showSettings();
             showError(
