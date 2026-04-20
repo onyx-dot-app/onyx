@@ -107,7 +107,13 @@ export default function SignInButton({
     }
   }
 
-  const intercepted = isCaptchaEnabled;
+  // Only the Google OAuth callback is gated by CaptchaCookieMiddleware on the
+  // backend. OIDC/SAML callbacks have no cookie requirement, so running the
+  // reCAPTCHA interception for them is wasted friction — and worse, a failed
+  // captcha would block the sign-in entirely.
+  const intercepted =
+    isCaptchaEnabled &&
+    (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD);
 
   return (
     <>
