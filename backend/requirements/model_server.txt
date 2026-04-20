@@ -559,7 +559,7 @@ websockets==15.0.1
     # via google-genai
 wrapt==1.17.3
     # via aiobotocore
-yarl==1.22.0
+yarl==1.23.0
     # via aiohttp
 zipp==3.23.0
     # via importlib-metadata

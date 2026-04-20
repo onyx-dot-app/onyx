@@ -1131,7 +1131,7 @@ xmltodict==1.0.2
     # via ddtrace
 xxhash==3.6.0
     # via langsmith
-yarl==1.22.0
+yarl==1.23.0
     # via aiohttp
 zeep==4.3.2
     # via simple-salesforce
