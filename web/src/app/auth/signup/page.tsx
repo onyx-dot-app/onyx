@@ -11,7 +11,6 @@ import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import SignupChallengeGate from "@/components/auth/SignupChallengeGate";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { AuthType } from "@/lib/constants";
@@ -81,40 +80,33 @@ const Page = async (props: {
               Get started with Onyx
             </Text>
           </div>
-          <SignupChallengeGate
-            siteKey={authTypeMetadata?.turnstileSiteKey ?? ""}
-          >
-            {cloud && authUrl && (
-              <div className="w-full justify-center mt-6">
-                <SignInButton
-                  authorizeUrl={authUrl}
-                  authType={AuthType.CLOUD}
-                />
-                <div className="flex items-center w-full my-4">
-                  <div className="flex-grow border-t border-border-01" />
-                  <Text as="p" mainUiMuted text03 className="mx-2">
-                    or
-                  </Text>
-                  <div className="flex-grow border-t border-border-01" />
-                </div>
+          {cloud && authUrl && (
+            <div className="w-full justify-center mt-6">
+              <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
+              <div className="flex items-center w-full my-4">
+                <div className="flex-grow border-t border-border-01" />
+                <Text as="p" mainUiMuted text03 className="mx-2">
+                  or
+                </Text>
+                <div className="flex-grow border-t border-border-01" />
               </div>
-            )}
+            </div>
+          )}
 
-            {cloud && (
-              <>
-                <div className="w-full flex flex-col mb-3">
-                  <ReferralSourceSelector />
-                </div>
-              </>
-            )}
+          {cloud && (
+            <>
+              <div className="w-full flex flex-col mb-3">
+                <ReferralSourceSelector />
+              </div>
+            </>
+          )}
 
-            <EmailPasswordForm
-              isSignup
-              shouldVerify={authTypeMetadata?.requiresVerification}
-              nextUrl={nextUrl}
-              defaultEmail={defaultEmail}
-            />
-          </SignupChallengeGate>
+          <EmailPasswordForm
+            isSignup
+            shouldVerify={authTypeMetadata?.requiresVerification}
+            nextUrl={nextUrl}
+            defaultEmail={defaultEmail}
+          />
         </div>
       </>
     </AuthFlowContainer>

@@ -12,9 +12,6 @@ export interface AuthTypeMetadata {
   passwordMinLength: number;
   hasUsers: boolean;
   oauthEnabled: boolean;
-  // Cloudflare Turnstile site key. Empty string means Turnstile is disabled
-  // for this deployment — the signup page skips the widget entirely.
-  turnstileSiteKey: string;
 }
 
 export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
@@ -30,7 +27,6 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     password_min_length: number;
     has_users: boolean;
     oauth_enabled: boolean;
-    turnstile_site_key?: string;
   } = await res.json();
 
   let authType: AuthType;
@@ -53,7 +49,6 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
       passwordMinLength: data.password_min_length,
       hasUsers: data.has_users,
       oauthEnabled: data.oauth_enabled,
-      turnstileSiteKey: data.turnstile_site_key ?? "",
     };
   }
   return {
@@ -64,7 +59,6 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     passwordMinLength: data.password_min_length,
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
-    turnstileSiteKey: data.turnstile_site_key ?? "",
   };
 };
 

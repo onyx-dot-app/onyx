@@ -180,16 +180,10 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
     "https://disposable.github.io/disposable-email-domains/domains.json",
 )
 
-# Cloudflare Turnstile (bot detection on signup). Both keys must be set for
-# enforcement to activate. When TURNSTILE_SECRET_KEY is empty the signup
-# endpoints do not verify a token — used for self-hosted and dev.
-TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "")
-TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
-# How long a successful challenge remains valid in the browser cookie before
-# the user has to solve it again. Should comfortably cover an OAuth round-trip.
-TURNSTILE_COOKIE_TTL_SECONDS = int(
-    os.environ.get("TURNSTILE_COOKIE_TTL_SECONDS", "600")
-)
+# Captcha cookie TTL — how long a verified captcha token remains valid in
+# the browser cookie before the user has to solve another challenge. Should
+# comfortably cover an OAuth round-trip; 10 minutes is generous.
+CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "600"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows

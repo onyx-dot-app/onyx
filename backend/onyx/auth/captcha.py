@@ -1,17 +1,38 @@
-"""Captcha verification for user registration."""
+"""Captcha verification for user registration.
+
+Two flows share this module:
+
+1. Email/password signup. The token is posted with the signup body and
+   verified inline by ``UserManager.create``.
+
+2. Google OAuth signup. The OAuth callback request originates from Google
+   as a browser redirect, so we cannot attach a header or body field to it
+   at that moment. Instead the frontend verifies a reCAPTCHA token BEFORE
+   redirecting to Google and we set a signed HttpOnly cookie. The cookie
+   is sent automatically on the callback request, where middleware checks
+   it. ``issue_captcha_cookie_value`` / ``validate_captcha_cookie_value``
+   handle the HMAC signing + expiry.
+"""
+
+import hashlib
+import hmac
+import time
 
 import httpx
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
 from onyx.configs.app_configs import CAPTCHA_ENABLED
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
 from onyx.configs.app_configs import RECAPTCHA_SECRET_KEY
+from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
+CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
 
 
 class CaptchaVerificationError(Exception):
@@ -104,3 +125,54 @@ async def verify_captcha_token(
         # In case of API errors, we might want to allow registration
         # to prevent blocking legitimate users. This is a policy decision.
         raise CaptchaVerificationError("Captcha verification service unavailable")
+
+
+# ---------------------------------------------------------------------------
+# OAuth pre-redirect cookie helpers
+# ---------------------------------------------------------------------------
+
+
+def _cookie_signing_key() -> bytes:
+    """Derive a dedicated HMAC key from USER_AUTH_SECRET.
+
+    Using a separate derivation keeps the captcha cookie signature from
+    being interchangeable with any other token that reuses USER_AUTH_SECRET.
+    """
+    return hashlib.sha256(
+        f"onyx-captcha-cookie-v1::{USER_AUTH_SECRET}".encode("utf-8")
+    ).digest()
+
+
+def issue_captcha_cookie_value(now: int | None = None) -> str:
+    """Produce an opaque cookie value encoding 'verified until <expiry>'.
+
+    Format: ``<expiry_epoch>.<hex_hmac>``. The presence of a valid
+    unexpired signature proves the browser solved a captcha challenge
+    recently on this origin.
+    """
+    issued_at = now if now is not None else int(time.time())
+    expiry = issued_at + CAPTCHA_COOKIE_TTL_SECONDS
+    sig = hmac.new(
+        _cookie_signing_key(), str(expiry).encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{expiry}.{sig}"
+
+
+def validate_captcha_cookie_value(value: str | None) -> bool:
+    """Return True if the cookie value has a valid unexpired signature."""
+    if not value:
+        return False
+    parts = value.split(".", 1)
+    if len(parts) != 2:
+        return False
+    expiry_str, provided_sig = parts
+    try:
+        expiry = int(expiry_str)
+    except ValueError:
+        return False
+    if expiry < int(time.time()):
+        return False
+    expected_sig = hmac.new(
+        _cookie_signing_key(), str(expiry).encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected_sig, provided_sig)
