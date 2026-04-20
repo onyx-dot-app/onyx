@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -265,6 +266,7 @@ def categorize_uploaded_files(
                 # A PDF with thousands of embedded images can OOM the
                 # user-file-processing celery worker because every image is
                 # decoded with PIL and then sent to the vision LLM.
+                count = 0
                 if extension == ".pdf":
                     file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
                     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
@@ -308,6 +310,24 @@ def categorize_uploaded_files(
                     extension=extension,
                 )
                 if not text_content:
+                    # PDFs with embedded images (e.g. scans) have no extractable
+                    # text but can still be indexed via the vision-LLM
+                    # captioning path when image analysis is enabled.
+                    if (
+                        extension == ".pdf"
+                        and count > 0
+                        and get_image_extraction_and_analysis_enabled()
+                    ):
+                        results.acceptable.append(upload)
+                        results.acceptable_file_to_token_count[filename] = 0
+                        try:
+                            upload.file.seek(0)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to reset file pointer for '{filename}': {str(e)}"
+                            )
+                        continue
+
                     logger.warning(f"No text content extracted from '{filename}'")
                     results.rejected.append(
                         RejectedFile(

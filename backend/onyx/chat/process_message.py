@@ -60,6 +60,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
@@ -80,6 +81,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import extract_text_and_images
+from onyx.file_processing.image_summarization import (
+    summarize_image_with_error_handling,
+)
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -89,6 +94,7 @@ from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingPayload
 from onyx.hooks.points.query_processing import QueryProcessingResponse
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
@@ -127,6 +133,11 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 APPROX_CHARS_PER_TOKEN = 4
+# Cap for inline vision-LLM summarization of image-only files at chat time.
+# Each summary is a serial vision-LLM call (~seconds), so we bound latency for
+# files with many embedded images. Upload-time extraction/indexing summarizes
+# every embedded image (up to MAX_EMBEDDED_IMAGES_PER_FILE).
+_CHAT_TIME_IMAGE_SUMMARIZATION_CAP = 20
 
 
 def _collect_available_file_ids(
@@ -251,15 +262,57 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
     ingestion — decode directly.
     DOC / CSV / other text types: the content is the original file bytes —
     use extract_file_text which handles encoding detection and format parsing.
+    When image extraction is enabled and the file has no extractable text
+    (e.g. a scanned PDF), embedded images are summarized inline via a vision
+    LLM so the content survives into the chat context. Files that already
+    have text are left untouched to avoid adding vision-LLM latency to the
+    common case.
     """
     try:
         if f.file_type == ChatFileType.PLAIN_TEXT:
             return f.content.decode("utf-8", errors="ignore").replace("\x00", "")
-        return extract_file_text(
+
+        filename = f.filename or ""
+        if not get_image_extraction_and_analysis_enabled():
+            return extract_file_text(
+                file=io.BytesIO(f.content),
+                file_name=filename,
+                break_on_unprocessable=False,
+            )
+
+        extraction = extract_text_and_images(
             file=io.BytesIO(f.content),
-            file_name=f.filename or "",
-            break_on_unprocessable=False,
+            file_name=filename,
         )
+
+        if extraction.text_content.strip():
+            return extraction.text_content
+
+        if not extraction.embedded_images:
+            return None
+
+        images = extraction.embedded_images[:_CHAT_TIME_IMAGE_SUMMARIZATION_CAP]
+        truncated = len(extraction.embedded_images) > len(images)
+
+        vision_llm = get_default_llm_with_vision()
+        parts: list[str] = []
+        for idx, (img_bytes, img_name) in enumerate(images, start=1):
+            summary = summarize_image_with_error_handling(
+                llm=vision_llm,
+                image_data=img_bytes,
+                context_name=img_name,
+            )
+            if summary:
+                parts.append(f"[Image {idx} — {img_name}]\n{summary}")
+
+        if truncated and parts:
+            parts.append(
+                f"[Note: only the first {len(images)} of "
+                f"{len(extraction.embedded_images)} embedded images were "
+                f"summarized at chat time.]"
+            )
+
+        return "\n\n".join(parts).strip() or None
     except Exception:
         logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
         return None

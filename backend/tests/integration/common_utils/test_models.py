@@ -247,7 +247,7 @@ class DATestSettings(BaseModel):
     gpu_enabled: bool | None = None
     product_gating: DATestGatingType = DATestGatingType.NONE
     anonymous_user_enabled: bool | None = None
-    image_extraction_and_analysis_enabled: bool | None = False
+    image_extraction_and_analysis_enabled: bool | None = True
     search_time_image_analysis_enabled: bool | None = False
 
 
