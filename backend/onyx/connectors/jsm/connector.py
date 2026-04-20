@@ -12,8 +12,10 @@ from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
 
+__all__ = ["JsmConnector"]
 
-class JsmConnector(JiraConnector):
+
+class JsmConnector(JiraConnector):  # vulture: ignore
     """
     Jira Service Management (JSM) Connector.
     Heavily reuses JiraConnector logic but ensures DocumentSource is JIRA_SERVICE_MANAGEMENT.

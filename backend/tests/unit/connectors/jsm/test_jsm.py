@@ -1,10 +1,10 @@
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jsm.connector import JsmConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
+
 
 def test_jsm_connector_source_override():
     mock_checkpoint = JiraConnectorCheckpoint(has_more=False)
@@ -23,7 +23,10 @@ def test_jsm_connector_source_override():
 
     connector = JsmConnector(jira_base_url="https://test.atlassian.net")
 
-    with patch("onyx.connectors.jira.connector.JiraConnector.load_from_checkpoint", side_effect=mock_gen):
+    with patch(
+        "onyx.connectors.jira.connector.JiraConnector.load_from_checkpoint",
+        side_effect=mock_gen,
+    ):
         gen = connector.load_from_checkpoint(0, 100, mock_checkpoint)
         yielded_item = next(gen)
 
@@ -34,6 +37,3 @@ def test_jsm_connector_source_override():
             next(gen)
         except StopIteration as e:
             assert e.value == mock_checkpoint
-
-if __name__ == "__main__":
-    test_jsm_connector_source_override()

@@ -81,7 +81,12 @@ def extract_text_from_adf(adf: dict[str, Any] | None) -> str:
             texts.append("\n")
 
         elif node_type == "paragraph":
-            pass
+            if "content" in node:
+                for child in node["content"] or []:
+                    _traverse(child)
+            if texts and texts[-1] != "\n":
+                texts.append("\n")
+            return
 
         elif node_type == "heading":
             if texts and texts[-1] != "\n":
@@ -99,7 +104,7 @@ def extract_text_from_adf(adf: dict[str, Any] | None) -> str:
                 _traverse(child)
 
         # Add final newline for block types
-        if node_type in ("paragraph", "heading", "bulletList", "orderedList"):
+        if node_type in ("heading", "bulletList", "orderedList"):
             if texts and texts[-1] != "\n":
                 texts.append("\n")
 
