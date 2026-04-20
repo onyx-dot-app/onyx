@@ -531,7 +531,12 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         List of IndexingDocument objects with processed_sections as list[Section]
     """
     # Check if image extraction and analysis is enabled before trying to get a vision LLM
-    if not get_image_extraction_and_analysis_enabled():
+    has_image_section = any(
+        isinstance(section, ImageSection)
+        for document in documents
+        for section in document.sections
+    )
+    if not get_image_extraction_and_analysis_enabled() or not has_image_section:
         llm = None
     else:
         # Only get the vision LLM if image processing is enabled
