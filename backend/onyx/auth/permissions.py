@@ -49,6 +49,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_LLMS.value: {
         Permission.READ_USER_GROUPS.value,
         Permission.READ_AGENTS.value,
+        Permission.READ_USERS.value,
     },
 }
 

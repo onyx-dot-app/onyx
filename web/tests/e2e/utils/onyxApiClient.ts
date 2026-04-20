@@ -44,6 +44,8 @@ const E2E_IMAGE_GEN_API_KEY =
  * **User Groups:**
  * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
+ * - `addUsersToGroup(groupId, userIds)` - Adds users to a user group
+ * - `setUserGroupPermissions(groupId, permissions)` - Replaces group permission grants
  * - `deleteUserGroup(id)` - Deletes a user group
  *
  * **Tool Providers:**
@@ -590,6 +592,50 @@ export class OnyxApiClient {
   }
 
   /**
+   * Adds users to an existing user group.
+   *
+   * This endpoint recomputes effective permissions for the added users before
+   * returning, so callers do not need to wait for document-index group sync
+   * when they only need auth permissions.
+   */
+  async addUsersToGroup(groupId: number, userIds: string[]): Promise<void> {
+    const response = await this.post(
+      `/manage/admin/user-group/${groupId}/add-users`,
+      {
+        user_ids: userIds,
+      }
+    );
+
+    await this.handleResponse(
+      response,
+      `Failed to add users to group ${groupId}`
+    );
+    this.log(`Added ${userIds.length} user(s) to user group: ${groupId}`);
+  }
+
+  /**
+   * Replaces the toggleable permissions granted to a user group.
+   */
+  async setUserGroupPermissions(
+    groupId: number,
+    permissions: string[]
+  ): Promise<string[]> {
+    const response = await this.put(
+      `/manage/admin/user-group/${groupId}/permissions`,
+      {
+        permissions,
+      }
+    );
+
+    const updatedPermissions = await this.handleResponse<string[]>(
+      response,
+      `Failed to set permissions for user group ${groupId}`
+    );
+    this.log(`Set permissions for user group ${groupId}`);
+    return updatedPermissions;
+  }
+
+  /**
    * Polls until a user group has finished syncing (is_up_to_date === true).
    * Newly created groups start syncing immediately; many mutation endpoints
    * reject requests while the group is still syncing.
@@ -643,6 +689,14 @@ export class OnyxApiClient {
       "/manage/admin/user-group?include_default=true"
     );
     return response.json();
+  }
+
+  async getCurrentUserPermissions(): Promise<string[]> {
+    const response = await this.get("/me/permissions");
+    return await this.handleResponse(
+      response,
+      "Failed to fetch current user permissions"
+    );
   }
 
   async addUserToAdminGroup(email: string): Promise<void> {

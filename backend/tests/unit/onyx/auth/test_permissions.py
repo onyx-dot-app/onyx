@@ -32,14 +32,19 @@ class TestResolveEffectivePermissions:
         result = resolve_effective_permissions({"add:agents"})
         assert result == {"add:agents", "read:agents"}
 
-    def test_manage_agents_implies_add_and_read(self) -> None:
-        """manage:agents directly maps to {add:agents, read:agents}."""
+    def test_manage_agents_implies_add_and_reads(self) -> None:
+        """manage:agents implies add:agents, read:agents, and read:document_sets."""
         result = resolve_effective_permissions({"manage:agents"})
-        assert result == {"manage:agents", "add:agents", "read:agents"}
+        assert result == {
+            "manage:agents",
+            "add:agents",
+            "read:agents",
+            "read:document_sets",
+        }
 
     def test_manage_connectors_chain(self) -> None:
         result = resolve_effective_permissions({"manage:connectors"})
-        assert result == {"manage:connectors", "add:connectors", "read:connectors"}
+        assert result == {"manage:connectors", "read:connectors"}
 
     def test_manage_document_sets(self) -> None:
         result = resolve_effective_permissions({"manage:document_sets"})
@@ -55,6 +60,16 @@ class TestResolveEffectivePermissions:
             "manage:user_groups",
             "read:connectors",
             "read:document_sets",
+            "read:agents",
+            "read:users",
+            "read:user_groups",
+        }
+
+    def test_manage_llms_implies_reads(self) -> None:
+        result = resolve_effective_permissions({"manage:llms"})
+        assert result == {
+            "manage:llms",
+            "read:user_groups",
             "read:agents",
             "read:users",
         }
@@ -76,7 +91,6 @@ class TestResolveEffectivePermissions:
             "add:agents",
             "read:agents",
             "manage:connectors",
-            "add:connectors",
             "read:connectors",
         }
 
