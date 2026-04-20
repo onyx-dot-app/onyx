@@ -30,6 +30,7 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Document as DBDocument
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
@@ -89,7 +90,15 @@ def cc_pair(
     tenant_context: None,  # noqa: ARG001
     initialize_file_store: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
-    """Create a connector + credential + cc_pair backing the index attempt."""
+    """Create a connector + credential + cc_pair backing the index attempt.
+
+    Teardown sweeps everything the test created under this cc_pair: the
+    `document_by_connector_credential_pair` join rows, the `Document` rows
+    they point at, the `FileRecord` + blob for each doc's `file_id`, and
+    finally the cc_pair / connector / credential themselves. Without this,
+    every run would leave orphan rows in the dev DB and orphan blobs in
+    MinIO.
+    """
     connector = Connector(
         name=f"test-connector-{uuid4().hex[:8]}",
         source=DocumentSource.MOCK_CONNECTOR,
@@ -121,7 +130,57 @@ def cc_pair(
     db_session.commit()
     db_session.refresh(pair)
 
-    yield pair
+    connector_id = pair.connector_id
+    credential_id = pair.credential_id
+
+    try:
+        yield pair
+    finally:
+        db_session.expire_all()
+
+        # Collect every doc indexed under this cc_pair so we can delete its
+        # file_record + blob before dropping the Document row itself.
+        doc_ids: list[str] = [
+            row[0]
+            for row in db_session.query(DocumentByConnectorCredentialPair.id)
+            .filter(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            )
+            .all()
+        ]
+        file_ids: list[str] = [
+            row[0]
+            for row in db_session.query(DBDocument.file_id)
+            .filter(DBDocument.id.in_(doc_ids), DBDocument.file_id.isnot(None))
+            .all()
+        ]
+
+        file_store = get_default_file_store()
+        for fid in file_ids:
+            try:
+                file_store.delete_file(fid, error_on_missing=False)
+            except Exception:
+                pass
+
+        if doc_ids:
+            db_session.query(DocumentByConnectorCredentialPair).filter(
+                DocumentByConnectorCredentialPair.id.in_(doc_ids)
+            ).delete(synchronize_session="fetch")
+            db_session.query(DBDocument).filter(DBDocument.id.in_(doc_ids)).delete(
+                synchronize_session="fetch"
+            )
+
+        db_session.query(ConnectorCredentialPair).filter(
+            ConnectorCredentialPair.id == pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.query(Connector).filter(Connector.id == connector_id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.query(Credential).filter(Credential.id == credential_id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
 
 
 @pytest.fixture
