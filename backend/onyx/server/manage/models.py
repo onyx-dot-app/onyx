@@ -30,7 +30,6 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 
-
 if TYPE_CHECKING:
     pass
 
@@ -61,6 +60,10 @@ class AuthTypeResponse(BaseModel):
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False
+    # Cloudflare Turnstile site key (public). When non-empty, the frontend
+    # should render the Turnstile widget on signup and call
+    # /auth/turnstile/verify with the resulting token before submitting.
+    turnstile_site_key: str = ""
 
 
 class UserSpecificAssistantPreference(BaseModel):

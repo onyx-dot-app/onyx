@@ -64,6 +64,8 @@ from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
 from onyx.server.api_key.api import router as api_key_router
+from onyx.server.auth.turnstile_api import router as turnstile_router
+from onyx.server.auth.turnstile_api import TurnstileMiddleware
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
@@ -523,6 +525,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
+    include_router_with_global_prefix_prepended(application, turnstile_router)
 
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
         include_auth_router_with_prefix(
@@ -654,6 +657,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Challenge signup endpoints with Cloudflare Turnstile. No-ops unless
+    # MULTI_TENANT and not DEV_MODE and TURNSTILE_SECRET_KEY is set.
+    application.add_middleware(TurnstileMiddleware)
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
