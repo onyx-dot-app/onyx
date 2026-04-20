@@ -199,6 +199,9 @@ def categorize_uploaded_files(
     # rejected even if they'd individually fit under MAX_EMBEDDED_IMAGES_PER_FILE.
     batch_image_total = 0
 
+    # Hoisted out of the loop to avoid a KV-store lookup per file.
+    image_extraction_enabled = get_image_extraction_and_analysis_enabled()
+
     for upload in files:
         try:
             filename = get_safe_filename(upload)
@@ -266,7 +269,7 @@ def categorize_uploaded_files(
                 # A PDF with thousands of embedded images can OOM the
                 # user-file-processing celery worker because every image is
                 # decoded with PIL and then sent to the vision LLM.
-                count = 0
+                count: int = 0
                 if extension == ".pdf":
                     file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
                     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
@@ -313,11 +316,7 @@ def categorize_uploaded_files(
                     # PDFs with embedded images (e.g. scans) have no extractable
                     # text but can still be indexed via the vision-LLM
                     # captioning path when image analysis is enabled.
-                    if (
-                        extension == ".pdf"
-                        and count > 0
-                        and get_image_extraction_and_analysis_enabled()
-                    ):
+                    if extension == ".pdf" and count > 0 and image_extraction_enabled:
                         results.acceptable.append(upload)
                         results.acceptable_file_to_token_count[filename] = 0
                         try:

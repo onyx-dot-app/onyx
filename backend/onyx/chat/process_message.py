@@ -330,6 +330,16 @@ def _extract_text_from_in_memory_file(
         has_text = bool(text.strip())
         has_images = bool(extraction.embedded_images)
 
+        if not has_text and not has_images:
+            # extract_text_and_images has no is_text_file() fallback for
+            # unknown extensions (.py/.rs/.md without a dedicated handler).
+            # Defer to the legacy path so those files remain readable.
+            return extract_file_text(
+                file=io.BytesIO(f.content),
+                file_name=filename,
+                break_on_unprocessable=False,
+            )
+
         if not has_images:
             return text if has_text else None
 
