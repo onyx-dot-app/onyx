@@ -366,37 +366,44 @@ def index_doc_batch_with_handler(
     return index_pipeline_result
 
 
-def _apply_file_id_transitions(
+def _promote_new_staged_files(
     documents: list[Document],
     previous_file_ids: dict[str, str],
     db_session: Session,
 ) -> None:
-    """Finalize file_id lifecycle for the batch.
+    """Queue STAGING → CONNECTOR origin flips for every new file_id in the batch.
 
-    `document.file_id` is already written by `upsert_documents`. For each doc
-    whose file_id changed, promote the new staged file to `CONNECTOR` (so the
-    TTL janitor leaves it alone) and delete the replaced one. The delete is
-    best-effort; if it fails the janitor will reap the orphan.
+    Intended to run immediately before `_upsert_documents_in_db` so the origin
+    flip lands in the same commit as the `Document.file_id` write. Does not
+    commit — the caller's next commit flushes these UPDATEs.
+    """
+    for doc in documents:
+        new_file_id = doc.file_id
+        if new_file_id is None or new_file_id == previous_file_ids.get(doc.id):
+            continue
+        promote_staged_file(db_session=db_session, file_id=new_file_id)
+
+
+def _delete_replaced_files(
+    documents: list[Document],
+    previous_file_ids: dict[str, str],
+) -> None:
+    """Best-effort blob deletes for file_ids replaced in this batch.
+
+    Must run AFTER `Document.file_id` has been durably committed to its new
+    value — otherwise a rollback would leave Documents pointing at a deleted
+    blob. Failures are logged; the janitor reaps whatever slips through.
     """
     file_store = get_default_file_store()
     for doc in documents:
         new_file_id = doc.file_id
         old_file_id = previous_file_ids.get(doc.id)
-
-        if new_file_id == old_file_id:
+        if old_file_id is None or old_file_id == new_file_id:
             continue
-
-        if new_file_id is not None:
-            promote_staged_file(db_session=db_session, file_id=new_file_id)
-
-        if old_file_id is not None:
-            try:
-                file_store.delete_file(old_file_id, error_on_missing=False)
-            except Exception:
-                logger.exception(
-                    f"Failed to delete replaced file_id={old_file_id}; "
-                    "will be reaped by janitor."
-                )
+        try:
+            file_store.delete_file(old_file_id, error_on_missing=False)
+        except Exception:
+            logger.exception(f"Failed to delete replaced file_id={old_file_id}.")
 
 
 def index_doc_batch_prepare(
@@ -439,15 +446,24 @@ def index_doc_batch_prepare(
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
     if updatable_docs:
+        # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
+        # so `upsert_documents`' commit flushes Document.file_id and the origin
+        # flip atomically — closing the window where a committed Document would
+        # reference a still-STAGING file_record.
+        _promote_new_staged_files(
+            documents=updatable_docs,
+            previous_file_ids=previous_file_ids,
+            db_session=db_session,
+        )
         _upsert_documents_in_db(
             documents=updatable_docs,
             index_attempt_metadata=index_attempt_metadata,
             db_session=db_session,
         )
-        _apply_file_id_transitions(
+        # Blob deletes run only after Document.file_id is durable.
+        _delete_replaced_files(
             documents=updatable_docs,
             previous_file_ids=previous_file_ids,
-            db_session=db_session,
         )
 
     logger.info(
