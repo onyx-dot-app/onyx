@@ -83,8 +83,11 @@ from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
+from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
+from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import BulkInviteResponse
@@ -470,6 +473,12 @@ def bulk_invite_users(
                 detail="You have hit your invite limit. Please upgrade for unlimited invites.",
             )
 
+    enforce_invite_rate_limit(
+        redis_client=get_redis_client(tenant_id=tenant_id),
+        admin_user_id=current_user.id,
+        num_invites=len(emails_needing_seats),
+    )
+
     # Check seat availability for new users
     if emails_needing_seats:
         enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
@@ -529,10 +538,16 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
+    enforce_remove_invited_rate_limit(
+        redis_client=get_redis_client(tenant_id=tenant_id),
+        admin_user_id=current_user.id,
+    )
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
