@@ -5,13 +5,21 @@ nginx IP-keyed `limit_req` cannot stop (per-pod counters in multi-replica
 deployments, trivial IP rotation). Counters live in tenant-prefixed Redis
 so multi-pod api-server instances share state and per-admin / per-tenant
 quotas are enforced cluster-wide.
+
+Check+increment is performed in a single Redis Lua script so two
+concurrent replicas cannot both pass the pre-check and both increment
+past the limit. When Redis is unavailable (e.g. Onyx Lite deployments
+where Redis is an opt-in `--profile redis` service), the rate limiter
+fails open with a logged warning so core invite flows continue to work.
 """
 
 from dataclasses import dataclass
-from typing import cast
 from uuid import UUID
 
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import RedisError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from onyx.configs.app_configs import INVITE_RATE_LIMIT_ADMIN_PER_DAY
 from onyx.configs.app_configs import INVITE_RATE_LIMIT_ADMIN_PER_MIN
@@ -33,6 +41,41 @@ _INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:day"
 _INVITE_REMOVE_ADMIN_MIN_KEY = "ratelimit:invite_remove:admin:{user_id}:min"
 _INVITE_REMOVE_ADMIN_DAY_KEY = "ratelimit:invite_remove:admin:{user_id}:day"
 
+# Atomic multi-bucket check+increment.
+# ARGV[1] = N (bucket count). For each bucket i=1..N, ARGV[2+(i-1)*3..4+(i-1)*3]
+# carry increment, limit, ttl. KEYS[i] is the bucket's Redis key.
+#
+# Buckets with limit <= 0 or increment <= 0 are skipped (a disabled tier).
+# On reject, returns the 1-indexed bucket number that failed so the caller
+# can report which scope tripped; on success returns 0. TTL is set with NX
+# semantics so pre-existing keys without a TTL are still given one, but
+# fresh increments do not reset the window (fixed-window, not sliding).
+_CHECK_AND_INCREMENT_SCRIPT = """
+local n = tonumber(ARGV[1])
+for i = 1, n do
+    local key = KEYS[i]
+    local increment = tonumber(ARGV[2 + (i - 1) * 3])
+    local limit = tonumber(ARGV[3 + (i - 1) * 3])
+    if limit > 0 and increment > 0 then
+        local current = tonumber(redis.call('get', key)) or 0
+        if current + increment > limit then
+            return i
+        end
+    end
+end
+for i = 1, n do
+    local key = KEYS[i]
+    local increment = tonumber(ARGV[2 + (i - 1) * 3])
+    local limit = tonumber(ARGV[3 + (i - 1) * 3])
+    local ttl = tonumber(ARGV[4 + (i - 1) * 3])
+    if limit > 0 and increment > 0 then
+        redis.call('incrby', key, increment)
+        redis.call('expire', key, ttl, 'NX')
+    end
+end
+return 0
+"""
+
 
 @dataclass(frozen=True)
 class _Bucket:
@@ -43,33 +86,58 @@ class _Bucket:
     increment: int
 
 
-def _raise_if_exceeded(redis_client: Redis, bucket: _Bucket) -> None:
-    if bucket.limit <= 0 or bucket.increment <= 0:
+def _run_atomic(redis_client: Redis, buckets: list[_Bucket]) -> None:
+    """Run the check+increment Lua script. Raise OnyxError on rejection.
+
+    On Redis connection / timeout errors the rate limiter fails open: the
+    request is allowed through and the failure is logged. This keeps the
+    invite flow usable on Onyx Lite deployments (Redis is opt-in there)
+    and during transient Redis outages in full deployments.
+    """
+    if not buckets:
         return
 
-    raw_current = cast(bytes | None, redis_client.get(bucket.key))
-    current = int(raw_current) if raw_current is not None else 0
-    if current + bucket.increment > bucket.limit:
+    keys = [b.key for b in buckets]
+    argv: list[str] = [str(len(buckets))]
+    for b in buckets:
+        argv.extend([str(b.increment), str(b.limit), str(b.ttl_seconds)])
+
+    try:
+        result = redis_client.eval(  # type: ignore[no-untyped-call]
+            _CHECK_AND_INCREMENT_SCRIPT,
+            len(keys),
+            *keys,
+            *argv,
+        )
+    except (RedisConnectionError, RedisTimeoutError) as e:
         logger.warning(
-            "Invite rate limit hit: scope=%s key=%s current=%d adding=%d limit=%d",
-            bucket.scope,
-            bucket.key,
-            current,
-            bucket.increment,
-            bucket.limit,
+            "Invite rate limiter skipped — Redis unavailable: %s. Rate limiting is disabled for this request.",
+            e,
         )
-        raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED,
-            f"Invite rate limit exceeded ({bucket.scope}). Try again later.",
-        )
-
-
-def _record(redis_client: Redis, bucket: _Bucket) -> None:
-    if bucket.limit <= 0 or bucket.increment <= 0:
         return
-    new_value = redis_client.incrby(bucket.key, bucket.increment)
-    if new_value == bucket.increment:
-        redis_client.expire(bucket.key, bucket.ttl_seconds)
+    except RedisError as e:
+        logger.error(
+            "Invite rate limiter Redis error, failing open: %s",
+            e,
+        )
+        return
+
+    failed_index = int(result) if isinstance(result, (int, str, bytes)) else 0
+    if failed_index <= 0:
+        return
+
+    failed_bucket = buckets[failed_index - 1]
+    logger.warning(
+        "Invite rate limit hit: scope=%s key=%s adding=%d limit=%d",
+        failed_bucket.scope,
+        failed_bucket.key,
+        failed_bucket.increment,
+        failed_bucket.limit,
+    )
+    raise OnyxError(
+        OnyxErrorCode.RATE_LIMITED,
+        f"Invite rate limit exceeded ({failed_bucket.scope}). Try again later.",
+    )
 
 
 def enforce_invite_rate_limit(
@@ -116,11 +184,7 @@ def enforce_invite_rate_limit(
             increment=1,
         ),
     ]
-
-    for bucket in buckets:
-        _raise_if_exceeded(redis_client, bucket)
-    for bucket in buckets:
-        _record(redis_client, bucket)
+    _run_atomic(redis_client, buckets)
 
 
 def enforce_remove_invited_rate_limit(
@@ -151,8 +215,4 @@ def enforce_remove_invited_rate_limit(
             increment=1,
         ),
     ]
-
-    for bucket in buckets:
-        _raise_if_exceeded(redis_client, bucket)
-    for bucket in buckets:
-        _record(redis_client, bucket)
+    _run_atomic(redis_client, buckets)
