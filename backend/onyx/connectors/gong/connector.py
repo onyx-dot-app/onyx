@@ -381,10 +381,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             checkpoint.pending_transcripts[call_id] = transcript
 
         # First attempt on any newly-stashed transcripts counts as attempt #1.
-        if (
-            checkpoint.pending_transcripts
-            and checkpoint.pending_call_details_attempts == 0
-        ):
+        # pending_call_details_attempts is guaranteed 0 here because
+        # load_from_checkpoint only reaches _process_transcripts when
+        # pending_transcripts was empty at entry (see early-return above).
+        if checkpoint.pending_transcripts:
             checkpoint.pending_call_details_attempts = 1
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -543,6 +543,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
                 )
             checkpoint.pending_transcripts = {}
             checkpoint.pending_call_details_attempts = 0
+            # has_more is recomputed by the workspace iteration that follows;
+            # reset to False here so a stale True from a prior invocation
+            # can't leak out via any future early-return path.
+            checkpoint.has_more = False
         else:
             # Retry again on a future invocation; worker cadence provides gap.
             checkpoint.has_more = True
