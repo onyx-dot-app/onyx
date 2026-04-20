@@ -10,10 +10,11 @@ callback that we cannot add headers to because it originates from Google).
 Downstream middleware on ``/api/auth/register`` and ``/api/auth/oauth/callback``
 validates the cookie before the request reaches fastapi-users.
 
-Enforcement is skipped when ``TURNSTILE_SECRET_KEY`` is unset, when
-``MULTI_TENANT`` is false, or when ``DEV_MODE`` is true. This lets the
-backend ship dormant and flip on via env vars once the frontend widget
-is deployed.
+Enforcement is controlled by a single switch: whether TURNSTILE_SECRET_KEY
+is set. Deployments that don't want Turnstile (self-hosted, dev, single
+tenant) leave it empty and the middleware is a no-op. Cloud sets it and
+enforcement activates. One env var, toggleable at runtime, and easy to
+exercise end-to-end in local dev.
 """
 
 import hashlib
@@ -23,12 +24,10 @@ from typing import Any
 
 import httpx
 
-from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import TURNSTILE_COOKIE_TTL_SECONDS
 from onyx.configs.app_configs import TURNSTILE_SECRET_KEY
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -39,7 +38,7 @@ TURNSTILE_COOKIE_NAME = "onyx_turnstile_verified"
 
 def turnstile_enforcement_enabled() -> bool:
     """Return True if the signup endpoints should require a valid token."""
-    return MULTI_TENANT and not DEV_MODE and bool(TURNSTILE_SECRET_KEY)
+    return bool(TURNSTILE_SECRET_KEY)
 
 
 async def verify_turnstile_token(
