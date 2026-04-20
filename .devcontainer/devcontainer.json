@@ -16,9 +16,13 @@
     "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
   ],
   "containerEnv": {
-    "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "MODEL_SERVER_HOST": "inference_model_server",
+    "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",
-    "REDIS_HOST": "cache"
+    "REDIS_HOST": "cache",
+    "S3_ENDPOINT_URL": "http://minio:9000",
+    "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "VESPA_HOST": "index"
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
   "updateRemoteUserUID": false,

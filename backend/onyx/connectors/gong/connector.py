@@ -40,6 +40,22 @@ class GongConnectorCheckpoint(ConnectorCheckpoint):
     cursor: str | None = None
     # Cached time range — computed once, reused across checkpoint calls
     time_range: tuple[str, str] | None = None
+    # Transcripts whose call details were not yet available from /v2/calls/extensive
+    # (Gong has a known race where transcript call IDs take time to propagate).
+    # Keyed by call_id. Retried on subsequent checkpoint invocations.
+    #
+    # Invariant: all entries share one resolution session — they're stashed
+    # together from a single page and share the attempt counter and retry
+    # deadline. load_from_checkpoint only fetches a new page when this dict
+    # is empty, so entries from different pages can't mix.
+    pending_transcripts: dict[str, dict[str, Any]] = {}
+    # Number of resolution attempts made for pending_transcripts so far.
+    pending_call_details_attempts: int = 0
+    # Unix timestamp before which we should not retry pending_transcripts.
+    # Enforces exponential backoff independent of worker cadence — Gong's
+    # transcript-ID propagation race can take tens of seconds to minutes,
+    # longer than typical worker reinvocation intervals.
+    pending_retry_after: float | None = None
 
 
 class _TranscriptPage(BaseModel):
@@ -62,8 +78,15 @@ class _CursorExpiredError(Exception):
 
 class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
     BASE_URL = "https://api.gong.io"
+    # Max number of attempts to resolve missing call details across checkpoint
+    # invocations before giving up and emitting ConnectorFailure.
     MAX_CALL_DETAILS_ATTEMPTS = 6
-    CALL_DETAILS_DELAY = 30  # in seconds
+    # Base delay for exponential backoff between pending-transcript retry
+    # attempts. Delay before attempt N (N >= 2) is CALL_DETAILS_DELAY * 2^(N-2)
+    # seconds (30, 60, 120, 240, 480 = ~15.5min total) — matching the original
+    # blocking-retry schedule, but enforced via checkpoint deadline rather
+    # than in-call time.sleep.
+    CALL_DETAILS_DELAY = 30
     # Gong API limit is 3 calls/sec — stay safely under it
     MIN_REQUEST_INTERVAL = 0.5  # seconds between requests
 
@@ -187,50 +210,6 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         return call_to_metadata
 
-    def _fetch_call_details_with_retry(self, call_ids: list[str]) -> dict[str, Any]:
-        """Fetch call details with retry for the Gong API race condition.
-
-        The Gong API has a known race where transcript call IDs don't immediately
-        appear in /v2/calls/extensive. Retries with exponential backoff, only
-        re-requesting the missing IDs on each attempt.
-        """
-        call_details_map = self._get_call_details_by_ids(call_ids)
-        if set(call_ids) == set(call_details_map.keys()):
-            return call_details_map
-
-        for attempt in range(2, self.MAX_CALL_DETAILS_ATTEMPTS + 1):
-            missing_ids = list(set(call_ids) - set(call_details_map.keys()))
-            logger.warning(
-                f"_get_call_details_by_ids is missing call id's: current_attempt={attempt - 1} missing_call_ids={missing_ids}"
-            )
-
-            wait_seconds = self.CALL_DETAILS_DELAY * pow(2, attempt - 2)
-            logger.warning(
-                f"_get_call_details_by_ids waiting to retry: "
-                f"wait={wait_seconds}s "
-                f"current_attempt={attempt - 1} "
-                f"next_attempt={attempt} "
-                f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
-            )
-            time.sleep(wait_seconds)
-
-            # Only re-fetch the missing IDs, merge into existing results
-            new_details = self._get_call_details_by_ids(missing_ids)
-            call_details_map.update(new_details)
-
-            if set(call_ids) == set(call_details_map.keys()):
-                return call_details_map
-
-        missing_ids = list(set(call_ids) - set(call_details_map.keys()))
-        logger.error(
-            f"Giving up on missing call id's after "
-            f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
-            f"missing_call_ids={missing_ids} — "
-            f"proceeding with {len(call_details_map)} of "
-            f"{len(call_ids)} calls"
-        )
-        return call_details_map
-
     @staticmethod
     def _parse_parties(parties: list[dict]) -> dict[str, str]:
         id_mapping = {}
@@ -313,87 +292,119 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         return start_time, end_time
 
+    def _build_document(
+        self,
+        transcript: dict[str, Any],
+        call_details: dict[str, Any],
+    ) -> Document:
+        """Build a single Document from a transcript and its resolved call details."""
+        call_id = transcript["callId"]
+        call_metadata = call_details["metaData"]
+
+        call_time_str = call_metadata["started"]
+        call_title = call_metadata["title"]
+        logger.info(
+            f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+        )
+
+        call_parties = cast(list[dict] | None, call_details.get("parties"))
+        if call_parties is None:
+            logger.error(f"Couldn't get parties for Call ID: {call_id}")
+            call_parties = []
+
+        id_to_name_map = self._parse_parties(call_parties)
+
+        speaker_to_name: dict[str, str] = {}
+
+        transcript_text = ""
+        call_purpose = call_metadata["purpose"]
+        if call_purpose:
+            transcript_text += f"Call Description: {call_purpose}\n\n"
+
+        contents = transcript["transcript"]
+        for segment in contents:
+            speaker_id = segment.get("speakerId", "")
+            if speaker_id not in speaker_to_name:
+                if self.hide_user_info:
+                    speaker_to_name[speaker_id] = f"User {len(speaker_to_name) + 1}"
+                else:
+                    speaker_to_name[speaker_id] = id_to_name_map.get(
+                        speaker_id, "Unknown"
+                    )
+
+            speaker_name = speaker_to_name[speaker_id]
+
+            sentences = segment.get("sentences", {})
+            monolog = " ".join([sentence.get("text", "") for sentence in sentences])
+            transcript_text += f"{speaker_name}: {monolog}\n\n"
+
+        return Document(
+            id=call_id,
+            sections=[TextSection(link=call_metadata["url"], text=transcript_text)],
+            source=DocumentSource.GONG,
+            semantic_identifier=call_title or "Untitled",
+            doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
+                timezone.utc
+            ),
+            metadata={"client": call_metadata.get("system")},
+        )
+
     def _process_transcripts(
         self,
         transcripts: list[dict[str, Any]],
+        checkpoint: GongConnectorCheckpoint,
     ) -> Generator[Document | ConnectorFailure, None, None]:
-        """Process a batch of transcripts into Documents or ConnectorFailures."""
+        """Fetch call details for a page of transcripts and yield resulting
+        Documents. Transcripts whose call details are missing (Gong race
+        condition) are stashed into `checkpoint.pending_transcripts` for retry
+        on a future checkpoint invocation rather than blocking here.
+        """
         transcript_call_ids = cast(
             list[str],
             [t.get("callId") for t in transcripts if t.get("callId")],
         )
 
-        call_details_map = self._fetch_call_details_with_retry(transcript_call_ids)
+        call_details_map = (
+            self._get_call_details_by_ids(transcript_call_ids)
+            if transcript_call_ids
+            else {}
+        )
+
+        newly_stashed: list[str] = []
 
         for transcript in transcripts:
             call_id = transcript.get("callId")
 
-            if not call_id or call_id not in call_details_map:
-                logger.error(f"Couldn't get call information for Call ID: {call_id}")
-                if call_id:
-                    logger.error(
-                        f"Call debug info: call_id={call_id} "
-                        f"call_ids={transcript_call_ids} "
-                        f"call_details_map={call_details_map.keys()}"
-                    )
+            if not call_id:
+                logger.error(
+                    "Couldn't get call information for transcript missing callId"
+                )
                 yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=call_id or "unknown",
-                    ),
-                    failure_message=f"Couldn't get call information for Call ID: {call_id}",
+                    failed_document=DocumentFailure(document_id="unknown"),
+                    failure_message="Transcript missing callId",
                 )
                 continue
 
-            call_details = call_details_map[call_id]
-            call_metadata = call_details["metaData"]
+            if call_id in call_details_map:
+                yield self._build_document(transcript, call_details_map[call_id])
+                continue
 
-            call_time_str = call_metadata["started"]
-            call_title = call_metadata["title"]
-            logger.info(
-                f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+            # Details not available yet — stash for retry on next invocation.
+            checkpoint.pending_transcripts[call_id] = transcript
+            newly_stashed.append(call_id)
+
+        if newly_stashed:
+            logger.warning(
+                f"Gong call details not yet available (race condition); "
+                f"deferring to next checkpoint invocation: "
+                f"call_ids={newly_stashed}"
             )
-
-            call_parties = cast(list[dict] | None, call_details.get("parties"))
-            if call_parties is None:
-                logger.error(f"Couldn't get parties for Call ID: {call_id}")
-                call_parties = []
-
-            id_to_name_map = self._parse_parties(call_parties)
-
-            speaker_to_name: dict[str, str] = {}
-
-            transcript_text = ""
-            call_purpose = call_metadata["purpose"]
-            if call_purpose:
-                transcript_text += f"Call Description: {call_purpose}\n\n"
-
-            contents = transcript["transcript"]
-            for segment in contents:
-                speaker_id = segment.get("speakerId", "")
-                if speaker_id not in speaker_to_name:
-                    if self.hide_user_info:
-                        speaker_to_name[speaker_id] = f"User {len(speaker_to_name) + 1}"
-                    else:
-                        speaker_to_name[speaker_id] = id_to_name_map.get(
-                            speaker_id, "Unknown"
-                        )
-
-                speaker_name = speaker_to_name[speaker_id]
-
-                sentences = segment.get("sentences", {})
-                monolog = " ".join([sentence.get("text", "") for sentence in sentences])
-                transcript_text += f"{speaker_name}: {monolog}\n\n"
-
-            yield Document(
-                id=call_id,
-                sections=[TextSection(link=call_metadata["url"], text=transcript_text)],
-                source=DocumentSource.GONG,
-                semantic_identifier=call_title or "Untitled",
-                doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
-                    timezone.utc
-                ),
-                metadata={"client": call_metadata.get("system")},
-            )
+            # First attempt on any newly-stashed transcripts counts as attempt #1.
+            # pending_call_details_attempts is guaranteed 0 here because
+            # load_from_checkpoint only reaches _process_transcripts when
+            # pending_transcripts was empty at entry (see early-return above).
+            checkpoint.pending_call_details_attempts = 1
+            checkpoint.pending_retry_after = time.time() + self._next_retry_delay(1)
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         combined = (
@@ -432,6 +443,18 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             checkpoint.has_more = True
             return checkpoint
 
+        # Step 2: Resolve any transcripts stashed by a prior invocation whose
+        # call details were missing due to Gong's propagation race. Worker
+        # cadence between checkpoint calls provides the spacing between retry
+        # attempts — no in-call sleep needed.
+        if checkpoint.pending_transcripts:
+            yield from self._resolve_pending_transcripts(checkpoint)
+            # If pending still exists and we haven't exhausted attempts, defer
+            # the rest of this invocation — _resolve_pending_transcripts set
+            # has_more=True for us.
+            if checkpoint.pending_transcripts:
+                return checkpoint
+
         workspace_ids = checkpoint.workspace_ids
 
         # If we've exhausted all workspaces, we're done
@@ -450,7 +473,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         workspace_id = workspace_ids[checkpoint.workspace_index]
 
-        # Step 2: Fetch one page of transcripts
+        # Step 3: Fetch one page of transcripts
         try:
             page = self._fetch_transcript_page(
                 start_datetime=start_time,
@@ -473,22 +496,101 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             checkpoint.has_more = True
             return checkpoint
 
-        # Step 3: Process transcripts into documents
+        # Step 4: Process transcripts into documents. Missing-details
+        # transcripts get stashed into checkpoint.pending_transcripts.
         if page.transcripts:
-            yield from self._process_transcripts(page.transcripts)
+            yield from self._process_transcripts(page.transcripts, checkpoint)
 
-        # Step 4: Update checkpoint state
+        # Step 5: Update cursor/workspace state
         if page.next_cursor:
-            # More pages in this workspace
             checkpoint.cursor = page.next_cursor
             checkpoint.has_more = True
         else:
-            # This workspace is exhausted — advance to next
             checkpoint.workspace_index += 1
             checkpoint.cursor = None
             checkpoint.has_more = checkpoint.workspace_index < len(workspace_ids)
 
+        # If pending transcripts were stashed this invocation, we still have
+        # work to do on a future invocation even if pagination is exhausted.
+        if checkpoint.pending_transcripts:
+            checkpoint.has_more = True
+
         return checkpoint
+
+    def _next_retry_delay(self, attempts_done: int) -> float:
+        """Seconds to wait before attempt #(attempts_done + 1).
+        Matches the original exponential backoff: 30, 60, 120, 240, 480.
+        """
+        return self.CALL_DETAILS_DELAY * pow(2, attempts_done - 1)
+
+    def _resolve_pending_transcripts(
+        self,
+        checkpoint: GongConnectorCheckpoint,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Attempt to resolve transcripts whose call details were unavailable
+        in a prior invocation. Mutates checkpoint in place: resolved transcripts
+        are removed from pending_transcripts; on attempt exhaustion, emits
+        ConnectorFailure for each unresolved call_id and clears pending state.
+
+        If the backoff deadline hasn't elapsed yet, returns without issuing
+        any API call so the next invocation can try again later.
+        """
+        if (
+            checkpoint.pending_retry_after is not None
+            and time.time() < checkpoint.pending_retry_after
+        ):
+            # Backoff still in effect — defer to a later invocation without
+            # burning an attempt or an API call.
+            checkpoint.has_more = True
+            return
+
+        pending_call_ids = list(checkpoint.pending_transcripts.keys())
+        resolved = self._get_call_details_by_ids(pending_call_ids)
+
+        for call_id, details in resolved.items():
+            transcript = checkpoint.pending_transcripts.pop(call_id, None)
+            if transcript is None:
+                continue
+            yield self._build_document(transcript, details)
+
+        if not checkpoint.pending_transcripts:
+            checkpoint.pending_call_details_attempts = 0
+            checkpoint.pending_retry_after = None
+            return
+
+        checkpoint.pending_call_details_attempts += 1
+        logger.warning(
+            f"Gong call details still missing after "
+            f"{checkpoint.pending_call_details_attempts}/"
+            f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
+            f"missing_call_ids={list(checkpoint.pending_transcripts.keys())}"
+        )
+
+        if checkpoint.pending_call_details_attempts >= self.MAX_CALL_DETAILS_ATTEMPTS:
+            logger.error(
+                f"Giving up on missing Gong call details after "
+                f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
+                f"missing_call_ids={list(checkpoint.pending_transcripts.keys())}"
+            )
+            for call_id in list(checkpoint.pending_transcripts.keys()):
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=call_id),
+                    failure_message=(
+                        f"Couldn't get call details after {self.MAX_CALL_DETAILS_ATTEMPTS} attempts for Call ID: {call_id}"
+                    ),
+                )
+            checkpoint.pending_transcripts = {}
+            checkpoint.pending_call_details_attempts = 0
+            checkpoint.pending_retry_after = None
+            # has_more is recomputed by the workspace iteration that follows;
+            # reset to False here so a stale True from a prior invocation
+            # can't leak out via any future early-return path.
+            checkpoint.has_more = False
+        else:
+            checkpoint.pending_retry_after = time.time() + self._next_retry_delay(
+                checkpoint.pending_call_details_attempts
+            )
+            checkpoint.has_more = True
 
 
 if __name__ == "__main__":

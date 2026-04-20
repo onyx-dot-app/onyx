@@ -166,6 +166,7 @@ from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
+from shared_configs.configs import SENTRY_TRACES_SAMPLE_RATE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 warnings.filterwarnings(
@@ -439,7 +440,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            traces_sample_rate=0.1,
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
             release=__version__,
             before_send=_add_instance_tags,
         )

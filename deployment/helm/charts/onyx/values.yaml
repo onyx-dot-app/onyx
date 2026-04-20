@@ -1316,3 +1316,26 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+
+# -- Additional arbitrary manifests to render as part of the release. Each entry
+# may be either a YAML mapping (a single Kubernetes object) or a multi-line
+# string that will be passed through `tpl` so it can reference release values.
+# Useful for injecting resources not covered by the chart (e.g. NetworkPolicies,
+# ExternalSecrets, custom CRs) without forking the chart.
+extraManifests: []
+# extraManifests:
+#   - apiVersion: v1
+#     kind: ConfigMap
+#     metadata:
+#       name: my-extra-config
+#     data:
+#       key: value
+#   - |
+#     apiVersion: networking.k8s.io/v1
+#     kind: NetworkPolicy
+#     metadata:
+#       name: {{ include "onyx.fullname" . }}-extra
+#     spec:
+#       podSelector: {}
+#       policyTypes:
+#         - Ingress
