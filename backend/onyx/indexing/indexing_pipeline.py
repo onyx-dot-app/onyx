@@ -390,9 +390,8 @@ def _delete_replaced_files(
 ) -> None:
     """Best-effort blob deletes for file_ids replaced in this batch.
 
-    Must run AFTER `Document.file_id` has been durably committed to its new
-    value — otherwise a rollback would leave Documents pointing at a deleted
-    blob. Failures are logged; the janitor reaps whatever slips through.
+    Must run AFTER `Document.file_id` has been committed to the new
+    file_id.
     """
     file_store = get_default_file_store()
     for doc in documents:
@@ -448,8 +447,7 @@ def index_doc_batch_prepare(
     if updatable_docs:
         # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
         # so `upsert_documents`' commit flushes Document.file_id and the origin
-        # flip atomically — closing the window where a committed Document would
-        # reference a still-STAGING file_record.
+        # flip atomically
         _promote_new_staged_files(
             documents=updatable_docs,
             previous_file_ids=previous_file_ids,

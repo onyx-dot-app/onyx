@@ -67,13 +67,7 @@ def build_raw_file_callback(
 
 
 def promote_staged_file(db_session: Session, file_id: str) -> None:
-    """Mark a previously-staged file as `FileOrigin.CONNECTOR`.
-
-    Idempotent — the underlying update filters on the STAGING origin so
-    repeated calls no-op once the file has already been promoted or removed.
-    Caller owns the commit so promotion stays transactional with whatever
-    document-level bookkeeping the caller is doing.
-    """
+    """Mark a previously-staged file as `FileOrigin.CONNECTOR`."""
     update_filerecord_origin(
         file_id=file_id,
         from_origin=FileOrigin.INDEXING_STAGING,
