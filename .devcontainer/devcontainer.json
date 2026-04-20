@@ -18,6 +18,10 @@
   "containerEnv": {
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
     "POSTGRES_HOST": "relational_db",
+    "VESPA_HOST": "index",
+    "OPENSEARCH_HOST": "opensearch",
+    "MODEL_SERVER_HOST": "inference_model_server",
+    "S3_ENDPOINT_URL": "http://minio:9000",
     "REDIS_HOST": "cache"
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
