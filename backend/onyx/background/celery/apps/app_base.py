@@ -55,6 +55,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -69,7 +70,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
-        traces_sample_rate=0.1,
+        traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
         release=__version__,
         before_send=_add_instance_tags,
     )
