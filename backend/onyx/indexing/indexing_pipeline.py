@@ -72,6 +72,7 @@ from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
+from onyx.llm.utils import model_supports_image_input
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_middle
@@ -517,7 +518,9 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
     return documents
 
 
-def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
+def process_image_sections(
+    documents: list[Document], llm: LLM | None = None
+) -> list[IndexingDocument]:
     """
     Process all sections in documents by:
     1. Converting both TextSection and ImageSection objects to base Section objects
@@ -526,15 +529,24 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
     Args:
         documents: List of documents with TextSection | ImageSection objects
+        llm: LLM to use for image summarization. If not provided, falls back to
+             the default vision-capable LLM.
 
     Returns:
         List of IndexingDocument objects with processed_sections as list[Section]
     """
-    # Check if image extraction and analysis is enabled before trying to get a vision LLM
     if not get_image_extraction_and_analysis_enabled():
         llm = None
-    else:
-        # Only get the vision LLM if image processing is enabled
+    elif llm is not None and not model_supports_image_input(
+        llm.config.model_name, llm.config.model_provider
+    ):
+        # Configured LLM lacks vision — fall back to default vision model
+        logger.warning(
+            "Model '%s' does not support vision, falling back to default vision model",
+            llm.config.model_name,
+        )
+        llm = get_default_llm_with_vision()
+    elif llm is None:
         llm = get_default_llm_with_vision()
 
     if not llm:
@@ -973,7 +985,7 @@ def index_doc_batch(
 
     # Convert documents to IndexingDocument objects with processed section
     # logger.debug("Processing image sections")
-    context.indexable_docs = process_image_sections(context.updatable_docs)
+    context.indexable_docs = process_image_sections(context.updatable_docs, llm=llm)
 
     doc_descriptors = [
         {
