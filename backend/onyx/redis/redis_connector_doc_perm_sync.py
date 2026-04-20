@@ -231,8 +231,9 @@ class RedisConnectorPermissionSync:
 
             # This can internally exception due to db issues but still continue
             # Catch exceptions per-element to avoid breaking the entire sync
+            db_start = time.monotonic()
             try:
-                db_start = time.monotonic()
+
                 element_update_permissions_fn(
                     self.tenant_id,
                     permissions,
@@ -240,8 +241,6 @@ class RedisConnectorPermissionSync:
                     connector_id,
                     credential_id,
                 )
-                cumulative_db_update_time += time.monotonic() - db_start
-
                 num_permissions += 1
             except Exception:
                 num_errors += 1
@@ -254,7 +253,8 @@ class RedisConnectorPermissionSync:
                     task_logger.exception(
                         f"Failed to update permissions for element {element_id}"
                     )
-                # Continue processing other elements
+            finally:
+                cumulative_db_update_time += time.monotonic() - db_start
 
         observe_doc_perm_sync_db_update_duration(
             cumulative_db_update_time, source_string

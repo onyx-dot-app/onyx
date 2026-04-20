@@ -505,8 +505,6 @@ def _timed_perform_external_group_sync(
     attempt_id: int,
     timeout_seconds: int = JOB_TIMEOUT,
 ) -> str:
-    start_time = time.monotonic()
-
     with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
