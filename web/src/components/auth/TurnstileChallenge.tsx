@@ -69,13 +69,27 @@ export default function TurnstileChallenge({
   const [scriptReady, setScriptReady] = useState(false);
 
   useEffect(() => {
-    if (
-      typeof document === "undefined" ||
-      document.querySelector(`script[src="${TURNSTILE_SCRIPT_SRC}"]`)
-    ) {
-      if (window.turnstile) setScriptReady(true);
+    if (typeof document === "undefined") return;
+
+    // Another instance of this component may have already started loading the
+    // script. If it's still in-flight we need to listen for its load event;
+    // if it already finished we can flip scriptReady immediately. Without
+    // this handshake the second mount sees the existing tag and bails,
+    // leaving scriptReady stuck at false forever.
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${TURNSTILE_SCRIPT_SRC}"]`
+    );
+    if (existing) {
+      if (window.turnstile) {
+        setScriptReady(true);
+      } else {
+        const onExistingLoad = () => setScriptReady(true);
+        existing.addEventListener("load", onExistingLoad, { once: true });
+        return () => existing.removeEventListener("load", onExistingLoad);
+      }
       return;
     }
+
     const script = document.createElement("script");
     script.src = TURNSTILE_SCRIPT_SRC;
     script.async = true;

@@ -658,7 +658,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     # Challenge signup endpoints with Cloudflare Turnstile. No-ops unless
-    # MULTI_TENANT and not DEV_MODE and TURNSTILE_SECRET_KEY is set.
+    # TURNSTILE_SECRET_KEY is set (self-hosted / dev leave it empty).
     application.add_middleware(TurnstileMiddleware)
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)

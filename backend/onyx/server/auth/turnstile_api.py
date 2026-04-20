@@ -1,7 +1,6 @@
 """API + middleware for Cloudflare Turnstile enforcement on signup."""
 
 from fastapi import APIRouter
-from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 from pydantic import BaseModel
@@ -16,6 +15,8 @@ from onyx.auth.turnstile import validate_turnstile_cookie_value
 from onyx.auth.turnstile import verify_turnstile_token
 from onyx.configs.app_configs import TURNSTILE_COOKIE_TTL_SECONDS
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -61,9 +62,9 @@ async def verify_turnstile(
     remote_ip = request.client.host if request.client else None
     success, error = await verify_turnstile_token(body.token, remote_ip)
     if not success:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Turnstile verification failed: {error or 'unknown'}",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            f"Turnstile verification failed: {error or 'unknown'}",
         )
 
     response.set_cookie(
