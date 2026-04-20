@@ -339,6 +339,42 @@ class TestSheetToCsvStreaming:
         # 5 leading empty rows collapsed to 2
         assert csv_text.split("\n") == [",", ",", "A,B"]
 
+    def test_cell_cap_truncates_and_appends_marker(self) -> None:
+        """When total non-empty cells exceeds the cap, scanning stops and
+        a truncation marker row is appended so downstream indexing sees
+        the sheet was cut off."""
+        with patch(
+            "onyx.file_processing.extract_file_text.MAX_XLSX_CELLS_PER_SHEET", 5
+        ):
+            csv_text = _sheet_to_csv(
+                iter(
+                    [
+                        ("A", "B", "C"),
+                        ("D", "E", "F"),
+                        ("G", "H", "I"),
+                        ("J", "K", "L"),
+                    ]
+                )
+            )
+        lines = csv_text.split("\n")
+        assert lines[-1] == "[truncated: sheet exceeded cell limit]"
+        # First two rows (6 cells) trip the cap=5 check after row 2; the
+        # third and fourth rows are never scanned.
+        assert "G" not in csv_text
+        assert "J" not in csv_text
+
+    def test_cell_cap_not_hit_no_marker(self) -> None:
+        """Under the cap, no truncation marker is appended."""
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "B"),
+                    ("C", "D"),
+                ]
+            )
+        )
+        assert "[truncated" not in csv_text
+
 
 class TestXlsxSheetExtraction:
     def test_one_tuple_per_sheet(self) -> None:

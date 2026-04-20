@@ -868,6 +868,15 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
     0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_UPLOAD") or 1000)
 )
 
+# Maximum non-empty cells to extract from a single xlsx worksheet. Protects
+# from OOM on honestly-huge spreadsheets: memory cost in the extractor is
+# roughly proportional to this count. Once exceeded, the scan stops and a
+# truncation marker row is appended to the sheet's CSV.
+# Peak Memory ~= 100 B * MAX_CELLS
+MAX_XLSX_CELLS_PER_SHEET = max(
+    0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
