@@ -76,24 +76,34 @@ async def verify_captcha_token(
                     f"Captcha verification failed: {', '.join(error_codes)}"
                 )
 
-            # For reCAPTCHA v3, also check the score
-            if result.score is not None:
-                if result.score < RECAPTCHA_SCORE_THRESHOLD:
-                    logger.warning(
-                        f"Captcha score too low: {result.score} < {RECAPTCHA_SCORE_THRESHOLD}"
-                    )
-                    raise CaptchaVerificationError(
-                        "Captcha verification failed: suspicious activity detected"
-                    )
+            # Require v3 score. Google's public test secret returns no score
+            # — that path must not be active in prod since it skips the only
+            # human-vs-bot signal. A missing score here means captcha is
+            # misconfigured (test secret in prod, or a v2 response slipped in
+            # via an action mismatch).
+            if result.score is None:
+                logger.warning(
+                    "Captcha verification failed: siteverify returned no score (likely test secret in prod)"
+                )
+                raise CaptchaVerificationError(
+                    "Captcha verification failed: missing score"
+                )
 
-                # Optionally verify the action matches
-                if result.action and result.action != expected_action:
-                    logger.warning(
-                        f"Captcha action mismatch: {result.action} != {expected_action}"
-                    )
-                    raise CaptchaVerificationError(
-                        "Captcha verification failed: action mismatch"
-                    )
+            if result.score < RECAPTCHA_SCORE_THRESHOLD:
+                logger.warning(
+                    f"Captcha score too low: {result.score} < {RECAPTCHA_SCORE_THRESHOLD}"
+                )
+                raise CaptchaVerificationError(
+                    "Captcha verification failed: suspicious activity detected"
+                )
+
+            if result.action and result.action != expected_action:
+                logger.warning(
+                    f"Captcha action mismatch: {result.action} != {expected_action}"
+                )
+                raise CaptchaVerificationError(
+                    "Captcha verification failed: action mismatch"
+                )
 
             logger.debug(
                 f"Captcha verification passed: score={result.score}, action={result.action}"
