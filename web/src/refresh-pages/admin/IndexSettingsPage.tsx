@@ -97,6 +97,24 @@ const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const SWITCHOVER_NONE = "none";
 
+const AZURE_EMBEDDING_MODELS = [
+  {
+    model_name: "text-embedding-3-large",
+    model_dim: 3072,
+    description: "OpenAI's large embedding model via Azure.",
+  },
+  {
+    model_name: "text-embedding-3-small",
+    model_dim: 1536,
+    description: "OpenAI's small embedding model via Azure.",
+  },
+  {
+    model_name: "text-embedding-ada-002",
+    model_dim: 1536,
+    description: "OpenAI's legacy embedding model via Azure.",
+  },
+] as const;
+
 interface EmbeddingProviderInfoProps {
   providerType: string | null;
 }
@@ -176,6 +194,7 @@ function ProviderCredentialsModal({
   const [apiVersion, setApiVersion] = useState(
     existingCredentials?.api_version ?? ""
   );
+  const [azureModel, setAzureModel] = useState("");
   const [fileName, setFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -201,7 +220,7 @@ function ProviderCredentialsModal({
     try {
       const testResponse = await testEmbedding({
         provider_type: provider.provider_type,
-        modelName: isAzure ? "text-embedding-3-small" : modelName,
+        modelName: isAzure ? azureModel : modelName,
         apiKey,
         apiUrl,
         apiVersion: isAzure ? apiVersion : null,
@@ -245,14 +264,15 @@ function ProviderCredentialsModal({
 
   const isValid = (() => {
     if (isProxy) return !!apiUrl && !!modelName;
-    if (isAzure) return !!apiUrl && !!deploymentName && !!apiVersion;
+    if (isAzure)
+      return !!apiUrl && !!deploymentName && !!apiVersion && !!azureModel;
     if (isGoogle) return !!apiKey;
     return !!apiKey;
   })();
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <Modal.Content width="sm">
+      <Modal.Content width="md">
         <Modal.Header
           icon={provider.icon}
           moreIcon1={SvgArrowExchange}
@@ -306,6 +326,25 @@ function ProviderCredentialsModal({
                   value={apiVersion}
                   onChange={(e) => setApiVersion(e.target.value)}
                 />
+              </InputVertical>
+            )}
+
+            {isAzure && (
+              <InputVertical title="Embedding Model">
+                <InputSelect value={azureModel} onValueChange={setAzureModel}>
+                  <InputSelect.Trigger placeholder="Select an embedding model" />
+                  <InputSelect.Content>
+                    {AZURE_EMBEDDING_MODELS.map((m) => (
+                      <InputSelect.Item
+                        key={m.model_name}
+                        value={m.model_name}
+                        description={m.description}
+                      >
+                        {m.model_name}
+                      </InputSelect.Item>
+                    ))}
+                  </InputSelect.Content>
+                </InputSelect>
               </InputVertical>
             )}
 
