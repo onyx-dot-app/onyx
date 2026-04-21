@@ -126,18 +126,12 @@ def _bucket_key(ip: str) -> str:
     return f"{_REDIS_KEY_PREFIX}{ip}:{bucket}"
 
 
-def is_signup_rate_limit_enabled() -> bool:
-    """Only active on multi-tenant cloud deployments. Self-hosted signup is
-    typically admin-invite-only and doesn't see the spray-registration
-    threat model."""
-    return MULTI_TENANT
-
-
 async def enforce_signup_rate_limit(request: Request) -> None:
     """Raise OnyxError(RATE_LIMITED) if this client has exceeded the hourly
-    signup cap. Fails open on Redis errors so a Redis blip cannot block
-    legitimate registrations."""
-    if not is_signup_rate_limit_enabled():
+    signup cap. Cloud-only: self-hosted signup is typically admin-invite-only
+    and doesn't see the spray-registration threat model. Fails open on Redis
+    errors so a Redis blip cannot block legitimate registrations."""
+    if not MULTI_TENANT:
         return
 
     ip = _client_ip(request)
@@ -172,7 +166,6 @@ async def enforce_signup_rate_limit(request: Request) -> None:
 # re-deriving the constants.
 __all__ = [
     "enforce_signup_rate_limit",
-    "is_signup_rate_limit_enabled",
     "_PER_IP_PER_HOUR",
     "_BUCKET_SECONDS",
     "_client_ip",
