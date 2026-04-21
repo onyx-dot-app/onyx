@@ -120,27 +120,23 @@ function MCPServerCard({
           <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
               <Card key={tool.id} border="solid" rounding="md" padding="sm">
-                <CardLayout.Header
-                  headerChildren={
-                    <ContentAction
-                      icon={tool.icon}
-                      title={tool.name}
-                      description={tool.description}
-                      sizePreset="main-ui"
-                      variant="section"
-                      padding="fit"
-                      rightChildren={
-                        <Tooltip tooltip={authTooltip} side="top">
-                          <Switch
-                            checked={isToolEnabled(tool.id)}
-                            onCheckedChange={(checked) =>
-                              onToggleTool(tool.id, checked)
-                            }
-                            disabled={needsAuth}
-                          />
-                        </Tooltip>
-                      }
-                    />
+                <ContentAction
+                  icon={tool.icon}
+                  title={tool.name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                  padding="fit"
+                  rightChildren={
+                    <Tooltip tooltip={authTooltip} side="top">
+                      <Switch
+                        checked={isToolEnabled(tool.id)}
+                        onCheckedChange={(checked) =>
+                          onToggleTool(tool.id, checked)
+                        }
+                        disabled={needsAuth}
+                      />
+                    </Tooltip>
                   }
                 />
               </Card>
@@ -150,27 +146,6 @@ function MCPServerCard({
       }
     >
       <CardLayout.Header
-        headerChildren={
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="lg"
-            rightChildren={
-              <Tooltip tooltip={authTooltip} side="top">
-                <Switch
-                  checked={serverEnabled}
-                  onCheckedChange={(checked) =>
-                    onToggleTools(allToolIds, checked)
-                  }
-                  disabled={needsAuth}
-                />
-              </Tooltip>
-            }
-          />
-        }
         bottomChildren={
           tools.length > 0 ? (
             <Section flexDirection="row" gap={0.5}>
@@ -192,7 +167,27 @@ function MCPServerCard({
             </Section>
           ) : undefined
         }
-      />
+      >
+        <ContentAction
+          icon={getActionIcon(server.server_url, server.name)}
+          title={server.name}
+          description={server.description}
+          sizePreset="main-ui"
+          variant="section"
+          padding="lg"
+          rightChildren={
+            <Tooltip tooltip={authTooltip} side="top">
+              <Switch
+                checked={serverEnabled}
+                onCheckedChange={(checked) =>
+                  onToggleTools(allToolIds, checked)
+                }
+                disabled={needsAuth}
+              />
+            </Tooltip>
+          }
+        />
+      </CardLayout.Header>
     </Card>
   );
 }
@@ -894,22 +889,18 @@ export default function ChatPreferencesPage() {
                           rounding="lg"
                           padding="md"
                         >
-                          <CardLayout.Header
-                            headerChildren={
-                              <ContentAction
-                                icon={SvgActions}
-                                title={tool.display_name || tool.name}
-                                description={tool.description}
-                                sizePreset="main-ui"
-                                variant="section"
-                                padding="lg"
-                                rightChildren={
-                                  <Switch
-                                    checked={isToolEnabled(tool.id)}
-                                    onCheckedChange={(checked) =>
-                                      toggleTool(tool.id, checked)
-                                    }
-                                  />
+                          <ContentAction
+                            icon={SvgActions}
+                            title={tool.display_name || tool.name}
+                            description={tool.description}
+                            sizePreset="main-ui"
+                            variant="section"
+                            padding="lg"
+                            rightChildren={
+                              <Switch
+                                checked={isToolEnabled(tool.id)}
+                                onCheckedChange={(checked) =>
+                                  toggleTool(tool.id, checked)
                                 }
                               />
                             }

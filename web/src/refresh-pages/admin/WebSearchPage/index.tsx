@@ -277,50 +277,6 @@ function ProviderCard({
         }
       >
         <Card.Header
-          headerChildren={
-            <ContentAction
-              sizePreset="main-ui"
-              variant="section"
-              icon={icon}
-              title={title}
-              description={description}
-              padding="lg"
-              rightChildren={
-                isDisconnected && onConnect ? (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onConnect();
-                    }}
-                  >
-                    Connect
-                  </Button>
-                ) : isConnected && onSelect ? (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowRightCircle}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelect();
-                    }}
-                  >
-                    Set as Default
-                  </Button>
-                ) : isSelected ? (
-                  <div className="p-2">
-                    <Content
-                      title={selectedLabel}
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={SvgCheckSquare}
-                    />
-                  </div>
-                ) : undefined
-              }
-            />
-          }
           bottomRightChildren={
             !isDisconnected ? (
               <div className="flex flex-row px-1 pb-1">
@@ -355,7 +311,50 @@ function ProviderCard({
               </div>
             ) : undefined
           }
-        />
+        >
+          <ContentAction
+            sizePreset="main-ui"
+            variant="section"
+            icon={icon}
+            title={title}
+            description={description}
+            padding="lg"
+            rightChildren={
+              isDisconnected && onConnect ? (
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowExchange}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConnect();
+                  }}
+                >
+                  Connect
+                </Button>
+              ) : isConnected && onSelect ? (
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect();
+                  }}
+                >
+                  Set as Default
+                </Button>
+              ) : isSelected ? (
+                <div className="p-2">
+                  <Content
+                    title={selectedLabel}
+                    sizePreset="main-ui"
+                    variant="section"
+                    icon={SvgCheckSquare}
+                  />
+                </div>
+              ) : undefined
+            }
+          />
+        </Card.Header>
       </SelectCard>
     </Hoverable.Root>
   );

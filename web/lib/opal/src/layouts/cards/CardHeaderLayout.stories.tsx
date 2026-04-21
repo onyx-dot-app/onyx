@@ -40,7 +40,7 @@ export const Default: Story = {
     <div className="w-[28rem] border rounded-16">
       <Card.Header
         headerPadding="sm"
-        headerChildren={
+        children={
           <ContentAction
             sizePreset="main-ui"
             variant="section"
@@ -65,7 +65,7 @@ export const WithBottomRightSlot: Story = {
     <div className="w-[28rem] border rounded-16">
       <Card.Header
         headerPadding="sm"
-        headerChildren={
+        children={
           <ContentAction
             sizePreset="main-ui"
             variant="section"
@@ -110,7 +110,7 @@ export const NoRightAction: Story = {
     <div className="w-[28rem] border rounded-16">
       <Card.Header
         headerPadding="sm"
-        headerChildren={
+        children={
           <ContentAction
             sizePreset="main-ui"
             variant="section"
@@ -130,7 +130,7 @@ export const LongContent: Story = {
     <div className="w-[28rem] border rounded-16">
       <Card.Header
         headerPadding="sm"
-        headerChildren={
+        children={
           <ContentAction
             sizePreset="main-ui"
             variant="section"

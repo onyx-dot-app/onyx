@@ -256,55 +256,6 @@ export default function ImageGenerationContent() {
                     }
                   >
                     <Card.Header
-                      headerChildren={
-                        <ContentAction
-                          sizePreset="main-ui"
-                          variant="section"
-                          icon={() => (
-                            <ModelIcon
-                              provider={provider.provider_name}
-                              size={16}
-                            />
-                          )}
-                          title={provider.title}
-                          description={provider.description}
-                          padding="lg"
-                          rightChildren={
-                            isDisconnected ? (
-                              <Button
-                                prominence="tertiary"
-                                rightIcon={SvgArrowExchange}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleConnect(provider);
-                                }}
-                              >
-                                Connect
-                              </Button>
-                            ) : isConnected ? (
-                              <Button
-                                prominence="tertiary"
-                                rightIcon={SvgArrowRightCircle}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelect(provider);
-                                }}
-                              >
-                                Set as Default
-                              </Button>
-                            ) : isSelected ? (
-                              <div className="p-2">
-                                <Content
-                                  title="Current Default"
-                                  sizePreset="main-ui"
-                                  variant="section"
-                                  icon={SvgCheckSquare}
-                                />
-                              </div>
-                            ) : undefined
-                          }
-                        />
-                      }
                       bottomRightChildren={
                         !isDisconnected ? (
                           <div className="flex flex-row px-1 pb-1">
@@ -335,7 +286,55 @@ export default function ImageGenerationContent() {
                           </div>
                         ) : undefined
                       }
-                    />
+                    >
+                      <ContentAction
+                        sizePreset="main-ui"
+                        variant="section"
+                        icon={() => (
+                          <ModelIcon
+                            provider={provider.provider_name}
+                            size={16}
+                          />
+                        )}
+                        title={provider.title}
+                        description={provider.description}
+                        padding="lg"
+                        rightChildren={
+                          isDisconnected ? (
+                            <Button
+                              prominence="tertiary"
+                              rightIcon={SvgArrowExchange}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConnect(provider);
+                              }}
+                            >
+                              Connect
+                            </Button>
+                          ) : isConnected ? (
+                            <Button
+                              prominence="tertiary"
+                              rightIcon={SvgArrowRightCircle}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelect(provider);
+                              }}
+                            >
+                              Set as Default
+                            </Button>
+                          ) : isSelected ? (
+                            <div className="p-2">
+                              <Content
+                                title="Current Default"
+                                sizePreset="main-ui"
+                                variant="section"
+                                icon={SvgCheckSquare}
+                              />
+                            </div>
+                          ) : undefined
+                        }
+                      />
+                    </Card.Header>
                   </SelectCard>
                 </Hoverable.Root>
               );

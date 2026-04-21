@@ -114,22 +114,6 @@ export default function CodeInterpreterPage() {
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
               <Card.Header
-                headerChildren={
-                  <ContentAction
-                    sizePreset="main-ui"
-                    variant="section"
-                    icon={SvgTerminal}
-                    title="Code Interpreter"
-                    description="Built-in Python runtime"
-                    padding="lg"
-                    rightChildren={
-                      <ConnectionStatus
-                        healthy={isHealthy}
-                        isLoading={isLoading}
-                      />
-                    }
-                  />
-                }
                 bottomRightChildren={
                   <Section
                     flexDirection="row"
@@ -159,7 +143,22 @@ export default function CodeInterpreterPage() {
                     />
                   </Section>
                 }
-              />
+              >
+                <ContentAction
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgTerminal}
+                  title="Code Interpreter"
+                  description="Built-in Python runtime"
+                  padding="lg"
+                  rightChildren={
+                    <ConnectionStatus
+                      healthy={isHealthy}
+                      isLoading={isLoading}
+                    />
+                  }
+                />
+              </Card.Header>
             </SelectCard>
           </Hoverable.Root>
         ) : (
@@ -169,38 +168,30 @@ export default function CodeInterpreterPage() {
             rounding="lg"
             onClick={() => handleToggle(true)}
           >
-            <Card.Header
-              headerChildren={
-                <ContentAction
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgTerminal}
-                  title="Code Interpreter (Disconnected)"
-                  description="Built-in Python runtime"
-                  padding="lg"
-                  rightChildren={
-                    <Section
-                      flexDirection="row"
-                      alignItems="center"
-                      padding={0.5}
+            <ContentAction
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgTerminal}
+              title="Code Interpreter (Disconnected)"
+              description="Built-in Python runtime"
+              padding="lg"
+              rightChildren={
+                <Section flexDirection="row" alignItems="center" padding={0.5}>
+                  {isReconnecting ? (
+                    <CheckingStatus />
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(true);
+                      }}
                     >
-                      {isReconnecting ? (
-                        <CheckingStatus />
-                      ) : (
-                        <Button
-                          prominence="tertiary"
-                          rightIcon={SvgArrowExchange}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggle(true);
-                          }}
-                        >
-                          Reconnect
-                        </Button>
-                      )}
-                    </Section>
-                  }
-                />
+                      Reconnect
+                    </Button>
+                  )}
+                </Section>
               }
             />
           </SelectCard>

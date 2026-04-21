@@ -4,9 +4,9 @@
 
 interface CardHeaderProps {
   /** Content rendered in the header slot — typically a {@link ContentAction} block. */
-  headerChildren?: React.ReactNode;
+  children?: React.ReactNode;
 
-  /** Content rendered below `headerChildren`, in a right-aligned column. */
+  /** Content rendered below `children`, in a right-aligned column. */
   bottomRightChildren?: React.ReactNode;
 
   /**
@@ -27,7 +27,7 @@ interface CardHeaderProps {
  *
  * ```
  * +-----------------------------------+
- * | headerChildren                    |
+ * | children                    |
  * +                  +----------------+
  * |                  | bottomRight    |
  * +------------------+----------------+
@@ -36,42 +36,41 @@ interface CardHeaderProps {
  * ```
  *
  * For the typical icon/title/description + right-action pattern, pass a
- * {@link ContentAction} into `headerChildren` with `rightChildren` for
+ * {@link ContentAction} into `children` with `rightChildren` for
  * the action button.
  *
  * @example
  * ```tsx
  * <Card.Header
- *   headerChildren={
- *     <ContentAction
- *       icon={SvgGlobe}
- *       title="Google"
- *       description="Search engine"
- *       sizePreset="main-ui"
- *       variant="section"
- *       padding="lg"
- *       rightChildren={<Button>Connect</Button>}
- *     />
- *   }
  *   bottomRightChildren={
  *     <>
  *       <Button icon={SvgUnplug} size="sm" prominence="tertiary" />
  *       <Button icon={SvgSettings} size="sm" prominence="tertiary" />
  *     </>
  *   }
- * />
+ * >
+ *   <ContentAction
+ *     icon={SvgGlobe}
+ *     title="Google"
+ *     description="Search engine"
+ *     sizePreset="main-ui"
+ *     variant="section"
+ *     padding="lg"
+ *     rightChildren={<Button>Connect</Button>}
+ *   />
+ * </Card.Header>
  * ```
  */
 function Header({
-  headerChildren,
+  children,
   bottomRightChildren,
   bottomChildren,
 }: CardHeaderProps) {
   return (
     <div className="flex flex-col w-full">
       <div className="flex flex-row items-start w-full">
-        {headerChildren != null && (
-          <div className="self-start grow min-w-0">{headerChildren}</div>
+        {children != null && (
+          <div className="self-start grow min-w-0">{children}</div>
         )}
         {bottomRightChildren != null && (
           <div className="flex flex-col items-end shrink-0">
