@@ -390,3 +390,95 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
     }
   });
 });
+
+test.describe("Permission gating — MANAGE_ACTIONS", () => {
+  test("Admin panel /admin/actions/mcp and /admin/actions/open-api are gated behind MANAGE_ACTIONS", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates an OpenAPI custom tool and an MCP server
+    const toolName = `E2E Manage Tool ${Date.now()}`;
+    const toolId = await adminClient.createCustomTool(toolName);
+
+    const mcpName = `E2E Manage MCP ${Date.now()}`;
+    const mcpServerId = await adminClient.createMcpServer(mcpName);
+
+    try {
+      // Phase 1: Without MANAGE_ACTIONS — both pages should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/actions/open-api");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      await page.goto("/admin/actions/mcp");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant MANAGE_ACTIONS — both pages should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.MANAGE_ACTIONS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+
+      // Verify OpenAPI Actions page and created tool visibility
+      await page.goto("/admin/actions/open-api");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/admin/actions/open-api");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("OpenAPI Actions")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(
+        page.getByLabel(`${toolName} OpenAPI action card`)
+      ).toBeVisible({ timeout: 10000 });
+
+      // Verify MCP Actions page and created server visibility
+      await page.goto("/admin/actions/mcp");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/admin/actions/mcp");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("MCP Actions")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByLabel(`${mcpName} MCP server card`)).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Phase 3: Revoke MANAGE_ACTIONS — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/actions/open-api");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      await page.goto("/admin/actions/mcp");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete the tool and MCP server
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteCustomTool(toolId);
+      await cleanupClient.deleteMcpServer(mcpServerId);
+    }
+  });
+});

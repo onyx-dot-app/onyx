@@ -774,6 +774,58 @@ export class OnyxApiClient {
     return success;
   }
 
+  async createCustomTool(
+    name: string,
+    description: string = "E2E test tool"
+  ): Promise<number> {
+    const response = await this.post("/admin/tool/custom", {
+      name,
+      description,
+      definition: {
+        openapi: "3.0.0",
+        info: { title: name, description: description, version: "1.0.0" },
+        paths: {
+          "/test": {
+            get: {
+              operationId: "testOp",
+              summary: "Test endpoint",
+              responses: { "200": { description: "OK" } },
+            },
+          },
+        },
+        servers: [{ url: "https://example.com" }],
+      },
+      passthrough_auth: false,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create custom tool"
+    );
+    this.log(`Created custom tool: ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
+  async createMcpServer(
+    name: string,
+    serverUrl: string = "https://example.com/mcp"
+  ): Promise<number> {
+    const response = await this.post("/admin/mcp/servers/create", {
+      name,
+      description: "E2E test MCP server",
+      server_url: serverUrl,
+      auth_type: "NONE",
+      auth_performer: "ADMIN",
+    });
+
+    const data = await this.handleResponse<{ server_id: number }>(
+      response,
+      "Failed to create MCP server"
+    );
+    this.log(`Created MCP server: ${name} (ID: ${data.server_id})`);
+    return data.server_id;
+  }
+
   async deleteCustomTool(toolId: number): Promise<boolean> {
     const response = await this.request.delete(
       `${this.baseUrl}/admin/tool/custom/${toolId}`
