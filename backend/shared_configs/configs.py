@@ -99,6 +99,14 @@ STRICT_CHUNK_TOKEN_LIMIT = (
 # Set up Sentry integration (for error logging)
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
+# Celery task spans dominate ingestion volume (~94%), so default celery
+# tracing to 0. Web/API traces stay at a small non-zero rate so http.server
+# traces remain available. Both are env-tunable without a code change.
+SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.01"))
+SENTRY_CELERY_TRACES_SAMPLE_RATE = float(
+    os.environ.get("SENTRY_CELERY_TRACES_SAMPLE_RATE", "0.0")
+)
+
 
 # Fields which should only be set on new search setting
 PRESERVED_SEARCH_FIELDS = [

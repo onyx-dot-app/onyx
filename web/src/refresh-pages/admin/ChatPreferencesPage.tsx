@@ -997,6 +997,23 @@ export default function ChatPreferencesPage() {
                 </Card>
 
                 <Card border="solid" rounding="lg">
+                  <InputHorizontal
+                    title="Image Extraction & Analysis"
+                    description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                    withLabel
+                  >
+                    <Switch
+                      checked={s.image_extraction_and_analysis_enabled ?? true}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({
+                          image_extraction_and_analysis_enabled: checked,
+                        });
+                      }}
+                    />
+                  </InputHorizontal>
+                </Card>
+
+                <Card border="solid" rounding="lg">
                   <Section>
                     <InputHorizontal
                       title="Allow Anonymous Users"

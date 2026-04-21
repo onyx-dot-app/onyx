@@ -46,6 +46,7 @@ _EXPECTED_JIRA_GROUPS = [
             "chris@onyx.app",
             "founders@onyx.app",
             "hagen@danswer.ai",
+            "oauth@onyx.app",
             "pablo@onyx.app",
             "yuhong@onyx.app",
         },
@@ -54,6 +55,11 @@ _EXPECTED_JIRA_GROUPS = [
     ExternalUserGroupSet(
         id="jira-admins-danswerai",
         user_emails={"founders@onyx.app", "hagen@danswer.ai", "pablo@onyx.app"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="jira-servicemanagement-users-danswerai",
+        user_emails={"oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
@@ -67,6 +73,7 @@ _EXPECTED_JIRA_GROUPS = [
             "chris@onyx.app",
             "founders@onyx.app",
             "hagen@danswer.ai",
+            "oauth@onyx.app",
             "pablo@onyx.app",
         },
         gives_anyone_access=False,
@@ -76,18 +83,19 @@ _EXPECTED_JIRA_GROUPS = [
         user_emails={
             "chris@onyx.app",
             "founders@onyx.app",
+            "oauth@onyx.app",
             "yuhong@onyx.app",
         },
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
         id="bitbucket-admins-onyxai",
-        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
         id="bitbucket-users-onyxai",
-        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
 ]

@@ -30,6 +30,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
+from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -49,6 +50,7 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import promote_staged_file
 from onyx.hooks.executor import execute_hook
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
@@ -154,6 +156,7 @@ def _upsert_documents_in_db(
             doc_metadata=doc.doc_metadata,
             # parent_hierarchy_node_id is resolved in docfetching using Redis cache
             parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
+            file_id=doc.file_id,
         )
         document_metadata_list.append(db_doc_metadata)
 
@@ -364,6 +367,45 @@ def index_doc_batch_with_handler(
     return index_pipeline_result
 
 
+def _promote_new_staged_files(
+    documents: list[Document],
+    previous_file_ids: dict[str, str],
+    db_session: Session,
+) -> None:
+    """Queue STAGING → CONNECTOR origin flips for every new file_id in the batch.
+
+    Intended to run immediately before `_upsert_documents_in_db` so the origin
+    flip lands in the same commit as the `Document.file_id` write. Does not
+    commit — the caller's next commit flushes these UPDATEs.
+    """
+    for doc in documents:
+        new_file_id = doc.file_id
+        if new_file_id is None or new_file_id == previous_file_ids.get(doc.id):
+            continue
+        promote_staged_file(db_session=db_session, file_id=new_file_id)
+
+
+def _delete_replaced_files(
+    documents: list[Document],
+    previous_file_ids: dict[str, str],
+) -> None:
+    """Best-effort blob deletes for file_ids replaced in this batch.
+
+    Must run AFTER `Document.file_id` has been committed to the new
+    file_id.
+    """
+    file_store = get_default_file_store()
+    for doc in documents:
+        new_file_id = doc.file_id
+        old_file_id = previous_file_ids.get(doc.id)
+        if old_file_id is None or old_file_id == new_file_id:
+            continue
+        try:
+            file_store.delete_file(old_file_id, error_on_missing=False)
+        except Exception:
+            logger.exception(f"Failed to delete replaced file_id={old_file_id}.")
+
+
 def index_doc_batch_prepare(
     documents: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -382,6 +424,11 @@ def index_doc_batch_prepare(
         document_ids=document_ids,
     )
 
+    # Capture previous file_ids BEFORE any writes so we know what to reap.
+    previous_file_ids: dict[str, str] = {
+        db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
+    }
+
     updatable_docs = (
         get_doc_ids_to_update(documents=documents, db_docs=db_docs)
         if not ignore_time_skip
@@ -399,10 +446,23 @@ def index_doc_batch_prepare(
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
     if updatable_docs:
+        # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
+        # so `upsert_documents`' commit flushes Document.file_id and the origin
+        # flip atomically
+        _promote_new_staged_files(
+            documents=updatable_docs,
+            previous_file_ids=previous_file_ids,
+            db_session=db_session,
+        )
         _upsert_documents_in_db(
             documents=updatable_docs,
             index_attempt_metadata=index_attempt_metadata,
             db_session=db_session,
+        )
+        # Blob deletes run only after Document.file_id is durable.
+        _delete_replaced_files(
+            documents=updatable_docs,
+            previous_file_ids=previous_file_ids,
         )
 
     logger.info(
@@ -530,8 +590,15 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     Returns:
         List of IndexingDocument objects with processed_sections as list[Section]
     """
-    # Check if image extraction and analysis is enabled before trying to get a vision LLM
-    if not get_image_extraction_and_analysis_enabled():
+    # Check if image extraction and analysis is enabled before trying to get a vision LLM.
+    # Use section.type rather than isinstance because sections can round-trip
+    # through pydantic as base Section instances (not the concrete subclass).
+    has_image_section = any(
+        section.type == SectionType.IMAGE
+        for document in documents
+        for section in document.sections
+    )
+    if not get_image_extraction_and_analysis_enabled() or not has_image_section:
         llm = None
     else:
         # Only get the vision LLM if image processing is enabled

@@ -75,6 +75,8 @@ from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -981,6 +983,42 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
                 )
+            try:
+                validate_outbound_http_url(site_url, https_only=True)
+            except (SSRFException, ValueError) as e:
+                raise ConnectorValidationError(
+                    f"Invalid site URL '{site_url}': {e}"
+                ) from e
+
+        # Probe RoleAssignments permission — required for permission sync.
+        # Only runs when credentials have been loaded.
+        if self.msal_app and self.sp_tenant_domain and self.sites:
+            try:
+                token_response = acquire_token_for_rest(
+                    self.msal_app,
+                    self.sp_tenant_domain,
+                    self.sharepoint_domain_suffix,
+                )
+                probe_url = (
+                    f"{self.sites[0].rstrip('/')}/_api/web/roleassignments?$top=1"
+                )
+                resp = requests.get(
+                    probe_url,
+                    headers={"Authorization": f"Bearer {token_response.accessToken}"},
+                    timeout=10,
+                )
+                if resp.status_code in (401, 403):
+                    raise ConnectorValidationError(
+                        "The Azure AD app registration is missing the required SharePoint permission "
+                        "to read role assignments. Please grant 'Sites.FullControl.All' "
+                        "(application permission) in the Azure portal and re-run admin consent."
+                    )
+            except ConnectorValidationError:
+                raise
+            except Exception as e:
+                logger.warning(
+                    f"RoleAssignments permission probe failed (non-blocking): {e}"
+                )
 
     def _extract_tenant_domain_from_sites(self) -> str | None:
         """Extract the tenant domain from configured site URLs.
@@ -1876,16 +1914,22 @@ class SharepointConnector(
                     logger.debug(
                         f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
                     )
-                    ctx = self._create_rest_client_context(site_descriptor.url)
-                    doc_batch.append(
-                        _convert_sitepage_to_slim_document(
-                            site_page,
-                            ctx,
-                            self.graph_client,
-                            parent_hierarchy_raw_node_id=site_descriptor.url,
-                            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                    try:
+                        ctx = self._create_rest_client_context(site_descriptor.url)
+                        doc_batch.append(
+                            _convert_sitepage_to_slim_document(
+                                site_page,
+                                ctx,
+                                self.graph_client,
+                                parent_hierarchy_raw_node_id=site_descriptor.url,
+                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                            )
                         )
-                    )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to process site page "
+                            f"{site_page.get('webUrl', site_page.get('name', 'Unknown'))}: {e}"
+                        )
                     if len(doc_batch) >= SLIM_BATCH_SIZE:
                         yield doc_batch
                         doc_batch = []

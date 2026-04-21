@@ -98,6 +98,9 @@ class DocumentMetadata:
     # The resolved database ID of the parent hierarchy node (folder/container)
     parent_hierarchy_node_id: int | None = None
 
+    # Opt-in pointer to the persisted raw file for this document (file_store id).
+    file_id: str | None = None
+
 
 @dataclass
 class VespaDocumentFields:

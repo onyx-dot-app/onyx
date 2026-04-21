@@ -27,6 +27,7 @@ from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import SENTRY_DSN
+from shared_configs.configs import SENTRY_TRACES_SAMPLE_RATE
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -101,7 +102,7 @@ def get_model_app() -> FastAPI:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            traces_sample_rate=0.1,
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
             release=__version__,
             before_send=_add_instance_tags,
         )

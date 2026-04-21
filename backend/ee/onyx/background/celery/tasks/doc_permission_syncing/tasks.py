@@ -81,6 +81,9 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_docs_processed
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
+from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import doc_permission_sync_ctx
@@ -475,6 +478,8 @@ def connector_permission_sync_generator_task(
         _fail_doc_permission_sync_attempt(attempt_id, error_msg)
         return None
 
+    sync_start = time.monotonic()
+    connector_type: str = "unknown"
     try:
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
@@ -508,6 +513,7 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
+            connector_type = source_type.value
             sync_config = get_source_perm_sync_config(source_type)
             if sync_config is None:
                 error_msg = f"No sync config found for {source_type}"
@@ -593,7 +599,7 @@ def connector_permission_sync_generator_task(
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
-                    source_string=source_type,
+                    source_string=connector_type,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                     task_logger=task_logger,
@@ -605,6 +611,10 @@ def connector_permission_sync_generator_task(
                 f"RedisConnector.permissions.generate_tasks finished. "
                 f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
             )
+
+            inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
+            if docs_with_errors > 0:
+                inc_doc_perm_sync_errors(connector_type, docs_with_errors)
 
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
@@ -638,6 +648,7 @@ def connector_permission_sync_generator_task(
         redis_connector.permissions.set_fence(None)
         raise e
     finally:
+        observe_doc_perm_sync_duration(time.monotonic() - sync_start, connector_type)
         if lock.owned():
             lock.release()
 

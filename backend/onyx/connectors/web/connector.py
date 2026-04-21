@@ -19,6 +19,7 @@ from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError
 from requests_oauthlib import OAuth2Session
+from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -32,11 +33,16 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.web_content import extract_pdf_text
@@ -54,8 +60,6 @@ class ScrapeSessionContext:
         self.to_visit = to_visit
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
-
-        self.doc_batch: list[Document | HierarchyNode] = []
 
         self.at_least_one_doc: bool = False
         self.last_error: str | None = None
@@ -438,7 +442,7 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         )
 
 
-class WebConnector(LoadConnector):
+class WebConnector(LoadConnector, SlimConnector):
     MAX_RETRIES = 3
 
     def __init__(
@@ -493,8 +497,14 @@ class WebConnector(LoadConnector):
         index: int,
         initial_url: str,
         session_ctx: ScrapeSessionContext,
+        slim: bool = False,
     ) -> ScrapeResult:
-        """Returns a ScrapeResult object with a doc and retry flag."""
+        """Returns a ScrapeResult object with a doc and retry flag.
+
+        When slim=True, skips scroll, PDF content download, and content extraction.
+        The bot-detection render wait (5s) fires on CF/403 responses regardless of slim.
+        networkidle is always awaited so JS-rendered links are discovered correctly.
+        """
 
         if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
@@ -515,7 +525,16 @@ class WebConnector(LoadConnector):
         is_pdf = is_pdf_resource(initial_url, content_type)
 
         if is_pdf:
-            # PDF files are not checked for links
+            if slim:
+                result.doc = Document(
+                    id=initial_url,
+                    sections=[],
+                    source=DocumentSource.WEB,
+                    semantic_identifier=initial_url,
+                    metadata={},
+                )
+                return result
+
             response = requests.get(initial_url, headers=DEFAULT_HEADERS)
             page_text, metadata = extract_pdf_text(response.content)
             last_modified = response.headers.get("Last-Modified")
@@ -546,14 +565,20 @@ class WebConnector(LoadConnector):
                 timeout=30000,  # 30 seconds
                 wait_until="commit",  # Wait for navigation to commit
             )
-            # Give the page a moment to start rendering after navigation commits.
-            # Allows CloudFlare and other bot-detection challenges to complete.
-            page.wait_for_timeout(PAGE_RENDER_TIMEOUT_MS)
 
-            # Wait for network activity to settle so SPAs that fetch content
-            # asynchronously after the initial JS bundle have time to render.
+            # Bot-detection JS challenges (CloudFlare, Imperva, etc.) need a moment
+            # to start network activity after commit before networkidle is meaningful.
+            # We detect this via the cf-ray header (CloudFlare) or a 403 response,
+            # which is the common entry point for JS-challenge-based bot detection.
+            is_bot_challenge = page_response is not None and (
+                page_response.header_value("cf-ray") is not None
+                or page_response.status == 403
+            )
+            if is_bot_challenge:
+                page.wait_for_timeout(PAGE_RENDER_TIMEOUT_MS)
+
+            # Wait for network activity to settle (handles SPAs, CF challenges, etc.)
             try:
-                # A bit of extra time to account for long-polling, websockets, etc.
                 page.wait_for_load_state("networkidle", timeout=PAGE_RENDER_TIMEOUT_MS)
             except TimeoutError:
                 pass
@@ -576,7 +601,7 @@ class WebConnector(LoadConnector):
                 session_ctx.visited_links.add(initial_url)
 
             # If we got here, the request was successful
-            if self.scroll_before_scraping:
+            if not slim and self.scroll_before_scraping:
                 scroll_attempts = 0
                 previous_height = page.evaluate("document.body.scrollHeight")
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
@@ -613,6 +638,16 @@ class WebConnector(LoadConnector):
                 session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
                 logger.info(session_ctx.last_error)
                 result.retry = True
+                return result
+
+            if slim:
+                result.doc = Document(
+                    id=initial_url,
+                    sections=[],
+                    source=DocumentSource.WEB,
+                    semantic_identifier=initial_url,
+                    metadata={},
+                )
                 return result
 
             # after this point, we don't need the caller to retry
@@ -666,9 +701,13 @@ class WebConnector(LoadConnector):
 
         return result
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        """Traverses through all pages found on the website
-        and converts them into documents"""
+    def load_from_state(self, slim: bool = False) -> GenerateDocumentsOutput:
+        """Traverses through all pages found on the website and converts them into
+        documents.
+
+        When slim=True, yields SlimDocument objects (URL id only, no content).
+        Playwright is used in all modes — slim skips content extraction only.
+        """
 
         if not self.to_visit_list:
             raise ValueError("No URLs to visit")
@@ -678,6 +717,8 @@ class WebConnector(LoadConnector):
 
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
         session_ctx.initialize()
+
+        batch: list[Document | SlimDocument | HierarchyNode] = []
 
         while session_ctx.to_visit:
             initial_url = session_ctx.to_visit.pop()
@@ -693,7 +734,9 @@ class WebConnector(LoadConnector):
                 continue
 
             index = len(session_ctx.visited_links)
-            logger.info(f"{index}: Visiting {initial_url}")
+            logger.info(
+                f"{index}: {'Slim-visiting' if slim else 'Visiting'} {initial_url}"
+            )
 
             # Add retry mechanism with exponential backoff
             retry_count = 0
@@ -708,12 +751,14 @@ class WebConnector(LoadConnector):
                     time.sleep(delay)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx)
+                    result = self._do_scrape(index, initial_url, session_ctx, slim=slim)
                     if result.retry:
                         continue
 
                     if result.doc:
-                        session_ctx.doc_batch.append(result.doc)
+                        batch.append(
+                            SlimDocument(id=result.doc.id) if slim else result.doc
+                        )
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
@@ -724,16 +769,16 @@ class WebConnector(LoadConnector):
 
                 break  # success / don't retry
 
-            if len(session_ctx.doc_batch) >= self.batch_size:
+            if len(batch) >= self.batch_size:
                 session_ctx.initialize()
                 session_ctx.at_least_one_doc = True
-                yield session_ctx.doc_batch
-                session_ctx.doc_batch = []
+                yield batch  # ty: ignore[invalid-yield]
+                batch = []
 
-        if session_ctx.doc_batch:
+        if batch:
             session_ctx.stop()
             session_ctx.at_least_one_doc = True
-            yield session_ctx.doc_batch
+            yield batch  # ty: ignore[invalid-yield]
 
         if not session_ctx.at_least_one_doc:
             if session_ctx.last_error:
@@ -741,6 +786,22 @@ class WebConnector(LoadConnector):
             raise RuntimeError("No valid pages found.")
 
         session_ctx.stop()
+
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Yields SlimDocuments for all pages reachable from the configured URLs.
+
+        Uses the same Playwright crawl as full indexing but skips content extraction,
+        scroll, and PDF downloads. The 5s render wait fires only on bot-detection
+        responses (CloudFlare cf-ray header or HTTP 403).
+        The start/end parameters are ignored — WEB connector has no incremental path.
+        """
+        yield from self.load_from_state(slim=True)  # ty: ignore[invalid-yield]
 
     def validate_connector_settings(self) -> None:
         # Make sure we have at least one valid URL to check

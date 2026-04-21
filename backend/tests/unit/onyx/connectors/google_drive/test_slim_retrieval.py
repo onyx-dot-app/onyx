@@ -287,3 +287,140 @@ class TestFailedFolderIdsByEmail:
             )
 
         assert len(failed_map) == 0
+
+
+class TestOrphanedPathBackfill:
+    def _make_failed_map(
+        self, entries: dict[str, set[str]]
+    ) -> ThreadSafeDict[str, ThreadSafeSet[str]]:
+        return ThreadSafeDict({k: ThreadSafeSet(v) for k, v in entries.items()})
+
+    def _make_file(self, parent_id: str) -> MagicMock:
+        file = MagicMock()
+        file.user_email = "retriever@example.com"
+        file.drive_file = {"parents": [parent_id]}
+        return file
+
+    def test_backfills_intermediate_folders_into_failed_map(self) -> None:
+        """When a walk dead-ends at a confirmed orphan, all intermediate folder
+        IDs must be added to failed_folder_ids_by_email for both emails so
+        future files short-circuit via _get_folder_metadata's cache check."""
+        connector = _make_connector()
+
+        # Chain: folderA -> folderB -> folderC (confirmed orphan)
+        failed_map = self._make_failed_map(
+            {
+                "retriever@example.com": {"folderC"},
+                "admin@example.com": {"folderC"},
+            }
+        )
+
+        folder_a = {"id": "folderA", "name": "A", "parents": ["folderB"]}
+        folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
+
+        def mock_get_folder(
+            _service: MagicMock, folder_id: str, _field_type: DriveFileFieldType
+        ) -> dict | None:
+            if folder_id == "folderA":
+                return folder_a
+            if folder_id == "folderB":
+                return folder_b
+            return None
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_folder_metadata",
+                side_effect=mock_get_folder,
+            ),
+        ):
+            connector._get_new_ancestors_for_files(
+                files=[self._make_file("folderA")],
+                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        # Both emails confirmed folderC as orphan, so both get the backfill
+        for email in ("retriever@example.com", "admin@example.com"):
+            cached = failed_map.get(email, ThreadSafeSet())
+            assert "folderA" in cached
+            assert "folderB" in cached
+            assert "folderC" in cached
+
+    def test_backfills_only_for_confirming_email(self) -> None:
+        """Only the email that confirmed the orphan gets the path backfilled."""
+        connector = _make_connector()
+
+        # Only retriever confirmed folderC as orphan; admin has no entry
+        failed_map = self._make_failed_map({"retriever@example.com": {"folderC"}})
+
+        folder_a = {"id": "folderA", "name": "A", "parents": ["folderB"]}
+        folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
+
+        def mock_get_folder(
+            _service: MagicMock, folder_id: str, _field_type: DriveFileFieldType
+        ) -> dict | None:
+            if folder_id == "folderA":
+                return folder_a
+            if folder_id == "folderB":
+                return folder_b
+            return None
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_folder_metadata",
+                side_effect=mock_get_folder,
+            ),
+        ):
+            connector._get_new_ancestors_for_files(
+                files=[self._make_file("folderA")],
+                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        retriever_cached = failed_map.get("retriever@example.com", ThreadSafeSet())
+        assert "folderA" in retriever_cached
+        assert "folderB" in retriever_cached
+
+        # admin did not confirm the orphan — must not get the backfill
+        assert failed_map.get("admin@example.com") is None
+
+    def test_short_circuits_on_backfilled_intermediate(self) -> None:
+        """A second file whose parent is already in failed_folder_ids_by_email
+        must not trigger any folder metadata API calls."""
+        connector = _make_connector()
+
+        # folderA already in the failed map from a previous walk
+        failed_map = self._make_failed_map(
+            {
+                "retriever@example.com": {"folderA"},
+                "admin@example.com": {"folderA"},
+            }
+        )
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_folder_metadata"
+            ) as mock_api,
+        ):
+            connector._get_new_ancestors_for_files(
+                files=[self._make_file("folderA")],
+                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+                failed_folder_ids_by_email=failed_map,
+            )
+
+        mock_api.assert_not_called()

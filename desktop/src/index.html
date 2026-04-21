@@ -459,8 +459,19 @@
             return;
           }
 
-          // Not first launch and not explicit settings
-          // Auto-redirect to configured domain
+          // Not first launch and not explicit settings — confirm the server
+          // is reachable before handing the webview over. Otherwise the user
+          // lands on a native "connection refused" page with no way back.
+          try {
+            await invoke("check_server_reachable");
+          } catch (reachErr) {
+            showSettings();
+            showError(
+              `Could not connect to ${currentServerUrl}. Check the URL and your network connection.`,
+            );
+            return;
+          }
+
           window.location.href = currentServerUrl;
         } catch (error) {
           // On error, default to cloud

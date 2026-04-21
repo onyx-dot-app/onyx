@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
@@ -77,6 +78,15 @@ def mark_old_external_groups_as_stale(
         .where(PublicExternalUserGroup.cc_pair_id == cc_pair_id)
         .values(stale=True)
     )
+    # Commit immediately so the transaction closes before potentially long
+    # external API calls (e.g. Google Drive folder iteration). Without this,
+    # the DB connection sits idle-in-transaction during API calls and gets
+    # killed by idle_in_transaction_session_timeout, causing the entire sync
+    # to fail and stale cleanup to never run.
+    db_session.commit()
+
+
+_UPSERT_BATCH_SIZE = 5000
 
 
 def upsert_external_groups(
@@ -86,91 +96,102 @@ def upsert_external_groups(
     source: DocumentSource,
 ) -> None:
     """
-    Performs a true upsert operation for external user groups:
-    - For existing groups (same user_id, external_user_group_id, cc_pair_id), updates the stale flag to False
-    - For new groups, inserts them with stale=False
-    - For public groups, uses upsert logic as well
+    Batch upsert external user groups using INSERT ... ON CONFLICT DO UPDATE.
+    - For existing rows (same user_id, external_user_group_id, cc_pair_id),
+      sets stale=False
+    - For new rows, inserts with stale=False
+    - Same logic for PublicExternalUserGroup
     """
-    # If there are no groups to add, return early
     if not external_groups:
         return
 
-    # collect all emails from all groups to batch add all users at once for efficiency
-    all_group_member_emails = set()
+    # Collect all emails from all groups to batch-add users at once
+    all_group_member_emails: set[str] = set()
     for external_group in external_groups:
-        for user_email in external_group.user_emails:
-            all_group_member_emails.add(user_email)
+        all_group_member_emails.update(external_group.user_emails)
 
-    # batch add users if they don't exist and get their ids
+    # Batch add users if they don't exist and get their ids
     all_group_members: list[User] = batch_add_ext_perm_user_if_not_exists(
         db_session=db_session,
-        # NOTE: this function handles case sensitivity for emails
         emails=list(all_group_member_emails),
     )
 
-    # map emails to ids
     email_id_map = {user.email.lower(): user.id for user in all_group_members}
 
-    # Process each external group
+    # Build all user-group mappings and public-group mappings
+    user_group_mappings: list[dict] = []
+    public_group_mappings: list[dict] = []
+
     for external_group in external_groups:
         external_group_id = build_ext_group_name_for_onyx(
             ext_group_name=external_group.id,
             source=source,
         )
 
-        # Handle user-group mappings
         for user_email in external_group.user_emails:
             user_id = email_id_map.get(user_email.lower())
             if user_id is None:
                 logger.warning(
-                    f"User in group {external_group.id} with email {user_email} not found"
+                    f"User in group {external_group.id}"
+                    f" with email {user_email} not found"
                 )
                 continue
 
-            # Check if the user-group mapping already exists
-            existing_user_group = db_session.scalar(
-                select(User__ExternalUserGroupId).where(
-                    User__ExternalUserGroupId.user_id == user_id,
-                    User__ExternalUserGroupId.external_user_group_id
-                    == external_group_id,
-                    User__ExternalUserGroupId.cc_pair_id == cc_pair_id,
-                )
+            user_group_mappings.append(
+                {
+                    "user_id": user_id,
+                    "external_user_group_id": external_group_id,
+                    "cc_pair_id": cc_pair_id,
+                    "stale": False,
+                }
             )
 
-            if existing_user_group:
-                # Update existing record
-                existing_user_group.stale = False
-            else:
-                # Insert new record
-                new_user_group = User__ExternalUserGroupId(
-                    user_id=user_id,
-                    external_user_group_id=external_group_id,
-                    cc_pair_id=cc_pair_id,
-                    stale=False,
-                )
-                db_session.add(new_user_group)
-
-        # Handle public group if needed
         if external_group.gives_anyone_access:
-            # Check if the public group already exists
-            existing_public_group = db_session.scalar(
-                select(PublicExternalUserGroup).where(
-                    PublicExternalUserGroup.external_user_group_id == external_group_id,
-                    PublicExternalUserGroup.cc_pair_id == cc_pair_id,
-                )
+            public_group_mappings.append(
+                {
+                    "external_user_group_id": external_group_id,
+                    "cc_pair_id": cc_pair_id,
+                    "stale": False,
+                }
             )
 
-            if existing_public_group:
-                # Update existing record
-                existing_public_group.stale = False
-            else:
-                # Insert new record
-                new_public_group = PublicExternalUserGroup(
-                    external_user_group_id=external_group_id,
-                    cc_pair_id=cc_pair_id,
-                    stale=False,
-                )
-                db_session.add(new_public_group)
+    # Deduplicate to avoid "ON CONFLICT DO UPDATE command cannot affect row
+    # a second time" when duplicate emails or overlapping groups produce
+    # identical (user_id, external_user_group_id, cc_pair_id) tuples.
+    user_group_mappings_deduped = list(
+        {
+            (m["user_id"], m["external_user_group_id"], m["cc_pair_id"]): m
+            for m in user_group_mappings
+        }.values()
+    )
+
+    # Batch upsert user-group mappings
+    for i in range(0, len(user_group_mappings_deduped), _UPSERT_BATCH_SIZE):
+        chunk = user_group_mappings_deduped[i : i + _UPSERT_BATCH_SIZE]
+        stmt = pg_insert(User__ExternalUserGroupId).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id", "external_user_group_id", "cc_pair_id"],
+            set_={"stale": False},
+        )
+        db_session.execute(stmt)
+
+    # Deduplicate public group mappings as well
+    public_group_mappings_deduped = list(
+        {
+            (m["external_user_group_id"], m["cc_pair_id"]): m
+            for m in public_group_mappings
+        }.values()
+    )
+
+    # Batch upsert public group mappings
+    for i in range(0, len(public_group_mappings_deduped), _UPSERT_BATCH_SIZE):
+        chunk = public_group_mappings_deduped[i : i + _UPSERT_BATCH_SIZE]
+        stmt = pg_insert(PublicExternalUserGroup).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["external_user_group_id", "cc_pair_id"],
+            set_={"stale": False},
+        )
+        db_session.execute(stmt)
 
     db_session.commit()
 

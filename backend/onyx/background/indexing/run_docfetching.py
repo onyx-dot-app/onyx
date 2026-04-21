@@ -58,6 +58,8 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.file_store.staging import build_raw_file_callback
+from onyx.file_store.staging import RawFileCallback
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
@@ -90,6 +92,7 @@ def _get_connector_runner(
     end_time: datetime,
     include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll connectors
@@ -108,6 +111,7 @@ def _get_connector_runner(
             input_type=task,
             connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
             credential=attempt.connector_credential_pair.credential,
+            raw_file_callback=raw_file_callback,
         )
 
         # validate the connector settings
@@ -275,6 +279,12 @@ def run_docfetching_entrypoint(
         f"credentials='{credential_id}'"
     )
 
+    raw_file_callback = build_raw_file_callback(
+        index_attempt_id=index_attempt_id,
+        cc_pair_id=connector_credential_pair_id,
+        tenant_id=tenant_id,
+    )
+
     connector_document_extraction(
         app,
         index_attempt_id,
@@ -282,6 +292,7 @@ def run_docfetching_entrypoint(
         attempt.search_settings_id,
         tenant_id,
         callback,
+        raw_file_callback=raw_file_callback,
     )
 
     logger.info(
@@ -301,6 +312,7 @@ def connector_document_extraction(
     search_settings_id: int,
     tenant_id: str,
     callback: IndexingHeartbeatInterface | None = None,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> None:
     """Extract documents from connector and queue them for indexing pipeline processing.
 
@@ -451,6 +463,7 @@ def connector_document_extraction(
             start_time=window_start,
             end_time=window_end,
             include_permissions=should_fetch_permissions_during_indexing,
+            raw_file_callback=raw_file_callback,
         )
 
         # don't use a checkpoint if we're explicitly indexing from

@@ -40,6 +40,7 @@ ALLOWED_DOMAINS=(
     "api.anthropic.com"
     "api-staging.anthropic.com"
     "files.anthropic.com"
+    "huggingface.co"
     "sentry.io"
     "update.code.visualstudio.com"
     "pypi.org"

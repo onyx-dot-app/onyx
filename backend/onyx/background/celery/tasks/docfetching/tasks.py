@@ -37,6 +37,7 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
@@ -140,7 +141,7 @@ def _docfetching_task(
 
         sentry_sdk.init(
             dsn=SENTRY_DSN,
-            traces_sample_rate=0.1,
+            traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
             release=__version__,
             before_send=_add_instance_tags,
         )

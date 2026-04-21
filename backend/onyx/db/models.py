@@ -894,7 +894,7 @@ class HierarchyNode(Base):
     # For hierarchy nodes that are also documents (e.g., Confluence pages)
     # SET NULL when document is deleted - node can exist without its document
     document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("document.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Self-referential FK for tree structure
@@ -952,6 +952,7 @@ class Document(Base):
     semantic_id: Mapped[str] = mapped_column(NullFilteredString)
     # First Section's link
     link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
+    file_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of
@@ -2203,6 +2204,7 @@ class IndexAttempt(Base):
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     # Some index attempts that run from beginning will still have this as False
@@ -2406,10 +2408,12 @@ class IndexAttemptError(Base):
     index_attempt_id: Mapped[int] = mapped_column(
         ForeignKey("index_attempt.id"),
         nullable=False,
+        index=True,
     )
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     document_id: Mapped[str | None] = mapped_column(String, nullable=True)
