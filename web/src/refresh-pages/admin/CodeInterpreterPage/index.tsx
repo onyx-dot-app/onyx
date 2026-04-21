@@ -114,6 +114,7 @@ export default function CodeInterpreterPage() {
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
               <Card.Header
+                headerPadding="sm"
                 headerChildren={
                   <Content
                     sizePreset="main-ui"
@@ -166,6 +167,7 @@ export default function CodeInterpreterPage() {
             onClick={() => handleToggle(true)}
           >
             <Card.Header
+              headerPadding="sm"
               headerChildren={
                 <Content
                   sizePreset="main-ui"

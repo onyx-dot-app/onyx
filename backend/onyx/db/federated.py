@@ -8,14 +8,13 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
-from onyx.configs.constants import MASK_CREDENTIAL_CHAR
-from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import FederatedConnectorOAuthToken
 from onyx.federated_connectors.factory import get_federated_connector
+from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -47,23 +46,6 @@ def fetch_all_federated_connectors_parallel() -> list[FederatedConnector]:
         return fetch_all_federated_connectors(db_session)
 
 
-def _reject_masked_credentials(credentials: dict[str, Any]) -> None:
-    """Raise if any credential string value contains mask placeholder characters.
-
-    mask_string() has two output formats:
-    - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
-    - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
-    Both must be rejected.
-    """
-    for key, val in credentials.items():
-        if isinstance(val, str) and (
-            MASK_CREDENTIAL_CHAR in val or MASK_CREDENTIAL_LONG_RE.match(val)
-        ):
-            raise ValueError(
-                f"Credential field '{key}' contains masked placeholder characters. Please provide the actual credential value."
-            )
-
-
 def validate_federated_connector_credentials(
     source: FederatedConnectorSource,
     credentials: dict[str, Any],
@@ -85,7 +67,7 @@ def create_federated_connector(
     config: dict[str, Any] | None = None,
 ) -> FederatedConnector:
     """Create a new federated connector with credential and config validation."""
-    _reject_masked_credentials(credentials)
+    reject_masked_credentials(credentials)
 
     # Validate credentials before creating
     if not validate_federated_connector_credentials(source, credentials):
@@ -298,7 +280,7 @@ def update_federated_connector(
     )
 
     if credentials is not None:
-        _reject_masked_credentials(credentials)
+        reject_masked_credentials(credentials)
 
         # Validate credentials before updating
         if not validate_federated_connector_credentials(

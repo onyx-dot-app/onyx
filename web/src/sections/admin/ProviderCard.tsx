@@ -93,6 +93,7 @@ export default function ProviderCard({
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
       <Card.Header
+        headerPadding="sm"
         headerChildren={
           <Content
             sizePreset="main-ui"

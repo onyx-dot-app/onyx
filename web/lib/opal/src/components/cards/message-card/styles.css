@@ -1,25 +1,26 @@
 .opal-message-card {
-  @apply flex flex-col w-full self-stretch rounded-16 border;
+  @apply flex flex-col gap-1 w-full self-stretch rounded-16 border;
 }
 
-/* Variant colors */
+/* Variant background colors. Border *color* lives in `cards/shared.css` and
+   is keyed off the `data-opal-status-border` attribute. */
 
 .opal-message-card[data-variant="default"] {
-  @apply bg-background-tint-01 border-border-01;
+  @apply bg-background-tint-01;
 }
 
 .opal-message-card[data-variant="info"] {
-  @apply bg-status-info-00 border-status-info-02;
+  @apply bg-status-info-00;
 }
 
 .opal-message-card[data-variant="success"] {
-  @apply bg-status-success-00 border-status-success-02;
+  @apply bg-status-success-00;
 }
 
 .opal-message-card[data-variant="warning"] {
-  @apply bg-status-warning-00 border-status-warning-02;
+  @apply bg-status-warning-00;
 }
 
 .opal-message-card[data-variant="error"] {
-  @apply bg-status-error-00 border-status-error-02;
+  @apply bg-status-error-00;
 }

@@ -277,6 +277,7 @@ function ProviderCard({
         }
       >
         <Card.Header
+          headerPadding="sm"
           headerChildren={
             <Content
               sizePreset="main-ui"

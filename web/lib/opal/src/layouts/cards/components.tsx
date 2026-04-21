@@ -2,9 +2,16 @@
 // Types
 // ---------------------------------------------------------------------------
 
+import { paddingVariants } from "@opal/shared";
+import type { PaddingVariants } from "@opal/types";
+import { cn } from "@opal/utils";
+
 interface CardHeaderProps {
   /** Content rendered in the top-left header slot — typically a {@link Content} block. */
   headerChildren?: React.ReactNode;
+
+  /** Padding applied around `headerChildren`. @default "fit" */
+  headerPadding?: Extract<PaddingVariants, "sm" | "fit">;
 
   /** Content rendered to the right of `headerChildren` (top of right column). */
   topRightChildren?: React.ReactNode;
@@ -68,6 +75,7 @@ interface CardHeaderProps {
  */
 function Header({
   headerChildren,
+  headerPadding = "fit",
   topRightChildren,
   bottomRightChildren,
   bottomChildren,
@@ -78,7 +86,14 @@ function Header({
     <div className="flex flex-col w-full">
       <div className="flex flex-row items-start w-full">
         {headerChildren != null && (
-          <div className="self-start p-2 grow min-w-0">{headerChildren}</div>
+          <div
+            className={cn(
+              "self-start grow min-w-0",
+              paddingVariants[headerPadding]
+            )}
+          >
+            {headerChildren}
+          </div>
         )}
         {hasRight && (
           <div className="flex flex-col items-end shrink-0">

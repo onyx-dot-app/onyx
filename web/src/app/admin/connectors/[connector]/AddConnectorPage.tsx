@@ -27,12 +27,12 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  defaultPruneFreqHours,
   defaultRefreshFreqMinutes,
   isLoadState,
   Connector,
   ConnectorBase,
 } from "@/lib/connectors/connectors";
+import { useSettings } from "@/hooks/useSettings";
 import Modal from "@/refresh-components/Modal";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import {
@@ -149,6 +149,10 @@ export default function AddConnector({
   }, []);
 
   const router = useRouter();
+  const { settings } = useSettings();
+  const defaultPruneFreqHours = settings.default_pruning_freq
+    ? settings.default_pruning_freq / 3600
+    : 600; // 25 days fallback until settings load
 
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
@@ -662,7 +666,7 @@ export default function AddConnector({
 
           {formStep === 2 && (
             <CardSection>
-              <AdvancedFormPage />
+              <AdvancedFormPage defaultPruneFreqHours={defaultPruneFreqHours} />
             </CardSection>
           )}
 

@@ -117,9 +117,9 @@ function MCPServerCard({
       padding="sm"
       expandedContent={
         hasContent ? (
-          <div className="flex flex-col gap-2 p-2">
+          <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
-              <Card key={tool.id} border="solid" rounding="lg" padding="sm">
+              <Card key={tool.id} border="solid" rounding="md" padding="sm">
                 <CardLayout.Header
                   headerChildren={
                     <Content
@@ -144,11 +144,12 @@ function MCPServerCard({
                 />
               </Card>
             ))}
-          </div>
+          </Section>
         ) : undefined
       }
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
@@ -891,7 +892,7 @@ export default function ChatPreferencesPage() {
                           key={tool.id}
                           border="solid"
                           rounding="lg"
-                          padding="sm"
+                          padding="md"
                         >
                           <CardLayout.Header
                             headerChildren={

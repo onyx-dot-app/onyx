@@ -2100,10 +2100,6 @@ class SearchSettings(Base):
         String, nullable=True
     )
 
-    multilingual_expansion: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), default=[]
-    )
-
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
         "CloudEmbeddingProvider",
         back_populates="search_settings",
@@ -4590,6 +4586,25 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+
+# Lifetime invite counter per tenant. Incremented atomically on every
+# invite reservation; never decremented — removals do not free quota, so
+# loops of invite → remove → invite cannot bypass the trial cap.
+class TenantInviteCounter(Base):
+    __tablename__ = "tenant_invite_counter"
+    __table_args__ = {"schema": "public"}
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    total_invites_sent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
 

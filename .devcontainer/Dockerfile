@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iptables \
   ipset \
   iproute2 \
+  dnsmasq \
   dnsutils \
   unzip \
   wget \

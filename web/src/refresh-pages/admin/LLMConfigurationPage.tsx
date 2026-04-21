@@ -141,6 +141,7 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <CardLayout.Header
+            headerPadding="sm"
             headerChildren={
               <Content
                 icon={icon}
@@ -211,6 +212,7 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <Content
             icon={icon}
@@ -262,6 +264,7 @@ function NewCustomProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <Content
             icon={icon}

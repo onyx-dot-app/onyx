@@ -23,7 +23,7 @@ export function SearchDateRangeSelector({
           <TimeRangeSelector
             value={value}
             className={cn(
-              "border border-border bg-background rounded-lg flex flex-col w-64 max-h-96 overflow-y-auto flex overscroll-contain",
+              "border border-border bg-background rounded-lg flex flex-col w-64 max-h-96 overflow-y-auto overscroll-contain",
               className
             )}
             timeRangeValues={timeRangeValues}

@@ -121,4 +121,16 @@ if ! timeout 5 curl -s https://api.github.com/meta > /dev/null; then
     echo "Warning: GitHub API is not accessible"
 fi
 
+# Start dnsmasq and point the container resolver at it.  dnsmasq's ipset=
+# directives add every resolved A record for allowlisted domains into the
+# `allowed-domains` ipset at resolve time, keeping the firewall in step with
+# CDN IP rotation.
+pkill -x dnsmasq 2>/dev/null || true
+dnsmasq -C /workspace/.devcontainer/dnsmasq.conf
+
+cat > /etc/resolv.conf <<EOF
+nameserver 127.0.0.1
+options edns0 trust-ad
+EOF
+
 echo "Firewall setup complete"

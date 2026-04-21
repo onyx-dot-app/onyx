@@ -51,11 +51,14 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.tenant_invite_counter import release_trial_invites
+from onyx.db.tenant_invite_counter import reserve_trial_invites
 from onyx.db.user_preferences import activate_user
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.user_preferences import get_all_user_assistant_specific_configs
@@ -466,25 +469,37 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
-    # Limit bulk invites for trial tenants to prevent email spam
-    # Only count new invites, not re-invites of existing users
+    # Check seat availability for new users. Must run before the counter
+    # reservation below — a seat-limit failure must not burn trial quota.
+    if emails_needing_seats:
+        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
+
+    # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
+    # The UPSERT holds a row-level lock on `tenant_id` during the UPDATE, so
+    # concurrent bulk-invite flows for the same tenant are serialized without
+    # an advisory lock. On reject we ROLLBACK so the reservation does not stick.
+    trial_invite_reservation = 0
     if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
-        current_invited = len(already_invited)
-        if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
-            raise HTTPException(
-                status_code=403,
-                detail="You have hit your invite limit. Please upgrade for unlimited invites.",
-            )
+        num_new_invites = len(emails_needing_seats)
+        if num_new_invites > 0:
+            with get_session_with_shared_schema() as shared_session:
+                new_total = reserve_trial_invites(
+                    shared_session, tenant_id, num_new_invites
+                )
+                if new_total > NUM_FREE_TRIAL_USER_INVITES:
+                    shared_session.rollback()
+                    raise OnyxError(
+                        OnyxErrorCode.TRIAL_INVITE_LIMIT_EXCEEDED,
+                        "You have hit your invite limit. Please upgrade for unlimited invites.",
+                    )
+                shared_session.commit()
+                trial_invite_reservation = num_new_invites
         enforce_invite_rate_limit(
             redis_client=get_redis_client(tenant_id=tenant_id),
             admin_user_id=current_user.id,
             num_invites=len(emails_needing_seats),
             tenant_id=tenant_id,
         )
-
-    # Check seat availability for new users
-    if emails_needing_seats:
-        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
 
     if MULTI_TENANT:
         try:
@@ -498,7 +513,29 @@ def bulk_invite_users(
     initial_invited_users = get_invited_users()
 
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
-    number_of_invited_users = write_invited_users(all_emails)
+    try:
+        number_of_invited_users = write_invited_users(all_emails)
+    except Exception:
+        # KV write failed after the counter already reserved slots. Release
+        # the reservation so the counter tracks invites that actually reached
+        # the store. Compensation failures are logged and never re-raised —
+        # the original KV error is what the caller needs to see.
+        if trial_invite_reservation > 0:
+            try:
+                with get_session_with_shared_schema() as comp_session:
+                    release_trial_invites(
+                        comp_session, tenant_id, trial_invite_reservation
+                    )
+                    comp_session.commit()
+            except Exception as comp_err:
+                logger.error(
+                    "tenant_invite_counter release failed for tenant=%s, "
+                    "slots burned=%d: %s",
+                    tenant_id,
+                    trial_invite_reservation,
+                    comp_err,
+                )
+        raise
 
     # send out email invitations only to new users (not already invited or existing)
     if not ENABLE_EMAIL_INVITES:
@@ -526,10 +563,31 @@ def bulk_invite_users(
             logger.info(
                 "Reverting changes: removing users from tenant and resetting invited users"
             )
-            write_invited_users(initial_invited_users)  # Reset to original state
-            fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-            )(new_invited_emails, tenant_id)
+            try:
+                write_invited_users(initial_invited_users)  # Reset to original state
+                fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+                )(new_invited_emails, tenant_id)
+            finally:
+                # Release the counter reservation regardless of whether the KV /
+                # user-mapping reverts above succeeded — otherwise a double-fault
+                # (billing failure + revert failure) permanently inflates the
+                # counter for an invite batch the system considers rolled back.
+                if trial_invite_reservation > 0:
+                    try:
+                        with get_session_with_shared_schema() as comp_session:
+                            release_trial_invites(
+                                comp_session, tenant_id, trial_invite_reservation
+                            )
+                            comp_session.commit()
+                    except Exception as comp_err:
+                        logger.error(
+                            "tenant_invite_counter release failed for tenant=%s, "
+                            "slots burned=%d: %s",
+                            tenant_id,
+                            trial_invite_reservation,
+                            comp_err,
+                        )
             raise e
 
     return BulkInviteResponse(
