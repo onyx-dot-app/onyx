@@ -1217,10 +1217,19 @@ export default function IndexSettingsPage() {
                           <Button
                             prominence="secondary"
                             onClick={() => {
+                              const isSelectedSelfHosted =
+                                selectedModelName &&
+                                SELF_HOSTED_MODELS.some(
+                                  (m) => m.model_name === selectedModelName
+                                );
                               setActiveModelTab(
-                                currentEmbeddingModel?.provider_type
-                                  ? MODEL_TAB_CLOUD
-                                  : MODEL_TAB_SELF
+                                isSelectedSelfHosted
+                                  ? MODEL_TAB_SELF
+                                  : selectedModelName
+                                    ? MODEL_TAB_CLOUD
+                                    : currentEmbeddingModel?.provider_type
+                                      ? MODEL_TAB_CLOUD
+                                      : MODEL_TAB_SELF
                               );
                               setViewAllModelsOpen(true);
                             }}
