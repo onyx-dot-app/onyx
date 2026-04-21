@@ -47,6 +47,7 @@ import {
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
   EmbeddingProvider,
+  SwitchoverType,
 } from "@/lib/indexing/interfaces";
 import type {
   ConfiguredEmbeddingProvider,
@@ -814,6 +815,9 @@ export default function IndexSettingsPage() {
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   );
+  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
+    SwitchoverType.REINDEX
+  );
 
   const allCloudProviders = useMemo(
     () =>
@@ -962,10 +966,60 @@ export default function IndexSettingsPage() {
 
       <SettingsLayouts.Body>
         <MessageCard
+          variant={selectedModelName ? "warning" : undefined}
+          headerPadding="sm"
           title="Changes require a full re-index."
           description={markdown(
             "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
           )}
+          bottomChildren={
+            selectedModelName ? (
+              <div className="flex flex-row items-end gap-4 p-2">
+                <div className="flex-1 min-w-0">
+                  <InputSelect
+                    value={switchoverType}
+                    onValueChange={(v) =>
+                      setSwitchoverType(v as SwitchoverType)
+                    }
+                  >
+                    <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                    <InputSelect.Content>
+                      <InputSelect.Item
+                        value={SwitchoverType.REINDEX}
+                        description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                      >
+                        Re-index All Connectors Then Switch
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value={SwitchoverType.ACTIVE_ONLY}
+                        description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                      >
+                        Re-index Active Connectors Then Switch
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value={SwitchoverType.INSTANT}
+                        description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                      >
+                        Switch Before Re-index
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </div>
+                <div className="flex flex-row gap-2 shrink-0">
+                  <Button
+                    prominence="secondary"
+                    onClick={() => {
+                      setSelectedModelName(null);
+                      setSwitchoverType(SwitchoverType.REINDEX);
+                    }}
+                  >
+                    Revert
+                  </Button>
+                  <Button>Apply & Re-index</Button>
+                </div>
+              </div>
+            ) : undefined
+          }
         />
 
         {/* ── Embedding Model ── */}

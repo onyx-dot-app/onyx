@@ -38,6 +38,9 @@ interface MessageCardBaseProps {
   /** Padding preset. @default "sm" */
   padding?: Extract<PaddingVariants, "sm" | "xs">;
 
+  /** Padding around the header Content area. @default "sm" */
+  headerPadding?: PaddingVariants;
+
   /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
@@ -122,6 +125,7 @@ function MessageCard({
   title,
   description,
   padding = "sm",
+  headerPadding = "sm",
   bottomChildren,
   rightChildren,
   onClose,
@@ -148,17 +152,19 @@ function MessageCard({
       data-variant={variant}
       ref={ref}
     >
-      <ContentAction
-        icon={(props) => (
-          <Icon {...props} className={cn(props.className, iconClass)} />
-        )}
-        title={title}
-        description={description}
-        sizePreset="main-ui"
-        variant="section"
-        padding="md"
-        rightChildren={right}
-      />
+      <div className={paddingVariants[headerPadding]}>
+        <ContentAction
+          icon={(props) => (
+            <Icon {...props} className={cn(props.className, iconClass)} />
+          )}
+          title={title}
+          description={description}
+          sizePreset="main-ui"
+          variant="section"
+          padding="fit"
+          rightChildren={right}
+        />
+      </div>
 
       {bottomChildren && (
         <>
