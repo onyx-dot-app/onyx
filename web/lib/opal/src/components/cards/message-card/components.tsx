@@ -38,7 +38,7 @@ interface MessageCardBaseProps {
   /** Padding preset. @default "sm" */
   padding?: Extract<PaddingVariants, "sm" | "xs">;
 
-  /** Padding around the header Content area. @default "sm" */
+  /** Padding around the header Content area. @default "fit" */
   headerPadding?: PaddingVariants;
 
   /**
@@ -125,7 +125,7 @@ function MessageCard({
   title,
   description,
   padding = "sm",
-  headerPadding = "sm",
+  headerPadding = "fit",
   bottomChildren,
   rightChildren,
   onClose,
