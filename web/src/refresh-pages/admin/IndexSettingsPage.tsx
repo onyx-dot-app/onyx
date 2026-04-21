@@ -423,7 +423,7 @@ function ProviderGroupHeader({
   const providerName = getFormattedProviderName(provider.provider_type);
 
   return (
-    <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
+    <div className="px-1 pt-1 w-full h-[var(--opal-line-height-lg)]">
       <GeneralLayouts.Section flexDirection="row" gap={0}>
         <Spacer horizontal rem={0.675} />
         <div className="flex flex-row justify-between items-center w-full py-1">
