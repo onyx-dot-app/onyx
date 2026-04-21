@@ -281,6 +281,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   return (
     <Card border="solid" rounding="lg" padding="sm">
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={SvgActions}
@@ -346,6 +347,7 @@ function MCPServerCard({
             <Disabled key={tool.id} disabled={toolDisabled}>
               <Card border="solid" rounding="lg" padding="sm">
                 <CardLayout.Header
+                  headerPadding="sm"
                   headerChildren={
                     <ContentAction
                       icon={tool.icon ?? SvgSliders}
@@ -381,6 +383,7 @@ function MCPServerCard({
       expandedContent={cardContent}
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}

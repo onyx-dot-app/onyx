@@ -81,6 +81,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       }
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={serverIcon}
@@ -113,6 +114,7 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
     <Card border="solid" rounding="lg" padding="sm">
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <Content
             icon={SvgActions}

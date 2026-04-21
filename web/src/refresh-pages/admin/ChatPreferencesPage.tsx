@@ -121,6 +121,7 @@ function MCPServerCard({
             {filteredTools.map((tool) => (
               <Card key={tool.id} border="solid" rounding="lg" padding="sm">
                 <CardLayout.Header
+                  headerPadding="sm"
                   headerChildren={
                     <Content
                       icon={tool.icon}
@@ -149,6 +150,7 @@ function MCPServerCard({
       }
     >
       <CardLayout.Header
+        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
@@ -894,6 +896,7 @@ export default function ChatPreferencesPage() {
                           padding="sm"
                         >
                           <CardLayout.Header
+                            headerPadding="sm"
                             headerChildren={
                               <Content
                                 icon={SvgActions}
