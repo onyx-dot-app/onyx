@@ -279,14 +279,20 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg">
-      <InputHorizontal
-        title={tool.display_name || tool.name}
-        description={tool.description}
-        withLabel={toolFieldName}
-      >
-        <SwitchField name={toolFieldName} />
-      </InputHorizontal>
+    <Card border="solid" rounding="lg" padding="md">
+      <CardLayout.Header
+        headerChildren={
+          <ContentAction
+            icon={SvgActions}
+            title={tool.display_name || tool.name}
+            description={tool.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+          />
+        }
+        topRightChildren={<SwitchField name={toolFieldName} />}
+      />
     </Card>
   );
 }
@@ -331,7 +337,7 @@ function MCPServerCard({
     );
   } else if (hasTools) {
     cardContent = (
-      <div className="flex flex-col gap-2 p-2">
+      <GeneralLayouts.Section gap={0.5} padding={0.5}>
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
@@ -361,7 +367,7 @@ function MCPServerCard({
             </Disabled>
           );
         })}
-      </div>
+      </GeneralLayouts.Section>
     );
   }
 
@@ -375,7 +381,6 @@ function MCPServerCard({
       expandedContent={cardContent}
     >
       <CardLayout.Header
-        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
@@ -411,6 +416,7 @@ function MCPServerCard({
             }
           />
         }
+        headerPadding="sm"
         bottomChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
