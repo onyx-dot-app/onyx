@@ -1,3 +1,4 @@
+import re
 from typing import TypeVar
 
 from sqlalchemy.orm import Session
@@ -7,6 +8,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
+from onyx.db.document import get_document_id_to_file_id_map
 from onyx.db.search_settings import get_current_search_settings
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
@@ -102,3 +104,39 @@ def convert_inference_sections_to_search_docs(
     for search_doc in search_docs:
         search_doc.is_internet = is_internet
     return search_docs
+
+
+def sandbox_filename_for_document_title(title: str) -> str:
+    """Sanitize a document title into a sandbox-safe filename; extensions on
+    the title are preserved verbatim, extensionless titles get no suffix."""
+    unsafe_chars = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
+    max_length = 200
+
+    name = unsafe_chars.sub("_", title).strip().strip(".")
+    if not name:
+        name = "document"
+    return name[:max_length]
+
+
+def populate_file_ids_on_sections(
+    sections: list[InferenceSection],
+    db_session: Session,
+) -> None:
+    """Stamp `Document.file_id` onto every chunk in-place."""
+    if not sections:
+        return
+
+    document_ids = list({section.center_chunk.document_id for section in sections})
+    file_id_map = get_document_id_to_file_id_map(
+        db_session=db_session, document_ids=document_ids
+    )
+    if not file_id_map:
+        return
+
+    for section in sections:
+        # Set on every chunk so the section's chunks stay consistent with
+        # center_chunk regardless of which one downstream code looks at.
+        for chunk in (section.center_chunk, *section.chunks):
+            file_id = file_id_map.get(chunk.document_id)
+            if file_id is not None:
+                chunk.file_id = file_id

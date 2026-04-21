@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from collections.abc import Callable
 from typing import cast
@@ -14,8 +15,11 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.utils import sandbox_filename_for_document_title
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -42,6 +46,7 @@ from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -859,3 +864,82 @@ def create_tool_call_failure_messages(
         messages.append(failure_response_msg)
 
     return messages
+
+
+def _dedupe_filename(name: str, taken: set[str]) -> str:
+    """Append `_2`, `_3`, ... before the extension on filename collision."""
+    if name not in taken:
+        return name
+    base, ext = os.path.splitext(name)
+    counter = 2
+    while True:
+        candidate = f"{base}_{counter}{ext}"
+        if candidate not in taken:
+            return candidate
+        counter += 1
+
+
+def build_python_chat_files_from_search_docs(
+    search_docs: list[SearchDoc],
+) -> list[ChatFile]:
+    """Turn each eligible search hit into a ready-to-upload `ChatFile`.
+    The associated file needs to have been uploaded to the file store
+    by a Connector.
+    """
+    if not search_docs:
+        return []
+
+    file_store = get_default_file_store()
+
+    # Dedupe by file_id while preserving order (first hit wins).
+    seen_file_ids: set[str] = set()
+    ordered_candidates: list[tuple[str, str]] = []  # (file_id, doc_title)
+    for doc in search_docs:
+        if not doc.file_id:
+            continue
+        if doc.file_id in seen_file_ids:
+            continue
+        seen_file_ids.add(doc.file_id)
+        ordered_candidates.append((doc.file_id, doc.semantic_identifier))
+
+    if not ordered_candidates:
+        return []
+
+    chat_files: list[ChatFile] = []
+    taken_names: set[str] = set()
+
+    for file_id, doc_title in ordered_candidates:
+        try:
+            record = file_store.read_file_record(file_id)
+        except Exception as e:
+            logger.warning(
+                f"file_id={file_id!r} not found in file store ({e}); skipping."
+            )
+            continue
+
+        if record.file_origin != FileOrigin.CONNECTOR:
+            logger.warning(
+                f"file_id={file_id!r} has origin={record.file_origin!r}, "
+                "not eligible for code-interpreter staging; skipping."
+            )
+            continue
+
+        try:
+            content = file_store.read_file(file_id, mode="b").read()
+        except Exception as e:
+            logger.warning(
+                f"Failed to read bytes for file_id={file_id!r}: {e}; skipping."
+            )
+            continue
+
+        # Derive filename from the document title + resolve collisions
+        # against files already added in THIS search. Uses the same helper
+        # the LLM-facing JSON uses, so the filename the LLM sees matches
+        # the filename that actually lands in the sandbox.
+        sandbox_name = sandbox_filename_for_document_title(doc_title)
+        filename = _dedupe_filename(sandbox_name, taken_names)
+        taken_names.add(filename)
+
+        chat_files.append(ChatFile(filename=filename, content=content))
+
+    return chat_files
