@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/spf13/cobra"
 )
 
@@ -17,23 +18,6 @@ const (
 	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
 )
 
-// findRepoRoot walks up from cwd until it finds a .git directory.
-func findRepoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("could not get working directory: %w", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("could not find git repo root — run this command from within the Onyx repo")
-		}
-		dir = parent
-	}
-}
 
 func NewInstallSkillCommand() *cobra.Command {
 	var (
@@ -76,7 +60,7 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 				}
 			}
 
-			repoRoot, err := findRepoRoot()
+			repoRoot, err := paths.GitRoot()
 			if err != nil {
 				return err
 			}
