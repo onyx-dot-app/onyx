@@ -269,3 +269,124 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
     }
   });
 });
+
+test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
+  test("Admin panel and /admin/documents/sets are gated behind MANAGE_DOCUMENT_SETS, with implied READ_CONNECTORS", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates a public file connector
+    const connectorName = `E2E DocSet Connector ${Date.now()}`;
+    const ccPairId = await adminClient.createFileConnector(
+      connectorName,
+      "public"
+    );
+
+    // Admin creates a second user group (user is already in fixture group;
+    // having 2 groups causes the full group selector to render)
+    const extraGroupName = `E2E DocSet Group ${Date.now()}`;
+    const extraGroupId = await adminClient.createUserGroup(extraGroupName, [
+      testUserContext.userId,
+    ]);
+
+    try {
+      // Phase 1: Without MANAGE_DOCUMENT_SETS — /admin/documents/sets should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/documents/sets");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Also verify /admin/documents/sets/new redirects
+      await page.goto("/admin/documents/sets/new");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant MANAGE_DOCUMENT_SETS — pages should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.MANAGE_DOCUMENT_SETS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/documents/sets");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/documents/sets");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("Document Sets")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText("New Document Set")).toBeVisible();
+
+      // Navigate to creation page to verify implied READ_CONNECTORS
+      await page.goto("/admin/documents/sets/new");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/documents/sets/new");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("New Document Set")
+      ).toBeVisible({ timeout: 10000 });
+
+      // Open the connector dropdown and verify the admin-created connector is listed
+      const connectorSearchInput = page.getByTestId("connector-search-input");
+      await expect(connectorSearchInput).toBeVisible({ timeout: 10000 });
+      await connectorSearchInput.click();
+
+      // Verify the connector is visible (proves implied READ_CONNECTORS)
+      await expect(page.getByText(connectorName)).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Verify group selector loaded successfully (proves implied READ_USER_GROUPS)
+      await expect(
+        page.getByText("Assign group access for this document set")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(
+        page.getByText(
+          "Failed to load assign group access for this document set"
+        )
+      ).not.toBeVisible();
+
+      // Open the group dropdown and verify the extra group is listed
+      const groupSearchInput = page.getByTestId("groups-search-input");
+      await expect(groupSearchInput).toBeVisible({ timeout: 10000 });
+      await groupSearchInput.click();
+      await expect(
+        page.getByRole("option", { name: extraGroupName })
+      ).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Phase 3: Revoke MANAGE_DOCUMENT_SETS — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/documents/sets");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete the connector and extra group
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteCCPair(ccPairId);
+      await cleanupClient.deleteUserGroup(extraGroupId);
+    }
+  });
+});

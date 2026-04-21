@@ -1050,7 +1050,7 @@ def get_currently_failed_indexing_status(
 
 @router.get("/admin/connector/status", tags=PUBLIC_API_TAGS)
 def get_connector_status(
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorStatus]:
     # This method is only used document set and group creation/editing

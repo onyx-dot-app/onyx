@@ -36,6 +36,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_DOCUMENT_SETS.value: {
         Permission.READ_DOCUMENT_SETS.value,
         Permission.READ_CONNECTORS.value,
+        Permission.READ_USER_GROUPS.value,
     },
     Permission.MANAGE_CONNECTORS.value: {
         Permission.READ_CONNECTORS.value,
