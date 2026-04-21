@@ -10,6 +10,7 @@ from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -68,6 +69,7 @@ from onyx.document_index.opensearch.search import (
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
+from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -76,6 +78,10 @@ from shared_configs.model_server_models import Embedding
 
 
 logger = setup_logger(__name__)
+
+
+VERIFY_INDEX_LOCK_TTL_S = 60
+VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
 
 class ChunkCountNotFoundError(ValueError):
@@ -622,29 +628,37 @@ class OpenSearchDocumentIndex(DocumentIndex):
             f"necessary, with embedding dimension {embedding_dim}."
         )
 
-        if not self._tenant_state.multitenant:
-            set_cluster_state(self._client)
+        with redis_shared_lock(
+            lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
+            max_time_lock_held_s=VERIFY_INDEX_LOCK_TTL_S,
+            wait_for_lock_s=VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S,
+            logger=logger,
+        ):
+            if not self._tenant_state.multitenant:
+                set_cluster_state(self._client)
 
-        expected_mappings = DocumentSchema.get_document_schema(
-            embedding_dim, self._tenant_state.multitenant
-        )
-
-        if not self._client.index_exists():
-            index_settings = DocumentSchema.get_index_settings_based_on_environment()
-            self._client.create_index(
-                mappings=expected_mappings,
-                settings=index_settings,
+            expected_mappings = DocumentSchema.get_document_schema(
+                embedding_dim, self._tenant_state.multitenant
             )
-        else:
-            # Ensure schema is up to date by applying the current mappings.
-            try:
-                self._client.put_mapping(expected_mappings)
-            except Exception as e:
-                logger.error(
-                    f"Failed to update mappings for index {self._index_name}. This likely means a "
-                    f"field type was changed which requires reindexing. Error: {e}"
+
+            if not self._client.index_exists():
+                index_settings = (
+                    DocumentSchema.get_index_settings_based_on_environment()
                 )
-                raise
+                self._client.create_index(
+                    mappings=expected_mappings,
+                    settings=index_settings,
+                )
+            else:
+                # Ensure schema is up to date by applying the current mappings.
+                try:
+                    self._client.put_mapping(expected_mappings)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to update mappings for index {self._index_name}. This likely means a "
+                        f"field type was changed which requires reindexing. Error: {e}"
+                    )
+                    raise
 
     def index(
         self,
