@@ -150,6 +150,7 @@ function MessageCard({
     <div
       className={cn("opal-message-card", paddingVariants[padding])}
       data-variant={variant}
+      data-opal-status-border={variant}
       ref={ref}
     >
       <div className={paddingVariants[headerPadding]}>
