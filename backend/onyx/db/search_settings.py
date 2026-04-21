@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
@@ -175,17 +174,6 @@ def get_all_search_settings(db_session: Session) -> list[SearchSettings]:
     result = db_session.execute(query)
     all_settings = result.scalars().all()
     return list(all_settings)
-
-
-def get_multilingual_expansion(db_session: Session | None = None) -> list[str]:
-    if db_session is None:
-        with get_session_with_current_tenant() as db_session:
-            search_settings = get_current_search_settings(db_session)
-    else:
-        search_settings = get_current_search_settings(db_session)
-    if not search_settings:
-        return []
-    return search_settings.multilingual_expansion
 
 
 def update_search_settings(

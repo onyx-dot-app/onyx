@@ -82,6 +82,7 @@ from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
 from onyx.utils.encryption import mask_string
+from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,30 +97,65 @@ def _truncate_description(description: str | None, max_length: int = 500) -> str
     return description[: max_length - 3] + "..."
 
 
-# TODO: Replace mask-comparison approach with an explicit Unset sentinel from the
-# frontend indicating whether each credential field was actually modified. The current
-# approach is brittle (e.g. short credentials produce a fixed-length mask that could
-# collide) and mutates request values, which is surprising. The frontend should signal
-# "unchanged" vs "new value" directly rather than relying on masked-string equality.
-def _restore_masked_oauth_credentials(
+def _resolve_oauth_credentials(
+    *,
     request_client_id: str | None,
+    request_client_id_changed: bool,
     request_client_secret: str | None,
-    existing_client: OAuthClientInformationFull,
+    request_client_secret_changed: bool,
+    existing_client: OAuthClientInformationFull | None,
 ) -> tuple[str | None, str | None]:
-    """If the frontend sent back masked credentials, restore the real stored values."""
-    if (
-        request_client_id
-        and existing_client.client_id
-        and request_client_id == mask_string(existing_client.client_id)
-    ):
-        request_client_id = existing_client.client_id
-    if (
-        request_client_secret
-        and existing_client.client_secret
-        and request_client_secret == mask_string(existing_client.client_secret)
-    ):
-        request_client_secret = existing_client.client_secret
-    return request_client_id, request_client_secret
+    """Pick the effective client_id / client_secret for an upsert/connect.
+
+    Mirrors the LLM-provider `api_key_changed` pattern: when the frontend
+    flags a field as unchanged, ignore whatever value it sent (it is most
+    likely a masked placeholder) and reuse the stored value. When the
+    frontend flags a field as changed, take the request value as-is, but
+    defensively reject masked placeholders so a buggy client can't write
+    a mask to the database.
+    """
+    resolved_id = request_client_id
+    if not request_client_id_changed:
+        resolved_id = existing_client.client_id if existing_client else None
+    elif resolved_id:
+        reject_masked_credentials({"oauth_client_id": resolved_id})
+
+    resolved_secret = request_client_secret
+    if not request_client_secret_changed:
+        resolved_secret = existing_client.client_secret if existing_client else None
+    elif resolved_secret:
+        reject_masked_credentials({"oauth_client_secret": resolved_secret})
+
+    return resolved_id, resolved_secret
+
+
+def _build_oauth_admin_config_data(
+    *,
+    client_id: str | None,
+    client_secret: str | None,
+) -> MCPConnectionData:
+    """Construct the admin connection config payload for an OAuth client.
+
+    A public client legitimately has no `client_secret`, so we only require
+    a `client_id` to seed `client_info`. When no client_id is available we
+    fall through to an empty config (the OAuth provider will rely on
+    Dynamic Client Registration to obtain credentials).
+    """
+    config_data = MCPConnectionData(headers={})
+    if not client_id:
+        return config_data
+    token_endpoint_auth_method = "client_secret_post" if client_secret else "none"
+    client_info = OAuthClientInformationFull(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        scope=REQUESTED_SCOPE,  # TODO(evan): allow specifying scopes?
+        token_endpoint_auth_method=token_endpoint_auth_method,
+    )
+    config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
+    return config_data
 
 
 router = APIRouter(prefix="/mcp")
@@ -420,8 +456,10 @@ async def _connect_oauth(
             detail=f"Server was configured with authentication type {auth_type_str}",
         )
 
-    # If the frontend sent back masked credentials (unchanged by the user),
-    # restore the real stored values so we don't overwrite them with masks.
+    # Resolve the effective OAuth credentials, falling back to the stored
+    # values for any field the frontend marked as unchanged. This protects
+    # against the resubmit case where the form replays masked placeholders.
+    existing_client: OAuthClientInformationFull | None = None
     if mcp_server.admin_connection_config:
         existing_data = extract_connection_data(
             mcp_server.admin_connection_config, apply_mask=False
@@ -431,31 +469,19 @@ async def _connect_oauth(
             existing_client = OAuthClientInformationFull.model_validate(
                 existing_client_raw
             )
-            (
-                request.oauth_client_id,
-                request.oauth_client_secret,
-            ) = _restore_masked_oauth_credentials(
-                request.oauth_client_id,
-                request.oauth_client_secret,
-                existing_client,
-            )
 
-    # Create admin config with client info if provided
-    config_data = MCPConnectionData(headers={})
-    if request.oauth_client_id and request.oauth_client_secret:
-        client_info = OAuthClientInformationFull(
-            client_id=request.oauth_client_id,
-            client_secret=request.oauth_client_secret,
-            redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
-            grant_types=["authorization_code", "refresh_token"],
-            response_types=["code"],
-            scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
-            # Must specify auth method so client_secret is actually sent during token exchange
-            token_endpoint_auth_method="client_secret_post",
-        )
-        config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
-            mode="json"
-        )
+    request.oauth_client_id, request.oauth_client_secret = _resolve_oauth_credentials(
+        request_client_id=request.oauth_client_id,
+        request_client_id_changed=request.oauth_client_id_changed,
+        request_client_secret=request.oauth_client_secret,
+        request_client_secret_changed=request.oauth_client_secret_changed,
+        existing_client=existing_client,
+    )
+
+    config_data = _build_oauth_admin_config_data(
+        client_id=request.oauth_client_id,
+        client_secret=request.oauth_client_secret,
+    )
 
     if mcp_server.admin_connection_config_id is None:
         if not is_admin:
@@ -1404,17 +1430,20 @@ def _upsert_mcp_server(
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
 
-        # If the frontend sent back masked credentials (unchanged by the user),
-        # restore the real stored values so the comparison below sees no change
-        # and the credentials aren't overwritten with masked strings.
+        # Resolve the effective OAuth credentials, falling back to the stored
+        # values for any field the frontend marked as unchanged. This protects
+        # the change-detection comparison below from spurious diffs caused by
+        # masked placeholders being replayed.
         if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
             (
                 request.oauth_client_id,
                 request.oauth_client_secret,
-            ) = _restore_masked_oauth_credentials(
-                request.oauth_client_id,
-                request.oauth_client_secret,
-                client_info,
+            ) = _resolve_oauth_credentials(
+                request_client_id=request.oauth_client_id,
+                request_client_id_changed=request.oauth_client_id_changed,
+                request_client_secret=request.oauth_client_secret,
+                request_client_secret_changed=request.oauth_client_secret_changed,
+                existing_client=client_info,
             )
 
         changing_connection_config = (

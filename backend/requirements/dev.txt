@@ -285,7 +285,7 @@ matplotlib-inline==0.2.1
     # via
     #   ipykernel
     #   ipython
-mcp==1.26.0
+mcp==1.27.0
     # via claude-agent-sdk
 mdurl==0.1.2
     # via markdown-it-py
@@ -438,7 +438,7 @@ python-dateutil==2.8.2
     #   jupyter-client
     #   kubernetes
     #   matplotlib
-python-dotenv==1.1.1
+python-dotenv==1.2.2
     # via
     #   litellm
     #   pydantic-settings
@@ -618,7 +618,7 @@ websockets==15.0.1
     # via google-genai
 wrapt==1.17.3
     # via aiobotocore
-yarl==1.22.0
+yarl==1.23.0
     # via aiohttp
 zipp==3.23.0
     # via importlib-metadata

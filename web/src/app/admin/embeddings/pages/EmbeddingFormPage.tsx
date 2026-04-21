@@ -53,7 +53,6 @@ export default function EmbeddingForm() {
       enable_contextual_rag: false,
       contextual_rag_llm_name: null,
       contextual_rag_llm_provider: null,
-      multilingual_expansion: [],
       disable_rerank_for_streaming: false,
       api_url: null,
       num_rerank: 0,
@@ -144,7 +143,6 @@ export default function EmbeddingForm() {
         enable_contextual_rag: searchSettings.enable_contextual_rag,
         contextual_rag_llm_name: searchSettings.contextual_rag_llm_name,
         contextual_rag_llm_provider: searchSettings.contextual_rag_llm_provider,
-        multilingual_expansion: searchSettings.multilingual_expansion,
         disable_rerank_for_streaming:
           searchSettings.disable_rerank_for_streaming,
         num_rerank: searchSettings.num_rerank,

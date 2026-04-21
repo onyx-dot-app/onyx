@@ -8,21 +8,19 @@ import React, {
   useCallback,
 } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { cn, mergeRefs } from "@/lib/utils";
-import { Tooltip } from "@opal/components";
-import { WithoutStyles } from "@/types";
+import { mergeRefs } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section, SectionProps } from "@/layouts/general-layouts";
-import { IconProps } from "@opal/types";
+import { IconProps, WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import Text from "./texts/Text";
-import { Button } from "@opal/components";
+import { Tooltip, Button, Text } from "@opal/components";
 
 /* =============================================================================
    CONTEXT
    ============================================================================= */
 
 interface TabsContextValue {
-  variant: "contained" | "pill";
+  variant: "contained" | "pill" | "underline";
 }
 
 const TabsContext = React.createContext<TabsContextValue | undefined>(
@@ -69,21 +67,29 @@ const useTabsContext = () => {
    ============================================================================= */
 
 /** Style classes for TabsList variants */
+const PILL_LIST =
+  "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden";
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
+  pill: PILL_LIST,
+  underline: PILL_LIST,
 } as const;
 
 /** Base style classes for TabsTrigger variants */
+const PILL_TRIGGER =
+  "p-1 font-secondary-action transition-all duration-200 ease-out";
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
-  pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
+  pill: PILL_TRIGGER,
+  underline: PILL_TRIGGER,
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
+const PILL_ICON = "stroke-current";
 const iconVariants = {
   contained: "stroke-text-03",
-  pill: "stroke-current",
+  pill: PILL_ICON,
+  underline: PILL_ICON,
 } as const;
 
 /* =============================================================================
@@ -297,16 +303,20 @@ function useHorizontalScroll(
 function PillIndicator({
   style,
   rightOffset = 0,
+  hideBaseLine = false,
 }: {
   style: IndicatorStyle;
   rightOffset?: number;
+  hideBaseLine?: boolean;
 }) {
   return (
     <>
-      <div
-        className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
-        style={{ right: rightOffset }}
-      />
+      {!hideBaseLine && (
+        <div
+          className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
+          style={{ right: rightOffset }}
+        />
+      )}
       <div
         className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 pointer-events-none transition-all duration-200 ease-out"
         style={{
@@ -360,7 +370,7 @@ interface TabsListProps
    * - `pill`: Transparent background with a sliding underline indicator.
    *   Best for secondary navigation or filter-style tabs with flexible widths.
    */
-  variant?: "contained" | "pill";
+  variant?: "contained" | "pill" | "underline";
 
   /**
    * Content to render on the right side of the tab list.
@@ -415,7 +425,7 @@ const TabsList = React.forwardRef<
     const scrollArrowsRef = useRef<HTMLDivElement>(null);
     const rightContentRef = useRef<HTMLDivElement>(null);
     const [rightOffset, setRightOffset] = useState(0);
-    const isPill = variant === "pill";
+    const isPill = variant === "pill" || variant === "underline";
     const { style: indicatorStyle } = usePillIndicator(
       listRef,
       isPill,
@@ -529,7 +539,11 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && (
-            <PillIndicator style={indicatorStyle} rightOffset={rightOffset} />
+            <PillIndicator
+              style={indicatorStyle}
+              rightOffset={rightOffset}
+              hideBaseLine={variant === "underline"}
+            />
           )}
         </TabsContext.Provider>
       </TabsPrimitive.List>
@@ -558,7 +572,7 @@ interface TabsTriggerProps
    * - `contained` (default): White background with shadow when active
    * - `pill`: Dark pill background when active, transparent when inactive
    */
-  variant?: "contained" | "pill";
+  variant?: "contained" | "pill" | "underline";
 
   /** Optional tooltip text to display on hover */
   tooltip?: string;
@@ -617,7 +631,7 @@ const TabsTrigger = React.forwardRef<
         )}
         {typeof children === "string" ? (
           <div className="px-0.5">
-            <Text>{children}</Text>
+            <Text color="inherit">{children}</Text>
           </div>
         ) : (
           children
@@ -649,6 +663,7 @@ const TabsTrigger = React.forwardRef<
             "data-[state=active]:bg-background-tint-inverted-03",
             "data-[state=active]:text-text-inverted-05",
           ],
+          variant === "underline" && ["data-[state=active]:text-text-05"],
           variant === "contained" && [
             "data-[state=inactive]:text-text-03",
             "data-[state=inactive]:bg-transparent",
@@ -658,7 +673,8 @@ const TabsTrigger = React.forwardRef<
           variant === "pill" && [
             "data-[state=inactive]:bg-background-tint-00",
             "data-[state=inactive]:text-text-03",
-          ]
+          ],
+          variant === "underline" && ["data-[state=inactive]:text-text-03"]
         )}
         {...props}
       >
@@ -705,11 +721,14 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   SectionProps & { value: string }
->(({ children, value, ...props }, ref) => (
+>(({ children, value, className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     value={value}
-    className="pt-4 focus:outline-none focus:border-theme-primary-05 w-full"
+    className={cn(
+      "pt-4 focus:outline-none focus:border-theme-primary-05 w-full",
+      className
+    )}
   >
     <Section padding={0} {...props}>
       {children}
