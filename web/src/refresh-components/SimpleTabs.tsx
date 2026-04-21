@@ -19,7 +19,7 @@ export interface TabDefinition {
   /** Optional tooltip text to display on hover */
   tooltip?: string;
   /** Optional tooltip side */
-  side?: "top" | "bottom" | "left" | "right";
+  tooltipSide?: "top" | "bottom" | "left" | "right";
   /** Whether the tab is disabled */
   disabled?: boolean;
 }
@@ -103,7 +103,7 @@ export default function SimpleTabs({
             value={key}
             icon={tab.icon}
             tooltip={tab.tooltip}
-            tooltipSide={tab.side}
+            tooltipSide={tab.tooltipSide}
             disabled={tab.disabled}
           >
             {tab.name}
