@@ -75,7 +75,6 @@ import {
   testEmbedding,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
 import Modal from "@/refresh-components/Modal";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -820,7 +819,7 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
-  const editEmbeddingModelModal = useCreateModal();
+  const collapsedEditModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
@@ -1120,9 +1119,19 @@ export default function IndexSettingsPage() {
           {currentEmbeddingModel && (
             <>
               {currentCloudProvider && (
-                <editEmbeddingModelModal.Provider>
-                  <EditEmbeddingModelModal provider={currentCloudProvider} />
-                </editEmbeddingModelModal.Provider>
+                <collapsedEditModal.Provider>
+                  <ProviderCredentialsModal
+                    provider={currentCloudProvider}
+                    existingCredentials={configuredProviders?.get(
+                      currentCloudProvider.provider_type
+                    )}
+                    onSubmit={async () => {
+                      await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+                      collapsedEditModal.toggle(false);
+                    }}
+                    onCancel={() => collapsedEditModal.toggle(false)}
+                  />
+                </collapsedEditModal.Provider>
               )}
 
               <Tabs value={activeModelTab} onValueChange={setActiveModelTab}>
@@ -1320,9 +1329,7 @@ export default function IndexSettingsPage() {
                                 icon={SvgSettings}
                                 prominence="tertiary"
                                 size="md"
-                                onClick={() =>
-                                  editEmbeddingModelModal.toggle(true)
-                                }
+                                onClick={() => collapsedEditModal.toggle(true)}
                               />
                             </div>
                           )}
