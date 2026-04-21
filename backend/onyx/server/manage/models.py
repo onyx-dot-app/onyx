@@ -30,7 +30,6 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 
-
 if TYPE_CHECKING:
     pass
 
