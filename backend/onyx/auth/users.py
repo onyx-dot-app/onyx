@@ -399,8 +399,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 )
             raise
 
-        # Per-IP rate limit (cloud only). Runs before captcha so over-limit
-        # clients don't consume a Google siteverify call.
         if request is not None:
             await enforce_signup_rate_limit(request)
 

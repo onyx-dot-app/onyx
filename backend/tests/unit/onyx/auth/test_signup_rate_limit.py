@@ -43,32 +43,12 @@ def _fake_pipeline_redis(incr_return: int) -> MagicMock:
     return redis
 
 
-# ---------- IP extraction (Onyx cloud topology) ----------
-#
-# In cloud: NLB (L4) → ingress-nginx → internal nginx → api-server.
-# ingress-nginx OVERWRITES X-Forwarded-For with its own $remote_addr (the
-# real client IP, preserved through NLB). internal nginx then APPENDS its
-# own pod IP via $proxy_add_x_forwarded_for. So a typical request arrives
-# at the api-server with:
-#
-#     X-Forwarded-For: <real_client_ip>, <ingress_nginx_pod_ip>
-#
-# The real client is parts[0]. The rightmost entry is always a
-# private/internal pod IP.
-
-
 def test_client_ip_uses_leftmost_when_first_entry_is_public() -> None:
-    """Cloud production shape: public real client IP, private internal hop."""
     req = _make_request(xff="1.2.3.4, 10.0.0.42")
     assert _client_ip(req) == "1.2.3.4"
 
 
 def test_client_ip_falls_back_when_leftmost_is_private() -> None:
-    """If the leftmost entry is private (indicates either a spoof attempt
-    or a misconfigured ingress that no longer overwrites XFF), we refuse
-    to use it and fall back to the TCP peer. Prevents an attacker from
-    trivially bucketing all their traffic under e.g. `10.0.0.1` by
-    sending that in a raw XFF header."""
     req = _make_request(xff="10.0.0.1, 1.2.3.4", client_host="5.6.7.8")
     assert _client_ip(req) == "5.6.7.8"
 
@@ -79,9 +59,7 @@ def test_client_ip_falls_back_when_leftmost_is_loopback() -> None:
 
 
 def test_client_ip_falls_back_when_xff_is_malformed() -> None:
-    """Non-IP entries (e.g. injected garbage) are not usable keys."""
     req = _make_request(xff="not-an-ip, 1.2.3.4", client_host="10.0.0.1")
-    # We don't walk past parts[0]; if it's unparseable, fall through.
     assert _client_ip(req) == "10.0.0.1"
 
 
@@ -95,13 +73,8 @@ def test_client_ip_handles_no_client() -> None:
     assert _client_ip(req) == "unknown"
 
 
-# ---------- enforce_signup_rate_limit ----------
-
-
 @pytest.mark.asyncio
 async def test_disabled_when_not_multitenant() -> None:
-    """Self-hosted (MULTI_TENANT=False) should never call Redis, even if
-    SIGNUP_RATE_LIMIT_ENABLED is on."""
     req = _make_request(client_host="1.2.3.4")
     fake_redis = MagicMock()
     with (
@@ -117,9 +90,6 @@ async def test_disabled_when_not_multitenant() -> None:
 
 @pytest.mark.asyncio
 async def test_disabled_when_enable_flag_off() -> None:
-    """MULTI_TENANT alone is not enough — CI runs multi-tenant but must
-    not trip the rate limit. SIGNUP_RATE_LIMIT_ENABLED is the explicit
-    opt-in."""
     req = _make_request(client_host="1.2.3.4")
     fake_redis = MagicMock()
     with (
@@ -167,8 +137,7 @@ async def test_rejects_when_over_limit() -> None:
 
 @pytest.mark.asyncio
 async def test_pipeline_expire_runs_on_every_hit() -> None:
-    """INCR and EXPIRE go through the same pipeline so TTL is always set
-    atomically — closes the 'key with no TTL → permanent block' bug."""
+    """INCR and EXPIRE run in a single pipeline for atomicity."""
     req = _make_request(xff="1.2.3.4, 10.0.0.1")
     fake_redis = _fake_pipeline_redis(incr_return=3)
     with (
