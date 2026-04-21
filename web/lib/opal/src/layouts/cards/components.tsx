@@ -10,7 +10,7 @@ interface CardHeaderProps {
   /** Content rendered in the top-left header slot — typically a {@link Content} block. */
   headerChildren?: React.ReactNode;
 
-  /** Padding applied around `headerChildren`. @default "sm" */
+  /** Padding applied around `headerChildren`. @default "fit" */
   headerPadding?: Extract<PaddingVariants, "sm" | "fit">;
 
   /** Content rendered to the right of `headerChildren` (top of right column). */
@@ -75,7 +75,7 @@ interface CardHeaderProps {
  */
 function Header({
   headerChildren,
-  headerPadding = "sm",
+  headerPadding = "fit",
   topRightChildren,
   bottomRightChildren,
   bottomChildren,
