@@ -570,3 +570,88 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
     }
   });
 });
+
+test.describe("Permission gating — MANAGE_BOTS", () => {
+  test("Admin panel /admin/bots and /admin/discord-bot are gated behind MANAGE_BOTS", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates a Discord guild (Slack bot skipped — creation requires real Slack API tokens)
+    const guild = await adminClient.createDiscordGuild();
+
+    try {
+      // Phase 1: Without MANAGE_BOTS — both pages should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/bots");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      await page.goto("/admin/discord-bot");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant MANAGE_BOTS — both pages should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.MANAGE_BOTS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+
+      // Verify Slack Integration page
+      await page.goto("/admin/bots");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/admin/bots");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("Slack Integration")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(
+        page.getByRole("button", { name: "New Slack Bot" })
+      ).toBeVisible();
+
+      // Verify Discord Integration page
+      await page.goto("/admin/discord-bot");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/admin/discord-bot");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("Discord Integration")
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText("Add Server")).toBeVisible();
+
+      // Phase 3: Revoke MANAGE_BOTS — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/bots");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      await page.goto("/admin/discord-bot");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete the Discord guild
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteDiscordGuild(guild.id);
+    }
+  });
+});
