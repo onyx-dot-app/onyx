@@ -777,6 +777,25 @@ export class OnyxApiClient {
     return tools.find((tool) => tool.name === name) ?? null;
   }
 
+  async createAgent(name: string, description: string = ""): Promise<number> {
+    const response = await this.post("/persona", {
+      name,
+      description,
+      system_prompt: "",
+      task_prompt: "",
+      datetime_aware: false,
+      document_set_ids: [],
+      is_public: true,
+      tool_ids: [],
+    });
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create agent"
+    );
+    this.log(`Created agent: ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
   async deleteAgent(agentId: number): Promise<boolean> {
     const response = await this.request.delete(
       `${this.baseUrl}/persona/${agentId}`
