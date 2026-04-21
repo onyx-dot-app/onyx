@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
+import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 import type { Route } from "next";
@@ -84,6 +85,8 @@ export interface LineItemProps
   icon?: React.FunctionComponent<IconProps>;
   strokeIcon?: boolean;
   description?: string;
+  /** When true, the description text wraps instead of truncating. @default false */
+  wrapDescription?: boolean;
   rightChildren?: React.ReactNode;
   href?: string;
   rel?: string;
@@ -157,6 +160,7 @@ export default function LineItem({
   icon: Icon,
   strokeIcon = true,
   description,
+  wrapDescription,
   children,
   rightChildren,
   href,
@@ -271,17 +275,28 @@ export default function LineItem({
                 </Section>
               )}
             </Section>
-            {description && (
+            {description &&
+              (wrapDescription ? (
+                <Text as="p" secondaryBody text03 className="text-left w-full">
+                  {description}
+                </Text>
+              ) : (
+                <Truncated secondaryBody text03 className="text-left w-full">
+                  {description}
+                </Truncated>
+              ))}
+          </>
+        ) : description ? (
+          <Section flexDirection="row" gap={0.5}>
+            {wrapDescription ? (
+              <Text as="p" secondaryBody text03 className="text-left w-full">
+                {description}
+              </Text>
+            ) : (
               <Truncated secondaryBody text03 className="text-left w-full">
                 {description}
               </Truncated>
             )}
-          </>
-        ) : description ? (
-          <Section flexDirection="row" gap={0.5}>
-            <Truncated secondaryBody text03 className="text-left w-full">
-              {description}
-            </Truncated>
             {rightChildren && (
               <Section alignItems="end" width="fit">
                 {rightChildren}

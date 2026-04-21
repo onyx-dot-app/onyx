@@ -1,5 +1,5 @@
 .opal-message-card {
-  @apply flex flex-col w-full self-stretch rounded-16 border;
+  @apply flex flex-col gap-1 w-full self-stretch rounded-16 border;
 }
 
 /* Variant background colors. Border *color* lives in `cards/shared.css` and

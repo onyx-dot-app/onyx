@@ -986,18 +986,21 @@ export default function IndexSettingsPage() {
                     <InputSelect.Content>
                       <InputSelect.Item
                         value={SwitchoverType.REINDEX}
+                        wrapDescription
                         description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
                       >
                         Re-index All Connectors Then Switch
                       </InputSelect.Item>
                       <InputSelect.Item
                         value={SwitchoverType.ACTIVE_ONLY}
+                        wrapDescription
                         description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
                       >
                         Re-index Active Connectors Then Switch
                       </InputSelect.Item>
                       <InputSelect.Item
                         value={SwitchoverType.INSTANT}
+                        wrapDescription
                         description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
                       >
                         Switch Before Re-index
