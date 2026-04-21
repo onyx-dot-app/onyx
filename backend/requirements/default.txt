@@ -465,7 +465,7 @@ locket==1.0.0
     # via
     #   distributed
     #   partd
-lxml==5.3.0
+lxml==6.1.0
     # via
     #   htmldate
     #   justext
