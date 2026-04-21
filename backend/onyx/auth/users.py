@@ -72,6 +72,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.captcha import CaptchaVerificationError
+from onyx.auth.captcha import is_captcha_enabled
+from onyx.auth.captcha import verify_captcha_token
 from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -82,6 +85,7 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -380,11 +384,28 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
-        # Verify captcha if enabled (for cloud signup protection)
-        from onyx.auth.captcha import CaptchaVerificationError
-        from onyx.auth.captcha import is_captcha_enabled
-        from onyx.auth.captcha import verify_captcha_token
+        # Run cheap, non-network checks first so bots on disposable domains or
+        # over the rate limit never reach Google siteverify.
+        try:
+            verify_email_domain(user_create.email, is_registration=True)
+        except OnyxError as e:
+            # Log blocked disposable email attempts
+            if "Disposable email" in e.detail:
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
+                logger.warning(
+                    f"Blocked disposable email registration attempt: {domain}",
+                    extra={"email_domain": domain},
+                )
+            raise
 
+        if request is not None:
+            await enforce_signup_rate_limit(request)
+
+        # Verify captcha if enabled (for cloud signup protection)
         if is_captcha_enabled() and request is not None:
             # Get captcha token from request body or headers
             captcha_token = None
@@ -406,24 +427,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         await self.validate_password(
             user_create.password, cast(schemas.UC, user_create)
         )
-
-        # Check for disposable emails BEFORE provisioning tenant
-        # This prevents creating tenants for throwaway email addresses
-        try:
-            verify_email_domain(user_create.email, is_registration=True)
-        except OnyxError as e:
-            # Log blocked disposable email attempts
-            if "Disposable email" in e.detail:
-                domain = (
-                    user_create.email.split("@")[-1]
-                    if "@" in user_create.email
-                    else "unknown"
-                )
-                logger.warning(
-                    f"Blocked disposable email registration attempt: {domain}",
-                    extra={"email_domain": domain},
-                )
-            raise
 
         user_count: int | None = None
         referral_source = (
@@ -620,8 +623,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_db.commit()
             else:
                 logger.warning(
-                    "User %s not found in sync session during upgrade to standard; "
-                    "skipping upgrade",
+                    "User %s not found in sync session during upgrade to standard; skipping upgrade",
                     user_id,
                 )
 
@@ -1614,7 +1616,6 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user
