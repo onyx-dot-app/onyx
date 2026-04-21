@@ -743,7 +743,12 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             model_name,
         )
         if model_obj and "supports_reasoning" in model_obj:
-            return model_obj.get("supports_reasoning", False)
+            reasoning = model_obj.get("supports_reasoning")
+            if reasoning is None:
+                logger.error(
+                    f"Cannot find reasoning for name={model_name} and provider={model_provider}"
+                )
+            return reasoning or False
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
