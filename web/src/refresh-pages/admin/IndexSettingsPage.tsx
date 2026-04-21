@@ -69,7 +69,11 @@ import {
 } from "@/lib/indexing";
 import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
-import { saveAdminSettings, testEmbedding } from "@/lib/indexing/svc";
+import {
+  saveAdminSettings,
+  setNewSearchSettings,
+  testEmbedding,
+} from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
 import Modal from "@/refresh-components/Modal";
@@ -538,6 +542,7 @@ function ProviderGroup({
                 icon={SvgUnplug}
                 prominence="tertiary"
                 size="sm"
+                disabled={models.some((m) => m.model_name === currentModelName)}
                 onClick={() => disconnectModal.toggle(true)}
               />
               <Button
@@ -902,6 +907,41 @@ export default function IndexSettingsPage() {
     [settings.settings, router]
   );
 
+  const handleApply = useCallback(async () => {
+    if (!selectedModelName) return;
+
+    const model = getCurrentModelCopy(selectedModelName);
+    if (!model) {
+      toast.error("Could not find the selected model");
+      return;
+    }
+
+    if (switchoverType === SWITCHOVER_NONE) {
+      toast.success("Settings applied");
+      setSelectedModelName(null);
+      setSwitchoverType(SWITCHOVER_NONE);
+      return;
+    }
+
+    const response = await setNewSearchSettings(
+      model,
+      switchoverType as SwitchoverType
+    );
+
+    if (!response.ok) {
+      toast.error("Failed to apply settings");
+      return;
+    }
+
+    toast.success("Re-indexing started");
+    setSelectedModelName(null);
+    setSwitchoverType(SWITCHOVER_NONE);
+    await Promise.all([
+      mutate(SWR_KEYS.currentSearchSettings),
+      mutate("/api/search-settings/get-secondary-search-settings"),
+    ]);
+  }, [selectedModelName, switchoverType]);
+
   const statusVariant = selectedModelName
     ? switchoverType === SWITCHOVER_NONE
       ? "info"
@@ -1052,7 +1092,11 @@ export default function IndexSettingsPage() {
                   >
                     Revert
                   </Button>
-                  <Button>Apply & Re-index</Button>
+                  <Button onClick={handleApply}>
+                    {switchoverType === SWITCHOVER_NONE
+                      ? "Apply without Re-index"
+                      : "Apply & Re-index"}
+                  </Button>
                 </div>
               </div>
             ) : undefined

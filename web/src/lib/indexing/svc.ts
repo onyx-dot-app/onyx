@@ -95,7 +95,8 @@ export async function cancelNewEmbedding(): Promise<Response> {
  * that is a separate, explicit action.
  */
 export async function setNewSearchSettings(
-  model: EmbeddingModelDescriptor
+  model: EmbeddingModelDescriptor,
+  switchoverType: SwitchoverType
 ): Promise<Response> {
   return await fetch("/api/search-settings/set-new-search-settings", {
     method: "POST",
@@ -105,6 +106,7 @@ export async function setNewSearchSettings(
       multipass_indexing: false,
       embedding_precision: EmbeddingPrecision.FLOAT,
       enable_contextual_rag: false,
+      switchover_type: switchoverType,
     }),
   });
 }
