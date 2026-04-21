@@ -5,7 +5,7 @@
  * evaluated by external auditors or automated compliance scanners.
  */
 
-import { test, expect } from "@tests/e2e/fixtures/accessibility";
+import { test } from "@tests/e2e/fixtures/accessibility";
 
 test.describe("Accessibility — public pages", () => {
   test.describe.configure({ mode: "parallel" });

@@ -6,7 +6,6 @@
  */
 
 import { test, expect } from "@tests/e2e/fixtures/accessibility";
-import { loginAs } from "@tests/e2e/utils/auth";
 
 test.use({ storageState: "admin_auth.json" });
 
@@ -14,7 +13,6 @@ test("Accessibility — all settings pages", async ({
   page,
   expectAccessible,
 }) => {
-  await loginAs(page, "admin");
   await page.goto("/app/settings/general");
 
   const nav = page.getByTestId("settings-left-tab-navigation");

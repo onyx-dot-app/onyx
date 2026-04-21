@@ -14,7 +14,14 @@ export type WcagLevel = "wcag-aa" | "wcag-aaa" | "all";
 
 const WCAG_TAGS: Record<WcagLevel, string[]> = {
   "wcag-aa": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-  "wcag-aaa": ["wcag2a", "wcag2aa", "wcag2aaa", "wcag21a", "wcag21aa"],
+  "wcag-aaa": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag2aaa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag21aaa",
+  ],
   all: [],
 };
 
