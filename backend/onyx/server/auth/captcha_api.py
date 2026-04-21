@@ -1,15 +1,15 @@
-"""API + middleware for the reCAPTCHA pre-OAuth cookie flow.
+"""API + middleware for the reCAPTCHA cookie and header flows.
 
-The frontend solves a reCAPTCHA v3 challenge before clicking "Continue
-with Google", POSTs the token to ``/auth/captcha/oauth-verify``, and the
-backend verifies it with Google and sets a signed HttpOnly cookie. The
-cookie rides along on the subsequent Google OAuth callback redirect,
-where ``CaptchaCookieMiddleware`` checks it. Without this cookie flow
-the OAuth callback is un-gated because Google (not our frontend) issues
-the request and we cannot attach a header at the redirect hop.
+Three entry points are gated:
 
-Email/password signup has its own captcha enforcement inside
-``UserManager.create``, so this module only gates the OAuth callback.
+1. ``/auth/oauth/callback`` — the frontend pre-verifies a token and gets
+   a signed HttpOnly cookie (``/auth/captcha/oauth-verify``) that rides
+   along on the Google redirect, where ``CaptchaCookieMiddleware``
+   checks it.
+2. ``/auth/login`` — ``LoginCaptchaMiddleware`` verifies an
+   ``X-Captcha-Token`` header before the fastapi-users handler runs.
+3. ``/auth/register`` — captcha is enforced inside
+   ``UserManager.create`` via the body's ``captcha_token`` field.
 """
 
 from fastapi import APIRouter
@@ -117,3 +117,34 @@ class CaptchaCookieMiddleware(BaseHTTPMiddleware):
         if is_guarded_callback:
             response.delete_cookie(CAPTCHA_COOKIE_NAME, path="/")
         return response
+
+
+GUARDED_LOGIN_PATHS = frozenset({"/auth/login"})
+LOGIN_CAPTCHA_HEADER = "X-Captcha-Token"
+
+
+class LoginCaptchaMiddleware(BaseHTTPMiddleware):
+    """Reject ``/auth/login`` requests without a valid captcha token.
+
+    Enforced before the fastapi-users handler runs, so credential-stuffing
+    attempts cost the attacker a fresh captcha token per try. No-op when
+    ``is_captcha_enabled()`` is false.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        if (
+            request.method == "POST"
+            and request.url.path in GUARDED_LOGIN_PATHS
+            and is_captcha_enabled()
+        ):
+            token = request.headers.get(LOGIN_CAPTCHA_HEADER, "")
+            try:
+                await verify_captcha_token(token, CaptchaAction.LOGIN)
+            except CaptchaVerificationError as exc:
+                return onyx_error_to_json_response(
+                    OnyxError(OnyxErrorCode.UNAUTHORIZED, str(exc))
+                )
+
+        return await call_next(request)

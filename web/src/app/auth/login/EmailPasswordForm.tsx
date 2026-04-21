@@ -130,7 +130,14 @@ export default function EmailPasswordForm({
             }
           }
 
-          const loginResponse = await basicLogin(email, values.password);
+          const loginCaptchaToken = isSignup
+            ? undefined
+            : await getCaptchaToken("login");
+          const loginResponse = await basicLogin(
+            email,
+            values.password,
+            loginCaptchaToken
+          );
           if (loginResponse.ok) {
             setApiStatus("success");
             if (isSignup && shouldVerify) {

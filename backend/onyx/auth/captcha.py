@@ -59,6 +59,7 @@ class CaptchaAction(StrEnum):
     one endpoint cannot be replayed against another."""
 
     SIGNUP = "signup"
+    LOGIN = "login"
     OAUTH = "oauth"
 
 
