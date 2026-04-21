@@ -172,9 +172,13 @@ def verify_auth_setting() -> None:
     raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
 
     if raw_auth_type == "cloud":
-        raise ValueError("'cloud' is not a valid auth type for self-hosted deployments.")
+        raise ValueError(
+            "'cloud' is not a valid auth type for self-hosted deployments."
+        )
     if raw_auth_type == "disabled":
-        logger.warning("AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration.")
+        logger.warning(
+            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
+        )
 
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
@@ -265,7 +269,9 @@ def verify_email_is_invited(email: str) -> None:
         try:
             # normalized emails are now being inserted into the db
             # we can remove this normalization on read after some time has passed
-            email_info_whitelist = validate_email(email_whitelist, check_deliverability=False)
+            email_info_whitelist = validate_email(
+                email_whitelist, check_deliverability=False
+            )
         except EmailNotValidError:
             continue
 
@@ -337,9 +343,9 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
     if MULTI_TENANT:
         return
 
-    result = fetch_ee_implementation_or_noop("onyx.db.license", "check_seat_availability", None)(
-        db_session, seats_needed=seats_needed
-    )
+    result = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "check_seat_availability", None
+    )(db_session, seats_needed=seats_needed)
 
     if result is not None and not result.available:
         raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message)
@@ -352,12 +358,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
 
     async def get_by_email(self, user_email: str) -> User:
-        tenant_id = fetch_ee_implementation_or_noop("onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None)(
-            user_email
-        )
+        tenant_id = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+        )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](db_session, User, OAuthAccount)
+                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
                 user = await tenant_user_db.get_by_email(user_email)
             else:
                 user = await self.user_db.get_by_email(user_email)
@@ -380,7 +388,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except OnyxError as e:
             # Log blocked disposable email attempts
             if "Disposable email" in e.detail:
-                domain = user_create.email.split("@")[-1] if "@" in user_create.email else "unknown"
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
                 logger.warning(
                     f"Blocked disposable email registration attempt: {domain}",
                     extra={"email_domain": domain},
@@ -408,15 +420,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 captcha_token = request.headers.get("X-Captcha-Token")
 
             try:
-                await verify_captcha_token(captcha_token or "", expected_action="signup")
+                await verify_captcha_token(
+                    captcha_token or "", expected_action="signup"
+                )
             except CaptchaVerificationError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
         # We verify the password here to make sure it's valid before we proceed
-        await self.validate_password(user_create.password, cast(schemas.UC, user_create))
+        await self.validate_password(
+            user_create.password, cast(schemas.UC, user_create)
+        )
 
         user_count: int | None = None
-        referral_source = request.cookies.get("referral_source", None) if request is not None else None
+        referral_source = (
+            request.cookies.get("referral_source", None)
+            if request is not None
+            else None
+        )
 
         tenant_id = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
@@ -444,14 +464,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
                     verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
-                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](db_session, User, OAuthAccount)
+                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                        db_session, User, OAuthAccount
+                    )
                     self.user_db = tenant_user_db
 
                 if hasattr(user_create, "role"):
                     user_create.role = UserRole.BASIC  # ty: ignore[invalid-assignment]
 
                     user_count = await get_user_count()
-                    if user_count == 0 or user_create.email in get_default_admin_user_emails():
+                    if (
+                        user_count == 0
+                        or user_create.email in get_default_admin_user_emails()
+                    ):
                         user_create.role = (  # ty: ignore[invalid-assignment]
                             UserRole.ADMIN
                         )
@@ -541,7 +566,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
 
-    async def _assign_default_pinned_assistants(self, user: User, db_session: AsyncSession) -> None:
+    async def _assign_default_pinned_assistants(
+        self, user: User, db_session: AsyncSession
+    ) -> None:
         if user.pinned_assistants is not None:
             return
 
@@ -585,7 +612,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 .first()
             )
             if sync_user:
-                sync_user.hashed_password = self.password_helper.hash(user_create.password)
+                sync_user.hashed_password = self.password_helper.hash(
+                    user_create.password
+                )
                 sync_user.is_verified = user_create.is_verified or False
                 sync_user.role = user_create.role
                 sync_user.account_type = AccountType.STANDARD
@@ -606,16 +635,28 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
         if len(password) < PASSWORD_MIN_LENGTH:
-            raise exceptions.InvalidPasswordException(reason=f"Password must be at least {PASSWORD_MIN_LENGTH} characters long.")
+            raise exceptions.InvalidPasswordException(
+                reason=f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+            )
         if len(password) > PASSWORD_MAX_LENGTH:
-            raise exceptions.InvalidPasswordException(reason=f"Password must not exceed {PASSWORD_MAX_LENGTH} characters.")
+            raise exceptions.InvalidPasswordException(
+                reason=f"Password must not exceed {PASSWORD_MAX_LENGTH} characters."
+            )
         if PASSWORD_REQUIRE_UPPERCASE and not any(char.isupper() for char in password):
-            raise exceptions.InvalidPasswordException(reason="Password must contain at least one uppercase letter.")
+            raise exceptions.InvalidPasswordException(
+                reason="Password must contain at least one uppercase letter."
+            )
         if PASSWORD_REQUIRE_LOWERCASE and not any(char.islower() for char in password):
-            raise exceptions.InvalidPasswordException(reason="Password must contain at least one lowercase letter.")
+            raise exceptions.InvalidPasswordException(
+                reason="Password must contain at least one lowercase letter."
+            )
         if PASSWORD_REQUIRE_DIGIT and not any(char.isdigit() for char in password):
-            raise exceptions.InvalidPasswordException(reason="Password must contain at least one number.")
-        if PASSWORD_REQUIRE_SPECIAL_CHAR and not any(char in PASSWORD_SPECIAL_CHARS for char in password):
+            raise exceptions.InvalidPasswordException(
+                reason="Password must contain at least one number."
+            )
+        if PASSWORD_REQUIRE_SPECIAL_CHAR and not any(
+            char in PASSWORD_SPECIAL_CHARS for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason=f"Password must contain at least one special character from the following set: {PASSWORD_SPECIAL_CHARS}."
             )
@@ -635,7 +676,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
     ) -> User:
-        referral_source = getattr(request.state, "referral_source", None) if request else None
+        referral_source = (
+            getattr(request.state, "referral_source", None) if request else None
+        )
 
         tenant_id = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
@@ -661,7 +704,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # NOTE(rkuo): If this UserManager is instantiated per connection
             # should we even be doing this here?
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](db_session, User, OAuthAccount)
+                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
                 self.user_db = tenant_user_db
 
             oauth_account_dict = {
@@ -688,7 +733,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     # Make sure user is not None before adding OAuth account
                     if user is not None:
-                        user = await self.user_db.add_oauth_account(user, oauth_account_dict)
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
                     else:
                         # This shouldn't happen since get_by_email would raise UserNotExists
                         # but adding as a safeguard
@@ -718,7 +765,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # User exists, update OAuth account if needed
                 if user is not None:  # Add explicit check
                     for existing_oauth_account in user.oauth_accounts:
-                        if existing_oauth_account.account_id == account_id and existing_oauth_account.oauth_name == oauth_name:
+                        if (
+                            existing_oauth_account.account_id == account_id
+                            and existing_oauth_account.oauth_name == oauth_name
+                        ):
                             user = await self.user_db.update_oauth_account(
                                 user,
                                 # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
@@ -731,7 +781,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # re-authenticate that frequently, so by default this is disabled
             if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
                 oidc_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
-                await self.user_db.update(user, update_dict={"oidc_expiry": oidc_expiry})
+                await self.user_db.update(
+                    user, update_dict={"oidc_expiry": oidc_expiry}
+                )
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
@@ -817,7 +869,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             properties={"email": user.email, "tenant_id": tenant_id},
         )
 
-    async def on_after_register(self, user: User, request: Optional[Request] = None) -> None:
+    async def on_after_register(
+        self, user: User, request: Optional[Request] = None
+    ) -> None:
         tenant_id = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
@@ -862,7 +916,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # otherwise get_session_with_current_tenant() targets the wrong schema.
             is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
             with get_session_with_current_tenant() as db_session:
-                assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+                assign_user_to_default_groups__no_commit(
+                    db_session, user, is_admin=is_admin
+                )
                 db_session.commit()
 
         finally:
@@ -892,9 +948,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
             and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
-            marketing_anonymous_id = parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
-                "distinct_id"
-            ]
+            marketing_anonymous_id = (
+                parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
+                    "distinct_id"
+                ]
+            )
 
             # Technically, USER_SIGNED_UP is only fired from the cloud site when
             # it is the first user in a tenant. However, it is semantically correct
@@ -938,7 +996,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
-            logger.error("Email is not configured. Please configure email in the admin panel")
+            logger.error(
+                "Email is not configured. Please configure email in the admin panel"
+            )
             raise HTTPException(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
                 "Your admin has not enabled this feature.",
@@ -959,12 +1019,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> None:
         verify_email_domain(user.email)
 
-        logger.notice(f"Verification requested for user {user.id}. Verification token: {token}")
+        logger.notice(
+            f"Verification requested for user {user.id}. Verification token: {token}"
+        )
         user_count = await get_user_count()
-        send_user_verification_email(user.email, token, new_organization=user_count == 1)
+        send_user_verification_email(
+            user.email, token, new_organization=user_count == 1
+        )
 
     @log_function_time(print_only=True)
-    async def authenticate(self, credentials: OAuth2PasswordRequestForm) -> Optional[User]:
+    async def authenticate(
+        self, credentials: OAuth2PasswordRequestForm
+    ) -> Optional[User]:
         email = credentials.username
 
         tenant_id: str | None = None
@@ -977,7 +1043,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 email=email,
             )
         except Exception as e:
-            logger.warning(f"User attempted to login with invalid credentials: {str(e)}")
+            logger.warning(
+                f"User attempted to login with invalid credentials: {str(e)}"
+            )
 
         if not tenant_id:
             # User not found in mapping
@@ -986,7 +1054,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Create a tenant-specific session
         async with get_async_session_context_manager(tenant_id) as tenant_session:
-            tenant_user_db: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(tenant_session, User)
+            tenant_user_db: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(
+                tenant_session, User
+            )
             self.user_db = tenant_user_db
 
             # Proceed with authentication
@@ -1002,12 +1072,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
                 )
 
-            verified, updated_password_hash = self.password_helper.verify_and_update(credentials.password, user.hashed_password)
+            verified, updated_password_hash = self.password_helper.verify_and_update(
+                credentials.password, user.hashed_password
+            )
             if not verified:
                 return None
 
             if updated_password_hash is not None:
-                await self.user_db.update(user, {"hashed_password": updated_password_hash})
+                await self.user_db.update(
+                    user, {"hashed_password": updated_password_hash}
+                )
 
             return user
 
@@ -1018,12 +1092,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         await self._update(user, {"password": new_password})
         return new_password
 
-    async def change_password_if_old_matches(self, user: User, old_password: str, new_password: str) -> None:
+    async def change_password_if_old_matches(
+        self, user: User, old_password: str, new_password: str
+    ) -> None:
         """
         For normal users to change password if they know the old one.
         Raises 400 if old password doesn't match.
         """
-        verified, updated_password_hash = self.password_helper.verify_and_update(old_password, user.hashed_password)
+        verified, updated_password_hash = self.password_helper.verify_and_update(
+            old_password, user.hashed_password
+        )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
             from fastapi import HTTPException, status
@@ -1105,7 +1183,9 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         )
         return token
 
-    async def read_token(self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]) -> Optional[User]:
+    async def read_token(
+        self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
+    ) -> Optional[User]:
         redis = await get_async_redis_connection()
         token_data_str = await redis.get(f"{self.key_prefix}{token}")
         if not token_data_str:
@@ -1174,7 +1254,9 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
             return await self.write_token(user)
 
         # Update expiration time
-        new_expires = datetime.now(timezone.utc) + timedelta(seconds=float(self.lifetime_seconds or SESSION_EXPIRE_TIME_SECONDS))
+        new_expires = datetime.now(timezone.utc) + timedelta(
+            seconds=float(self.lifetime_seconds or SESSION_EXPIRE_TIME_SECONDS)
+        )
         await self._access_token_db.update(access_token, {"expires": new_expires})
 
         return token
@@ -1215,7 +1297,9 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             "aud": self.token_audience,
             "iat": int(datetime.now(timezone.utc).timestamp()),
         }
-        return generate_jwt(data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm)
+        return generate_jwt(
+            data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
+        )
 
     async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         # JWTs are stateless — nothing to invalidate server-side.
@@ -1242,7 +1326,9 @@ def get_redis_strategy() -> TenantAwareRedisStrategy:
 def get_database_strategy(
     access_token_db: AccessTokenDatabase[AccessToken] = Depends(get_access_token_db),
 ) -> RefreshableDatabaseStrategy:
-    return RefreshableDatabaseStrategy(access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS)
+    return RefreshableDatabaseStrategy(
+        access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS
+    )
 
 
 def get_jwt_strategy() -> SingleTenantJWTStrategy:
@@ -1261,11 +1347,17 @@ if AUTH_BACKEND == AuthBackend.JWT:
         raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
 
 if AUTH_BACKEND == AuthBackend.REDIS:
-    auth_backend = AuthenticationBackend(name="redis", transport=cookie_transport, get_strategy=get_redis_strategy)
+    auth_backend = AuthenticationBackend(
+        name="redis", transport=cookie_transport, get_strategy=get_redis_strategy
+    )
 elif AUTH_BACKEND == AuthBackend.POSTGRES:
-    auth_backend = AuthenticationBackend(name="postgres", transport=cookie_transport, get_strategy=get_database_strategy)
+    auth_backend = AuthenticationBackend(
+        name="postgres", transport=cookie_transport, get_strategy=get_database_strategy
+    )
 elif AUTH_BACKEND == AuthBackend.JWT:
-    auth_backend = AuthenticationBackend(name="jwt", transport=cookie_transport, get_strategy=get_jwt_strategy)
+    auth_backend = AuthenticationBackend(
+        name="jwt", transport=cookie_transport, get_strategy=get_jwt_strategy
+    )
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
@@ -1282,14 +1374,22 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         """
         router = APIRouter()
 
-        get_current_user_token = self.authenticator.current_user_token(active=True, verified=requires_verification)
+        get_current_user_token = self.authenticator.current_user_token(
+            active=True, verified=requires_verification
+        )
 
         logout_responses: OpenAPIResponseType = {
-            **{status.HTTP_401_UNAUTHORIZED: {"description": "Missing token or inactive user."}},
+            **{
+                status.HTTP_401_UNAUTHORIZED: {
+                    "description": "Missing token or inactive user."
+                }
+            },
             **backend.transport.get_openapi_logout_responses_success(),
         }
 
-        @router.post("/logout", name=f"auth:{backend.name}.logout", responses=logout_responses)
+        @router.post(
+            "/logout", name=f"auth:{backend.name}.logout", responses=logout_responses
+        )
         async def logout(
             user_token: Tuple[models.UP, str] = Depends(get_current_user_token),
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
@@ -1312,18 +1412,28 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
 
         router = APIRouter()
 
-        get_current_user_token = self.authenticator.current_user_token(active=True, verified=requires_verification)
+        get_current_user_token = self.authenticator.current_user_token(
+            active=True, verified=requires_verification
+        )
 
         refresh_responses: OpenAPIResponseType = {
-            **{status.HTTP_401_UNAUTHORIZED: {"description": "Missing token or inactive user."}},
+            **{
+                status.HTTP_401_UNAUTHORIZED: {
+                    "description": "Missing token or inactive user."
+                }
+            },
             **backend.transport.get_openapi_login_responses_success(),
         }
 
-        @router.post("/refresh", name=f"auth:{backend.name}.refresh", responses=refresh_responses)
+        @router.post(
+            "/refresh", name=f"auth:{backend.name}.refresh", responses=refresh_responses
+        )
         async def refresh(
             user_token: Tuple[models.UP, str] = Depends(get_current_user_token),
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
-            user_manager: BaseUserManager[models.UP, models.ID] = Depends(get_user_manager),
+            user_manager: BaseUserManager[models.UP, models.ID] = Depends(
+                get_user_manager
+            ),
             db_session: AsyncSession = Depends(get_async_session),
         ) -> Response:
             try:
@@ -1338,13 +1448,17 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                 )
 
                 # Check if strategy supports refreshing
-                supports_refresh = hasattr(strategy, "refresh_token") and callable(getattr(strategy, "refresh_token"))
+                supports_refresh = hasattr(strategy, "refresh_token") and callable(
+                    getattr(strategy, "refresh_token")
+                )
 
                 if supports_refresh:
                     try:
                         refresh_method = getattr(strategy, "refresh_token")
                         new_token = await refresh_method(token, user)
-                        logger.info(f"Successfully refreshed session token for user {user.email}")
+                        logger.info(
+                            f"Successfully refreshed session token for user {user.email}"
+                        )
                         return await backend.transport.get_login_response(new_token)
                     except Exception as e:
                         logger.error(f"Error refreshing session token: {str(e)}")
@@ -1353,7 +1467,9 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                         return await backend.login(strategy, user)
 
                 # Fallback: logout and login again
-                logger.info("Strategy doesn't support refresh - using logout/login flow")
+                logger.info(
+                    "Strategy doesn't support refresh - using logout/login flow"
+                )
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
             except Exception as e:
@@ -1366,7 +1482,9 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         return router
 
 
-fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](get_user_manager, [auth_backend])
+fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
+    get_user_manager, [auth_backend]
+)
 
 
 # NOTE: verified=REQUIRE_EMAIL_VERIFICATION is not used here since we
@@ -1393,7 +1511,9 @@ def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
     return None
 
 
-async def _sync_jwt_oidc_expiry(user_manager: UserManager, user: User, payload: dict[str, Any]) -> None:
+async def _sync_jwt_oidc_expiry(
+    user_manager: UserManager, user: User, payload: dict[str, Any]
+) -> None:
     if TRACK_EXTERNAL_IDP_EXPIRY:
         expires_at = payload.get("exp")
         if expires_at is None:
@@ -1424,14 +1544,18 @@ async def _get_or_create_user_from_jwt(
 ) -> User | None:
     email = _extract_email_from_jwt(payload)
     if email is None:
-        logger.warning("JWT token decoded successfully but no email claim found; skipping auth")
+        logger.warning(
+            "JWT token decoded successfully but no email claim found; skipping auth"
+        )
         return None
 
     # Enforce the same allowlist/domain policies as other auth flows
     verify_email_is_invited(email)
     verify_email_domain(email)
 
-    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(async_db_session, User, OAuthAccount)
+    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+        async_db_session, User, OAuthAccount
+    )
     user_manager = UserManager(user_db)
 
     try:
@@ -1483,7 +1607,9 @@ async def _check_for_saml_and_jwt(
             token = auth_header[len("Bearer ") :].strip()
             payload = await verify_jwt_token(token)
             if payload is not None:
-                user = await _get_or_create_user_from_jwt(payload, request, async_db_session)
+                user = await _get_or_create_user_from_jwt(
+                    payload, request, async_db_session
+                )
 
     return user
 
@@ -1539,7 +1665,11 @@ async def double_check_user(
                 detail="Access denied. User is not verified.",
             )
 
-        if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc) and not include_expired:
+        if (
+            user.oidc_expiry
+            and user.oidc_expiry < datetime.now(timezone.utc)
+            and not include_expired
+        ):
             raise BasicAuthenticationError(
                 detail="Access denied. User's OIDC token has expired.",
             )
@@ -1571,7 +1701,9 @@ async def current_chat_accessible_user(
 ) -> User:
     tenant_id = get_current_tenant_id()
 
-    return await double_check_user(user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id))
+    return await double_check_user(
+        user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
+    )
 
 
 async def current_user(
@@ -1684,18 +1816,24 @@ async def current_user_from_websocket(
     try:
         token_data = await retrieve_ws_token_data(token)
         if token_data is None:
-            raise BasicAuthenticationError(detail="Access denied. Invalid or expired authentication token.")
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid or expired authentication token."
+            )
     except BasicAuthenticationError:
         raise
     except Exception as e:
         logger.error(f"WS auth: error during token validation: {e}")
-        raise BasicAuthenticationError(detail="Authentication verification failed.") from e
+        raise BasicAuthenticationError(
+            detail="Authentication verification failed."
+        ) from e
 
     # Get user from token data
     user = await _get_user_from_token_data(token_data)
     if user is None:
         logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
-        raise BasicAuthenticationError(detail="Access denied. User not found or inactive.")
+        raise BasicAuthenticationError(
+            detail="Access denied. User not found or inactive."
+        )
 
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
@@ -1813,7 +1951,9 @@ def get_oauth_router(
     async def null_access_token_state() -> tuple[OAuth2Token, Optional[str]] | None:
         return None
 
-    access_token_state_dependency = oauth2_authorize_callback if not enable_pkce else null_access_token_state
+    access_token_state_dependency = (
+        oauth2_authorize_callback if not enable_pkce else null_access_token_state
+    )
 
     if csrf_token_cookie_secure is None:
         csrf_token_cookie_secure = WEB_DOMAIN.startswith("https")
@@ -1871,7 +2011,9 @@ def get_oauth_router(
 
         # For Google OAuth, add parameters to request refresh tokens
         if oauth_client.name == "google":
-            authorization_url = add_url_params(authorization_url, {"access_type": "offline", "prompt": "consent"})
+            authorization_url = add_url_params(
+                authorization_url, {"access_type": "offline", "prompt": "consent"}
+            )
 
         def set_oauth_cookie(
             target_response: Response,
@@ -1941,7 +2083,9 @@ def get_oauth_router(
     )
     async def callback(
         request: Request,
-        access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(access_token_state_dependency),
+        access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(
+            access_token_state_dependency
+        ),
         code: Optional[str] = None,
         state: Optional[str] = None,
         error: Optional[str] = None,
@@ -1969,7 +2113,9 @@ def get_oauth_router(
 
         def decode_and_validate_state(state_value: str) -> Dict[str, str]:
             try:
-                state_data = decode_jwt(state_value, state_secret, [STATE_TOKEN_AUDIENCE])
+                state_data = decode_jwt(
+                    state_value, state_secret, [STATE_TOKEN_AUDIENCE]
+                )
             except jwt.DecodeError:
                 raise OnyxError(
                     OnyxErrorCode.VALIDATION_ERROR,
@@ -2000,7 +2146,11 @@ def get_oauth_router(
 
             cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
             state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
-            if not cookie_csrf_token or not state_csrf_token or not secrets.compare_digest(cookie_csrf_token, state_csrf_token):
+            if (
+                not cookie_csrf_token
+                or not state_csrf_token
+                or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
+            ):
                 raise OnyxError(
                     OnyxErrorCode.VALIDATION_ERROR,
                     getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
@@ -2062,7 +2212,9 @@ def get_oauth_router(
                 return build_error_response(e)
 
             try:
-                token = await oauth_client.get_access_token(code, callback_redirect_url, code_verifier)
+                token = await oauth_client.get_access_token(
+                    code, callback_redirect_url, code_verifier
+                )
             except GetAccessTokenError:
                 return build_error_response(
                     OnyxError(
@@ -2072,7 +2224,9 @@ def get_oauth_router(
                 )
         else:
             if access_token_state is None:
-                raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Missing OAuth callback state")
+                raise OnyxError(
+                    OnyxErrorCode.INTERNAL_ERROR, "Missing OAuth callback state"
+                )
             token, callback_state = access_token_state
             if callback_state is None:
                 raise OnyxError(
@@ -2081,8 +2235,12 @@ def get_oauth_router(
                 )
             state_data = decode_and_validate_state(callback_state)
 
-        async def complete_login_flow(token: OAuth2Token, state_data: Dict[str, str]) -> RedirectResponse:
-            account_id, account_email = await oauth_client.get_id_email(token["access_token"])
+        async def complete_login_flow(
+            token: OAuth2Token, state_data: Dict[str, str]
+        ) -> RedirectResponse:
+            account_id, account_email = await oauth_client.get_id_email(
+                token["access_token"]
+            )
 
             if account_email is None:
                 raise OnyxError(
@@ -2093,9 +2251,9 @@ def get_oauth_router(
             next_url = state_data.get("next_url", "/")
             referral_source = state_data.get("referral_source", None)
             try:
-                tenant_id = fetch_ee_implementation_or_noop("onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None)(
-                    account_email
-                )
+                tenant_id = fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+                )(account_email)
             except exceptions.UserNotExists:
                 tenant_id = None
 
@@ -2134,7 +2292,9 @@ def get_oauth_router(
             if tenant_id is None:
                 # Use URL utility to add parameters
                 redirect_destination = add_url_params(next_url, {"new_team": "true"})
-                redirect_response = RedirectResponse(redirect_destination, status_code=302)
+                redirect_response = RedirectResponse(
+                    redirect_destination, status_code=302
+                )
             else:
                 # No parameters to add
                 redirect_response = RedirectResponse(next_url, status_code=302)
