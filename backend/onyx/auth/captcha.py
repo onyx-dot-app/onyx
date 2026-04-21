@@ -159,7 +159,19 @@ def issue_captcha_cookie_value(now: int | None = None) -> str:
 
 
 def validate_captcha_cookie_value(value: str | None) -> bool:
-    """Return True if the cookie value has a valid unexpired signature."""
+    """Return True if the cookie value has a valid unexpired signature.
+
+    The cookie is NOT a JWT — it's a minimal two-field format produced by
+    ``issue_captcha_cookie_value``:
+
+        <expiry_epoch_seconds>.<hex_hmac_sha256>
+
+    We split on the first ``.``, parse the expiry as an integer, recompute
+    the HMAC over the expiry string using the key derived from
+    USER_AUTH_SECRET, and compare with ``hmac.compare_digest`` to avoid
+    timing leaks. No base64, no JSON, no claims — anything fancier would
+    be overkill for a short-lived "verified recently" cookie.
+    """
     if not value:
         return False
     parts = value.split(".", 1)

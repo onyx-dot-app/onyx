@@ -181,9 +181,11 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 )
 
 # Captcha cookie TTL — how long a verified captcha token remains valid in
-# the browser cookie before the user has to solve another challenge. Should
-# comfortably cover an OAuth round-trip; 10 minutes is generous.
-CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "600"))
+# the browser cookie before the user has to solve another challenge. Sized
+# to comfortably cover one Google OAuth round-trip (typically <10s) while
+# keeping the replay window tight. 120s also matches Google's own v3 token
+# lifetime, so a paired-up cookie + token never outlive each other.
+CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
