@@ -81,6 +81,16 @@
   @apply border;
 }
 
+/* When expanded, the header's bottom border acts as a separator between
+   header and body. It should always remain the default border color,
+   regardless of any status borderColor applied to the card. */
+
+.opal-card-expandable-header:has(
+    + .opal-card-expandable-wrapper[data-expanded="true"]
+  ) {
+  @apply border-b-border-01;
+}
+
 /* ── Content wrapper: grid 0fr↔1fr animation ─────────────────────────── */
 
 .opal-card-expandable-wrapper {
