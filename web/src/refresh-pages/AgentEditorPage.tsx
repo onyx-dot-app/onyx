@@ -288,7 +288,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
             description={tool.description}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding="lg"
             rightChildren={<SwitchField name={toolFieldName} />}
           />
         }
@@ -353,7 +353,7 @@ function MCPServerCard({
                       description={tool.description}
                       sizePreset="main-ui"
                       variant="section"
-                      padding="fit"
+                      padding="lg"
                       rightChildren={
                         <SwitchField
                           name={`${serverFieldName}.tool_${tool.id}`}
@@ -388,7 +388,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding="lg"
             rightChildren={
               <GeneralLayouts.Section
                 flexDirection="row"
@@ -416,7 +416,6 @@ function MCPServerCard({
             }
           />
         }
-        headerPadding="sm"
         bottomChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn

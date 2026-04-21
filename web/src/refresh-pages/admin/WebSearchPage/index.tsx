@@ -277,7 +277,6 @@ function ProviderCard({
         }
       >
         <Card.Header
-          headerPadding="sm"
           headerChildren={
             <ContentAction
               sizePreset="main-ui"
@@ -285,7 +284,7 @@ function ProviderCard({
               icon={icon}
               title={title}
               description={description}
-              padding="fit"
+              padding="lg"
               rightChildren={
                 isDisconnected && onConnect ? (
                   <Button

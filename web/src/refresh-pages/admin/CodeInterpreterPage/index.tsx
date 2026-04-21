@@ -114,7 +114,6 @@ export default function CodeInterpreterPage() {
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
               <Card.Header
-                headerPadding="sm"
                 headerChildren={
                   <ContentAction
                     sizePreset="main-ui"
@@ -122,7 +121,7 @@ export default function CodeInterpreterPage() {
                     icon={SvgTerminal}
                     title="Code Interpreter"
                     description="Built-in Python runtime"
-                    padding="fit"
+                    padding="lg"
                     rightChildren={
                       <ConnectionStatus
                         healthy={isHealthy}
@@ -171,7 +170,6 @@ export default function CodeInterpreterPage() {
             onClick={() => handleToggle(true)}
           >
             <Card.Header
-              headerPadding="sm"
               headerChildren={
                 <ContentAction
                   sizePreset="main-ui"
@@ -179,7 +177,7 @@ export default function CodeInterpreterPage() {
                   icon={SvgTerminal}
                   title="Code Interpreter (Disconnected)"
                   description="Built-in Python runtime"
-                  padding="fit"
+                  padding="lg"
                   rightChildren={
                     <Section
                       flexDirection="row"

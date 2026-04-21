@@ -256,7 +256,6 @@ export default function ImageGenerationContent() {
                     }
                   >
                     <Card.Header
-                      headerPadding="sm"
                       headerChildren={
                         <ContentAction
                           sizePreset="main-ui"
@@ -269,7 +268,7 @@ export default function ImageGenerationContent() {
                           )}
                           title={provider.title}
                           description={provider.description}
-                          padding="fit"
+                          padding="lg"
                           rightChildren={
                             isDisconnected ? (
                               <Button

@@ -93,7 +93,6 @@ export default function ProviderCard({
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
       <Card.Header
-        headerPadding="sm"
         headerChildren={
           <ContentAction
             sizePreset="main-ui"
@@ -101,7 +100,7 @@ export default function ProviderCard({
             icon={icon}
             title={title}
             description={description}
-            padding="fit"
+            padding="lg"
             rightChildren={
               isDisconnected && onConnect ? (
                 <Button

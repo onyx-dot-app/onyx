@@ -150,7 +150,6 @@ function MCPServerCard({
       }
     >
       <CardLayout.Header
-        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
@@ -158,7 +157,7 @@ function MCPServerCard({
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding="lg"
             rightChildren={
               <Tooltip tooltip={authTooltip} side="top">
                 <Switch
@@ -903,7 +902,7 @@ export default function ChatPreferencesPage() {
                                 description={tool.description}
                                 sizePreset="main-ui"
                                 variant="section"
-                                padding="fit"
+                                padding="lg"
                                 rightChildren={
                                   <Switch
                                     checked={isToolEnabled(tool.id)}
