@@ -5,7 +5,8 @@ Usage:
     source .venv/bin/activate
     python backend/scripts/debugging/opensearch/opensearch_debug.py --help
     python backend/scripts/debugging/opensearch/opensearch_debug.py list
-    python backend/scripts/debugging/opensearch/opensearch_debug.py delete <index_name>
+    python backend/scripts/debugging/opensearch/opensearch_debug.py delete
+        <index_name>
 
 Environment Variables:
     OPENSEARCH_HOST: OpenSearch host
@@ -17,10 +18,11 @@ Dependencies:
     backend/shared_configs/configs.py
     backend/onyx/document_index/opensearch/client.py
 """
-
 import argparse
+import json
 import os
 import sys
+from typing import Any
 
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
@@ -61,6 +63,33 @@ def delete_index(client: OpenSearchIndexClient) -> None:
         print(f"Failed to delete index '{client._index_name}' for an unknown reason.")
 
 
+def get_settings(
+    client: OpenSearchIndexClient,
+    include_defaults: bool = False,
+    flat_settings: bool = False,
+    pretty: bool = False,
+) -> None:
+    settings = client.get_settings(
+        include_defaults=include_defaults, flat_settings=flat_settings, pretty=pretty
+    )
+    print(json.dumps(settings, indent=4))
+
+
+def set_settings(client: OpenSearchIndexClient, settings: dict[str, Any]) -> None:
+    client.update_settings(settings)
+    print(f"Updated settings for index '{client._index_name}'.")
+
+
+def open_index(client: OpenSearchIndexClient) -> None:
+    client.open_index()
+    print(f"Index '{client._index_name}' opened.")
+
+
+def close_index(client: OpenSearchIndexClient) -> None:
+    client.close_index()
+    print(f"Index '{client._index_name}' closed.")
+
+
 def main() -> None:
     def add_standard_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -77,13 +106,19 @@ def main() -> None:
         )
         parser.add_argument(
             "--username",
-            help="OpenSearch username. If not provided, will fall back to OPENSEARCH_ADMIN_USERNAME, then prompt for input.",
+            help=(
+                "OpenSearch username. If not provided, will fall back to OPENSEARCH_ADMIN_USERNAME, then prompt for "
+                "input."
+            ),
             type=str,
             default=os.environ.get("OPENSEARCH_ADMIN_USERNAME", ""),
         )
         parser.add_argument(
             "--password",
-            help="OpenSearch password. If not provided, will fall back to OPENSEARCH_ADMIN_PASSWORD, then prompt for input.",
+            help=(
+                "OpenSearch password. If not provided, will fall back to OPENSEARCH_ADMIN_PASSWORD, then prompt for "
+                "input."
+            ),
             type=str,
             default=os.environ.get("OPENSEARCH_ADMIN_PASSWORD", ""),
         )
@@ -118,6 +153,41 @@ def main() -> None:
     delete_parser = subparsers.add_parser("delete", help="Delete an index.")
     delete_parser.add_argument("index", help="Index name.", type=str)
 
+    get_settings_parser = subparsers.add_parser(
+        "get-settings", help="Get settings for an index."
+    )
+    get_settings_parser.add_argument("index", help="Index name.", type=str)
+    get_settings_parser.add_argument(
+        "--include-defaults",
+        help="Include default settings.",
+        action="store_true",
+        default=False,
+    )
+    get_settings_parser.add_argument(
+        "--flat-settings",
+        help="Return settings in flat format.",
+        action="store_true",
+        default=False,
+    )
+    get_settings_parser.add_argument(
+        "--pretty",
+        help="Pretty-format the returned JSON response.",
+        action="store_true",
+        default=False,
+    )
+
+    set_settings_parser = subparsers.add_parser(
+        "set-settings", help="Set settings for an index."
+    )
+    set_settings_parser.add_argument("index", help="Index name.", type=str)
+    set_settings_parser.add_argument("settings", help="Settings to set.", type=str)
+
+    open_index_parser = subparsers.add_parser("open-index", help="Open an index.")
+    open_index_parser.add_argument("index", help="Index name.", type=str)
+
+    close_index_parser = subparsers.add_parser("close-index", help="Close an index.")
+    close_index_parser.add_argument("index", help="Index name.", type=str)
+
     args = parser.parse_args()
 
     if not (host := args.host or input("Enter the OpenSearch host: ")):
@@ -136,16 +206,16 @@ def main() -> None:
     print(f"MULTI_TENANT: {MULTI_TENANT}")
 
     with (
-        OpenSearchIndexClient(
-            index_name=args.index,
+        OpenSearchClient(
             host=host,
             port=port,
             auth=(username, password),
             use_ssl=not args.no_ssl,
             verify_certs=not args.no_verify_certs,
         )
-        if args.command == "delete"
-        else OpenSearchClient(
+        if args.command == "list"
+        else OpenSearchIndexClient(
+            index_name=args.index,
             host=host,
             port=port,
             auth=(username, password),
@@ -161,6 +231,14 @@ def main() -> None:
             list_indices(client)
         elif args.command == "delete":
             delete_index(client)
+        elif args.command == "get-settings":
+            get_settings(client, args.include_defaults, args.flat_settings, args.pretty)
+        elif args.command == "set-settings":
+            set_settings(client, args.settings)
+        elif args.command == "open-index":
+            open_index(client)
+        elif args.command == "close-index":
+            close_index(client)
 
 
 if __name__ == "__main__":
