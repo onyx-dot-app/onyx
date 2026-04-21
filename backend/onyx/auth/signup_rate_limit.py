@@ -29,15 +29,37 @@ _PER_IP_PER_HOUR = 5
 _BUCKET_SECONDS = 3600
 _REDIS_KEY_PREFIX = "signup_rate:"
 
+# Number of infrastructure hops between the public internet and the api-server
+# that each *append* to X-Forwarded-For. Onyx cloud: AWS ALB + ingress-nginx =
+# 2. Adjust if the deployment topology changes. This is what lets us safely
+# ignore any client-supplied prefix of the XFF header: the trusted proxy that
+# sits _TRUSTED_PROXY_HOPS from the right always appended the actual client
+# IP, so we count from the end.
+_TRUSTED_PROXY_HOPS = 2
+
 
 def _client_ip(request: Request) -> str:
-    """Prefer the real client IP from X-Forwarded-For. Nginx and the AWS LB
-    both set it; ``request.client.host`` is the proxy hop, which is the same
-    for every request and useless as a rate-limit key."""
+    """Extract the real client IP in a way that is not trivially spoofable.
+
+    AWS ALB and nginx *append* to any pre-existing X-Forwarded-For header —
+    they do not replace it. A bot can send `X-Forwarded-For: fake-ip`; the
+    LB appends the real client IP; nginx appends the ALB's IP. The FIRST
+    entry is therefore client-controlled and useless. The REAL client IP is
+    the entry written by the outermost trusted proxy, counted from the
+    right.
+
+    Falls back to request.client.host (direct TCP peer) only when there is
+    no trust chain — self-hosted single-nginx deployments, local dev, tests.
+    """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        # First entry is the originating client per RFC 7239 convention.
-        return xff.split(",")[0].strip()
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        # Take the entry written by the outermost trusted proxy. If the chain
+        # is shorter than expected (misconfiguration, or a proxy we don't
+        # know about), fall through to the TCP peer rather than reading from
+        # the client-controlled prefix.
+        if len(parts) >= _TRUSTED_PROXY_HOPS:
+            return parts[-_TRUSTED_PROXY_HOPS]
     return request.client.host if request.client else "unknown"
 
 
@@ -65,11 +87,15 @@ async def enforce_signup_rate_limit(request: Request) -> None:
 
     try:
         redis = await get_async_redis_connection()
-        # INCR returns the post-increment value; if this is the first hit in
-        # the bucket we also set TTL so the key self-cleans.
-        count = await redis.incr(key)
-        if count == 1:
-            await redis.expire(key, _BUCKET_SECONDS)
+        # INCR + EXPIRE must be atomic: if INCR created the key but EXPIRE
+        # then failed separately, the key would live forever with no TTL,
+        # permanently blocking that IP after it crossed the threshold.
+        # A single pipeline round-trip guarantees both or neither.
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _BUCKET_SECONDS)
+        incr_result, _ = await pipe.execute()
+        count = int(incr_result)
     except Exception as e:
         logger.error(f"Signup rate-limit Redis error (failing open): {e}")
         return
