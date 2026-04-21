@@ -757,7 +757,7 @@ python-dateutil==2.8.2
     #   opensearch-py
     #   pandas
 python-docx==1.1.2
-python-dotenv==1.1.1
+python-dotenv==1.2.2
     # via
     #   braintrust
     #   fastmcp
