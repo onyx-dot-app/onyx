@@ -90,16 +90,16 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             sizePreset="main-ui"
             variant="section"
             padding="fit"
+            rightChildren={
+              <Button
+                prominence="internal"
+                rightIcon={expanded ? SvgFold : SvgExpand}
+                onClick={() => setExpanded((prev) => !prev)}
+              >
+                {expanded ? "Fold" : "Expand"}
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button
-            prominence="internal"
-            rightIcon={expanded ? SvgFold : SvgExpand}
-            onClick={() => setExpanded((prev) => !prev)}
-          >
-            {expanded ? "Fold" : "Expand"}
-          </Button>
         }
       />
     </Card>

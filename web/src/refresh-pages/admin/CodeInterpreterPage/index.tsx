@@ -13,7 +13,7 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button, SelectCard } from "@opal/components";
-import { Card, Content } from "@opal/layouts";
+import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -116,16 +116,20 @@ export default function CodeInterpreterPage() {
               <Card.Header
                 headerPadding="sm"
                 headerChildren={
-                  <Content
+                  <ContentAction
                     sizePreset="main-ui"
                     variant="section"
                     icon={SvgTerminal}
                     title="Code Interpreter"
                     description="Built-in Python runtime"
+                    padding="fit"
+                    rightChildren={
+                      <ConnectionStatus
+                        healthy={isHealthy}
+                        isLoading={isLoading}
+                      />
+                    }
                   />
-                }
-                topRightChildren={
-                  <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
                 }
                 bottomRightChildren={
                   <Section
@@ -169,31 +173,36 @@ export default function CodeInterpreterPage() {
             <Card.Header
               headerPadding="sm"
               headerChildren={
-                <Content
+                <ContentAction
                   sizePreset="main-ui"
                   variant="section"
                   icon={SvgTerminal}
                   title="Code Interpreter (Disconnected)"
                   description="Built-in Python runtime"
-                />
-              }
-              topRightChildren={
-                <Section flexDirection="row" alignItems="center" padding={0.5}>
-                  {isReconnecting ? (
-                    <CheckingStatus />
-                  ) : (
-                    <Button
-                      prominence="tertiary"
-                      rightIcon={SvgArrowExchange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggle(true);
-                      }}
+                  padding="fit"
+                  rightChildren={
+                    <Section
+                      flexDirection="row"
+                      alignItems="center"
+                      padding={0.5}
                     >
-                      Reconnect
-                    </Button>
-                  )}
-                </Section>
+                      {isReconnecting ? (
+                        <CheckingStatus />
+                      ) : (
+                        <Button
+                          prominence="tertiary"
+                          rightIcon={SvgArrowExchange}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggle(true);
+                          }}
+                        >
+                          Reconnect
+                        </Button>
+                      )}
+                    </Section>
+                  }
+                />
               }
             />
           </SelectCard>

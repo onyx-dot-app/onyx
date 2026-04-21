@@ -5,7 +5,12 @@ import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, Card as CardLayout, InputHorizontal } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  Card as CardLayout,
+  InputHorizontal,
+} from "@opal/layouts";
 import {
   Button,
   Divider,
@@ -143,43 +148,44 @@ function ExistingProviderCard({
           <CardLayout.Header
             headerPadding="sm"
             headerChildren={
-              <Content
+              <ContentAction
                 icon={icon}
                 title={provider.name}
                 description={companyName}
                 sizePreset="main-ui"
                 variant="section"
+                padding="fit"
                 tag={
                   isDefault ? { title: "Default", color: "blue" } : undefined
                 }
+                rightChildren={
+                  <div className="flex flex-row">
+                    <Hoverable.Item
+                      group="ExistingProviderCard"
+                      variant="opacity-on-hover"
+                    >
+                      <Button
+                        icon={SvgTrash}
+                        prominence="tertiary"
+                        aria-label={`Delete ${provider.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteModal.toggle(true);
+                        }}
+                      />
+                    </Hoverable.Item>
+                    <Button
+                      icon={SvgSettings}
+                      prominence="tertiary"
+                      aria-label={`Edit ${provider.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsOpen(true);
+                      }}
+                    />
+                  </div>
+                }
               />
-            }
-            topRightChildren={
-              <div className="flex flex-row">
-                <Hoverable.Item
-                  group="ExistingProviderCard"
-                  variant="opacity-on-hover"
-                >
-                  <Button
-                    icon={SvgTrash}
-                    prominence="tertiary"
-                    aria-label={`Delete ${provider.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteModal.toggle(true);
-                    }}
-                  />
-                </Hoverable.Item>
-                <Button
-                  icon={SvgSettings}
-                  prominence="tertiary"
-                  aria-label={`Edit ${provider.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsOpen(true);
-                  }}
-                />
-              </div>
             }
           />
         </SelectCard>
@@ -214,25 +220,26 @@ function NewProviderCard({
       <CardLayout.Header
         headerPadding="sm"
         headerChildren={
-          <Content
+          <ContentAction
             icon={icon}
             title={productName}
             description={companyName}
             sizePreset="main-ui"
             variant="section"
+            padding="fit"
+            rightChildren={
+              <Button
+                rightIcon={SvgArrowExchange}
+                prominence="tertiary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(true);
+                }}
+              >
+                Connect
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button
-            rightIcon={SvgArrowExchange}
-            prominence="tertiary"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(true);
-            }}
-          >
-            Connect
-          </Button>
         }
       />
       {isOpen && (
@@ -266,25 +273,26 @@ function NewCustomProviderCard({
       <CardLayout.Header
         headerPadding="sm"
         headerChildren={
-          <Content
+          <ContentAction
             icon={icon}
             title={productName}
             description={companyName}
             sizePreset="main-ui"
             variant="section"
+            padding="fit"
+            rightChildren={
+              <Button
+                rightIcon={SvgArrowExchange}
+                prominence="tertiary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(true);
+                }}
+              >
+                Set Up
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button
-            rightIcon={SvgArrowExchange}
-            prominence="tertiary"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(true);
-            }}
-          >
-            Set Up
-          </Button>
         }
       />
       {isOpen && (

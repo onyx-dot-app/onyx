@@ -289,9 +289,9 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
             sizePreset="main-ui"
             variant="section"
             padding="fit"
+            rightChildren={<SwitchField name={toolFieldName} />}
           />
         }
-        topRightChildren={<SwitchField name={toolFieldName} />}
       />
     </Card>
   );
@@ -354,12 +354,12 @@ function MCPServerCard({
                       sizePreset="main-ui"
                       variant="section"
                       padding="fit"
-                    />
-                  }
-                  topRightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
+                      rightChildren={
+                        <SwitchField
+                          name={`${serverFieldName}.tool_${tool.id}`}
+                          disabled={!isServerEnabled}
+                        />
+                      }
                     />
                   }
                 />

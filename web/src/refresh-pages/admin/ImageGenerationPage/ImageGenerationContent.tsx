@@ -22,7 +22,7 @@ import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, SelectCard, Text } from "@opal/components";
-import { Content, Card } from "@opal/layouts";
+import { Content, ContentAction, Card } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -258,7 +258,7 @@ export default function ImageGenerationContent() {
                     <Card.Header
                       headerPadding="sm"
                       headerChildren={
-                        <Content
+                        <ContentAction
                           sizePreset="main-ui"
                           variant="section"
                           icon={() => (
@@ -269,41 +269,42 @@ export default function ImageGenerationContent() {
                           )}
                           title={provider.title}
                           description={provider.description}
+                          padding="fit"
+                          rightChildren={
+                            isDisconnected ? (
+                              <Button
+                                prominence="tertiary"
+                                rightIcon={SvgArrowExchange}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleConnect(provider);
+                                }}
+                              >
+                                Connect
+                              </Button>
+                            ) : isConnected ? (
+                              <Button
+                                prominence="tertiary"
+                                rightIcon={SvgArrowRightCircle}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelect(provider);
+                                }}
+                              >
+                                Set as Default
+                              </Button>
+                            ) : isSelected ? (
+                              <div className="p-2">
+                                <Content
+                                  title="Current Default"
+                                  sizePreset="main-ui"
+                                  variant="section"
+                                  icon={SvgCheckSquare}
+                                />
+                              </div>
+                            ) : undefined
+                          }
                         />
-                      }
-                      topRightChildren={
-                        isDisconnected ? (
-                          <Button
-                            prominence="tertiary"
-                            rightIcon={SvgArrowExchange}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConnect(provider);
-                            }}
-                          >
-                            Connect
-                          </Button>
-                        ) : isConnected ? (
-                          <Button
-                            prominence="tertiary"
-                            rightIcon={SvgArrowRightCircle}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelect(provider);
-                            }}
-                          >
-                            Set as Default
-                          </Button>
-                        ) : isSelected ? (
-                          <div className="p-2">
-                            <Content
-                              title="Current Default"
-                              sizePreset="main-ui"
-                              variant="section"
-                              icon={SvgCheckSquare}
-                            />
-                          </div>
-                        ) : undefined
                       }
                       bottomRightChildren={
                         !isDisconnected ? (

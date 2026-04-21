@@ -122,24 +122,25 @@ function MCPServerCard({
               <Card key={tool.id} border="solid" rounding="md" padding="sm">
                 <CardLayout.Header
                   headerChildren={
-                    <Content
+                    <ContentAction
                       icon={tool.icon}
                       title={tool.name}
                       description={tool.description}
                       sizePreset="main-ui"
                       variant="section"
+                      padding="fit"
+                      rightChildren={
+                        <Tooltip tooltip={authTooltip} side="top">
+                          <Switch
+                            checked={isToolEnabled(tool.id)}
+                            onCheckedChange={(checked) =>
+                              onToggleTool(tool.id, checked)
+                            }
+                            disabled={needsAuth}
+                          />
+                        </Tooltip>
+                      }
                     />
-                  }
-                  topRightChildren={
-                    <Tooltip tooltip={authTooltip} side="top">
-                      <Switch
-                        checked={isToolEnabled(tool.id)}
-                        onCheckedChange={(checked) =>
-                          onToggleTool(tool.id, checked)
-                        }
-                        disabled={needsAuth}
-                      />
-                    </Tooltip>
                   }
                 />
               </Card>
@@ -896,19 +897,20 @@ export default function ChatPreferencesPage() {
                         >
                           <CardLayout.Header
                             headerChildren={
-                              <Content
+                              <ContentAction
                                 icon={SvgActions}
                                 title={tool.display_name || tool.name}
                                 description={tool.description}
                                 sizePreset="main-ui"
                                 variant="section"
-                              />
-                            }
-                            topRightChildren={
-                              <Switch
-                                checked={isToolEnabled(tool.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleTool(tool.id, checked)
+                                padding="fit"
+                                rightChildren={
+                                  <Switch
+                                    checked={isToolEnabled(tool.id)}
+                                    onCheckedChange={(checked) =>
+                                      toggleTool(tool.id, checked)
+                                    }
+                                  />
                                 }
                               />
                             }

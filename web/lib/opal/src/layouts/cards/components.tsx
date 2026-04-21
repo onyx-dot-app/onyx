@@ -7,16 +7,13 @@ import type { PaddingVariants } from "@opal/types";
 import { cn } from "@opal/utils";
 
 interface CardHeaderProps {
-  /** Content rendered in the top-left header slot — typically a {@link Content} block. */
+  /** Content rendered in the header slot — typically a {@link ContentAction} block. */
   headerChildren?: React.ReactNode;
 
   /** Padding applied around `headerChildren`. @default "fit" */
   headerPadding?: Extract<PaddingVariants, "sm" | "fit">;
 
-  /** Content rendered to the right of `headerChildren` (top of right column). */
-  topRightChildren?: React.ReactNode;
-
-  /** Content rendered below `topRightChildren`, in the same column. */
+  /** Content rendered below `headerChildren`, in a right-aligned column. */
   bottomRightChildren?: React.ReactNode;
 
   /**
@@ -32,12 +29,12 @@ interface CardHeaderProps {
 // ---------------------------------------------------------------------------
 
 /**
- * A card header layout with three optional slots arranged in two independent
- * columns, plus a full-width `bottomChildren` slot below.
+ * A card header layout with a main content slot, an optional right-aligned
+ * column below, and a full-width `bottomChildren` slot.
  *
  * ```
- * +------------------+----------------+
- * | headerChildren   | topRight       |
+ * +-----------------------------------+
+ * | headerChildren                    |
  * +                  +----------------+
  * |                  | bottomRight    |
  * +------------------+----------------+
@@ -45,25 +42,24 @@ interface CardHeaderProps {
  * +-----------------------------------+
  * ```
  *
- * The left column grows to fill available space; the right column shrinks
- * to fit its content. The two columns are independent in height.
- *
- * For the typical icon/title/description pattern, pass a {@link Content}
- * (or {@link ContentAction}) into `headerChildren`.
+ * For the typical icon/title/description + right-action pattern, pass a
+ * {@link ContentAction} into `headerChildren` with `rightChildren` for
+ * the action button.
  *
  * @example
  * ```tsx
  * <Card.Header
  *   headerChildren={
- *     <Content
+ *     <ContentAction
  *       icon={SvgGlobe}
  *       title="Google"
  *       description="Search engine"
  *       sizePreset="main-ui"
  *       variant="section"
+ *       padding="fit"
+ *       rightChildren={<Button>Connect</Button>}
  *     />
  *   }
- *   topRightChildren={<Button>Connect</Button>}
  *   bottomRightChildren={
  *     <>
  *       <Button icon={SvgUnplug} size="sm" prominence="tertiary" />
@@ -76,12 +72,9 @@ interface CardHeaderProps {
 function Header({
   headerChildren,
   headerPadding = "fit",
-  topRightChildren,
   bottomRightChildren,
   bottomChildren,
 }: CardHeaderProps) {
-  const hasRight = topRightChildren != null || bottomRightChildren != null;
-
   return (
     <div className="flex flex-col w-full">
       <div className="flex flex-row items-start w-full">
@@ -95,12 +88,9 @@ function Header({
             {headerChildren}
           </div>
         )}
-        {hasRight && (
+        {bottomRightChildren != null && (
           <div className="flex flex-col items-end shrink-0">
-            {topRightChildren != null && <div>{topRightChildren}</div>}
-            {bottomRightChildren != null && (
-              <div className="flex flex-row">{bottomRightChildren}</div>
-            )}
+            <div className="flex flex-row">{bottomRightChildren}</div>
           </div>
         )}
       </div>
