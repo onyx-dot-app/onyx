@@ -40,15 +40,31 @@ const containerSizeVariants: Record<
   ContainerProperties
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
-  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
-  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
-  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  lg: {
+    height: "h-[var(--line-height-lg)]",
+    minWidth: "min-w-[var(--line-height-lg)]",
+    padding: "p-2",
+  },
+  md: {
+    height: "h-[var(--line-height-md)]",
+    minWidth: "min-w-[var(--line-height-md)]",
+    padding: "p-1",
+  },
+  sm: {
+    height: "h-[var(--line-height-sm)]",
+    minWidth: "min-w-[var(--line-height-sm)]",
+    padding: "p-1",
+  },
   xs: {
-    height: "h-[1.25rem]",
-    minWidth: "min-w-[1.25rem]",
+    height: "h-[var(--line-height-xs)]",
+    minWidth: "min-w-[var(--line-height-xs)]",
     padding: "p-0.5",
   },
-  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  "2xs": {
+    height: "h-[var(--line-height-2xs)]",
+    minWidth: "min-w-[var(--line-height-2xs)]",
+    padding: "p-0.5",
+  },
 } as const;
 
 // ---------------------------------------------------------------------------

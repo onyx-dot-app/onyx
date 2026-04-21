@@ -22,6 +22,7 @@ import {
   LinkButton,
   MessageCard,
   SelectCard,
+  Text,
 } from "@opal/components";
 import {
   SvgCloud,
@@ -55,10 +56,13 @@ import Tabs from "@/refresh-components/Tabs";
 import { saveAdminSettings } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import {
+  useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useLLMContextualCosts,
@@ -123,16 +127,55 @@ interface ProviderGroupProps {
   provider: CloudEmbeddingProvider;
   models: CloudEmbeddingModel[];
   currentModelName?: string;
+  isConfigured?: boolean;
 }
 
 function ProviderGroup({
   provider,
   models,
   currentModelName,
+  isConfigured,
 }: ProviderGroupProps) {
+  const disconnectModal = useCreateModal();
+  const providerName = getFormattedProviderName(provider.provider_type);
+
+  const handleDisconnect = useCallback(async () => {
+    const response = await fetch(
+      `${EMBEDDING_PROVIDERS_ADMIN_URL}/${provider.provider_type}`,
+      { method: "DELETE" }
+    );
+
+    if (!response.ok) {
+      toast.error(`Failed to disconnect ${providerName}`);
+      return;
+    }
+
+    toast.success(`Disconnected ${providerName}`);
+    await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+    disconnectModal.toggle(false);
+  }, [provider.provider_type, providerName, disconnectModal]);
+
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
-      <div className="px-1 pt-1 w-full">
+      <disconnectModal.Provider>
+        <ConfirmationModalLayout
+          icon={SvgUnplug}
+          title={markdown(`Disconnect *${providerName}*`)}
+          submit={
+            <Button variant="danger" onClick={handleDisconnect}>
+              Disconnect
+            </Button>
+          }
+        >
+          <Text font="main-ui-body" color="text-03" as="p">
+            {markdown(
+              `This will disconnect all embedding models from provider **${providerName}**.`
+            )}
+          </Text>
+        </ConfirmationModalLayout>
+      </disconnectModal.Provider>
+
+      <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
         <GeneralLayouts.Section flexDirection="row" gap={0}>
           <Spacer horizontal rem={0.675} />
           <div className="flex flex-row justify-between items-center w-full py-1">
@@ -146,12 +189,22 @@ function ProviderGroup({
               sizePreset="secondary"
               variant="body"
             />
-            <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
-              {/* TODO(@raunakab): wire up */}
-              <Button icon={SvgUnplug} prominence="tertiary" size="sm" />
-              {/* TODO(@raunakab): wire up */}
-              <Button icon={SvgSettings} prominence="tertiary" size="sm" />
-            </GeneralLayouts.Section>
+            {isConfigured && (
+              <GeneralLayouts.Section
+                flexDirection="row"
+                gap={0.25}
+                width="fit"
+              >
+                <Button
+                  icon={SvgUnplug}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={() => disconnectModal.toggle(true)}
+                />
+                {/* TODO(@raunakab): wire up */}
+                <Button icon={SvgSettings} prominence="tertiary" size="sm" />
+              </GeneralLayouts.Section>
+            )}
           </div>
         </GeneralLayouts.Section>
       </div>
@@ -331,6 +384,7 @@ export default function IndexSettingsPage() {
     useCurrentSearchSettings();
 
   const { data: contextualCosts } = useLLMContextualCosts();
+  const { data: configuredProviders } = useConfiguredEmbeddingProviders();
 
   const saveSearchSettings = useCallback(
     async (updates: Partial<SavedSearchSettings>) => {
@@ -434,6 +488,9 @@ export default function IndexSettingsPage() {
                                 currentModelName={
                                   currentEmbeddingModel?.model_name
                                 }
+                                isConfigured={configuredProviders?.has(
+                                  provider.provider_type
+                                )}
                               />
                             ))}
                           </GeneralLayouts.Section>

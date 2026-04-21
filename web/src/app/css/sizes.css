@@ -9,4 +9,10 @@
   --container-full: 100%;
 
   --toast-width: 25rem;
+
+  --line-height-lg: 2.25rem;
+  --line-height-md: 1.75rem;
+  --line-height-sm: 1.5rem;
+  --line-height-xs: 1.25rem;
+  --line-height-2xs: 1rem;
 }

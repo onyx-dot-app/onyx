@@ -3,9 +3,11 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModelDescriptor,
+  EmbeddingProvider,
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
+import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 /**
@@ -47,5 +49,20 @@ export function useLLMContextualCosts() {
   return useSWR<LLMContextualCost[]>(
     LLM_CONTEXTUAL_COST_ADMIN_URL,
     errorHandlingFetcher
+  );
+}
+
+/**
+ * Fetches the set of cloud embedding provider types that have API keys
+ * configured in the backend.
+ */
+export function useConfiguredEmbeddingProviders() {
+  return useSWR<Set<EmbeddingProvider>>(
+    EMBEDDING_PROVIDERS_ADMIN_URL,
+    async (url: string) => {
+      const providers: { provider_type: EmbeddingProvider }[] =
+        await errorHandlingFetcher(url);
+      return new Set(providers.map((p) => p.provider_type));
+    }
   );
 }
