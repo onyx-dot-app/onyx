@@ -1,6 +1,8 @@
 from typing import Any
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR
+from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
@@ -40,6 +42,30 @@ def mask_string(sensitive_str: str) -> str:
         return "••••••••••••"
 
     return f"{sensitive_str[:visible_start]}...{sensitive_str[-visible_end:]}"
+
+
+def is_masked_credential(value: str) -> bool:
+    """Return True if the string looks like a `mask_string` placeholder.
+
+    `mask_string` has two output formats:
+    - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
+    - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
+    """
+    return MASK_CREDENTIAL_CHAR in value or bool(MASK_CREDENTIAL_LONG_RE.match(value))
+
+
+def reject_masked_credentials(credentials: dict[str, Any]) -> None:
+    """Raise if any credential string value contains mask placeholder characters.
+
+    Used as a defensive net at write boundaries so that masked values
+    round-tripped from `mask_string` are never persisted as real credentials.
+    """
+    for key, val in credentials.items():
+        if isinstance(val, str) and is_masked_credential(val):
+            raise ValueError(
+                f"Credential field '{key}' contains masked placeholder "
+                "characters. Please provide the actual credential value."
+            )
 
 
 MASK_CREDENTIALS_WHITELIST = {
