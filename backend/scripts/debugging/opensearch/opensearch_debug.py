@@ -257,7 +257,7 @@ def main() -> None:
                 human=args.human,
             )
         elif args.command == "set":
-            set_settings(client, args.settings)
+            set_settings(client, json.loads(args.settings))
         elif args.command == "open":
             open_index(client)
         elif args.command == "close":

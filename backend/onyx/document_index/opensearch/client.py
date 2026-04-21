@@ -547,10 +547,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         """
         logger.debug(f"Getting settings of index {self._index_name}.")
         params = {
-            "include_defaults": "true" if include_defaults else "false",
-            "flat_settings": "true" if flat_settings else "false",
-            "pretty": "true" if pretty else "false",
-            "human": "true" if human else "false",
+            "include_defaults": str(include_defaults).lower(),
+            "flat_settings": str(flat_settings).lower(),
+            "pretty": str(pretty).lower(),
+            "human": str(human).lower(),
         }
         response = self._client.indices.get_settings(
             index=self._index_name, params=params
