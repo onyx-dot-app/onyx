@@ -404,12 +404,6 @@ export class OnyxApiClient {
     this.log(
       `Initiated deletion for CC pair: ${ccPairId} (connector: ${connectorId}, credential: ${credentialId})`
     );
-    await this.waitForDeletion(
-      `/manage/admin/cc-pair/${ccPairId}`,
-      "CC pair",
-      ccPairId
-    );
-    this.log(`CC pair ${ccPairId} deletion confirmed`);
   }
 
   /**
@@ -447,6 +441,37 @@ export class OnyxApiClient {
     this.log(
       `Created restricted LLM provider: ${providerName} (ID: ${responseData.id}, Group: ${groupId})`
     );
+    return responseData.id;
+  }
+
+  /**
+   * Creates a public LLM provider and returns its ID.
+   *
+   * @param providerName - Display name for the provider
+   * @returns The provider ID
+   */
+  async createProvider(providerName: string): Promise<number> {
+    const response = await this.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
+          is_public: true,
+          groups: [],
+          personas: [],
+          model_configurations: [{ name: "gpt-4o", is_visible: true }],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create LLM provider"
+    );
+
+    this.log(`Created LLM provider: ${providerName} (ID: ${responseData.id})`);
     return responseData.id;
   }
 
