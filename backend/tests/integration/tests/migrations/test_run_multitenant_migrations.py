@@ -6,7 +6,7 @@ The script is invoked as a subprocess — the same way it would be used in
 production.  Tests verify exit codes and stdout messages.
 
 Usage:
-    pytest tests/integration/tests/migrations/test_run_multitenant_migrations.py -v
+    pytest -m alembic tests/integration/tests/migrations/test_run_multitenant_migrations.py -v
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from onyx.db.engine.sql_engine import SqlEngine
+
+pytestmark = pytest.mark.alembic
 
 # Resolve the backend/ directory once so every helper can use it as cwd.
 _BACKEND_DIR = os.path.normpath(
