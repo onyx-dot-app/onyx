@@ -476,6 +476,7 @@ def bulk_invite_users(
             redis_client=get_redis_client(tenant_id=tenant_id),
             admin_user_id=current_user.id,
             num_invites=len(emails_needing_seats),
+            tenant_id=tenant_id,
         )
 
     # Check seat availability for new users

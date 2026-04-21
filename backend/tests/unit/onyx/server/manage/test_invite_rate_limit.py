@@ -71,11 +71,13 @@ def test_invite_allows_under_all_tiers() -> None:
             500,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=10)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=10, tenant_id="tenant_a"
+        )
 
     stub = cast(_StubRedis, redis_client)
     assert stub.store[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
-    assert stub.store["ratelimit:invite_put:tenant:day"] == 10
+    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
     assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
 
 
@@ -93,10 +95,14 @@ def test_invite_minute_bucket_blocks_request_flood() -> None:
         ),
     ):
         for _ in range(5):
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=1)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=1, tenant_id="tenant_a"
+            )
 
         with pytest.raises(OnyxError) as exc_info:
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=1)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=1, tenant_id="tenant_a"
+            )
 
     assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
 
@@ -114,7 +120,9 @@ def test_invite_bulk_call_does_not_trip_minute_bucket() -> None:
             500,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=20)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=20, tenant_id="tenant_a"
+        )
 
     stub = cast(_StubRedis, redis_client)
     assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
@@ -135,9 +143,13 @@ def test_invite_admin_daily_cap_enforced() -> None:
             5000,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=50)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=50, tenant_id="tenant_a"
+        )
         with pytest.raises(OnyxError):
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=1)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=1, tenant_id="tenant_a"
+            )
 
 
 def test_invite_tenant_daily_cap_enforced_across_admins() -> None:
@@ -155,10 +167,16 @@ def test_invite_tenant_daily_cap_enforced_across_admins() -> None:
         ),
         patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 10),
     ):
-        enforce_invite_rate_limit(redis_client, uuid4(), num_invites=6)
-        enforce_invite_rate_limit(redis_client, uuid4(), num_invites=4)
+        enforce_invite_rate_limit(
+            redis_client, uuid4(), num_invites=6, tenant_id="tenant_a"
+        )
+        enforce_invite_rate_limit(
+            redis_client, uuid4(), num_invites=4, tenant_id="tenant_a"
+        )
         with pytest.raises(OnyxError):
-            enforce_invite_rate_limit(redis_client, uuid4(), num_invites=1)
+            enforce_invite_rate_limit(
+                redis_client, uuid4(), num_invites=1, tenant_id="tenant_a"
+            )
 
 
 def test_invite_rejected_request_does_not_consume_budget() -> None:
@@ -171,13 +189,17 @@ def test_invite_rejected_request_does_not_consume_budget() -> None:
         patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 50),
         patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 10),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=10)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=10, tenant_id="tenant_a"
+        )
         with pytest.raises(OnyxError):
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=5)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=5, tenant_id="tenant_a"
+            )
 
     stub = cast(_StubRedis, redis_client)
     assert stub.store[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
-    assert stub.store["ratelimit:invite_put:tenant:day"] == 10
+    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
     assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
 
 
@@ -194,14 +216,20 @@ def test_invite_zero_new_invites_still_ticks_minute_bucket() -> None:
             5000,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=0)
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=0)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=0, tenant_id="tenant_a"
+        )
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=0, tenant_id="tenant_a"
+        )
         with pytest.raises(OnyxError):
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=0)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=0, tenant_id="tenant_a"
+            )
 
     stub = cast(_StubRedis, redis_client)
     assert stub.store.get(f"ratelimit:invite_put:admin:{user_id}:day", 0) == 0
-    assert stub.store.get("ratelimit:invite_put:tenant:day", 0) == 0
+    assert stub.store.get("ratelimit:invite_put:tenant:tenant_a:day", 0) == 0
 
 
 def test_invite_limit_zero_disables_tier() -> None:
@@ -214,7 +242,40 @@ def test_invite_limit_zero_disables_tier() -> None:
         patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 0),
     ):
         for _ in range(100):
-            enforce_invite_rate_limit(redis_client, user_id, num_invites=10)
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=10, tenant_id="tenant_a"
+            )
+
+
+def test_invite_tenant_bucket_is_isolated_across_tenants() -> None:
+    """Regression guard: tenants MUST NOT share the tenant/day counter.
+    TenantRedis does not prefix keys passed to `eval`, so the tenant_id is
+    baked into the key string itself."""
+    redis_client = _stub()
+    user_id = uuid4()
+
+    with (
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_MIN", 1000),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 1000),
+        patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 10),
+    ):
+        # Tenant A exhausts its own cap.
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=10, tenant_id="tenant_a"
+        )
+        with pytest.raises(OnyxError):
+            enforce_invite_rate_limit(
+                redis_client, user_id, num_invites=1, tenant_id="tenant_a"
+            )
+
+        # Tenant B must still have its full budget.
+        enforce_invite_rate_limit(
+            redis_client, uuid4(), num_invites=10, tenant_id="tenant_b"
+        )
+
+    stub = cast(_StubRedis, redis_client)
+    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
+    assert stub.store["ratelimit:invite_put:tenant:tenant_b:day"] == 10
 
 
 def test_invite_fails_open_when_redis_unavailable() -> None:
@@ -229,7 +290,9 @@ def test_invite_fails_open_when_redis_unavailable() -> None:
         patch("onyx.server.manage.invite_rate_limit._INVITE_ADMIN_PER_DAY", 1),
         patch("onyx.server.manage.invite_rate_limit._INVITE_TENANT_PER_DAY", 1),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=1_000_000)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=1_000_000, tenant_id="tenant_a"
+        )
 
 
 def test_remove_minute_bucket_blocks_pattern_attack() -> None:
@@ -286,11 +349,13 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
             5000,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=3)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=3, tenant_id="tenant_a"
+        )
 
     stub = cast(_StubRedis, redis_client)
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:day"] == 24 * 60 * 60
-    assert stub.ttls["ratelimit:invite_put:tenant:day"] == 24 * 60 * 60
+    assert stub.ttls["ratelimit:invite_put:tenant:tenant_a:day"] == 24 * 60 * 60
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] == 60
 
     stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] = 999
@@ -302,6 +367,8 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
             5000,
         ),
     ):
-        enforce_invite_rate_limit(redis_client, user_id, num_invites=3)
+        enforce_invite_rate_limit(
+            redis_client, user_id, num_invites=3, tenant_id="tenant_a"
+        )
 
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] == 999

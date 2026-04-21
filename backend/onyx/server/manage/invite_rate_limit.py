@@ -45,9 +45,16 @@ _INVITE_TENANT_PER_DAY = 15
 _REMOVE_ADMIN_PER_MIN = 3
 _REMOVE_ADMIN_PER_DAY = 30
 
+# Per-admin buckets are accidentally safe without an explicit tenant
+# prefix because admin UUIDs are globally unique. The tenant/day bucket
+# MUST embed the tenant_id directly: TenantRedis.__getattribute__ only
+# prefixes commands in an explicit allowlist and `eval` is not on it, so
+# keys passed to the Lua script reach Redis bare. A key of
+# "ratelimit:invite_put:tenant:day" would be shared across every trial
+# tenant, exhausting one global counter for the whole cluster.
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
-_INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:day"
+_INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:{tenant_id}:day"
 _INVITE_REMOVE_ADMIN_MIN_KEY = "ratelimit:invite_remove:admin:{user_id}:min"
 _INVITE_REMOVE_ADMIN_DAY_KEY = "ratelimit:invite_remove:admin:{user_id}:day"
 
@@ -154,6 +161,7 @@ def enforce_invite_rate_limit(
     redis_client: Redis,
     admin_user_id: UUID | str,
     num_invites: int,
+    tenant_id: str,
 ) -> None:
     """Check+record invite quotas for an admin user within their tenant.
 
@@ -173,7 +181,7 @@ def enforce_invite_rate_limit(
     daily_increment = max(0, num_invites)
     buckets = [
         _Bucket(
-            key=_INVITE_PUT_TENANT_DAY_KEY,
+            key=_INVITE_PUT_TENANT_DAY_KEY.format(tenant_id=tenant_id),
             limit=_INVITE_TENANT_PER_DAY,
             ttl_seconds=_SECONDS_PER_DAY,
             scope="tenant/day",
