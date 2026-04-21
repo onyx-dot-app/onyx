@@ -68,11 +68,21 @@ def get_settings(
     include_defaults: bool = False,
     flat_settings: bool = False,
     pretty: bool = False,
+    human: bool = False,
 ) -> None:
-    settings = client.get_settings(
-        include_defaults=include_defaults, flat_settings=flat_settings, pretty=pretty
+    settings, default_settings = client.get_settings(
+        include_defaults=include_defaults,
+        flat_settings=flat_settings,
+        pretty=pretty,
+        human=human,
     )
+    print("Settings:")
     print(json.dumps(settings, indent=4))
+    print("-" * 80)
+    if default_settings:
+        print("Default settings:")
+        print(json.dumps(default_settings, indent=4))
+        print("-" * 80)
 
 
 def set_settings(client: OpenSearchIndexClient, settings: dict[str, Any]) -> None:
@@ -154,7 +164,7 @@ def main() -> None:
     delete_parser.add_argument("index", help="Index name.", type=str)
 
     get_settings_parser = subparsers.add_parser(
-        "get-settings", help="Get settings for an index."
+        "get", help="Get settings for an index."
     )
     get_settings_parser.add_argument("index", help="Index name.", type=str)
     get_settings_parser.add_argument(
@@ -175,17 +185,23 @@ def main() -> None:
         action="store_true",
         default=False,
     )
+    get_settings_parser.add_argument(
+        "--human",
+        help="Return statistics in human-readable format.",
+        action="store_true",
+        default=False,
+    )
 
     set_settings_parser = subparsers.add_parser(
-        "set-settings", help="Set settings for an index."
+        "set", help="Set settings for an index."
     )
     set_settings_parser.add_argument("index", help="Index name.", type=str)
     set_settings_parser.add_argument("settings", help="Settings to set.", type=str)
 
-    open_index_parser = subparsers.add_parser("open-index", help="Open an index.")
+    open_index_parser = subparsers.add_parser("open", help="Open an index.")
     open_index_parser.add_argument("index", help="Index name.", type=str)
 
-    close_index_parser = subparsers.add_parser("close-index", help="Close an index.")
+    close_index_parser = subparsers.add_parser("close", help="Close an index.")
     close_index_parser.add_argument("index", help="Index name.", type=str)
 
     args = parser.parse_args()
@@ -204,6 +220,7 @@ def main() -> None:
         sys.exit(1)
     print("Using AWS-managed OpenSearch: ", args.use_aws_managed_opensearch)
     print(f"MULTI_TENANT: {MULTI_TENANT}")
+    print()
 
     with (
         OpenSearchClient(
@@ -231,14 +248,23 @@ def main() -> None:
             list_indices(client)
         elif args.command == "delete":
             delete_index(client)
-        elif args.command == "get-settings":
-            get_settings(client, args.include_defaults, args.flat_settings, args.pretty)
-        elif args.command == "set-settings":
+        elif args.command == "get":
+            get_settings(
+                client,
+                include_defaults=args.include_defaults,
+                flat_settings=args.flat_settings,
+                pretty=args.pretty,
+                human=args.human,
+            )
+        elif args.command == "set":
             set_settings(client, args.settings)
-        elif args.command == "open-index":
+        elif args.command == "open":
             open_index(client)
-        elif args.command == "close-index":
+        elif args.command == "close":
             close_index(client)
+        else:
+            print(f"Unknown command: {args.command}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -456,7 +456,7 @@ class TestOpenSearchClient:
         # Assert that the current number of replicas is not the desired test
         # number we are updating to.
         test_num_replicas = 0
-        current_settings = test_client.get_settings()
+        current_settings, _ = test_client.get_settings()
         assert current_settings["index"]["number_of_replicas"] != f"{test_num_replicas}"
 
         # Under test.
@@ -467,7 +467,7 @@ class TestOpenSearchClient:
         )
 
         # Postcondition.
-        current_settings = test_client.get_settings()
+        current_settings, _ = test_client.get_settings()
         assert current_settings["index"]["number_of_replicas"] == f"{test_num_replicas}"
 
     def test_update_settings_on_nonexistent_index(
@@ -488,7 +488,7 @@ class TestOpenSearchClient:
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
-        current_settings = test_client.get_settings()
+        current_settings, _ = test_client.get_settings()
 
         # Postcondition.
         assert "index" in current_settings

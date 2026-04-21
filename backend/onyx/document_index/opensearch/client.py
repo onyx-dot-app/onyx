@@ -524,7 +524,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         include_defaults: bool = False,
         flat_settings: bool = False,
         pretty: bool = False,
-    ) -> dict[str, Any]:
+        human: bool = False,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """Gets the settings of the index.
 
         Args:
@@ -534,23 +535,29 @@ class OpenSearchIndexClient(OpenSearchClient):
                 dictionaries. Defaults to False.
             pretty: Whether to pretty-format the returned JSON response.
                 Defaults to False.
+            human: Whether to return statistics in human-readable format.
+                Defaults to False.
 
         Returns:
-            The settings of the index.
+            The settings of the index, and optionally the default settings. If
+                include_defaults is False, the default settings will be None.
 
         Raises:
             Exception: There was an error getting the settings of the index.
         """
         logger.debug(f"Getting settings of index {self._index_name}.")
         params = {
-            "include_defaults": include_defaults,
-            "flat_settings": flat_settings,
-            "pretty": pretty,
+            "include_defaults": "true" if include_defaults else "false",
+            "flat_settings": "true" if flat_settings else "false",
+            "pretty": "true" if pretty else "false",
+            "human": "true" if human else "false",
         }
         response = self._client.indices.get_settings(
             index=self._index_name, params=params
         )
-        return response[self._index_name]["settings"]
+        return response[self._index_name]["settings"], response[self._index_name].get(
+            "defaults", None
+        )
 
     @log_function_time(print_only=True, debug_only=True)
     def open_index(self) -> None:
