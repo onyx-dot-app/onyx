@@ -68,6 +68,10 @@ export default function SignInButton({
     if (isVerifying) return;
     setIsVerifying(true);
     setError(null);
+    // Stays true on the success branch so the button remains disabled until
+    // the browser actually begins unloading for the OAuth redirect — prevents
+    // a double-click window between `window.location.href = ...` and unload.
+    let navigating = false;
     try {
       const token = await getCaptchaToken("oauth");
       if (!token) {
@@ -97,13 +101,14 @@ export default function SignInButton({
         );
         return;
       }
+      navigating = true;
       window.location.href = authorizeUrl;
     } catch (exc) {
       // eslint-disable-next-line no-console
       console.error("Captcha verify request failed", exc);
       setError(exc instanceof Error ? exc.message : String(exc));
     } finally {
-      setIsVerifying(false);
+      if (!navigating) setIsVerifying(false);
     }
   }
 

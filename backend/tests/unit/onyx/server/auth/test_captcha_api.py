@@ -143,6 +143,28 @@ def test_middleware_allows_oauth_callback_with_valid_cookie() -> None:
     assert res.json() == {"status": "ok"}
 
 
+def test_middleware_clears_cookie_after_successful_callback() -> None:
+    """One-time-use: cookie is deleted after the callback has been served so
+    a replayed callback URL cannot re-enter without a fresh challenge."""
+    app = build_app_with_middleware()
+    client = TestClient(app)
+    from onyx.auth.captcha import CAPTCHA_COOKIE_NAME
+
+    with patch.object(captcha_api_module, "is_captcha_enabled", return_value=True):
+        cookie_value = captcha_api_module.issue_captcha_cookie_value()
+        res = client.get(
+            "/auth/oauth/callback",
+            cookies={CAPTCHA_COOKIE_NAME: cookie_value},
+        )
+    assert res.status_code == 200
+    set_cookie = res.headers.get("set-cookie", "")
+    # Starlette's delete_cookie emits an expired Max-Age=0 Set-Cookie for the name.
+    assert CAPTCHA_COOKIE_NAME in set_cookie
+    assert (
+        "Max-Age=0" in set_cookie or 'expires="Thu, 01 Jan 1970' in set_cookie.lower()
+    )
+
+
 def test_middleware_rejects_tampered_cookie() -> None:
     app = build_app_with_middleware()
     client = TestClient(app)

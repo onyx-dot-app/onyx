@@ -93,11 +93,12 @@ class CaptchaCookieMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         # Skip OPTIONS so CORS preflight is never blocked.
-        if (
+        is_guarded_callback = (
             request.method != "OPTIONS"
             and request.url.path in GUARDED_OAUTH_CALLBACK_PATHS
             and is_captcha_enabled()
-        ):
+        )
+        if is_guarded_callback:
             cookie_value = request.cookies.get(CAPTCHA_COOKIE_NAME)
             if not validate_captcha_cookie_value(cookie_value):
                 return onyx_error_to_json_response(
@@ -106,4 +107,12 @@ class CaptchaCookieMiddleware(BaseHTTPMiddleware):
                         "Captcha challenge required. Refresh the page and try again.",
                     )
                 )
-        return await call_next(request)
+
+        response = await call_next(request)
+
+        # One-time-use cookie: after the OAuth callback has been served, clear
+        # it so the remaining TTL cannot be replayed (e.g. via browser
+        # back-button) to re-enter the callback without a fresh challenge.
+        if is_guarded_callback:
+            response.delete_cookie(CAPTCHA_COOKIE_NAME, path="/")
+        return response
