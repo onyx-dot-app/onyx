@@ -25,8 +25,11 @@ import {
   Text,
 } from "@opal/components";
 import {
+  SvgArrowExchange,
+  SvgCheckSquare,
   SvgCloud,
   SvgFold,
+  SvgPlusCircle,
   SvgServer,
   SvgSettings,
   SvgUnplug,
@@ -41,7 +44,9 @@ import {
   SavedSearchSettings,
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
+  EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
+import type { EmbeddingModelState } from "@/lib/indexing/interfaces";
 import {
   CLOUD_EMBEDDING_PROVIDERS,
   SELF_HOSTED_MODELS,
@@ -53,9 +58,11 @@ import {
 } from "@/lib/indexing";
 import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
-import { saveAdminSettings } from "@/lib/indexing/svc";
+import { saveAdminSettings, setNewSearchSettings } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
+import ProviderCreationModal from "@/sections/modals/indexing/ProviderCreationModal";
+import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -66,6 +73,7 @@ import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useLLMContextualCosts,
+  useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
@@ -127,6 +135,7 @@ interface ProviderGroupProps {
   provider: CloudEmbeddingProvider;
   models: CloudEmbeddingModel[];
   currentModelName?: string;
+  selectedModelName?: string;
   isConfigured?: boolean;
 }
 
@@ -134,10 +143,15 @@ function ProviderGroup({
   provider,
   models,
   currentModelName,
+  selectedModelName,
   isConfigured,
 }: ProviderGroupProps) {
   const disconnectModal = useCreateModal();
+  const providerCreationModal = useCreateModal();
   const providerName = getFormattedProviderName(provider.provider_type);
+  const [pendingModel, setPendingModel] = useState<CloudEmbeddingModel | null>(
+    null
+  );
 
   const handleDisconnect = useCallback(async () => {
     const response = await fetch(
@@ -154,6 +168,44 @@ function ProviderGroup({
     await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
     disconnectModal.toggle(false);
   }, [provider.provider_type, providerName, disconnectModal]);
+
+  const selectModel = useCallback(async (model: CloudEmbeddingModel) => {
+    const response = await setNewSearchSettings(model);
+
+    if (!response.ok) {
+      toast.error(`Failed to select ${model.model_name}`);
+      return;
+    }
+
+    toast.success(`Selected ${model.model_name}`);
+    await mutate("/api/search-settings/get-secondary-search-settings");
+  }, []);
+
+  const getModelState = useCallback(
+    (model: CloudEmbeddingModel): EmbeddingModelState => {
+      if (!isConfigured) return "unconnected";
+      if (model.model_name === selectedModelName) return "selected";
+      if (model.model_name === currentModelName) return "current";
+      return "connected";
+    },
+    [isConfigured, selectedModelName, currentModelName]
+  );
+
+  const handleModelSelect = useCallback(
+    (model: CloudEmbeddingModel) => {
+      const state = getModelState(model);
+      if (state === "current" || state === "selected") return;
+
+      if (state === "unconnected") {
+        setPendingModel(model);
+        providerCreationModal.toggle(true);
+        return;
+      }
+
+      void selectModel(model);
+    },
+    [getModelState, selectModel, providerCreationModal]
+  );
 
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
@@ -174,6 +226,27 @@ function ProviderGroup({
           </Text>
         </ConfirmationModalLayout>
       </disconnectModal.Provider>
+
+      <providerCreationModal.Provider>
+        <ProviderCreationModal
+          selectedProvider={provider}
+          isProxy={provider.provider_type === EmbeddingProvider.LITELLM}
+          isAzure={provider.provider_type === EmbeddingProvider.AZURE}
+          updateCurrentModel={() => {}}
+          onConfirm={async () => {
+            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+            providerCreationModal.toggle(false);
+            if (pendingModel) {
+              await selectModel(pendingModel);
+              setPendingModel(null);
+            }
+          }}
+          onCancel={() => {
+            providerCreationModal.toggle(false);
+            setPendingModel(null);
+          }}
+        />
+      </providerCreationModal.Provider>
 
       <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
         <GeneralLayouts.Section flexDirection="row" gap={0}>
@@ -213,29 +286,80 @@ function ProviderGroup({
           key={model.model_name}
           model={model}
           providerIcon={provider.icon}
-          isSelected={model.model_name === currentModelName}
+          modelState={getModelState(model)}
+          onSelect={() => handleModelSelect(model)}
         />
       ))}
     </GeneralLayouts.Section>
   );
 }
 
+const SELECT_CARD_STATE: Record<
+  EmbeddingModelState,
+  "empty" | "filled" | "selected"
+> = {
+  unconnected: "filled",
+  connected: "filled",
+  current: "filled",
+  selected: "selected",
+};
+
 interface EmbeddingModelCardProps {
   model: CloudEmbeddingModel;
   providerIcon: IconFunctionComponent;
-  isSelected?: boolean;
+  modelState: EmbeddingModelState;
+  onSelect?: () => void;
 }
 
 function EmbeddingModelCard({
   model,
   providerIcon,
-  isSelected,
+  modelState,
+  onSelect,
 }: EmbeddingModelCardProps) {
+  const topRightButton = (() => {
+    switch (modelState) {
+      case "unconnected":
+        return (
+          <Button
+            prominence="tertiary"
+            rightIcon={SvgArrowExchange}
+            onClick={onSelect}
+          >
+            Connect
+          </Button>
+        );
+      case "connected":
+        return (
+          <Button prominence="tertiary" onClick={onSelect}>
+            Select Model
+          </Button>
+        );
+      case "current":
+        return (
+          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
+            Current Model
+          </Button>
+        );
+      case "selected":
+        return (
+          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
+            Selected
+          </Button>
+        );
+    }
+  })();
+
   return (
     <SelectCard
-      state={isSelected ? "selected" : "filled"}
+      state={SELECT_CARD_STATE[modelState]}
       rounding="md"
       padding="xs"
+      onClick={
+        modelState === "unconnected" || modelState === "connected"
+          ? onSelect
+          : undefined
+      }
     >
       <CardLayout.Header
         headerChildren={
@@ -252,6 +376,7 @@ function EmbeddingModelCard({
             </div>
           </div>
         }
+        topRightChildren={topRightButton}
       />
     </SelectCard>
   );
@@ -294,6 +419,66 @@ function SelfHostedModelCard({ model, isSelected }: SelfHostedModelCardProps) {
   );
 }
 
+interface ConfigOnlyProviderCardProps {
+  provider: CloudEmbeddingProvider;
+}
+
+function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
+  const providerCreationModal = useCreateModal();
+  const providerName = getFormattedProviderName(provider.provider_type);
+
+  return (
+    <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
+      <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
+        <GeneralLayouts.Section flexDirection="row" gap={0}>
+          <Spacer horizontal rem={0.675} />
+          <div className="flex flex-row justify-between items-center w-full py-1">
+            <Content
+              icon={provider.icon}
+              title={markdown(`[${providerName}](${provider.docsLink})`)}
+              sizePreset="secondary"
+              variant="body"
+            />
+          </div>
+        </GeneralLayouts.Section>
+      </div>
+
+      <providerCreationModal.Provider>
+        <ProviderCreationModal
+          selectedProvider={provider}
+          isProxy={provider.provider_type === EmbeddingProvider.LITELLM}
+          isAzure={provider.provider_type === EmbeddingProvider.AZURE}
+          updateCurrentModel={() => {}}
+          onConfirm={async () => {
+            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+            providerCreationModal.toggle(false);
+          }}
+          onCancel={() => providerCreationModal.toggle(false)}
+        />
+      </providerCreationModal.Provider>
+
+      <SelectCard state="filled" rounding="md" padding="xs">
+        <ContentAction
+          icon={provider.icon}
+          title={`Add configs for your ${providerName} embedding providers.`}
+          sizePreset="main-ui"
+          variant="section"
+          padding="sm"
+          rightChildren={
+            <Button
+              prominence="tertiary"
+              rightIcon={SvgPlusCircle}
+              onClick={() => providerCreationModal.toggle(true)}
+            >
+              Add Configuration
+            </Button>
+          }
+        />
+      </SelectCard>
+    </GeneralLayouts.Section>
+  );
+}
+
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
@@ -305,6 +490,14 @@ export default function IndexSettingsPage() {
     () =>
       Object.values(CLOUD_EMBEDDING_PROVIDERS).filter(
         (p) => p.embedding_models.length > 0
+      ),
+    []
+  );
+
+  const configOnlyProviders = useMemo(
+    () =>
+      Object.values(CLOUD_EMBEDDING_PROVIDERS).filter(
+        (p) => p.embedding_models.length === 0
       ),
     []
   );
@@ -385,6 +578,7 @@ export default function IndexSettingsPage() {
 
   const { data: contextualCosts } = useLLMContextualCosts();
   const { data: configuredProviders } = useConfiguredEmbeddingProviders();
+  const { data: secondarySettings } = useSecondarySearchSettings();
 
   const saveSearchSettings = useCallback(
     async (updates: Partial<SavedSearchSettings>) => {
@@ -478,7 +672,8 @@ export default function IndexSettingsPage() {
                   expandedContent={
                     <>
                       <Tabs.Content value="cloud" className="pt-0">
-                        {filteredProviders.length > 0 ? (
+                        {filteredProviders.length > 0 ||
+                        configOnlyProviders.length > 0 ? (
                           <GeneralLayouts.Section gap={0.5} padding={0.5}>
                             {filteredProviders.map(({ provider, models }) => (
                               <ProviderGroup
@@ -488,9 +683,18 @@ export default function IndexSettingsPage() {
                                 currentModelName={
                                   currentEmbeddingModel?.model_name
                                 }
+                                selectedModelName={
+                                  secondarySettings?.model_name
+                                }
                                 isConfigured={configuredProviders?.has(
                                   provider.provider_type
                                 )}
+                              />
+                            ))}
+                            {configOnlyProviders.map((provider) => (
+                              <ConfigOnlyProviderCard
+                                key={provider.provider_type}
+                                provider={provider}
                               />
                             ))}
                           </GeneralLayouts.Section>

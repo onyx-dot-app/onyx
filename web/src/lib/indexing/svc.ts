@@ -79,6 +79,20 @@ export async function updateSearchSettings(
   });
 }
 
+/**
+ * Marks a model as the FUTURE embedding model. Does NOT start re-indexing —
+ * that is a separate, explicit action.
+ */
+export async function setNewSearchSettings(
+  model: EmbeddingModelDescriptor
+): Promise<Response> {
+  return await fetch("/api/search-settings/set-new-search-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(model),
+  });
+}
+
 // We use a spread operation to merge properties from multiple objects into a single object.
 // Advanced embedding details may update default values.
 // Do NOT modify the order unless you are positive the new hierarchy is correct.

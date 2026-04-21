@@ -53,6 +53,21 @@ export function useLLMContextualCosts() {
 }
 
 /**
+ * Fetches the secondary (FUTURE) search settings — the model the admin has
+ * selected as the next embedding model. Returns `null` when no switch is
+ * pending.
+ *
+ * Polls every 5 seconds to stay in sync with backend state.
+ */
+export function useSecondarySearchSettings() {
+  return useSWR<EmbeddingModelDescriptor | null>(
+    "/api/search-settings/get-secondary-search-settings",
+    errorHandlingFetcher,
+    { refreshInterval: 5000 }
+  );
+}
+
+/**
  * Fetches the set of cloud embedding provider types that have API keys
  * configured in the backend.
  */

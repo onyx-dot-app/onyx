@@ -134,3 +134,11 @@ export interface LLMContextualCost {
   model_name: string;
   cost: number;
 }
+
+// ─── Embedding model card state ─────────────────────────────────────────────
+
+export type EmbeddingModelState =
+  | "unconnected"
+  | "connected"
+  | "current"
+  | "selected";
