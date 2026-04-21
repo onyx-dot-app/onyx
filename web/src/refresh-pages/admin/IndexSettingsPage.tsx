@@ -63,12 +63,7 @@ import {
 } from "@/lib/indexing";
 import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
-import {
-  cancelNewEmbedding,
-  saveAdminSettings,
-  setNewSearchSettings,
-  testEmbedding,
-} from "@/lib/indexing/svc";
+import { saveAdminSettings, testEmbedding } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
 import Modal from "@/refresh-components/Modal";
@@ -83,7 +78,6 @@ import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useLLMContextualCosts,
-  useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
@@ -403,6 +397,8 @@ interface ProviderGroupProps {
   currentModelName?: string;
   selectedModelName?: string;
   existingCredentials?: ConfiguredEmbeddingProvider;
+  onSelectModel: (modelName: string) => void;
+  onDeselectModel: () => void;
 }
 
 function ProviderGroup({
@@ -411,6 +407,8 @@ function ProviderGroup({
   currentModelName,
   selectedModelName,
   existingCredentials,
+  onSelectModel,
+  onDeselectModel,
 }: ProviderGroupProps) {
   const isConfigured = !!existingCredentials;
   const disconnectModal = useCreateModal();
@@ -437,34 +435,6 @@ function ProviderGroup({
     disconnectModal.toggle(false);
   }, [provider.provider_type, providerName, disconnectModal]);
 
-  const cancelAndMutate = useCallback(async () => {
-    const response = await cancelNewEmbedding();
-    if (!response.ok) {
-      toast.error("Failed to cancel selection");
-      return;
-    }
-    await Promise.all([
-      mutate("/api/search-settings/get-secondary-search-settings"),
-      mutate(SWR_KEYS.currentSearchSettings),
-    ]);
-  }, []);
-
-  const selectModel = useCallback(async (model: CloudEmbeddingModel) => {
-    const response = await setNewSearchSettings(model);
-
-    if (!response.ok) {
-      toast.error(`Failed to select ${model.model_name}`);
-      return;
-    }
-
-    toast.success(`Selected ${model.model_name}`);
-    await Promise.all([
-      mutate("/api/search-settings/get-secondary-search-settings"),
-      mutate(SWR_KEYS.currentSearchSettings),
-      mutate(EMBEDDING_PROVIDERS_ADMIN_URL),
-    ]);
-  }, []);
-
   const getModelState = useCallback(
     (model: CloudEmbeddingModel): EmbeddingModelState => {
       if (!isConfigured) return "unconnected";
@@ -480,15 +450,8 @@ function ProviderGroup({
       if (provider.deprecated) return;
       const state = getModelState(model);
 
-      if (state === "selected") {
-        void cancelAndMutate();
-        return;
-      }
-
-      if (state === "current") {
-        if (selectedModelName) {
-          void cancelAndMutate();
-        }
+      if (state === "selected" || state === "current") {
+        onDeselectModel();
         return;
       }
 
@@ -498,9 +461,15 @@ function ProviderGroup({
         return;
       }
 
-      void selectModel(model);
+      onSelectModel(model.model_name);
     },
-    [getModelState, selectModel, connectModal]
+    [
+      getModelState,
+      onSelectModel,
+      onDeselectModel,
+      connectModal,
+      provider.deprecated,
+    ]
   );
 
   return (
@@ -530,7 +499,7 @@ function ProviderGroup({
             await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
             connectModal.toggle(false);
             if (pendingModel) {
-              await selectModel(pendingModel);
+              onSelectModel(pendingModel.model_name);
               setPendingModel(null);
             }
           }}
@@ -842,6 +811,9 @@ export default function IndexSettingsPage() {
   const editEmbeddingModelModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
+  const [selectedModelName, setSelectedModelName] = useState<string | null>(
+    null
+  );
 
   const allCloudProviders = useMemo(
     () =>
@@ -920,36 +892,6 @@ export default function IndexSettingsPage() {
     [settings.settings, router]
   );
 
-  const cancelNewEmbeddingAndMutate = useCallback(async () => {
-    const response = await cancelNewEmbedding();
-    if (!response.ok) {
-      toast.error("Failed to cancel selection");
-      return;
-    }
-    await Promise.all([
-      mutate("/api/search-settings/get-secondary-search-settings"),
-      mutate(SWR_KEYS.currentSearchSettings),
-    ]);
-  }, []);
-
-  const selectSelfHostedModel = useCallback(
-    async (model: SelfHostedEmbeddingModel) => {
-      const response = await setNewSearchSettings(model);
-
-      if (!response.ok) {
-        toast.error(`Failed to select ${model.model_name}`);
-        return;
-      }
-
-      toast.success(`Selected ${model.model_name}`);
-      await Promise.all([
-        mutate("/api/search-settings/get-secondary-search-settings"),
-        mutate(SWR_KEYS.currentSearchSettings),
-      ]);
-    },
-    []
-  );
-
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
 
@@ -965,7 +907,6 @@ export default function IndexSettingsPage() {
 
   const { data: contextualCosts } = useLLMContextualCosts();
   const { data: configuredProviders } = useConfiguredEmbeddingProviders();
-  const { data: secondarySettings } = useSecondarySearchSettings();
 
   const saveSearchSettings = useCallback(
     async (updates: Partial<SavedSearchSettings>) => {
@@ -1071,11 +1012,15 @@ export default function IndexSettingsPage() {
                                   currentEmbeddingModel?.model_name
                                 }
                                 selectedModelName={
-                                  secondarySettings?.model_name
+                                  selectedModelName ?? undefined
                                 }
                                 existingCredentials={configuredProviders?.get(
                                   provider.provider_type
                                 )}
+                                onSelectModel={setSelectedModelName}
+                                onDeselectModel={() =>
+                                  setSelectedModelName(null)
+                                }
                               />
                             ))}
                             {configOnlyProviders.map((provider) => (
@@ -1099,8 +1044,7 @@ export default function IndexSettingsPage() {
                           <GeneralLayouts.Section gap={0.25} padding={0.5}>
                             {filteredSelfHostedModels.map((model) => {
                               const state: EmbeddingModelState =
-                                model.model_name ===
-                                secondarySettings?.model_name
+                                model.model_name === selectedModelName
                                   ? "selected"
                                   : model.model_name ===
                                       currentEmbeddingModel?.model_name
@@ -1112,17 +1056,14 @@ export default function IndexSettingsPage() {
                                   model={model}
                                   modelState={state}
                                   onSelect={() => {
-                                    if (state === "selected") {
-                                      void cancelNewEmbeddingAndMutate();
+                                    if (
+                                      state === "selected" ||
+                                      state === "current"
+                                    ) {
+                                      setSelectedModelName(null);
                                       return;
                                     }
-                                    if (state === "current") {
-                                      if (secondarySettings) {
-                                        void cancelNewEmbeddingAndMutate();
-                                      }
-                                      return;
-                                    }
-                                    void selectSelfHostedModel(model);
+                                    setSelectedModelName(model.model_name);
                                   }}
                                 />
                               );
