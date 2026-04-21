@@ -99,7 +99,7 @@ backend = [
     "pytest-mock==3.12.0",
     "pytest-playwright==0.7.2",
     "python-docx==1.1.2",
-    "python-dotenv==1.1.1",
+    "python-dotenv==1.2.2",
     "python-multipart==0.0.22",
     "pywikibot==9.0.0",
     "redis==5.0.8",
