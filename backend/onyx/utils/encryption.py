@@ -59,13 +59,35 @@ def reject_masked_credentials(credentials: dict[str, Any]) -> None:
 
     Used as a defensive net at write boundaries so that masked values
     round-tripped from `mask_string` are never persisted as real credentials.
+
+    Recurses into nested dicts and lists to stay symmetric with
+    `mask_credential_dict`, which masks nested string values. The error
+    message includes a dotted path like `oauth.client_secret` or
+    `keys[2]` so callers can pinpoint the offending field.
     """
+    _reject_masked_in_dict(credentials, path="")
+
+
+def _reject_masked_in_dict(credentials: dict[str, Any], path: str) -> None:
     for key, val in credentials.items():
-        if isinstance(val, str) and is_masked_credential(val):
+        field_path = f"{path}.{key}" if path else key
+        _reject_masked_in_value(val, field_path)
+
+
+def _reject_masked_in_value(val: Any, path: str) -> None:
+    if isinstance(val, str):
+        if is_masked_credential(val):
             raise ValueError(
-                f"Credential field '{key}' contains masked placeholder "
+                f"Credential field '{path}' contains masked placeholder "
                 "characters. Please provide the actual credential value."
             )
+        return
+    if isinstance(val, dict):
+        _reject_masked_in_dict(val, path=path)
+        return
+    if isinstance(val, list):
+        for index, item in enumerate(val):
+            _reject_masked_in_value(item, f"{path}[{index}]")
 
 
 MASK_CREDENTIALS_WHITELIST = {

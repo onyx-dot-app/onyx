@@ -56,3 +56,52 @@ class TestRejectMaskedCredentials:
                 "some_flag": True,
             }
         )
+
+    def test_rejects_masked_value_inside_nested_dict(self) -> None:
+        """`mask_credential_dict` recurses into nested dicts; the rejection
+        helper must do the same so a masked nested string can't slip
+        through on resubmit."""
+        with pytest.raises(ValueError, match=r"oauth\.client_secret"):
+            reject_masked_credentials(
+                {
+                    "name": "fine",
+                    "oauth": {
+                        "client_id": "1234567890.1234567890",
+                        "client_secret": "abcd...wxyz",
+                    },
+                }
+            )
+
+    def test_rejects_masked_value_inside_list(self) -> None:
+        """`_mask_list` masks string elements; the rejection helper must
+        catch them too."""
+        with pytest.raises(ValueError, match=r"keys\[1\]"):
+            reject_masked_credentials(
+                {
+                    "keys": ["real-key-aaaa", "abcd...wxyz", "real-key-bbbb"],
+                }
+            )
+
+    def test_rejects_masked_value_inside_list_of_dicts(self) -> None:
+        with pytest.raises(ValueError, match=r"sessions\[0\]\.token"):
+            reject_masked_credentials(
+                {
+                    "sessions": [
+                        {"token": "abcd...wxyz"},
+                        {"token": "real-token-value"},
+                    ],
+                }
+            )
+
+    def test_accepts_deeply_nested_real_values(self) -> None:
+        reject_masked_credentials(
+            {
+                "oauth": {
+                    "client_id": "real-id-value-1234",
+                    "extras": {
+                        "scopes": ["read", "write"],
+                        "metadata": {"region": "us-east-1"},
+                    },
+                },
+            }
+        )

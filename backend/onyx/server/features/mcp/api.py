@@ -151,7 +151,7 @@ def _build_oauth_admin_config_data(
         redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
-        scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
+        scope=REQUESTED_SCOPE,  # TODO(evan): allow specifying scopes?
         token_endpoint_auth_method=token_endpoint_auth_method,
     )
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
