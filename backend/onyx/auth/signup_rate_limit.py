@@ -48,6 +48,19 @@ we reject leftmost entries that are private / loopback / reserved and
 fall through to `request.client.host`. That prevents an attacker from
 trivially bucketing all their requests under `10.0.0.1` via an
 `X-Forwarded-For: 10.0.0.1` header.
+
+### Prerequisite: ingress-nginx must NOT run with `--enable-ssl-passthrough`
+
+Pre-2026-04-20, the ingress-nginx deployment ran with
+`--enable-ssl-passthrough`, which wraps the main nginx in an internal
+TCP proxy on `127.0.0.1:442`. That made `$remote_addr` at ingress-nginx
+always `127.0.0.1`, so XFF carried loopback for every request. The arg
+was removed in `cloud-deployment-yamls#256`. If it is ever re-added,
+`parts[0]` will be `127.0.0.1` and `is_global` will correctly reject it
+— every signup will bucket under the TCP peer (ingress pod IP), which
+degrades rate limiting to a single cluster-wide counter. Safe-fails
+(over-rate-limits rather than under-rate-limits) but bad UX, so this
+flag must stay off.
 """
 
 import ipaddress
