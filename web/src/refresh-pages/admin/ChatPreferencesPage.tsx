@@ -121,7 +121,6 @@ function MCPServerCard({
             {filteredTools.map((tool) => (
               <Card key={tool.id} border="solid" rounding="lg" padding="sm">
                 <CardLayout.Header
-                  headerPadding="sm"
                   headerChildren={
                     <Content
                       icon={tool.icon}
