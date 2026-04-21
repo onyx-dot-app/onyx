@@ -960,6 +960,23 @@ function ChatPreferencesForm() {
 
                 <Card>
                   <InputLayouts.Horizontal
+                    title="Image Extraction & Analysis"
+                    description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                    nonInteractive
+                  >
+                    <Switch
+                      checked={s.image_extraction_and_analysis_enabled ?? true}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({
+                          image_extraction_and_analysis_enabled: checked,
+                        });
+                      }}
+                    />
+                  </InputLayouts.Horizontal>
+                </Card>
+
+                <Card>
+                  <InputLayouts.Horizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
                     nonInteractive

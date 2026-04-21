@@ -60,7 +60,9 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
@@ -74,12 +76,17 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -122,6 +129,7 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -244,22 +252,106 @@ def _empty_extracted_context_files() -> ExtractedContextFiles:
     )
 
 
-def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
+def _fetch_cached_image_captions(
+    user_file: UserFile | None,
+    document_index: DocumentIndex | None,
+) -> list[str]:
+    """Read image-caption chunks for a user file from the document index.
+
+    During indexing, embedded images are summarized via a vision LLM and
+    those summaries are stored as chunks whose `image_file_id` is set. Reading
+    them back at chat time avoids re-running vision-LLM calls per turn.
+    Returns an empty list if the index has no chunks yet (e.g. indexing is
+    still in flight) or on any fetch failure.
+    """
+    if user_file is None or document_index is None:
+        return []
+    try:
+        chunks = document_index.id_based_retrieval(
+            chunk_requests=[VespaChunkRequest(document_id=str(user_file.id))],
+            filters=IndexFilters(
+                access_control_list=None,
+                tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+            ),
+        )
+    except Exception:
+        logger.warning(
+            f"Failed to fetch cached captions for user_file {user_file.id}",
+            exc_info=True,
+        )
+        return []
+
+    # An image can be spread across multiple chunks; combine by image_file_id
+    # so a single caption appears once in the context.
+    combined: dict[str, list[str]] = {}
+    for chunk in chunks:
+        if chunk.image_file_id and chunk.content:
+            combined.setdefault(chunk.image_file_id, []).append(chunk.content)
+    return [
+        f"[Image — {image_file_id}]\n" + "\n".join(contents)
+        for image_file_id, contents in combined.items()
+    ]
+
+
+def _extract_text_from_in_memory_file(
+    f: InMemoryChatFile,
+    user_file: UserFile | None = None,
+    document_index: DocumentIndex | None = None,
+) -> str | None:
     """Extract text content from an InMemoryChatFile.
 
     PLAIN_TEXT: the content is pre-extracted UTF-8 plaintext stored during
     ingestion — decode directly.
     DOC / CSV / other text types: the content is the original file bytes —
     use extract_file_text which handles encoding detection and format parsing.
+    When image extraction is enabled and the file has embedded images, cached
+    captions are pulled from the document index and appended to the text.
+    The index fetch is skipped for files with no embedded images. We do not
+    re-summarize images inline here — this path is hot and the indexing
+    pipeline writes chunks atomically, so a missed caption means the file
+    is mid-indexing and will be picked up on the next turn.
     """
     try:
         if f.file_type == ChatFileType.PLAIN_TEXT:
             return f.content.decode("utf-8", errors="ignore").replace("\x00", "")
-        return extract_file_text(
+
+        filename = f.filename or ""
+        if not get_image_extraction_and_analysis_enabled():
+            return extract_file_text(
+                file=io.BytesIO(f.content),
+                file_name=filename,
+                break_on_unprocessable=False,
+            )
+
+        extraction = extract_text_and_images(
             file=io.BytesIO(f.content),
-            file_name=f.filename or "",
-            break_on_unprocessable=False,
+            file_name=filename,
         )
+        text = extraction.text_content
+        has_text = bool(text.strip())
+        has_images = bool(extraction.embedded_images)
+
+        if not has_text and not has_images:
+            # extract_text_and_images has no is_text_file() fallback for
+            # unknown extensions (.py/.rs/.md without a dedicated handler).
+            # Defer to the legacy path so those files remain readable.
+            return extract_file_text(
+                file=io.BytesIO(f.content),
+                file_name=filename,
+                break_on_unprocessable=False,
+            )
+
+        if not has_images:
+            return text if has_text else None
+
+        cached_captions = _fetch_cached_image_captions(user_file, document_index)
+
+        parts: list[str] = []
+        if has_text:
+            parts.append(text)
+        parts.extend(cached_captions)
+
+        return "\n\n".join(parts).strip() or None
     except Exception:
         logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
         return None
@@ -341,6 +433,23 @@ def extract_context_files(
         db_session=db_session,
     )
 
+    # The document index is used at chat time to read cached image captions
+    # (produced during indexing) so vision-LLM calls don't re-run per turn.
+    document_index: DocumentIndex | None = None
+    if not DISABLE_VECTOR_DB and get_image_extraction_and_analysis_enabled():
+        try:
+            active_search_settings = get_active_search_settings(db_session)
+            document_index = get_default_document_index(
+                search_settings=active_search_settings.primary,
+                secondary_search_settings=None,
+                db_session=db_session,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to construct document index for caption lookup",
+                exc_info=True,
+            )
+
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
     file_metadata: list[ContextFileMetadata] = []
@@ -361,7 +470,9 @@ def extract_context_files(
                 continue
             tool_metadata.append(_build_tool_metadata(uf))
         elif f.file_type.is_text_file():
-            text_content = _extract_text_from_in_memory_file(f)
+            text_content = _extract_text_from_in_memory_file(
+                f, user_file=uf, document_index=document_index
+            )
             if not text_content:
                 continue
             if not uf:
