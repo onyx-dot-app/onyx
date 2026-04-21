@@ -503,11 +503,9 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
     const accountName = `E2E Service Account ${Date.now()}`;
     const apiKeyId = await adminClient.createServiceAccount(accountName);
 
-    // Admin creates a second user group (having 2 groups causes the full group selector to render)
+    // Admin creates a second user group (so the groups dropdown has content to render)
     const extraGroupName = `E2E SvcAcct Group ${Date.now()}`;
-    const extraGroupId = await adminClient.createUserGroup(extraGroupName, [
-      testUserContext.userId,
-    ]);
+    const extraGroupId = await adminClient.createUserGroup(extraGroupName);
 
     try {
       // Phase 1: Without MANAGE_SERVICE_ACCOUNT_API_KEYS — /admin/service-accounts should redirect to /app
@@ -548,7 +546,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
       const groupsSearchInput = page.getByTestId("groups-search-input");
       await expect(groupsSearchInput).toBeVisible({ timeout: 10000 });
       await groupsSearchInput.click();
-      await expect(page.getByText(extraGroupName)).toBeVisible({
+      await expect(page.getByText(extraGroupName).first()).toBeVisible({
         timeout: 10000,
       });
 
