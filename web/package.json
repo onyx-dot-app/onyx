@@ -113,6 +113,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.2",
     "@playwright/test": "^1.39.0",
     "@storybook/addon-essentials": "^8.6.18",
     "@storybook/addon-themes": "^8.6.18",
