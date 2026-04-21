@@ -14,7 +14,7 @@ import {
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { InputHorizontal } from "@opal/layouts";
+import { InputHorizontal, InputVertical } from "@opal/layouts";
 import {
   Button,
   Card,
@@ -29,14 +29,15 @@ import {
   SvgCheckSquare,
   SvgCloud,
   SvgFold,
-  SvgOnyxOctagon,
   SvgPlusCircle,
   SvgServer,
   SvgSettings,
   SvgUnplug,
 } from "@opal/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
@@ -240,7 +241,7 @@ function ProviderConnectionModal({
         <Modal.Header
           icon={provider.icon}
           moreIcon1={SvgArrowExchange}
-          moreIcon2={SvgOnyxOctagon}
+          moreIcon2={SvgOnyxLogo}
           title={`Set up ${providerName}`}
           description={`Connect to ${providerName} and set up your ${providerName} embedding models.`}
           onClose={onCancel}
@@ -248,52 +249,47 @@ function ProviderConnectionModal({
         <Modal.Body twoTone>
           <GeneralLayouts.Section gap={0.5}>
             {(isProxy || isAzure) && (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">API URL</Text>
+              <InputVertical title="API URL">
                 <InputTypeIn
                   placeholder="https://..."
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
                 />
-              </GeneralLayouts.Section>
+              </InputVertical>
             )}
 
             {isProxy && (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">Model Name (for testing)</Text>
+              <InputVertical title="Model Name (for testing)">
                 <InputTypeIn
                   placeholder="Model Name"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
                 />
-              </GeneralLayouts.Section>
+              </InputVertical>
             )}
 
             {isAzure && (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">Deployment Name</Text>
+              <InputVertical title="Deployment Name">
                 <InputTypeIn
                   placeholder="Deployment Name"
                   value={deploymentName}
                   onChange={(e) => setDeploymentName(e.target.value)}
                 />
-              </GeneralLayouts.Section>
+              </InputVertical>
             )}
 
             {isAzure && (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">API Version</Text>
+              <InputVertical title="API Version">
                 <InputTypeIn
                   placeholder="API Version"
                   value={apiVersion}
                   onChange={(e) => setApiVersion(e.target.value)}
                 />
-              </GeneralLayouts.Section>
+              </InputVertical>
             )}
 
             {isGoogle ? (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">Upload JSON credentials file</Text>
+              <InputVertical title="Upload JSON credentials file">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -305,19 +301,22 @@ function ProviderConnectionModal({
                     {fileName}
                   </Text>
                 )}
-              </GeneralLayouts.Section>
+              </InputVertical>
             ) : (
-              <GeneralLayouts.Section gap={0.25}>
-                <Text font="main-ui-action">
-                  {`API Key${isProxy ? " (for non-local deployments)" : ""}`}
-                </Text>
-                <InputTypeIn
+              <InputVertical
+                title={`API Key${
+                  isProxy ? " (for non-local deployments)" : ""
+                }`}
+                subDescription={markdown(
+                  `Paste your [API key](${provider.apiLink}) from ${providerName} to access your models.`
+                )}
+              >
+                <PasswordInputTypeIn
                   placeholder="API Key"
-                  type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
-              </GeneralLayouts.Section>
+              </InputVertical>
             )}
 
             {errorMsg && (
@@ -666,12 +665,13 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
         />
       </providerCreationModal.Provider>
 
-      <SelectCard state="filled" rounding="md" padding="xs">
+      <SelectCard state="filled" rounding="md" padding="sm">
         <ContentAction
-          icon={provider.icon}
           title={`Add configs for your ${providerName} embedding providers.`}
-          sizePreset="main-ui"
-          variant="section"
+          sizePreset="secondary"
+          variant="body"
+          prominence="muted"
+          nonInteractive
           padding="sm"
           rightChildren={
             <Button
