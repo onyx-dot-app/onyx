@@ -50,11 +50,6 @@ const useTabsContext = () => {
  * ─────────────╨═════╨─────────────────────────────
  *              ↑ sliding indicator under active tab
  *
- * Underline (like pill, but no base line):
- *    Tab 1      Tab 2      Tab 3
- *              ═══════
- *              ↑ sliding indicator only, no base border
- *
  * @example
  * <Tabs defaultValue="tab1">
  *   <Tabs.List variant="pill">
@@ -72,25 +67,29 @@ const useTabsContext = () => {
    ============================================================================= */
 
 /** Style classes for TabsList variants */
+const PILL_LIST =
+  "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden";
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
-  underline:
-    "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
+  pill: PILL_LIST,
+  underline: PILL_LIST,
 } as const;
 
 /** Base style classes for TabsTrigger variants */
+const PILL_TRIGGER =
+  "p-1 font-secondary-action transition-all duration-200 ease-out";
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
-  pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
-  underline: "p-1 font-secondary-action transition-all duration-200 ease-out",
+  pill: PILL_TRIGGER,
+  underline: PILL_TRIGGER,
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
+const PILL_ICON = "stroke-current";
 const iconVariants = {
   contained: "stroke-text-03",
-  pill: "stroke-current",
-  underline: "stroke-current",
+  pill: PILL_ICON,
+  underline: PILL_ICON,
 } as const;
 
 /* =============================================================================
@@ -368,13 +367,8 @@ interface TabsListProps
    * - `contained` (default): Rounded background with equal-width tabs in a grid.
    *   Best for primary navigation where tabs should fill available space.
    *
-   * - `pill`: Transparent background with a sliding underline indicator and
-   *   dark inverted active state. Best for secondary navigation or filter-style
-   *   tabs with flexible widths.
-   *
-   * - `underline`: Like `pill` but without the base border line. Active tab
-   *   gets a text-only highlight (no inverted background). Best for inline
-   *   tab groups within cards or sections.
+   * - `pill`: Transparent background with a sliding underline indicator.
+   *   Best for secondary navigation or filter-style tabs with flexible widths.
    */
   variant?: "contained" | "pill" | "underline";
 
@@ -577,7 +571,6 @@ interface TabsTriggerProps
    *
    * - `contained` (default): White background with shadow when active
    * - `pill`: Dark pill background when active, transparent when inactive
-   * - `underline`: Text-only highlight when active, muted when inactive
    */
   variant?: "contained" | "pill" | "underline";
 
