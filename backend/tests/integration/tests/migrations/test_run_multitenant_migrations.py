@@ -45,14 +45,13 @@ def _run_script(
     env_override: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``python alembic/run_multitenant_migrations.py`` from the backend/ directory."""
-    env = {**os.environ, **(env_override or {})}
     return subprocess.run(
         [sys.executable, "alembic/run_multitenant_migrations.py", *extra_args],
         cwd=_BACKEND_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env=env,
+        env={**os.environ, "PYTHONPATH": _BACKEND_DIR, **(env_override or {})},
     )
 
 
@@ -112,6 +111,7 @@ def current_head_rev() -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env={**os.environ, "PYTHONPATH": _BACKEND_DIR},
     )
     assert (
         result.returncode == 0
