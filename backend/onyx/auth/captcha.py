@@ -16,7 +16,6 @@ the OAuth cookie.
 
 import hashlib
 import hmac
-import os
 import time
 from datetime import datetime
 from datetime import timezone
@@ -28,6 +27,7 @@ from pydantic import Field
 
 from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
 from onyx.configs.app_configs import CAPTCHA_ENABLED
+from onyx.configs.app_configs import RECAPTCHA_ENTERPRISE_API_KEY
 from onyx.configs.app_configs import RECAPTCHA_ENTERPRISE_PROJECT_ID
 from onyx.configs.app_configs import RECAPTCHA_HOSTNAME_ALLOWLIST
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
@@ -40,26 +40,17 @@ logger = setup_logger()
 
 CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
 
-# Enterprise Assessment response enums from Google. Not operator-tunable —
-# changing the set changes what "bot" means relative to the API contract.
+# Enterprise Assessment reason enums defined by Google — not a
+# per-deployment tuning knob.
 _HARD_REJECT_REASONS: frozenset[str] = frozenset(
     {"AUTOMATION", "UNEXPECTED_ENVIRONMENT", "TOO_MUCH_TRAFFIC"}
 )
 
-# Enterprise tokens are valid at Google for ~2 minutes. Matches that window.
+# Matches Google's own ~2 minute token validity window.
 _TOKEN_MAX_AGE_SECONDS = 120
 
 _REPLAY_CACHE_TTL_SECONDS = 120
 _REPLAY_KEY_PREFIX = "captcha:replay:"
-
-
-def _enterprise_api_key() -> str:
-    """Read per-call so rolling secret updates land without a restart."""
-    return os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
-
-
-def _assessment_url() -> str:
-    return f"https://recaptchaenterprise.googleapis.com/v1/projects/{RECAPTCHA_ENTERPRISE_PROJECT_ID}/assessments"
 
 
 class CaptchaAction(StrEnum):
@@ -102,8 +93,8 @@ def is_captcha_enabled() -> bool:
     return (
         CAPTCHA_ENABLED
         and bool(RECAPTCHA_ENTERPRISE_PROJECT_ID)
+        and bool(RECAPTCHA_ENTERPRISE_API_KEY)
         and bool(RECAPTCHA_SITE_KEY)
-        and bool(_enterprise_api_key())
     )
 
 
@@ -226,8 +217,10 @@ async def verify_captcha_token(token: str, action: CaptchaAction) -> None:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                _assessment_url(),
-                params={"key": _enterprise_api_key()},
+                (
+                    f"https://recaptchaenterprise.googleapis.com/v1/projects/{RECAPTCHA_ENTERPRISE_PROJECT_ID}/assessments"
+                ),
+                params={"key": RECAPTCHA_ENTERPRISE_API_KEY},
                 json={
                     "event": {
                         "token": token,

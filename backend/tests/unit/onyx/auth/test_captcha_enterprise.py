@@ -1,6 +1,5 @@
 """Unit tests for the reCAPTCHA Enterprise Assessment rejection ladder."""
 
-import os
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
@@ -235,7 +234,7 @@ async def test_post_body_has_enterprise_shape() -> None:
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module, "RECAPTCHA_ENTERPRISE_PROJECT_ID", "test-project"),
         patch.object(captcha_module, "RECAPTCHA_SITE_KEY", "test-site-key"),
-        patch.dict(os.environ, {"RECAPTCHA_ENTERPRISE_API_KEY": "test-api-key"}),
+        patch.object(captcha_module, "RECAPTCHA_ENTERPRISE_API_KEY", "test-api-key"),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
     ):
         await verify_captcha_token("tok", CaptchaAction.SIGNUP)
