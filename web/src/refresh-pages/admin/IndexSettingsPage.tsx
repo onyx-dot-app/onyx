@@ -713,6 +713,7 @@ function EmbeddingModelCard({
             </div>
           </div>
         }
+        headerPadding="sm"
         topRightChildren={topRightButton}
       />
     </SelectCard>
@@ -798,6 +799,7 @@ function SelfHostedModelCard({
             </div>
           </div>
         }
+        headerPadding="sm"
         topRightChildren={topRightButton}
       />
     </SelectCard>
@@ -1336,7 +1338,7 @@ export default function IndexSettingsPage() {
                         </GeneralLayouts.Section>
                       )
                     }
-                    headerPadding={viewAllModelsOpen ? "fit" : undefined}
+                    headerPadding={viewAllModelsOpen ? undefined : "sm"}
                     topRightChildren={
                       viewAllModelsOpen ? undefined : (
                         <div className="flex flex-col items-end justify-between p-2 gap-1">
