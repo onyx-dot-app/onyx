@@ -335,19 +335,21 @@ def _download_and_extract_sections_basic(
                 raw_file_callback=raw_file_callback,
                 link=link,
             )
+            staged_sections: list[TextSection | ImageSection | TabularSection] = list(
+                result.sections
+            )
             return BasicExtractionResult(
-                sections=list(result.sections),
+                sections=staged_sections,
                 staged_file_id=result.staged_file_id,
             )
-        return BasicExtractionResult(
-            sections=list(
-                tabular_file_to_sections(
-                    io.BytesIO(raw_bytes),
-                    file_name=name,
-                    link=link,
-                )
+        tabular_sections: list[TextSection | ImageSection | TabularSection] = list(
+            tabular_file_to_sections(
+                io.BytesIO(raw_bytes),
+                file_name=name,
+                link=link,
             )
         )
+        return BasicExtractionResult(sections=tabular_sections)
 
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
@@ -423,12 +425,8 @@ def _download_and_extract_sections_basic(
             and not is_tabular_file(file_name)
         ):
             tabular_file_name = f"{file_name}.xlsx"
-        return list(
-            tabular_file_to_sections(
-                io.BytesIO(response_call()),
-                file_name=tabular_file_name,
-                link=link,
-            )
+        return _extract_tabular(
+            response_call(), name=tabular_file_name, content_type=mime_type
         )
 
     elif (
