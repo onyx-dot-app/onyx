@@ -1480,6 +1480,8 @@ export default function AgentEditorPage({
                               </Card>
                             </Disabled>
 
+                            {/* TODO(@raunakab): Consolidate the UI rendering logic of MCP-Server and OpenAPI cards
+                               (in `ChatPreferencesPage` and `AgentEditorPage`) together. */}
                             {/* Tools */}
                             <>
                               {/* render the separator if there is at least one mcp-server or open-api-tool */}

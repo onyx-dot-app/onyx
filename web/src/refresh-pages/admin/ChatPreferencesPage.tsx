@@ -875,6 +875,8 @@ export default function ChatPreferencesPage() {
                       />
                     )}
 
+                    {/* TODO(@raunakab): Consolidate the UI rendering logic of MCP-Server and OpenAPI cards
+                       (in `ChatPreferencesPage` and `AgentEditorPage`) together. */}
                     {/* MCP Servers & OpenAPI Tools */}
                     <Section gap={0.5}>
                       {mcpServersWithTools.map(({ server, tools }) => (
@@ -888,32 +890,19 @@ export default function ChatPreferencesPage() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <Card
-                          key={tool.id}
-                          border="solid"
-                          rounding="lg"
-                          padding="sm"
-                        >
-                          <CardLayout.Header
-                            headerPadding="sm"
-                            headerChildren={
-                              <Content
-                                icon={SvgActions}
-                                title={tool.display_name || tool.name}
-                                description={tool.description}
-                                sizePreset="main-ui"
-                                variant="section"
-                              />
-                            }
-                            topRightChildren={
-                              <Switch
-                                checked={isToolEnabled(tool.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleTool(tool.id, checked)
-                                }
-                              />
-                            }
-                          />
+                        <Card key={tool.id} border="solid" rounding="lg">
+                          <InputHorizontal
+                            title={tool.display_name || tool.name}
+                            description={tool.description}
+                            withLabel
+                          >
+                            <Switch
+                              checked={isToolEnabled(tool.id)}
+                              onCheckedChange={(checked) =>
+                                toggleTool(tool.id, checked)
+                              }
+                            />
+                          </InputHorizontal>
                         </Card>
                       ))}
                     </Section>
