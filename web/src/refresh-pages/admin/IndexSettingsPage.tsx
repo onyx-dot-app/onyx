@@ -86,7 +86,7 @@ import useFilter from "@/hooks/useFilter";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
-const MODEL_TAB_CLOUD = "cloud-hosted";
+const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 
 interface EmbeddingProviderInfoProps {
@@ -1092,7 +1092,7 @@ export default function IndexSettingsPage() {
                         ) : (
                           <IllustrationContent
                             illustration={SvgNoResult}
-                            title="No cloud models found"
+                            title="No cloud-based models found"
                             description="Try a different search term."
                           />
                         )}
@@ -1177,10 +1177,10 @@ export default function IndexSettingsPage() {
                           <div className="px-2">
                             <Tabs.List variant="underline">
                               <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                Cloud Hosted
+                                Cloud-based
                               </Tabs.Trigger>
                               <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                Self Hosted
+                                Self-hosted
                               </Tabs.Trigger>
                             </Tabs.List>
                           </div>
