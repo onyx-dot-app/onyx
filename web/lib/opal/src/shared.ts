@@ -6,6 +6,8 @@
  * circular imports and gives every consumer a single source of truth.
  */
 
+import "@opal/root.css";
+
 import type {
   SizeVariants,
   OverridableExtremaSizeVariants,
@@ -21,14 +23,16 @@ import type {
  * Each entry maps a named preset to Tailwind utility classes for
  * `height`, `min-width`, and `padding`.
  *
- * | Key   | Height        | Padding  |
- * |-------|---------------|----------|
- * | `lg`  | 2.25rem (36px)| `p-2`   |
- * | `md`  | 1.75rem (28px)| `p-1`   |
- * | `sm`  | 1.5rem (24px) | `p-1`   |
- * | `xs`  | 1.25rem (20px)| `p-0.5` |
- * | `2xs` | 1rem (16px)   | `p-0.5` |
- * | `fit` | h-fit         | `p-0`   |
+ * Heights are driven by CSS custom properties defined in `@opal/root.css`.
+ *
+ * | Key   | Height                      | Padding  |
+ * |-------|-----------------------------|----------|
+ * | `lg`  | `--opal-line-height-lg`     | `p-2`   |
+ * | `md`  | `--opal-line-height-md`     | `p-1`   |
+ * | `sm`  | `--opal-line-height-sm`     | `p-1`   |
+ * | `xs`  | `--opal-line-height-xs`     | `p-0.5` |
+ * | `2xs` | `--opal-line-height-2xs`    | `p-0.5` |
+ * | `fit` | `h-fit`                     | `p-0`   |
  */
 type ContainerProperties = {
   height: string;
@@ -41,28 +45,28 @@ const containerSizeVariants: Record<
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: {
-    height: "h-[var(--line-height-lg)]",
-    minWidth: "min-w-[var(--line-height-lg)]",
+    height: "h-[var(--opal-line-height-lg)]",
+    minWidth: "min-w-[var(--opal-line-height-lg)]",
     padding: "p-2",
   },
   md: {
-    height: "h-[var(--line-height-md)]",
-    minWidth: "min-w-[var(--line-height-md)]",
+    height: "h-[var(--opal-line-height-md)]",
+    minWidth: "min-w-[var(--opal-line-height-md)]",
     padding: "p-1",
   },
   sm: {
-    height: "h-[var(--line-height-sm)]",
-    minWidth: "min-w-[var(--line-height-sm)]",
+    height: "h-[var(--opal-line-height-sm)]",
+    minWidth: "min-w-[var(--opal-line-height-sm)]",
     padding: "p-1",
   },
   xs: {
-    height: "h-[var(--line-height-xs)]",
-    minWidth: "min-w-[var(--line-height-xs)]",
+    height: "h-[var(--opal-line-height-xs)]",
+    minWidth: "min-w-[var(--opal-line-height-xs)]",
     padding: "p-0.5",
   },
   "2xs": {
-    height: "h-[var(--line-height-2xs)]",
-    minWidth: "min-w-[var(--line-height-2xs)]",
+    height: "h-[var(--opal-line-height-2xs)]",
+    minWidth: "min-w-[var(--opal-line-height-2xs)]",
     padding: "p-0.5",
   },
 } as const;

@@ -1,0 +1,19 @@
+/**
+ * @opal/root — Root-level design tokens for the opal design system.
+ *
+ * Import this file once at the top of the component tree (or from shared.ts)
+ * to make all opal CSS custom properties available globally.
+ *
+ * App-level tokens (container widths, page widths, etc.) live in the app's
+ * own CSS — this file is strictly for library-owned tokens.
+ */
+
+:root {
+  /* ── Line heights / container sizes ──────────────────────────────────── */
+
+  --opal-line-height-lg: 2.25rem;
+  --opal-line-height-md: 1.75rem;
+  --opal-line-height-sm: 1.5rem;
+  --opal-line-height-xs: 1.25rem;
+  --opal-line-height-2xs: 1rem;
+}

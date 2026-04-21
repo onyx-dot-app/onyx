@@ -509,7 +509,7 @@ marshmallow==3.26.2
     # via dataclasses-json
 matrix-client==0.3.2
     # via zulip
-mcp==1.26.0
+mcp==1.27.0
     # via
     #   claude-agent-sdk
     #   fastmcp
@@ -1131,7 +1131,7 @@ xmltodict==1.0.2
     # via ddtrace
 xxhash==3.6.0
     # via langsmith
-yarl==1.22.0
+yarl==1.23.0
     # via aiohttp
 zeep==4.3.2
     # via simple-salesforce
