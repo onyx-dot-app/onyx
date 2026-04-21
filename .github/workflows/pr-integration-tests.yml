@@ -468,7 +468,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
@@ -589,7 +589,7 @@ jobs:
 
       - name: Upload logs (onyx-lite)
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-onyx-lite
           path: ${{ github.workspace }}/docker-compose-onyx-lite.log
@@ -727,7 +727,7 @@ jobs:
 
       - name: Upload logs (multi-tenant)
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-multitenant
           path: ${{ github.workspace }}/docker-compose-multitenant.log

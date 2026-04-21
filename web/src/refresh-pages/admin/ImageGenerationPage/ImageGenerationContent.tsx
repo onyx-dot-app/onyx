@@ -256,6 +256,7 @@ export default function ImageGenerationContent() {
                     }
                   >
                     <Card.Header
+                      headerPadding="sm"
                       headerChildren={
                         <Content
                           sizePreset="main-ui"

@@ -3,14 +3,15 @@
 // ---------------------------------------------------------------------------
 
 import { paddingVariants } from "@opal/shared";
-import { SizeVariants } from "@opal/types";
+import type { PaddingVariants } from "@opal/types";
 import { cn } from "@opal/utils";
 
 interface CardHeaderProps {
   /** Content rendered in the top-left header slot — typically a {@link Content} block. */
   headerChildren?: React.ReactNode;
 
-  headerPadding?: Extract<SizeVariants, "sm" | "fit">;
+  /** Padding applied around `headerChildren`. @default "fit" */
+  headerPadding?: Extract<PaddingVariants, "sm" | "fit">;
 
   /** Content rendered to the right of `headerChildren` (top of right column). */
   topRightChildren?: React.ReactNode;
@@ -74,7 +75,7 @@ interface CardHeaderProps {
  */
 function Header({
   headerChildren,
-  headerPadding = "sm",
+  headerPadding = "fit",
   topRightChildren,
   bottomRightChildren,
   bottomChildren,

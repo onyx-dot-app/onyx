@@ -82,6 +82,7 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -397,6 +398,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     extra={"email_domain": domain},
                 )
             raise
+
+        if request is not None:
+            await enforce_signup_rate_limit(request)
 
         # Verify captcha if enabled (for cloud signup protection)
         from onyx.auth.captcha import CaptchaVerificationError

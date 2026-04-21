@@ -75,6 +75,23 @@ class MCPToolCreateRequest(BaseModel):
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
+    oauth_client_id_changed: bool = Field(
+        default=False,
+        description=(
+            "True if `oauth_client_id` was edited by the user. When False on an "
+            "update of an existing server, the stored value is reused and the "
+            "request value is ignored. Defaults to False for backward "
+            "compatibility with older clients that don't send the flag."
+        ),
+    )
+    oauth_client_secret_changed: bool = Field(
+        default=False,
+        description=(
+            "True if `oauth_client_secret` was edited by the user. When False on "
+            "an update of an existing server, the stored value is reused and the "
+            "request value is ignored."
+        ),
+    )
     transport: MCPTransport | None = Field(
         None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
     )
@@ -203,6 +220,21 @@ class MCPUserOAuthConnectRequest(BaseModel):
     )
     oauth_client_secret: str | None = Field(
         None, description="OAuth client secret (optional for DCR)"
+    )
+    oauth_client_id_changed: bool = Field(
+        default=False,
+        description=(
+            "True if `oauth_client_id` was edited by the user. When False, "
+            "the stored value is reused and the request value is ignored. "
+            "Defaults to False for backward compatibility."
+        ),
+    )
+    oauth_client_secret_changed: bool = Field(
+        default=False,
+        description=(
+            "True if `oauth_client_secret` was edited by the user. When False, "
+            "the stored value is reused and the request value is ignored."
+        ),
     )
 
     @model_validator(mode="after")

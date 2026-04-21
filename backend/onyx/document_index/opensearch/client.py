@@ -519,18 +519,45 @@ class OpenSearchIndexClient(OpenSearchClient):
         logger.debug(f"Settings of index {self._index_name} updated successfully.")
 
     @log_function_time(print_only=True, debug_only=True)
-    def get_settings(self) -> dict[str, Any]:
+    def get_settings(
+        self,
+        include_defaults: bool = False,
+        flat_settings: bool = False,
+        pretty: bool = False,
+        human: bool = False,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """Gets the settings of the index.
 
+        Args:
+            include_defaults: Whether to include default settings which have not
+                been explicitly set. Defaults to False.
+            flat_settings: Whether to return settings in flat format vs nested
+                dictionaries. Defaults to False.
+            pretty: Whether to pretty-format the returned JSON response.
+                Defaults to False.
+            human: Whether to return statistics in human-readable format.
+                Defaults to False.
+
         Returns:
-            The settings of the index.
+            The settings of the index, and optionally the default settings. If
+                include_defaults is False, the default settings will be None.
 
         Raises:
             Exception: There was an error getting the settings of the index.
         """
         logger.debug(f"Getting settings of index {self._index_name}.")
-        response = self._client.indices.get_settings(index=self._index_name)
-        return response[self._index_name]["settings"]
+        params = {
+            "include_defaults": str(include_defaults).lower(),
+            "flat_settings": str(flat_settings).lower(),
+            "pretty": str(pretty).lower(),
+            "human": str(human).lower(),
+        }
+        response = self._client.indices.get_settings(
+            index=self._index_name, params=params
+        )
+        return response[self._index_name]["settings"], response[self._index_name].get(
+            "defaults", None
+        )
 
     @log_function_time(print_only=True, debug_only=True)
     def open_index(self) -> None:
