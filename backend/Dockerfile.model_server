@@ -1,7 +1,7 @@
 # Base stage with dependencies
 FROM python:3.11-slim-bookworm@sha256:9c6f90801e6b68e772b7c0ca74260cbf7af9f320acec894e26fccdaccfbe3b47 AS base
 
-ENV DANSWER_RUNNING_IN_DOCKER="true" \
+ENV ONYX_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
@@ -47,6 +47,7 @@ WORKDIR /app
 
 # Utils used by model server
 COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY ./onyx/utils/platform.py /app/onyx/utils/platform.py
 COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 COPY ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
 
