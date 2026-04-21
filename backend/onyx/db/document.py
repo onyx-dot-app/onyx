@@ -945,7 +945,7 @@ def get_file_ids_for_document_ids(
         .filter(DbDocument.file_id.isnot(None))
         .all()
     )
-    return [row.file_id for row in rows]
+    return [row.file_id for row in rows if row.file_id is not None]
 
 
 def delete_documents_complete__no_commit(
