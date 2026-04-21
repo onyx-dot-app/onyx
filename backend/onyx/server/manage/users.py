@@ -44,6 +44,7 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -81,10 +82,15 @@ from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
+from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
+from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import BulkInviteResponse
@@ -469,6 +475,12 @@ def bulk_invite_users(
                 status_code=403,
                 detail="You have hit your invite limit. Please upgrade for unlimited invites.",
             )
+        enforce_invite_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+            num_invites=len(emails_needing_seats),
+            tenant_id=tenant_id,
+        )
 
     # Check seat availability for new users
     if emails_needing_seats:
@@ -529,10 +541,17 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        enforce_remove_invited_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+        )
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
@@ -672,15 +691,24 @@ def get_valid_domains(
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
     include_api_keys: bool = False,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
+    if (
+        USER_DIRECTORY_ADMIN_ONLY
+        and Permission.READ_USERS not in get_effective_permissions(user)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have the required permissions for this action.",
+        )
+
     users = get_all_users(db_session)
     return [
-        MinimalUserSnapshot(id=user.id, email=user.email)
-        for user in users
-        if user.account_type != AccountType.BOT
-        and (include_api_keys or not is_api_key_email_address(user.email))
+        MinimalUserSnapshot(id=u.id, email=u.email)
+        for u in users
+        if u.account_type != AccountType.BOT
+        and (include_api_keys or not is_api_key_email_address(u.email))
     ]
 
 

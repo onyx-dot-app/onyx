@@ -986,11 +986,21 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """
     Stop a chat session by setting a stop signal.
     This endpoint is called by the frontend when the user clicks the stop button.
     """
+    try:
+        get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=user.id,
+            db_session=db_session,
+        )
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
+
     set_fence(chat_session_id, get_cache_backend(), True)
     return {"message": "Chat session stopped"}
