@@ -748,7 +748,8 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
                 logger.error(
                     f"Cannot find reasoning for name={model_name} and provider={model_provider}"
                 )
-            return reasoning or False
+                reasoning = False
+            return reasoning
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
