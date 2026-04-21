@@ -2,16 +2,9 @@
 // Types
 // ---------------------------------------------------------------------------
 
-import { paddingVariants } from "@opal/shared";
-import type { PaddingVariants } from "@opal/types";
-import { cn } from "@opal/utils";
-
 interface CardHeaderProps {
   /** Content rendered in the header slot — typically a {@link ContentAction} block. */
   headerChildren?: React.ReactNode;
-
-  /** Padding applied around `headerChildren`. @default "fit" */
-  headerPadding?: Extract<PaddingVariants, "sm" | "fit">;
 
   /** Content rendered below `headerChildren`, in a right-aligned column. */
   bottomRightChildren?: React.ReactNode;
@@ -56,7 +49,7 @@ interface CardHeaderProps {
  *       description="Search engine"
  *       sizePreset="main-ui"
  *       variant="section"
- *       padding="fit"
+ *       padding="lg"
  *       rightChildren={<Button>Connect</Button>}
  *     />
  *   }
@@ -71,7 +64,6 @@ interface CardHeaderProps {
  */
 function Header({
   headerChildren,
-  headerPadding = "fit",
   bottomRightChildren,
   bottomChildren,
 }: CardHeaderProps) {
@@ -79,14 +71,7 @@ function Header({
     <div className="flex flex-col w-full">
       <div className="flex flex-row items-start w-full">
         {headerChildren != null && (
-          <div
-            className={cn(
-              "self-start grow min-w-0",
-              paddingVariants[headerPadding]
-            )}
-          >
-            {headerChildren}
-          </div>
+          <div className="self-start grow min-w-0">{headerChildren}</div>
         )}
         {bottomRightChildren != null && (
           <div className="flex flex-col items-end shrink-0">

@@ -17,7 +17,6 @@ A card header layout with a main content slot, an optional right-aligned column 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `headerChildren` | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction />` block. |
-| `headerPadding` | `"sm" \| "fit"` | `"fit"` | Padding applied around `headerChildren`. `"sm"` → `p-2`; `"fit"` → `p-0`. |
 | `bottomRightChildren` | `ReactNode` | `undefined` | Content rendered below `headerChildren` in a right-aligned column. Laid out as `flex flex-row`. |
 | `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width. |
 
@@ -35,7 +34,7 @@ A card header layout with a main content slot, an optional right-aligned column 
 
 - Outer wrapper: `flex flex-col w-full`
 - Header row: `flex flex-row items-start w-full` — columns are independent in height
-- Left column (headerChildren wrapper): `self-start grow min-w-0` + `headerPadding` variant (default `p-0`) — grows to fill available space
+- Left column (headerChildren wrapper): `self-start grow min-w-0` — grows to fill available space
 - Right column: `flex flex-col items-end shrink-0` — only rendered when `bottomRightChildren` is provided
 - `bottomChildren` wrapper: `w-full` — only rendered when provided
 
@@ -49,7 +48,7 @@ import { Button } from "@opal/components";
 import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 <Card.Header
-  headerPadding="sm"
+
   headerChildren={
     <ContentAction
       icon={SvgGlobe}
@@ -78,7 +77,7 @@ import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header
-  headerPadding="sm"
+
   headerChildren={
     <ContentAction
       icon={SvgCloud}
@@ -101,7 +100,7 @@ import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header
-  headerPadding="sm"
+
   headerChildren={
     <ContentAction
       icon={SvgServer}
@@ -121,7 +120,7 @@ import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header
-  headerPadding="sm"
+
   headerChildren={
     <ContentAction
       icon={SvgInfo}
