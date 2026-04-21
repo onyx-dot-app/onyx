@@ -130,9 +130,7 @@ export default function EmailPasswordForm({
             }
           }
 
-          const loginCaptchaToken = isSignup
-            ? undefined
-            : await getCaptchaToken("login");
+          const loginCaptchaToken = await getCaptchaToken("login");
           const loginResponse = await basicLogin(
             email,
             values.password,
