@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -29,6 +29,7 @@ import {
   SvgCheckSquare,
   SvgCloud,
   SvgFold,
+  SvgOnyxOctagon,
   SvgPlusCircle,
   SvgServer,
   SvgSettings,
@@ -58,10 +59,14 @@ import {
 } from "@/lib/indexing";
 import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
-import { saveAdminSettings, setNewSearchSettings } from "@/lib/indexing/svc";
+import {
+  saveAdminSettings,
+  setNewSearchSettings,
+  testEmbedding,
+} from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import EditEmbeddingModelModal from "@/sections/modals/indexing/EditEmbeddingModelModal";
-import ProviderCreationModal from "@/sections/modals/indexing/ProviderCreationModal";
+import Modal from "@/refresh-components/Modal";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
@@ -79,6 +84,9 @@ import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
+
+const MODEL_TAB_CLOUD = "cloud-hosted";
+const MODEL_TAB_SELF = "self-hosted";
 
 interface EmbeddingProviderInfoProps {
   providerType: string | null;
@@ -124,6 +132,213 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         </LinkButton>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Provider connection modal
+// ---------------------------------------------------------------------------
+
+interface ProviderConnectionModalProps {
+  provider: CloudEmbeddingProvider;
+  onConnect: () => void;
+  onCancel: () => void;
+}
+
+function ProviderConnectionModal({
+  provider,
+  onConnect,
+  onCancel,
+}: ProviderConnectionModalProps) {
+  const providerName = getFormattedProviderName(provider.provider_type);
+  const isProxy = provider.provider_type === EmbeddingProvider.LITELLM;
+  const isAzure = provider.provider_type === EmbeddingProvider.AZURE;
+  const isGoogle = provider.provider_type === EmbeddingProvider.GOOGLE;
+
+  const [apiKey, setApiKey] = useState("");
+  const [apiUrl, setApiUrl] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [deploymentName, setDeploymentName] = useState("");
+  const [apiVersion, setApiVersion] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setFileName("");
+    if (!file) return;
+    setFileName(file.name);
+    try {
+      const content = JSON.parse(await file.text());
+      setApiKey(JSON.stringify(content));
+    } catch {
+      setApiKey("");
+    }
+  };
+
+  const handleSubmit = async () => {
+    setErrorMsg("");
+    setIsSubmitting(true);
+
+    try {
+      const testResponse = await testEmbedding({
+        provider_type: provider.provider_type,
+        modelName: isAzure ? "text-embedding-3-small" : modelName,
+        apiKey,
+        apiUrl,
+        apiVersion: isAzure ? apiVersion : null,
+        deploymentName: isAzure ? deploymentName : null,
+      });
+
+      if (!testResponse.ok) {
+        const err = await testResponse.json();
+        setErrorMsg(err.detail ?? "Embedding test failed");
+        return;
+      }
+
+      const saveResponse = await fetch(EMBEDDING_PROVIDERS_ADMIN_URL, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider_type: provider.provider_type,
+          api_key: apiKey,
+          api_url: apiUrl,
+          deployment_name: isAzure ? deploymentName : undefined,
+          api_version: isAzure ? apiVersion : undefined,
+          is_default_provider: false,
+          is_configured: true,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const err = await saveResponse.json();
+        throw new Error(err.detail ?? "Failed to save provider");
+      }
+
+      onConnect();
+    } catch (error: unknown) {
+      setErrorMsg(
+        error instanceof Error ? error.message : "An unknown error occurred"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isValid = (() => {
+    if (isProxy) return !!apiUrl && !!modelName;
+    if (isAzure) return !!apiUrl && !!deploymentName && !!apiVersion;
+    if (isGoogle) return !!apiKey;
+    return !!apiKey;
+  })();
+
+  return (
+    <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <Modal.Content width="sm">
+        <Modal.Header
+          icon={provider.icon}
+          moreIcon1={SvgArrowExchange}
+          moreIcon2={SvgOnyxOctagon}
+          title={`Set up ${providerName}`}
+          description={`Connect to ${providerName} and set up your ${providerName} embedding models.`}
+          onClose={onCancel}
+        />
+        <Modal.Body twoTone>
+          <GeneralLayouts.Section gap={0.5}>
+            {(isProxy || isAzure) && (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">API URL</Text>
+                <InputTypeIn
+                  placeholder="https://..."
+                  value={apiUrl}
+                  onChange={(e) => setApiUrl(e.target.value)}
+                />
+              </GeneralLayouts.Section>
+            )}
+
+            {isProxy && (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">Model Name (for testing)</Text>
+                <InputTypeIn
+                  placeholder="Model Name"
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                />
+              </GeneralLayouts.Section>
+            )}
+
+            {isAzure && (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">Deployment Name</Text>
+                <InputTypeIn
+                  placeholder="Deployment Name"
+                  value={deploymentName}
+                  onChange={(e) => setDeploymentName(e.target.value)}
+                />
+              </GeneralLayouts.Section>
+            )}
+
+            {isAzure && (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">API Version</Text>
+                <InputTypeIn
+                  placeholder="API Version"
+                  value={apiVersion}
+                  onChange={(e) => setApiVersion(e.target.value)}
+                />
+              </GeneralLayouts.Section>
+            )}
+
+            {isGoogle ? (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">Upload JSON credentials file</Text>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileUpload}
+                />
+                {fileName && (
+                  <Text font="secondary-body" color="text-03">
+                    {fileName}
+                  </Text>
+                )}
+              </GeneralLayouts.Section>
+            ) : (
+              <GeneralLayouts.Section gap={0.25}>
+                <Text font="main-ui-action">
+                  {`API Key${isProxy ? " (for non-local deployments)" : ""}`}
+                </Text>
+                <InputTypeIn
+                  placeholder="API Key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+              </GeneralLayouts.Section>
+            )}
+
+            {errorMsg && (
+              <MessageCard
+                variant="error"
+                title="Error"
+                description={errorMsg}
+              />
+            )}
+          </GeneralLayouts.Section>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button prominence="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button disabled={!isValid || isSubmitting} onClick={handleSubmit}>
+            {isSubmitting ? "Connecting..." : "Connect"}
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }
 
@@ -228,12 +443,9 @@ function ProviderGroup({
       </disconnectModal.Provider>
 
       <providerCreationModal.Provider>
-        <ProviderCreationModal
-          selectedProvider={provider}
-          isProxy={provider.provider_type === EmbeddingProvider.LITELLM}
-          isAzure={provider.provider_type === EmbeddingProvider.AZURE}
-          updateCurrentModel={() => {}}
-          onConfirm={async () => {
+        <ProviderConnectionModal
+          provider={provider}
+          onConnect={async () => {
             await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
             providerCreationModal.toggle(false);
             if (pendingModel) {
@@ -444,12 +656,9 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
       </div>
 
       <providerCreationModal.Provider>
-        <ProviderCreationModal
-          selectedProvider={provider}
-          isProxy={provider.provider_type === EmbeddingProvider.LITELLM}
-          isAzure={provider.provider_type === EmbeddingProvider.AZURE}
-          updateCurrentModel={() => {}}
-          onConfirm={async () => {
+        <ProviderConnectionModal
+          provider={provider}
+          onConnect={async () => {
             await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
             providerCreationModal.toggle(false);
           }}
@@ -484,7 +693,7 @@ export default function IndexSettingsPage() {
   const settings = useSettingsContext();
   const editEmbeddingModelModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
-  const [activeModelTab, setActiveModelTab] = useState("cloud");
+  const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
 
   const allCloudProviders = useMemo(
     () =>
@@ -671,7 +880,7 @@ export default function IndexSettingsPage() {
                   padding={viewAllModelsOpen ? "fit" : "sm"}
                   expandedContent={
                     <>
-                      <Tabs.Content value="cloud" className="pt-0">
+                      <Tabs.Content value={MODEL_TAB_CLOUD} className="pt-0">
                         {filteredProviders.length > 0 ||
                         configOnlyProviders.length > 0 ? (
                           <GeneralLayouts.Section gap={0.5} padding={0.5}>
@@ -707,7 +916,7 @@ export default function IndexSettingsPage() {
                         )}
                       </Tabs.Content>
 
-                      <Tabs.Content value="self" className="pt-0">
+                      <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
                         {filteredSelfHostedModels.length > 0 ? (
                           <GeneralLayouts.Section gap={0.25} padding={0.5}>
                             {filteredSelfHostedModels.map((model) => (
@@ -757,10 +966,10 @@ export default function IndexSettingsPage() {
 
                           <div className="px-2">
                             <Tabs.List variant="underline">
-                              <Tabs.Trigger value="cloud">
+                              <Tabs.Trigger value={MODEL_TAB_CLOUD}>
                                 Cloud Hosted
                               </Tabs.Trigger>
-                              <Tabs.Trigger value="self">
+                              <Tabs.Trigger value={MODEL_TAB_SELF}>
                                 Self Hosted
                               </Tabs.Trigger>
                             </Tabs.List>
@@ -797,7 +1006,14 @@ export default function IndexSettingsPage() {
                         <div className="flex flex-col items-end justify-between p-2 gap-1">
                           <Button
                             prominence="secondary"
-                            onClick={() => setViewAllModelsOpen(true)}
+                            onClick={() => {
+                              setActiveModelTab(
+                                currentEmbeddingModel?.provider_type
+                                  ? MODEL_TAB_CLOUD
+                                  : MODEL_TAB_SELF
+                              );
+                              setViewAllModelsOpen(true);
+                            }}
                           >
                             View All Models
                           </Button>
