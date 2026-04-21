@@ -7,7 +7,9 @@ import pytest
 from fastapi import HTTPException
 
 from onyx.server.manage.models import EmailInviteStatus
+from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.users import bulk_invite_users
+from onyx.server.manage.users import remove_invited_user
 
 
 @patch("onyx.server.manage.users.enforce_invite_rate_limit")
@@ -116,3 +118,119 @@ def test_email_invite_status_send_failed(*_mocks: None) -> None:
 
     assert result.email_invite_status == EmailInviteStatus.SEND_FAILED
     assert result.invited_count == 1
+
+
+# --- trial-only rate limit gating tests ---
+
+
+@patch("onyx.server.manage.users.enforce_invite_rate_limit")
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=3)
+@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+def test_paid_tenant_bypasses_invite_rate_limit(
+    _ee_fetch: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    _is_trial: MagicMock,
+    mock_rate_limit: MagicMock,
+) -> None:
+    """Paid tenants must not hit the invite rate limiter at all."""
+    emails = [f"user{i}@example.com" for i in range(3)]
+    bulk_invite_users(emails=emails, current_user=MagicMock())
+    mock_rate_limit.assert_not_called()
+
+
+@patch("onyx.server.manage.users.enforce_invite_rate_limit")
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=True)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=3)
+@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.NUM_FREE_TRIAL_USER_INVITES", 50)
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+def test_trial_tenant_hits_invite_rate_limit(
+    _ee_fetch: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    _is_trial: MagicMock,
+    mock_rate_limit: MagicMock,
+) -> None:
+    """Trial tenants must flow through the invite rate limiter."""
+    emails = [f"user{i}@example.com" for i in range(3)]
+    bulk_invite_users(emails=emails, current_user=MagicMock())
+    mock_rate_limit.assert_called_once()
+
+
+@patch("onyx.server.manage.users.enforce_remove_invited_rate_limit")
+@patch("onyx.server.manage.users.remove_user_from_invited_users", return_value=0)
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+def test_paid_tenant_bypasses_remove_invited_rate_limit(
+    _ee_fetch: MagicMock,
+    _get_tenant_id: MagicMock,
+    _is_trial: MagicMock,
+    _remove_from_invited: MagicMock,
+    mock_rate_limit: MagicMock,
+) -> None:
+    """Paid tenants must not hit the remove-invited rate limiter at all."""
+    remove_invited_user(
+        user_email=UserByEmail(user_email="user@example.com"),
+        current_user=MagicMock(),
+        db_session=MagicMock(),
+    )
+    mock_rate_limit.assert_not_called()
+
+
+@patch("onyx.server.manage.users.enforce_remove_invited_rate_limit")
+@patch("onyx.server.manage.users.remove_user_from_invited_users", return_value=0)
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=True)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+def test_trial_tenant_hits_remove_invited_rate_limit(
+    _ee_fetch: MagicMock,
+    _get_tenant_id: MagicMock,
+    _is_trial: MagicMock,
+    _remove_from_invited: MagicMock,
+    mock_rate_limit: MagicMock,
+) -> None:
+    """Trial tenants must flow through the remove-invited rate limiter."""
+    remove_invited_user(
+        user_email=UserByEmail(user_email="user@example.com"),
+        current_user=MagicMock(),
+        db_session=MagicMock(),
+    )
+    mock_rate_limit.assert_called_once()

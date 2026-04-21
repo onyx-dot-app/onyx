@@ -472,12 +472,11 @@ def bulk_invite_users(
                 status_code=403,
                 detail="You have hit your invite limit. Please upgrade for unlimited invites.",
             )
-
-    enforce_invite_rate_limit(
-        redis_client=get_redis_client(tenant_id=tenant_id),
-        admin_user_id=current_user.id,
-        num_invites=len(emails_needing_seats),
-    )
+        enforce_invite_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+            num_invites=len(emails_needing_seats),
+        )
 
     # Check seat availability for new users
     if emails_needing_seats:
@@ -544,10 +543,11 @@ def remove_invited_user(
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
-    enforce_remove_invited_rate_limit(
-        redis_client=get_redis_client(tenant_id=tenant_id),
-        admin_user_id=current_user.id,
-    )
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        enforce_remove_invited_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+        )
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None

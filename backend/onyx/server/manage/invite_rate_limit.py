@@ -30,16 +30,20 @@ logger = setup_logger()
 _SECONDS_PER_MINUTE = 60
 _SECONDS_PER_DAY = 24 * 60 * 60
 
-# These limits primarily matter for multi-tenant cloud. Self-hosted / Lite
-# deployments fail open when Redis is unavailable, so the limits are
-# effectively no-ops there. Tuned for the invite-spam attack pattern where
-# a compromised admin sends ~30/min of PUT+PATCH cycles; caps are well
-# above any legitimate human invite cadence.
-_INVITE_ADMIN_PER_MIN = 5
-_INVITE_ADMIN_PER_DAY = 50
-_INVITE_TENANT_PER_DAY = 500
-_REMOVE_ADMIN_PER_MIN = 10
-_REMOVE_ADMIN_PER_DAY = 100
+# Rate limits apply to trial tenants only (enforced at call site). Paid
+# tenants bypass entirely — their guardrails are seat limits and the
+# per-admin lifetime counter. Self-hosted / Lite deployments fail open
+# when Redis is unavailable. Values are sized against the trial lifetime
+# cap `NUM_FREE_TRIAL_USER_INVITES=10` and the invite→remove→invite
+# bypass attack: per-day caps stay tight so a compromised or scripted
+# trial admin cannot exceed the lifetime cap even across window rolls,
+# and per-minute caps block burst automation while leaving headroom for
+# a human typing emails by hand.
+_INVITE_ADMIN_PER_MIN = 3
+_INVITE_ADMIN_PER_DAY = 10
+_INVITE_TENANT_PER_DAY = 15
+_REMOVE_ADMIN_PER_MIN = 3
+_REMOVE_ADMIN_PER_DAY = 30
 
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
