@@ -64,6 +64,7 @@ flag must stay off.
 """
 
 import ipaddress
+import os
 import time
 
 from fastapi import Request
@@ -82,6 +83,14 @@ logger = setup_logger()
 _PER_IP_PER_HOUR = 5
 _BUCKET_SECONDS = 3600
 _REDIS_KEY_PREFIX = "signup_rate:"
+
+# Opt-in enable flag. MULTI_TENANT alone is insufficient — integration
+# tests run in multi-tenant mode from a single shared runner IP and would
+# trip the cap after a handful of signup-flow tests. Cloud sets this to
+# "true" explicitly; CI / local dev leave it unset.
+SIGNUP_RATE_LIMIT_ENABLED = (
+    os.environ.get("SIGNUP_RATE_LIMIT_ENABLED", "").lower() == "true"
+)
 
 
 def _is_usable_client_ip(ip_str: str) -> bool:
@@ -128,10 +137,11 @@ def _bucket_key(ip: str) -> str:
 
 async def enforce_signup_rate_limit(request: Request) -> None:
     """Raise OnyxError(RATE_LIMITED) if this client has exceeded the hourly
-    signup cap. Cloud-only: self-hosted signup is typically admin-invite-only
-    and doesn't see the spray-registration threat model. Fails open on Redis
-    errors so a Redis blip cannot block legitimate registrations."""
-    if not MULTI_TENANT:
+    signup cap. Only active when both MULTI_TENANT and
+    SIGNUP_RATE_LIMIT_ENABLED are true — self-hosted and CI deployments
+    skip this path. Fails open on Redis errors so a Redis blip cannot
+    block legitimate registrations."""
+    if not (MULTI_TENANT and SIGNUP_RATE_LIMIT_ENABLED):
         return
 
     ip = _client_ip(request)

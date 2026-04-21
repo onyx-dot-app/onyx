@@ -100,11 +100,31 @@ def test_client_ip_handles_no_client() -> None:
 
 @pytest.mark.asyncio
 async def test_disabled_when_not_multitenant() -> None:
-    """Self-hosted (MULTI_TENANT=False) should never call Redis."""
+    """Self-hosted (MULTI_TENANT=False) should never call Redis, even if
+    SIGNUP_RATE_LIMIT_ENABLED is on."""
     req = _make_request(client_host="1.2.3.4")
     fake_redis = MagicMock()
     with (
         patch.object(rl, "MULTI_TENANT", False),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
+        patch.object(
+            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+        ) as conn,
+    ):
+        await enforce_signup_rate_limit(req)
+    conn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_disabled_when_enable_flag_off() -> None:
+    """MULTI_TENANT alone is not enough — CI runs multi-tenant but must
+    not trip the rate limit. SIGNUP_RATE_LIMIT_ENABLED is the explicit
+    opt-in."""
+    req = _make_request(client_host="1.2.3.4")
+    fake_redis = MagicMock()
+    with (
+        patch.object(rl, "MULTI_TENANT", True),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", False),
         patch.object(
             rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
         ) as conn,
@@ -120,6 +140,7 @@ async def test_allows_when_under_limit() -> None:
     fake_redis = _fake_pipeline_redis(incr_return=_PER_IP_PER_HOUR)
     with (
         patch.object(rl, "MULTI_TENANT", True),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
             rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
         ),
@@ -134,6 +155,7 @@ async def test_rejects_when_over_limit() -> None:
     fake_redis = _fake_pipeline_redis(incr_return=_PER_IP_PER_HOUR + 1)
     with (
         patch.object(rl, "MULTI_TENANT", True),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
             rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
         ),
@@ -151,6 +173,7 @@ async def test_pipeline_expire_runs_on_every_hit() -> None:
     fake_redis = _fake_pipeline_redis(incr_return=3)
     with (
         patch.object(rl, "MULTI_TENANT", True),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
             rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
         ),
@@ -165,6 +188,7 @@ async def test_fails_open_on_redis_error() -> None:
     req = _make_request(xff="1.2.3.4, 10.0.0.1")
     with (
         patch.object(rl, "MULTI_TENANT", True),
+        patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
             rl,
             "get_async_redis_connection",
