@@ -1,5 +1,6 @@
 """Unit tests for the reCAPTCHA Enterprise Assessment rejection ladder."""
 
+import os
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
@@ -55,10 +56,9 @@ def _assessment(
 
 
 @pytest.fixture(autouse=True)
-def _bypass_replay_cache() -> Iterator[None]:
-    """These tests exercise the Enterprise rejection ladder, not the replay
-    cache (that is covered in test_captcha_replay.py). Stub the Redis
-    helpers so every test hits the HTTP path directly."""
+def _test_env() -> Iterator[None]:
+    """Stub the Redis replay cache (covered in test_captcha_replay.py) and
+    populate cloud-like config so the hostname check actually fires."""
     with (
         patch.object(
             captcha_module,
@@ -66,6 +66,12 @@ def _bypass_replay_cache() -> Iterator[None]:
             AsyncMock(return_value=None),
         ),
         patch.object(captcha_module, "_release_token", AsyncMock(return_value=None)),
+        patch.object(
+            captcha_module,
+            "RECAPTCHA_HOSTNAME_ALLOWLIST",
+            frozenset({"cloud.onyx.app"}),
+        ),
+        patch.object(captcha_module, "RECAPTCHA_SCORE_THRESHOLD", 0.8),
     ):
         yield
 
@@ -190,7 +196,7 @@ async def test_score_below_floor_rejects() -> None:
 async def test_soft_reason_alone_does_not_reject() -> None:
     """LOW_CONFIDENCE_SCORE is not in the hard-reject set; if the score is
     above floor and nothing else fails, the request passes."""
-    client = _fake_client(_assessment(score=0.7, reasons=["LOW_CONFIDENCE_SCORE"]))
+    client = _fake_client(_assessment(score=0.9, reasons=["LOW_CONFIDENCE_SCORE"]))
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
@@ -224,10 +230,12 @@ async def test_empty_token_rejected_before_http() -> None:
 
 @pytest.mark.asyncio
 async def test_post_body_has_enterprise_shape() -> None:
-    """Belt-and-suspenders on the request we send to Google."""
     client = _fake_client(_assessment())
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(captcha_module, "RECAPTCHA_ENTERPRISE_PROJECT_ID", "test-project"),
+        patch.object(captcha_module, "RECAPTCHA_SITE_KEY", "test-site-key"),
+        patch.dict(os.environ, {"RECAPTCHA_ENTERPRISE_API_KEY": "test-api-key"}),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
     ):
         await verify_captcha_token("tok", CaptchaAction.SIGNUP)
@@ -236,10 +244,13 @@ async def test_post_body_has_enterprise_shape() -> None:
     call = client.post.await_args
     assert call is not None
     url = call.args[0]
-    assert "recaptchaenterprise.googleapis.com" in url
-    assert "/projects/danswer-404504/assessments" in url
+    assert url == (
+        "https://recaptchaenterprise.googleapis.com/v1/projects/test-project/assessments"
+    )
     body = call.kwargs["json"]
-    assert body["event"]["token"] == "tok"
-    assert body["event"]["expectedAction"] == "signup"
-    assert body["event"]["siteKey"].startswith("6Ldb7Wos")
-    assert call.kwargs["params"]["key"] == captcha_module._RECAPTCHA_ENTERPRISE_API_KEY
+    assert body["event"] == {
+        "token": "tok",
+        "siteKey": "test-site-key",
+        "expectedAction": "signup",
+    }
+    assert call.kwargs["params"] == {"key": "test-api-key"}

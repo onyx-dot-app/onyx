@@ -2,21 +2,16 @@
 
 Two flows share this module:
 
-1. Email/password signup. The token is posted with the signup body and
-   verified inline by ``UserManager.create``.
+1. Email/password signup — ``UserManager.create`` verifies the token
+   posted with the signup body.
+2. Google OAuth signup — the frontend pre-verifies a token, the backend
+   sets a signed cookie, and ``CaptchaCookieMiddleware`` checks the
+   cookie on the ``/auth/oauth/callback`` redirect.
 
-2. Google OAuth signup. The OAuth callback request originates from Google
-   as a browser redirect, so we cannot attach a header or body field to it
-   at that moment. Instead the frontend verifies a reCAPTCHA token BEFORE
-   redirecting to Google and we set a signed HttpOnly cookie. The cookie
-   is sent automatically on the callback request, where middleware checks
-   it. ``issue_captcha_cookie_value`` / ``validate_captcha_cookie_value``
-   handle the HMAC signing + expiry.
-
-Verification calls the reCAPTCHA Enterprise Assessment API (not the
-legacy ``siteverify`` endpoint) so rejections can key on
-``riskAnalysis.reasons[]`` — Google's structured bot signals — instead
-of a raw 0-1 score that sophisticated farms routinely clear.
+Verification calls the reCAPTCHA Enterprise Assessment API so rejections
+can key on ``riskAnalysis.reasons`` rather than a raw 0-1 score.
+``issue_captcha_cookie_value`` / ``validate_captcha_cookie_value`` sign
+the OAuth cookie.
 """
 
 import hashlib
@@ -33,6 +28,10 @@ from pydantic import Field
 
 from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
 from onyx.configs.app_configs import CAPTCHA_ENABLED
+from onyx.configs.app_configs import RECAPTCHA_ENTERPRISE_PROJECT_ID
+from onyx.configs.app_configs import RECAPTCHA_HOSTNAME_ALLOWLIST
+from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
+from onyx.configs.app_configs import RECAPTCHA_SITE_KEY
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
@@ -41,40 +40,32 @@ logger = setup_logger()
 
 CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
 
-# --- Enterprise Assessment wiring ------------------------------------------
-# Project + site key are public, never rotate, and are Onyx-cloud-specific
-# identifiers — hardcoding keeps them out of app_configs without losing
-# clarity. Only the API key is a secret, consumed from the environment.
-_RECAPTCHA_PROJECT_ID = "danswer-404504"
-# pragma: allowlist nextline secret — reCAPTCHA SITE keys are public (served to
-# the browser inside HTML) despite the `6L…` prefix that ripsecrets flags.
-_RECAPTCHA_SITE_KEY = (
-    "6Ldb7WosAAAAAGsxnaOHHjw34afhnyuy9VhQ4UaZ"  # pragma: allowlist secret
-)
-_RECAPTCHA_ENTERPRISE_API_KEY = os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
-_RECAPTCHA_ASSESSMENT_URL = f"https://recaptchaenterprise.googleapis.com/v1/projects/{_RECAPTCHA_PROJECT_ID}/assessments"
-
-# Policy values — the knobs that would have been env vars in a v3-only world.
-# Score is a grey-area floor; reasons[] are the primary kill signal.
-_HOSTNAME_ALLOWLIST: frozenset[str] = frozenset({"cloud.onyx.app"})
+# Enterprise Assessment response enums from Google. Not operator-tunable —
+# changing the set changes what "bot" means relative to the API contract.
 _HARD_REJECT_REASONS: frozenset[str] = frozenset(
     {"AUTOMATION", "UNEXPECTED_ENVIRONMENT", "TOO_MUCH_TRAFFIC"}
 )
-_TOKEN_MAX_AGE_SECONDS = 120
-_SCORE_FLOOR = 0.5
 
-# --- Replay cache (unchanged from #10402) ----------------------------------
+# Enterprise tokens are valid at Google for ~2 minutes. Matches that window.
+_TOKEN_MAX_AGE_SECONDS = 120
+
 _REPLAY_CACHE_TTL_SECONDS = 120
 _REPLAY_KEY_PREFIX = "captcha:replay:"
 
 
+def _enterprise_api_key() -> str:
+    """Read per-call so rolling secret updates land without a restart."""
+    return os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
+
+
+def _assessment_url() -> str:
+    return f"https://recaptchaenterprise.googleapis.com/v1/projects/{RECAPTCHA_ENTERPRISE_PROJECT_ID}/assessments"
+
+
 class CaptchaAction(StrEnum):
-    """Actions passed to reCAPTCHA Enterprise so each endpoint's tokens are
-    mutually non-replayable. Enforced via strict equality against
-    ``tokenProperties.action`` — a signup token cannot pass the oauth path
-    even if siphoned, because the Enterprise response reports the action
-    the client embedded at challenge time.
-    """
+    """Distinct per-endpoint action names. Enforced against
+    ``tokenProperties.action`` with strict equality so a token minted for
+    one endpoint cannot be replayed against another."""
 
     SIGNUP = "signup"
     OAUTH = "oauth"
@@ -98,8 +89,6 @@ class _RiskAnalysis(BaseModel):
 
 
 class RecaptchaAssessmentResponse(BaseModel):
-    """Subset of the Enterprise Assessment response we actually read."""
-
     name: str | None = None
     token_properties: _TokenProperties = Field(
         default_factory=_TokenProperties, alias="tokenProperties"
@@ -110,24 +99,23 @@ class RecaptchaAssessmentResponse(BaseModel):
 
 
 def is_captcha_enabled() -> bool:
-    """Captcha is on iff the feature flag is set AND we have an Enterprise
-    API key to authenticate with. A missing API key is the kill-switch: the
-    module falls through without calling Google so self-hosted and dev
-    deployments are unaffected."""
-    return CAPTCHA_ENABLED and bool(_RECAPTCHA_ENTERPRISE_API_KEY)
+    return (
+        CAPTCHA_ENABLED
+        and bool(RECAPTCHA_ENTERPRISE_PROJECT_ID)
+        and bool(RECAPTCHA_SITE_KEY)
+        and bool(_enterprise_api_key())
+    )
 
 
 def _replay_cache_key(token: str) -> str:
-    """Avoid storing the raw token in Redis — hash it first."""
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     return f"{_REPLAY_KEY_PREFIX}{digest}"
 
 
 async def _reserve_token_or_raise(token: str) -> None:
-    """SETNX a token fingerprint. If another caller already claimed it within
-    the TTL, reject as a replay. Fails open on Redis errors — losing replay
-    protection is strictly better than hard-failing legitimate registrations
-    if Redis blips."""
+    """Claim a token fingerprint via ``SETNX``. A concurrent replay within
+    the TTL returns False → raise. Redis errors fail open so a blip does
+    not block legitimate signups."""
     try:
         redis = await get_async_redis_connection()
         claimed = await redis.set(
@@ -148,10 +136,9 @@ async def _reserve_token_or_raise(token: str) -> None:
 
 
 async def _release_token(token: str) -> None:
-    """Unclaim a previously-reserved token so a retry with the same still-valid
-    token is not blocked. Called when WE fail (network error talking to
-    Google), not when Google rejects the token — Google rejections mean the
-    token is permanently invalid and must stay claimed."""
+    """Unclaim the reservation when the failure is OURS (transport, parse),
+    not Google's. Google-rejected tokens stay claimed — they are dead for
+    their whole TTL regardless."""
     try:
         redis = await get_async_redis_connection()
         await redis.delete(_replay_cache_key(token))
@@ -160,15 +147,11 @@ async def _release_token(token: str) -> None:
 
 
 def _check_token_freshness(create_time: str | None) -> None:
-    """Reject tokens older than the Assessment API's own 2-minute validity
-    window. Google enforces this too, but a server-side check is cheap
-    defense-in-depth against clock-skew edge cases and reduces reliance
-    on a single counterparty.
-    """
-    if not create_time:
-        return
+    if create_time is None:
+        raise CaptchaVerificationError(
+            "Captcha verification failed: missing createTime"
+        )
     try:
-        # Google returns RFC3339 with `Z`; strip Z and parse as UTC.
         ts = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
     except ValueError:
         logger.warning(f"Captcha createTime unparseable: {create_time!r}")
@@ -184,10 +167,6 @@ def _check_token_freshness(create_time: str | None) -> None:
 def _evaluate_assessment(
     result: RecaptchaAssessmentResponse, action: CaptchaAction
 ) -> None:
-    """Apply the full rejection ladder to a parsed Assessment response.
-    Ordered cheapest-to-most-lenient: fail fast on definitively-bad tokens
-    before reaching the grey-area score floor.
-    """
     tp = result.token_properties
     ra = result.risk_analysis
 
@@ -196,7 +175,9 @@ def _evaluate_assessment(
         logger.warning(f"Captcha token invalid: reason={reason}")
         raise CaptchaVerificationError(f"Captcha verification failed: {reason}")
 
-    if tp.hostname and tp.hostname not in _HOSTNAME_ALLOWLIST:
+    if RECAPTCHA_HOSTNAME_ALLOWLIST and (
+        tp.hostname is None or tp.hostname not in RECAPTCHA_HOSTNAME_ALLOWLIST
+    ):
         logger.warning(f"Captcha hostname mismatch: {tp.hostname!r}")
         raise CaptchaVerificationError("Captcha verification failed: hostname mismatch")
 
@@ -215,9 +196,9 @@ def _evaluate_assessment(
             f"Captcha verification failed: {', '.join(sorted(hard))}"
         )
 
-    if ra.score < _SCORE_FLOOR:
+    if ra.score < RECAPTCHA_SCORE_THRESHOLD:
         logger.warning(
-            f"Captcha score below floor: {ra.score} < {_SCORE_FLOOR} reasons={ra.reasons}"
+            f"Captcha score below threshold: {ra.score} < {RECAPTCHA_SCORE_THRESHOLD} reasons={ra.reasons}"
         )
         raise CaptchaVerificationError(
             "Captcha verification failed: suspicious activity detected"
@@ -229,35 +210,28 @@ def _evaluate_assessment(
 
 
 async def verify_captcha_token(token: str, action: CaptchaAction) -> None:
-    """Verify a reCAPTCHA token with the Enterprise Assessment API.
-
-    Rejection ladder (strict equality; no silent skip on empty fields):
-    tokenProperties.valid → hostname → createTime ≤ 120s → action match →
-    riskAnalysis.reasons[] ∩ hard set → score ≥ floor.
-
-    Fails open (returns None) when captcha is disabled. Raises
-    ``CaptchaVerificationError`` on any rejection or service outage.
-    """
+    """Reject on any of: empty token, replay, invalid token, hostname
+    mismatch, stale createTime, action mismatch, hard-reject reason, or
+    score below threshold. No silent skip on null/empty fields."""
     if not is_captcha_enabled():
         return
 
     if not token:
         raise CaptchaVerificationError("Captcha token is required")
 
-    # Claim the token first so a concurrent replay of the same value cannot
-    # slip through the Google round-trip window. Done BEFORE calling Google
-    # because even a still-valid token should only redeem once.
+    # Claim before the Google round-trip so a concurrent replay of the
+    # same token is rejected without both callers hitting the API.
     await _reserve_token_or_raise(token)
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                _RECAPTCHA_ASSESSMENT_URL,
-                params={"key": _RECAPTCHA_ENTERPRISE_API_KEY},
+                _assessment_url(),
+                params={"key": _enterprise_api_key()},
                 json={
                     "event": {
                         "token": token,
-                        "siteKey": _RECAPTCHA_SITE_KEY,
+                        "siteKey": RECAPTCHA_SITE_KEY,
                         "expectedAction": action.value,
                     }
                 },
@@ -268,40 +242,21 @@ async def verify_captcha_token(token: str, action: CaptchaAction) -> None:
             _evaluate_assessment(result, action)
 
     except CaptchaVerificationError:
-        # Definitively-bad token. Keep the replay reservation so the same
-        # value cannot be retried elsewhere during the TTL window.
         raise
     except Exception as e:
-        # Transport / parse failures are OUR inability to verify, not proof
-        # the token is bad. Release the reservation so the user can retry.
         logger.error(f"Captcha verification failed unexpectedly: {e}")
         await _release_token(token)
         raise CaptchaVerificationError("Captcha verification service unavailable")
 
 
-# ---------------------------------------------------------------------------
-# OAuth pre-redirect cookie helpers
-# ---------------------------------------------------------------------------
-
-
 def _cookie_signing_key() -> bytes:
-    """Derive a dedicated HMAC key from USER_AUTH_SECRET.
-
-    Using a separate derivation keeps the captcha cookie signature from
-    being interchangeable with any other token that reuses USER_AUTH_SECRET.
-    """
     return hashlib.sha256(
         f"onyx-captcha-cookie-v1::{USER_AUTH_SECRET}".encode("utf-8")
     ).digest()
 
 
 def issue_captcha_cookie_value(now: int | None = None) -> str:
-    """Produce an opaque cookie value encoding 'verified until <expiry>'.
-
-    Format: ``<expiry_epoch>.<hex_hmac>``. The presence of a valid
-    unexpired signature proves the browser solved a captcha challenge
-    recently on this origin.
-    """
+    """Return ``<expiry_epoch>.<hex_hmac>`` proving a recent captcha challenge."""
     issued_at = now if now is not None else int(time.time())
     expiry = issued_at + CAPTCHA_COOKIE_TTL_SECONDS
     sig = hmac.new(
@@ -311,18 +266,6 @@ def issue_captcha_cookie_value(now: int | None = None) -> str:
 
 
 def validate_captcha_cookie_value(value: str | None) -> bool:
-    """Return True if the cookie value has a valid unexpired signature.
-
-    The cookie is NOT a JWT — it's a minimal two-field format produced by
-    ``issue_captcha_cookie_value``:
-
-        <expiry_epoch_seconds>.<hex_hmac_sha256>
-
-    We split on the first ``.``, parse the expiry as an integer, recompute
-    the HMAC over the expiry string using the key derived from
-    USER_AUTH_SECRET, and compare with ``hmac.compare_digest`` to avoid
-    timing leaks.
-    """
     if not value:
         return False
     parts = value.split(".", 1)
