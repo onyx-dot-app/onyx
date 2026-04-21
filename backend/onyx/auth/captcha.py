@@ -91,6 +91,21 @@ async def _reserve_token_or_raise(token: str) -> None:
         logger.error(f"Captcha replay cache error (failing open): {e}")
 
 
+async def _release_token(token: str) -> None:
+    """Unclaim a previously-reserved token so a retry with the same still-valid
+    token is not blocked. Called when WE fail (network error talking to
+    Google), not when Google rejects the token — Google rejections mean the
+    token is permanently invalid and must stay claimed."""
+    try:
+        redis = await get_async_redis_connection()
+        await redis.delete(_replay_cache_key(token))
+    except Exception as e:
+        # Worst case: the user must wait up to 120s before the TTL expires
+        # on its own and they can retry. Still strictly better than failing
+        # open on the reservation side.
+        logger.error(f"Captcha replay cache release error (ignored): {e}")
+
+
 async def verify_captcha_token(
     token: str,
     expected_action: str = "signup",
@@ -173,8 +188,11 @@ async def verify_captcha_token(
 
     except httpx.HTTPError as e:
         logger.error(f"Captcha API request failed: {e}")
-        # In case of API errors, we might want to allow registration
-        # to prevent blocking legitimate users. This is a policy decision.
+        # Google itself was unreachable — the user's token is not invalid,
+        # we just couldn't verify it. Release the replay reservation so a
+        # retry with the same still-valid token is accepted instead of
+        # rejected as "already used" for the next ~120s.
+        await _release_token(token)
         raise CaptchaVerificationError("Captcha verification service unavailable")
 
 

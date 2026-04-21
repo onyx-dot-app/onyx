@@ -4,12 +4,14 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 from onyx.auth import captcha as captcha_module
 from onyx.auth.captcha import _replay_cache_key
 from onyx.auth.captcha import _reserve_token_or_raise
 from onyx.auth.captcha import CaptchaVerificationError
+from onyx.auth.captcha import verify_captcha_token
 
 
 @pytest.mark.asyncio
@@ -63,3 +65,34 @@ def test_replay_cache_key_is_sha256_prefixed() -> None:
     assert "raw-value" not in key
     # Length = prefix + 64 hex chars.
     assert len(key) == len("captcha:replay:") + 64
+
+
+@pytest.mark.asyncio
+async def test_reservation_released_when_google_unreachable() -> None:
+    """If Google's siteverify itself errors (our side, not the token's), the
+    replay reservation must be released so the user can retry with the same
+    still-valid token instead of getting 'already used' for 120s."""
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=True)
+    fake_redis.delete = AsyncMock(return_value=1)
+
+    fake_client = MagicMock()
+    fake_client.post = AsyncMock(side_effect=httpx.ConnectError("network down"))
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_module,
+            "get_async_redis_connection",
+            AsyncMock(return_value=fake_redis),
+        ),
+        patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+    ):
+        with pytest.raises(CaptchaVerificationError, match="service unavailable"):
+            await verify_captcha_token("valid-token", expected_action="signup")
+
+    # The reservation was claimed and then released.
+    fake_redis.set.assert_awaited_once()
+    fake_redis.delete.assert_awaited_once()
