@@ -30,6 +30,7 @@ import {
   SvgCloud,
   SvgFold,
   SvgPlusCircle,
+  SvgRevert,
   SvgServer,
   SvgSettings,
   SvgUnplug,
@@ -478,7 +479,7 @@ function ProviderGroup({
       <disconnectModal.Provider>
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${providerName}*`)}
+          title={`Disconnect ${providerName}`}
           submit={
             <Button variant="danger" onClick={handleDisconnect}>
               Disconnect
@@ -1051,6 +1052,7 @@ export default function IndexSettingsPage() {
                 <Card
                   expandable
                   expanded={viewAllModelsOpen}
+                  expandableContentHeight="fit"
                   border="solid"
                   rounding="lg"
                   padding={viewAllModelsOpen ? "fit" : "sm"}
@@ -1151,13 +1153,25 @@ export default function IndexSettingsPage() {
                                 setModelSearchQuery(e.target.value)
                               }
                             />
-                            <Button
-                              prominence="internal"
-                              onClick={() => setViewAllModelsOpen(false)}
-                              rightIcon={SvgFold}
-                            >
-                              Fold Models
-                            </Button>
+                            <div className="flex flex-row">
+                              {selectedModelName && (
+                                <Button
+                                  icon={SvgRevert}
+                                  prominence="internal"
+                                  onClick={() => {
+                                    setSelectedModelName(null);
+                                    setSwitchoverType(SwitchoverType.REINDEX);
+                                  }}
+                                />
+                              )}
+                              <Button
+                                prominence="internal"
+                                onClick={() => setViewAllModelsOpen(false)}
+                                rightIcon={SvgFold}
+                              >
+                                Fold Models
+                              </Button>
+                            </div>
                           </div>
 
                           <div className="px-2">
