@@ -368,6 +368,40 @@ def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
         logger.exception("Failed to extract all docx images")
 
 
+def count_docx_embedded_images(file: IO[Any], cap: int) -> int:
+    """Return the number of embedded images in a docx, short-circuiting at cap+1.
+
+    Mirrors count_pdf_embedded_images so upload validation can apply the same
+    per-file/per-batch caps. Returns a value > cap once the count exceeds the
+    cap so callers do not iterate every media entry just to report a number.
+    Always restores the file pointer to its original position before returning.
+    """
+    try:
+        start_pos = file.tell()
+    except Exception:
+        start_pos = None
+    try:
+        if start_pos is not None:
+            file.seek(0)
+        count = 0
+        with zipfile.ZipFile(file) as z:
+            for name in z.namelist():
+                if name.startswith("word/media/"):
+                    count += 1
+                    if count > cap:
+                        return count
+        return count
+    except Exception:
+        logger.warning("Failed to count embedded images in docx", exc_info=True)
+        return 0
+    finally:
+        if start_pos is not None:
+            try:
+                file.seek(start_pos)
+            except Exception:
+                pass
+
+
 def read_docx_file(
     file: IO[Any],
     file_name: str = "",
