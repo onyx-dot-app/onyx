@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +14,7 @@ const (
 	defaultSkillSource = ".claude/skills/onyx-llm-context"
 	claudeSkillsDir    = ".claude/skills"
 	claudeMDFile       = ".claude/CLAUDE.md"
+	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
 )
 
 // findRepoRoot walks up from cwd until it finds a .git directory.
@@ -35,8 +37,9 @@ func findRepoRoot() (string, error) {
 
 func NewInstallSkillCommand() *cobra.Command {
 	var (
-		source   string
-		copyMode bool
+		source    string
+		copyMode  bool
+		cloneRepo bool
 	)
 
 	cmd := &cobra.Command{
@@ -48,7 +51,7 @@ Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md (project-
 Manual skills (skills/) are symlinked into ~/.claude/skills/ and invoked via /skill-name.
 
 By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
-		Example: `  ods install-skill
+		Example: `  ods install-skill --clone
   ods install-skill --source /path/to/onyx-llm-context
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,7 +64,16 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 			}
 
 			if _, err := os.Stat(source); os.IsNotExist(err) {
-				return fmt.Errorf("onyx-llm-context not found at %s\n  Clone it with: git clone <url> ~/.claude/skills/onyx-llm-context", source)
+				if !cloneRepo {
+					return fmt.Errorf("onyx-llm-context not found at %s\n  Re-run with --clone to fetch it automatically", source)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s → %s\n", llmContextCloneURL, source)
+				gitCmd := exec.Command("git", "clone", llmContextCloneURL, source)
+				gitCmd.Stdout = cmd.OutOrStdout()
+				gitCmd.Stderr = cmd.ErrOrStderr()
+				if err := gitCmd.Run(); err != nil {
+					return fmt.Errorf("git clone failed: %w", err)
+				}
 			}
 
 			repoRoot, err := findRepoRoot()
@@ -80,6 +92,7 @@ By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
 
 	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
 	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking")
+	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
 
 	return cmd
 }
