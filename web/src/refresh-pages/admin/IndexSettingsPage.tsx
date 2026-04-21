@@ -64,6 +64,7 @@ import {
 import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
 import {
+  cancelNewEmbedding,
   saveAdminSettings,
   setNewSearchSettings,
   testEmbedding,
@@ -367,6 +368,35 @@ function ProviderCredentialsModal({
 // Embedding model picker components
 // ---------------------------------------------------------------------------
 
+interface ProviderGroupHeaderProps {
+  provider: CloudEmbeddingProvider;
+  rightChildren?: React.ReactNode;
+}
+
+function ProviderGroupHeader({
+  provider,
+  rightChildren,
+}: ProviderGroupHeaderProps) {
+  const providerName = getFormattedProviderName(provider.provider_type);
+
+  return (
+    <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
+      <GeneralLayouts.Section flexDirection="row" gap={0}>
+        <Spacer horizontal rem={0.675} />
+        <div className="flex flex-row justify-between items-center w-full py-1">
+          <Content
+            icon={provider.icon}
+            title={markdown(`[${providerName}](${provider.docsLink})`)}
+            suffix={provider.deprecated ? "(deprecated)" : undefined}
+            sizePreset="secondary"
+          />
+          {rightChildren}
+        </div>
+      </GeneralLayouts.Section>
+    </div>
+  );
+}
+
 interface ProviderGroupProps {
   provider: CloudEmbeddingProvider;
   models: CloudEmbeddingModel[];
@@ -407,6 +437,18 @@ function ProviderGroup({
     disconnectModal.toggle(false);
   }, [provider.provider_type, providerName, disconnectModal]);
 
+  const cancelAndMutate = useCallback(async () => {
+    const response = await cancelNewEmbedding();
+    if (!response.ok) {
+      toast.error("Failed to cancel selection");
+      return;
+    }
+    await Promise.all([
+      mutate("/api/search-settings/get-secondary-search-settings"),
+      mutate(SWR_KEYS.currentSearchSettings),
+    ]);
+  }, []);
+
   const selectModel = useCallback(async (model: CloudEmbeddingModel) => {
     const response = await setNewSearchSettings(model);
 
@@ -437,7 +479,18 @@ function ProviderGroup({
     (model: CloudEmbeddingModel) => {
       if (provider.deprecated) return;
       const state = getModelState(model);
-      if (state === "current" || state === "selected") return;
+
+      if (state === "selected") {
+        void cancelAndMutate();
+        return;
+      }
+
+      if (state === "current") {
+        if (selectedModelName) {
+          void cancelAndMutate();
+        }
+        return;
+      }
 
       if (state === "unconnected") {
         setPendingModel(model);
@@ -500,44 +553,28 @@ function ProviderGroup({
         />
       </editCredentialsModal.Provider>
 
-      <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
-        <GeneralLayouts.Section flexDirection="row" gap={0}>
-          <Spacer horizontal rem={0.675} />
-          <div className="flex flex-row justify-between items-center w-full py-1">
-            <Content
-              icon={provider.icon}
-              title={markdown(
-                `[${getFormattedProviderName(provider.provider_type)}](${
-                  provider.docsLink
-                })`
-              )}
-              suffix={provider.deprecated ? "(deprecated)" : undefined}
-              sizePreset="secondary"
-            />
-            {isConfigured && (
-              <GeneralLayouts.Section
-                flexDirection="row"
-                gap={0.25}
-                width="fit"
-              >
-                <Button
-                  icon={SvgUnplug}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={() => disconnectModal.toggle(true)}
-                />
-                <Button
-                  icon={SvgSettings}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={() => editCredentialsModal.toggle(true)}
-                />
-                <Spacer horizontal rem={0.375} />
-              </GeneralLayouts.Section>
-            )}
-          </div>
-        </GeneralLayouts.Section>
-      </div>
+      <ProviderGroupHeader
+        provider={provider}
+        rightChildren={
+          isConfigured ? (
+            <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
+              <Button
+                icon={SvgUnplug}
+                prominence="tertiary"
+                size="sm"
+                onClick={() => disconnectModal.toggle(true)}
+              />
+              <Button
+                icon={SvgSettings}
+                prominence="tertiary"
+                size="sm"
+                onClick={() => editCredentialsModal.toggle(true)}
+              />
+              <Spacer horizontal rem={0.375} />
+            </GeneralLayouts.Section>
+          ) : undefined
+        }
+      />
       {models.map((model) => (
         <EmbeddingModelCard
           key={model.model_name}
@@ -605,25 +642,42 @@ function EmbeddingModelCard({
         );
       case "current":
         return (
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
+          <Button
+            variant="action"
+            prominence="tertiary"
+            rightIcon={SvgCheckSquare}
+            onClick={onSelect}
+          >
             Current Model
           </Button>
         );
       case "selected":
         return (
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
+          <Button
+            variant="action"
+            prominence="tertiary"
+            rightIcon={SvgCheckSquare}
+            onClick={onSelect}
+          >
             Selected
           </Button>
         );
     }
   })();
 
+  const isClickable =
+    !deprecated &&
+    (modelState === "unconnected" ||
+      modelState === "connected" ||
+      modelState === "current" ||
+      modelState === "selected");
+
   return (
     <SelectCard
       state={SELECT_CARD_STATE[modelState]}
       rounding="md"
       padding="xs"
-      onClick={canSelect ? onSelect : undefined}
+      onClick={isClickable ? onSelect : undefined}
     >
       <CardLayout.Header
         headerChildren={
@@ -648,15 +702,62 @@ function EmbeddingModelCard({
 
 interface SelfHostedModelCardProps {
   model: SelfHostedEmbeddingModel;
-  isSelected?: boolean;
+  modelState: EmbeddingModelState;
+  onSelect?: () => void;
 }
 
-function SelfHostedModelCard({ model, isSelected }: SelfHostedModelCardProps) {
+function SelfHostedModelCard({
+  model,
+  modelState,
+  onSelect,
+}: SelfHostedModelCardProps) {
+  const topRightButton = (() => {
+    switch (modelState) {
+      case "connected":
+        return (
+          <Button prominence="tertiary" onClick={onSelect}>
+            Select Model
+          </Button>
+        );
+      case "current":
+        return (
+          <Button
+            variant="action"
+            prominence="tertiary"
+            rightIcon={SvgCheckSquare}
+            onClick={onSelect}
+          >
+            Current Model
+          </Button>
+        );
+      case "selected":
+        return (
+          <Button
+            variant="action"
+            prominence="tertiary"
+            rightIcon={SvgCheckSquare}
+            onClick={onSelect}
+          >
+            Selected
+          </Button>
+        );
+      default:
+        return null;
+    }
+  })();
+
   return (
     <SelectCard
-      state={isSelected ? "selected" : "filled"}
+      state={SELECT_CARD_STATE[modelState]}
       rounding="md"
       padding="xs"
+      onClick={
+        modelState === "connected" ||
+        modelState === "current" ||
+        modelState === "selected"
+          ? onSelect
+          : undefined
+      }
     >
       <CardLayout.Header
         headerChildren={
@@ -678,6 +779,7 @@ function SelfHostedModelCard({ model, isSelected }: SelfHostedModelCardProps) {
             </div>
           </div>
         }
+        topRightChildren={topRightButton}
       />
     </SelectCard>
   );
@@ -693,19 +795,7 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
 
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
-      <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
-        <GeneralLayouts.Section flexDirection="row" gap={0}>
-          <Spacer horizontal rem={0.675} />
-          <div className="flex flex-row justify-between items-center w-full py-1">
-            <Content
-              icon={provider.icon}
-              title={markdown(`[${providerName}](${provider.docsLink})`)}
-              sizePreset="secondary"
-              variant="body"
-            />
-          </div>
-        </GeneralLayouts.Section>
-      </div>
+      <ProviderGroupHeader provider={provider} />
 
       <providerCreationModal.Provider>
         <ProviderCredentialsModal
@@ -828,6 +918,36 @@ export default function IndexSettingsPage() {
       }
     },
     [settings.settings, router]
+  );
+
+  const cancelNewEmbeddingAndMutate = useCallback(async () => {
+    const response = await cancelNewEmbedding();
+    if (!response.ok) {
+      toast.error("Failed to cancel selection");
+      return;
+    }
+    await Promise.all([
+      mutate("/api/search-settings/get-secondary-search-settings"),
+      mutate(SWR_KEYS.currentSearchSettings),
+    ]);
+  }, []);
+
+  const selectSelfHostedModel = useCallback(
+    async (model: SelfHostedEmbeddingModel) => {
+      const response = await setNewSearchSettings(model);
+
+      if (!response.ok) {
+        toast.error(`Failed to select ${model.model_name}`);
+        return;
+      }
+
+      toast.success(`Selected ${model.model_name}`);
+      await Promise.all([
+        mutate("/api/search-settings/get-secondary-search-settings"),
+        mutate(SWR_KEYS.currentSearchSettings),
+      ]);
+    },
+    []
   );
 
   const imageProcessingEnabled =
@@ -977,16 +1097,36 @@ export default function IndexSettingsPage() {
                       <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
                         {filteredSelfHostedModels.length > 0 ? (
                           <GeneralLayouts.Section gap={0.25} padding={0.5}>
-                            {filteredSelfHostedModels.map((model) => (
-                              <SelfHostedModelCard
-                                key={model.model_name}
-                                model={model}
-                                isSelected={
-                                  model.model_name ===
-                                  currentEmbeddingModel?.model_name
-                                }
-                              />
-                            ))}
+                            {filteredSelfHostedModels.map((model) => {
+                              const state: EmbeddingModelState =
+                                model.model_name ===
+                                secondarySettings?.model_name
+                                  ? "selected"
+                                  : model.model_name ===
+                                      currentEmbeddingModel?.model_name
+                                    ? "current"
+                                    : "connected";
+                              return (
+                                <SelfHostedModelCard
+                                  key={model.model_name}
+                                  model={model}
+                                  modelState={state}
+                                  onSelect={() => {
+                                    if (state === "selected") {
+                                      void cancelNewEmbeddingAndMutate();
+                                      return;
+                                    }
+                                    if (state === "current") {
+                                      if (secondarySettings) {
+                                        void cancelNewEmbeddingAndMutate();
+                                      }
+                                      return;
+                                    }
+                                    void selectSelfHostedModel(model);
+                                  }}
+                                />
+                              );
+                            })}
                           </GeneralLayouts.Section>
                         ) : (
                           <IllustrationContent

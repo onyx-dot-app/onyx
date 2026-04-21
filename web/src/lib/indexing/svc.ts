@@ -81,6 +81,16 @@ export async function updateSearchSettings(
 }
 
 /**
+ * Cancels the FUTURE embedding model selection, reverting to just the
+ * current (PRESENT) model.
+ */
+export async function cancelNewEmbedding(): Promise<Response> {
+  return await fetch("/api/search-settings/cancel-new-embedding", {
+    method: "POST",
+  });
+}
+
+/**
  * Marks a model as the FUTURE embedding model. Does NOT start re-indexing —
  * that is a separate, explicit action.
  */
