@@ -15,6 +15,7 @@ from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import FileRecord
 from onyx.db.models import Persona
 from onyx.db.models import Project__UserFile
+from onyx.db.models import ToolCall
 from onyx.db.models import UserFile
 
 
@@ -137,6 +138,9 @@ def user_can_access_chat_file(file_id: str, user_id: UUID, db_session: Session) 
     - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
       session the user owns or a session publicly shared via
       `ChatSessionSharedStatus.PUBLIC`.
+    - The `file_id` appears in a `ToolCall.generated_images` entry on a chat
+      session the user owns or a publicly shared session (image-generation
+      outputs are persisted there, not on `ChatMessage.files`).
     """
     owns_user_file = db_session.query(
         select(UserFile.id)
@@ -178,7 +182,22 @@ def user_can_access_chat_file(file_id: str, user_id: UUID, db_session: Session) 
         )
         .limit(1)
     )
-    return db_session.execute(chat_file_stmt).first() is not None
+    if db_session.execute(chat_file_stmt).first() is not None:
+        return True
+
+    generated_image_stmt = (
+        select(ToolCall.id)
+        .join(ChatSession, ToolCall.chat_session_id == ChatSession.id)
+        .where(ToolCall.generated_images.op("@>")([{"file_id": file_id}]))
+        .where(
+            or_(
+                ChatSession.user_id == user_id,
+                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
+            )
+        )
+        .limit(1)
+    )
+    return db_session.execute(generated_image_stmt).first() is not None
 
 
 def get_file_ids_by_user_file_ids(
