@@ -49,6 +49,12 @@ class IndexingWatchdogTerminalStatus(str, Enum):
     # the watchdog terminated the task due to no activity
     TERMINATED_BY_ACTIVITY_TIMEOUT = "terminated_by_activity_timeout"
 
+    # the watchdog terminated the task because the IndexAttempt reached a terminal
+    # status (failed/canceled/succeeded) outside of the spawned subprocess. We kill
+    # the subprocess so it can't keep doing work for an attempt that no longer exists
+    # logically. The DB row already reflects the real outcome, so we don't touch it.
+    TERMINATED_BY_ATTEMPT_FINALIZED = "terminated_by_attempt_finalized"
+
     # NOTE: this may actually be the same as SIGKILL, but parsed differently by python
     # consolidate once we know more
     OUT_OF_MEMORY = "out_of_memory"

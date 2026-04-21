@@ -138,6 +138,11 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 # to handle hung connectors
 CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 
+# how long the indexing watchdog waits for a spawned subprocess to exit after
+# SIGTERM before escalating to SIGKILL. Kept short because we only fall into this
+# code path once we have already decided the process needs to die.
+CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -640,11 +645,11 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[
-        socket.TCP_KEEPALIVE  # ty: ignore[unresolved-attribute]
-    ] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[
+        socket.TCP_KEEPIDLE  # ty: ignore[unresolved-attribute]
+    ] = 60
 
 
 class OnyxCallTypes(str, Enum):
