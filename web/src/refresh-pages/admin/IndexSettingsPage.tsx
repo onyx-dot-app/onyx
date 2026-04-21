@@ -902,7 +902,11 @@ export default function IndexSettingsPage() {
     [settings.settings, router]
   );
 
-  const cardBorderColor = selectedModelName ? "warning" : undefined;
+  const statusVariant = selectedModelName
+    ? switchoverType === SWITCHOVER_NONE
+      ? "info"
+      : "warning"
+    : undefined;
 
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
@@ -974,11 +978,19 @@ export default function IndexSettingsPage() {
 
       <SettingsLayouts.Body>
         <MessageCard
-          variant={selectedModelName ? "warning" : undefined}
+          variant={statusVariant}
           headerPadding="sm"
-          title="Changes require a full re-index."
+          title={
+            statusVariant === "info"
+              ? "Changes apply to newly indexed content only."
+              : "Changes require a full re-index."
+          }
           description={markdown(
-            "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+            statusVariant === "info"
+              ? "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\nRe-indexing may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\nYou can monitor the re-indexing progress on this page."
+              : statusVariant === "warning"
+                ? "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\nYou can monitor the re-indexing progress on this page."
+                : "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
           )}
           bottomChildren={
             selectedModelName ? (
@@ -994,45 +1006,39 @@ export default function IndexSettingsPage() {
                   >
                     <InputSelect.Trigger placeholder="Select a switchover strategy" />
                     <InputSelect.Content>
-                      <InputSelect.Group>
-                        <InputSelect.Label>Non-re-indexing</InputSelect.Label>
-                        <InputSelect.Item
-                          value={SWITCHOVER_NONE}
-                          icon={SvgNoImage}
-                          wrapDescription
-                          description="Safe option. Only apply changes to newly indexed content."
-                        >
-                          Do Not Re-index
-                        </InputSelect.Item>
-                      </InputSelect.Group>
-                      <InputSelect.Separator />
-                      <InputSelect.Group>
-                        <InputSelect.Label>Re-indexing</InputSelect.Label>
-                        <InputSelect.Item
-                          value={SwitchoverType.REINDEX}
-                          icon={SvgClock}
-                          wrapDescription
-                          description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
-                        >
-                          Re-index All Connectors Then Switch
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value={SwitchoverType.ACTIVE_ONLY}
-                          icon={SvgSlowTime}
-                          wrapDescription
-                          description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
-                        >
-                          Re-index Active Connectors Then Switch
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value={SwitchoverType.INSTANT}
-                          icon={SvgEmpty}
-                          wrapDescription
-                          description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
-                        >
-                          Switch Before Re-index
-                        </InputSelect.Item>
-                      </InputSelect.Group>
+                      <InputSelect.Item
+                        value={SWITCHOVER_NONE}
+                        icon={SvgNoImage}
+                        wrapDescription
+                        description="Safe option. Only apply changes to newly indexed content."
+                      >
+                        Do Not Re-index
+                      </InputSelect.Item>
+                      <Divider title="Re-index Options" />
+                      <InputSelect.Item
+                        value={SwitchoverType.REINDEX}
+                        icon={SvgClock}
+                        wrapDescription
+                        description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                      >
+                        Re-index All Connectors Then Switch
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value={SwitchoverType.ACTIVE_ONLY}
+                        icon={SvgSlowTime}
+                        wrapDescription
+                        description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                      >
+                        Re-index Active Connectors Then Switch
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value={SwitchoverType.INSTANT}
+                        icon={SvgEmpty}
+                        wrapDescription
+                        description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                      >
+                        Switch Before Re-index
+                      </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
                 </div>
@@ -1081,7 +1087,7 @@ export default function IndexSettingsPage() {
                   expanded={viewAllModelsOpen}
                   expandableContentHeight="fit"
                   border="solid"
-                  borderColor={cardBorderColor}
+                  borderColor={statusVariant}
                   rounding="lg"
                   padding={viewAllModelsOpen ? "fit" : "sm"}
                   expandedContent={
@@ -1325,7 +1331,7 @@ export default function IndexSettingsPage() {
              (backend/shared_configs/configs.py), so the update-inference-settings
              endpoint silently ignores it. The backend returns 200 but never persists
              the change. Needs a backend fix to remove it from the preserved list. */}
-          <Card border="solid" borderColor={cardBorderColor} rounding="lg">
+          <Card border="solid" borderColor={statusVariant} rounding="lg">
             <GeneralLayouts.Section width="full">
               <InputHorizontal
                 title="Contextual Retrieval"
@@ -1395,7 +1401,7 @@ export default function IndexSettingsPage() {
             variant="section"
           />
 
-          <Card border="solid" borderColor={cardBorderColor} rounding="lg">
+          <Card border="solid" borderColor={statusVariant} rounding="lg">
             <GeneralLayouts.Section width="full">
               <InputHorizontal
                 title="Extract & Caption Images"
