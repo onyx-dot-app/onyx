@@ -8,14 +8,12 @@ import React, {
   useCallback,
 } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { cn, mergeRefs } from "@/lib/utils";
-import { Tooltip } from "@opal/components";
-import { WithoutStyles } from "@/types";
+import { mergeRefs } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section, SectionProps } from "@/layouts/general-layouts";
-import { IconProps } from "@opal/types";
+import { IconProps, WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import Text from "./texts/Text";
-import { Button } from "@opal/components";
+import { Tooltip, Button, Text } from "@opal/components";
 
 /* =============================================================================
    CONTEXT
@@ -629,7 +627,7 @@ const TabsTrigger = React.forwardRef<
         )}
         {typeof children === "string" ? (
           <div className="px-0.5">
-            <Text>{children}</Text>
+            <Text color="inherit">{children}</Text>
           </div>
         ) : (
           children

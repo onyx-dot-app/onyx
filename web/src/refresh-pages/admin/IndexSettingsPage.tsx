@@ -122,9 +122,14 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 interface ProviderGroupProps {
   provider: CloudEmbeddingProvider;
   models: CloudEmbeddingModel[];
+  currentModelName?: string;
 }
 
-function ProviderGroup({ provider, models }: ProviderGroupProps) {
+function ProviderGroup({
+  provider,
+  models,
+  currentModelName,
+}: ProviderGroupProps) {
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
       <div className="px-1 pt-1 w-full">
@@ -155,6 +160,7 @@ function ProviderGroup({ provider, models }: ProviderGroupProps) {
           key={model.model_name}
           model={model}
           providerIcon={provider.icon}
+          isSelected={model.model_name === currentModelName}
         />
       ))}
     </GeneralLayouts.Section>
@@ -164,11 +170,20 @@ function ProviderGroup({ provider, models }: ProviderGroupProps) {
 interface EmbeddingModelCardProps {
   model: CloudEmbeddingModel;
   providerIcon: IconFunctionComponent;
+  isSelected?: boolean;
 }
 
-function EmbeddingModelCard({ model, providerIcon }: EmbeddingModelCardProps) {
+function EmbeddingModelCard({
+  model,
+  providerIcon,
+  isSelected,
+}: EmbeddingModelCardProps) {
   return (
-    <SelectCard state="filled" rounding="md" padding="xs">
+    <SelectCard
+      state={isSelected ? "selected" : "filled"}
+      rounding="md"
+      padding="xs"
+    >
       <CardLayout.Header
         headerChildren={
           <div className="flex flex-col">
@@ -191,11 +206,16 @@ function EmbeddingModelCard({ model, providerIcon }: EmbeddingModelCardProps) {
 
 interface SelfHostedModelCardProps {
   model: SelfHostedEmbeddingModel;
+  isSelected?: boolean;
 }
 
-function SelfHostedModelCard({ model }: SelfHostedModelCardProps) {
+function SelfHostedModelCard({ model, isSelected }: SelfHostedModelCardProps) {
   return (
-    <SelectCard state="filled" rounding="md" padding="xs">
+    <SelectCard
+      state={isSelected ? "selected" : "filled"}
+      rounding="md"
+      padding="xs"
+    >
       <CardLayout.Header
         headerChildren={
           <div className="flex flex-col">
@@ -411,6 +431,9 @@ export default function IndexSettingsPage() {
                                 key={provider.provider_type}
                                 provider={provider}
                                 models={models}
+                                currentModelName={
+                                  currentEmbeddingModel?.model_name
+                                }
                               />
                             ))}
                           </GeneralLayouts.Section>
@@ -430,6 +453,10 @@ export default function IndexSettingsPage() {
                               <SelfHostedModelCard
                                 key={model.model_name}
                                 model={model}
+                                isSelected={
+                                  model.model_name ===
+                                  currentEmbeddingModel?.model_name
+                                }
                               />
                             ))}
                           </GeneralLayouts.Section>
