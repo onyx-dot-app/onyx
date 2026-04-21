@@ -2,14 +2,25 @@
 This file tests user file permissions in different scenarios:
 1. Public assistant with user files - files should be accessible to all users
 2. Direct file access - user files should NOT be accessible by users who don't own them
+3. Image-generation tool outputs - files persisted on `ToolCall.generated_images`
+   must be downloadable by the chat session owner (and by anyone if the session
+   is publicly shared), but not by other users on private sessions.
 """
 
 import io
 from typing import NamedTuple
+from uuid import UUID
+from uuid import uuid4
 
 import pytest
 import requests
 
+from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.models import ChatSession
+from onyx.db.models import ToolCall
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -17,6 +28,7 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -149,3 +161,140 @@ def test_cannot_download_other_users_file_via_chat_file_endpoint(
             f"when fetching file_id={file_id}"
         )
         assert user2_response.content != owner_response.content
+
+
+# -----------------------------------------------------------------------------
+# Image-generation tool output access checks
+#
+# Image-generation results are persisted on `ToolCall.generated_images` (JSONB),
+# *not* on `ChatMessage.files`. The hardening commit `a7a5b66d6` added an
+# authorization gate to `GET /chat/file/{file_id}` that did not know about that
+# column, so previously-rendered images started returning 404 on chat reload.
+# These tests pin the post-fix behavior end-to-end.
+# -----------------------------------------------------------------------------
+
+
+_IMAGE_GEN_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"image-gen-test-bytes"
+
+
+class ImageGenSetup(NamedTuple):
+    owner: DATestUser
+    intruder: DATestUser
+    chat_session: DATestChatSession
+    file_id: str
+
+
+def _seed_image_gen_tool_call(chat_session_id: UUID) -> str:
+    """Persist a fake image to the file store and link it via a ToolCall row,
+    mirroring what `ImageGenerationTool` produces at runtime."""
+    file_store = get_default_file_store()
+    file_id = file_store.save_file(
+        content=io.BytesIO(_IMAGE_GEN_PNG_BYTES),
+        display_name="GeneratedImage",
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
+        file_type="image/png",
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        tool_call = ToolCall(
+            chat_session_id=chat_session_id,
+            parent_chat_message_id=None,
+            parent_tool_call_id=None,
+            turn_number=0,
+            tab_index=0,
+            tool_id=0,
+            tool_call_id=uuid4().hex,
+            tool_call_arguments={},
+            tool_call_response="",
+            tool_call_tokens=0,
+            generated_images=[
+                {
+                    "file_id": file_id,
+                    "url": f"/api/chat/file/{file_id}",
+                    "revised_prompt": "a cat",
+                    "shape": "square",
+                }
+            ],
+        )
+        db_session.add(tool_call)
+        db_session.commit()
+
+    return file_id
+
+
+@pytest.fixture
+def image_gen_setup(reset: None) -> ImageGenSetup:  # noqa: ARG001
+    """Owner with a chat session that has an image-generation tool output."""
+    owner: DATestUser = UserManager.create(name="img_gen_owner")
+    intruder: DATestUser = UserManager.create(name="img_gen_intruder")
+    LLMProviderManager.create(user_performing_action=owner)
+
+    chat_session = ChatSessionManager.create(
+        user_performing_action=owner,
+        description="image gen permission test",
+    )
+    file_id = _seed_image_gen_tool_call(UUID(str(chat_session.id)))
+    return ImageGenSetup(
+        owner=owner,
+        intruder=intruder,
+        chat_session=chat_session,
+        file_id=file_id,
+    )
+
+
+def test_owner_can_download_image_gen_file(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    """The chat session owner must be able to fetch an image-gen file_id stored
+    on `ToolCall.generated_images`. Pre-fix, this returned 404 — that 404 is
+    the exact regression these tests pin."""
+    response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
+        headers=image_gen_setup.owner.headers,
+    )
+    assert response.status_code == 200, (
+        f"Owner should receive image-gen file, got {response.status_code}: "
+        f"{response.text}"
+    )
+    assert response.content == _IMAGE_GEN_PNG_BYTES
+
+
+def test_non_owner_cannot_download_image_gen_file_in_private_session(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    """A non-owner must not be able to read an image-gen file in a PRIVATE
+    session — the new branch should not over-grant access."""
+    response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
+        headers=image_gen_setup.intruder.headers,
+    )
+    assert response.status_code in (403, 404), (
+        f"Non-owner should be denied on a private session, got "
+        f"{response.status_code}: {response.text}"
+    )
+    assert response.content != _IMAGE_GEN_PNG_BYTES
+
+
+def test_non_owner_can_download_image_gen_file_in_public_session(
+    image_gen_setup: ImageGenSetup,
+) -> None:
+    """When the chat session is publicly shared, any authenticated user must
+    be able to fetch its image-gen outputs — mirrors the existing
+    `ChatMessage.files` public-share branch."""
+    with get_session_with_current_tenant() as db_session:
+        chat_session = db_session.get(
+            ChatSession, UUID(str(image_gen_setup.chat_session.id))
+        )
+        assert chat_session is not None
+        chat_session.shared_status = ChatSessionSharedStatus.PUBLIC
+        db_session.commit()
+
+    response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
+        headers=image_gen_setup.intruder.headers,
+    )
+    assert response.status_code == 200, (
+        f"Non-owner should be able to read image-gen file on public session, "
+        f"got {response.status_code}: {response.text}"
+    )
+    assert response.content == _IMAGE_GEN_PNG_BYTES
