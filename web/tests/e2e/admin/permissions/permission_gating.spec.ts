@@ -814,3 +814,132 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
     }
   });
 });
+
+test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
+  test("Admin panel /admin/groups and /admin/groups/create are gated behind MANAGE_USER_GROUPS, with implied READ_CONNECTORS, READ_DOCUMENT_SETS, and READ_AGENTS", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates test data for implied permission verification
+    const connectorName = `E2E ManageGroups Connector ${Date.now()}`;
+    const ccPairId = await adminClient.createFileConnector(
+      connectorName,
+      "public"
+    );
+
+    const agentName = `E2E ManageGroups Agent ${Date.now()}`;
+    const agentId = await adminClient.createAgent(agentName, "Test agent");
+
+    const docSetName = `E2E ManageGroups DocSet ${Date.now()}`;
+    const docSetId = await adminClient.createDocumentSet(docSetName, [
+      ccPairId,
+    ]);
+
+    // Extra user group so the groups list has a visible custom group card
+    const extraGroupName = `E2E ManageGroups Group ${Date.now()}`;
+    const extraGroupId = await adminClient.createUserGroup(extraGroupName, [
+      testUserContext.userId,
+    ]);
+
+    try {
+      // Phase 1: Without MANAGE_USER_GROUPS — /admin/groups should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/groups");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Also verify /admin/groups/create redirects
+      await page.goto("/admin/groups/create");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant MANAGE_USER_GROUPS — pages should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.MANAGE_USER_GROUPS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+
+      // Verify groups list page
+      await page.goto("/admin/groups");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/groups");
+      await expect(page.getByTestId("groups-page-heading")).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.getByRole("button", { name: "New Group" })
+      ).toBeVisible();
+      await expect(page.getByText(extraGroupName)).toBeVisible();
+
+      // Navigate to create page to verify implied permissions
+      await page.goto("/admin/groups/create");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/groups/create");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("Create Group")
+      ).toBeVisible({ timeout: 10000 });
+
+      // Open connectors & document sets popover and verify items (proves READ_CONNECTORS + READ_DOCUMENT_SETS)
+      const connectorDocSetInput = page.getByPlaceholder(
+        "Add connectors, document sets"
+      );
+      await expect(connectorDocSetInput).toBeVisible({ timeout: 10000 });
+      await connectorDocSetInput.click();
+      await expect(page.getByText(connectorName).first()).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.getByText(docSetName).first()).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Dismiss the connectors popover by pressing Escape before opening agents
+      await page.keyboard.press("Escape");
+
+      // Open agents popover and verify item (proves READ_AGENTS)
+      const agentsInput = page.getByPlaceholder("Add agents");
+      await expect(agentsInput).toBeVisible({ timeout: 10000 });
+      await agentsInput.click();
+      await expect(page.getByText(agentName).first()).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Phase 3: Revoke MANAGE_USER_GROUPS — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/groups");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete resources (doc set before connector since it references it)
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteDocumentSet(docSetId);
+      await cleanupClient.deleteCCPair(ccPairId);
+      await cleanupClient.deleteAgent(agentId);
+      await cleanupClient.deleteUserGroup(extraGroupId);
+    }
+  });
+});
