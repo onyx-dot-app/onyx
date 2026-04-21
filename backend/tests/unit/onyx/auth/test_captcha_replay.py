@@ -96,3 +96,77 @@ async def test_reservation_released_when_google_unreachable() -> None:
     # The reservation was claimed and then released.
     fake_redis.set.assert_awaited_once()
     fake_redis.delete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reservation_released_on_unexpected_response_shape() -> None:
+    """Non-HTTP errors during response parsing (malformed JSON, pydantic
+    validation failure) also release the reservation — they mean WE couldn't
+    verify the token, not that the token is definitively invalid."""
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=True)
+    fake_redis.delete = AsyncMock(return_value=1)
+
+    # Simulate Google returning something that json() still succeeds on but
+    # fails RecaptchaResponse validation (e.g. success=true but with a wrong
+    # shape that Pydantic rejects when coerced).
+    fake_httpx_response = MagicMock()
+    fake_httpx_response.raise_for_status = MagicMock()
+    fake_httpx_response.json = MagicMock(side_effect=ValueError("not valid JSON"))
+    fake_client = MagicMock()
+    fake_client.post = AsyncMock(return_value=fake_httpx_response)
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_module,
+            "get_async_redis_connection",
+            AsyncMock(return_value=fake_redis),
+        ),
+        patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+    ):
+        with pytest.raises(CaptchaVerificationError, match="service unavailable"):
+            await verify_captcha_token("valid-token", expected_action="signup")
+
+    fake_redis.set.assert_awaited_once()
+    fake_redis.delete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reservation_kept_when_google_rejects_token() -> None:
+    """If Google itself says the token is invalid (success=false, or score
+    too low), the reservation must NOT be released — that token is known-bad
+    for its entire lifetime and shouldn't be retryable."""
+    fake_redis = MagicMock()
+    fake_redis.set = AsyncMock(return_value=True)
+    fake_redis.delete = AsyncMock(return_value=1)
+
+    fake_httpx_response = MagicMock()
+    fake_httpx_response.raise_for_status = MagicMock()
+    fake_httpx_response.json = MagicMock(
+        return_value={
+            "success": False,
+            "error-codes": ["invalid-input-response"],
+        }
+    )
+    fake_client = MagicMock()
+    fake_client.post = AsyncMock(return_value=fake_httpx_response)
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_module,
+            "get_async_redis_connection",
+            AsyncMock(return_value=fake_redis),
+        ),
+        patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
+    ):
+        with pytest.raises(CaptchaVerificationError, match="invalid-input-response"):
+            await verify_captcha_token("bad-token", expected_action="signup")
+
+    fake_redis.set.assert_awaited_once()
+    fake_redis.delete.assert_not_awaited()

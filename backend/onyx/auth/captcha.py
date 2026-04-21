@@ -186,12 +186,18 @@ async def verify_captcha_token(
                 f"Captcha verification passed: score={result.score}, action={result.action}"
             )
 
-    except httpx.HTTPError as e:
-        logger.error(f"Captcha API request failed: {e}")
-        # Google itself was unreachable — the user's token is not invalid,
-        # we just couldn't verify it. Release the replay reservation so a
-        # retry with the same still-valid token is accepted instead of
-        # rejected as "already used" for the next ~120s.
+    except CaptchaVerificationError:
+        # Definitively-bad token (Google rejected it, score too low, action
+        # mismatch). Keep the reservation so the same token cannot be
+        # retried elsewhere during the TTL window.
+        raise
+    except Exception as e:
+        # Anything else — network failure, JSON decode error, Pydantic
+        # validation error on an unexpected siteverify response shape — is
+        # OUR inability to verify the token, not proof the token is bad.
+        # Release the reservation so the user can retry with the same
+        # still-valid token instead of being locked out for ~120s.
+        logger.error(f"Captcha verification failed unexpectedly: {e}")
         await _release_token(token)
         raise CaptchaVerificationError("Captcha verification service unavailable")
 
