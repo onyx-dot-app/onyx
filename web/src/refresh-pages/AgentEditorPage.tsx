@@ -279,21 +279,14 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <CardLayout.Header
-        headerPadding="sm"
-        headerChildren={
-          <ContentAction
-            icon={SvgActions}
-            title={tool.display_name || tool.name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-          />
-        }
-        topRightChildren={<SwitchField name={toolFieldName} />}
-      />
+    <Card border="solid" rounding="lg">
+      <InputHorizontal
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        withLabel={toolFieldName}
+      >
+        <SwitchField name={toolFieldName} />
+      </InputHorizontal>
     </Card>
   );
 }
@@ -345,7 +338,7 @@ function MCPServerCard({
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="lg" padding="sm">
+              <Card border="solid" rounding="md" padding="sm">
                 <CardLayout.Header
                   headerChildren={
                     <ContentAction
