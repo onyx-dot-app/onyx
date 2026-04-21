@@ -19,6 +19,7 @@ A flexible card header with one slot for the main header content, two stacked sl
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `headerChildren` | `ReactNode` | `undefined` | Content rendered in the top-left header slot — typically a `<Content />` block. |
+| `headerPadding` | `"sm" \| "fit"` | `"sm"` | Padding applied around `headerChildren`. `"sm"` → `p-2`; `"fit"` → `p-0`. |
 | `topRightChildren` | `ReactNode` | `undefined` | Content rendered to the right of `headerChildren` (top of right column). |
 | `bottomRightChildren` | `ReactNode` | `undefined` | Content rendered below `topRightChildren` in the same column. Laid out as `flex flex-row`. |
 | `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header (left + right columns), spanning the full width. |
@@ -37,7 +38,7 @@ A flexible card header with one slot for the main header content, two stacked sl
 
 - Outer wrapper: `flex flex-col w-full`
 - Header row: `flex flex-row items-start w-full` — columns are independent in height
-- Left column (headerChildren wrapper): `self-start p-2 grow min-w-0` — grows to fill available space
+- Left column (headerChildren wrapper): `self-start grow min-w-0` + `headerPadding` variant (default `p-2`) — grows to fill available space
 - Right column: `flex flex-col items-end shrink-0` — shrinks to fit its content
 - `bottomChildren` wrapper: `w-full` — only rendered when provided
 
