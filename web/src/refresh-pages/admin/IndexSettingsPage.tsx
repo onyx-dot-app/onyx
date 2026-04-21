@@ -902,6 +902,8 @@ export default function IndexSettingsPage() {
     [settings.settings, router]
   );
 
+  const cardBorderColor = selectedModelName ? "warning" : undefined;
+
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
 
@@ -1079,6 +1081,7 @@ export default function IndexSettingsPage() {
                   expanded={viewAllModelsOpen}
                   expandableContentHeight="fit"
                   border="solid"
+                  borderColor={cardBorderColor}
                   rounding="lg"
                   padding={viewAllModelsOpen ? "fit" : "sm"}
                   expandedContent={
@@ -1322,7 +1325,7 @@ export default function IndexSettingsPage() {
              (backend/shared_configs/configs.py), so the update-inference-settings
              endpoint silently ignores it. The backend returns 200 but never persists
              the change. Needs a backend fix to remove it from the preserved list. */}
-          <Card border="solid" rounding="lg">
+          <Card border="solid" borderColor={cardBorderColor} rounding="lg">
             <GeneralLayouts.Section width="full">
               <InputHorizontal
                 title="Contextual Retrieval"
@@ -1392,7 +1395,7 @@ export default function IndexSettingsPage() {
             variant="section"
           />
 
-          <Card border="solid" rounding="lg">
+          <Card border="solid" borderColor={cardBorderColor} rounding="lg">
             <GeneralLayouts.Section width="full">
               <InputHorizontal
                 title="Extract & Caption Images"
