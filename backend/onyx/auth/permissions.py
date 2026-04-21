@@ -53,6 +53,9 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_AGENTS.value,
         Permission.READ_USERS.value,
     },
+    Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS.value: {
+        Permission.READ_USER_GROUPS.value,
+    },
 }
 
 # Permissions that cannot be toggled via the group-permission API.

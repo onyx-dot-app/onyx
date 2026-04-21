@@ -58,6 +58,10 @@ const E2E_IMAGE_GEN_API_KEY =
  * - `createChatSession(description, personaId?)` - Creates a chat session with a description
  * - `deleteChatSession(chatId)` - Deletes a chat session
  *
+ * **Service Accounts:**
+ * - `createServiceAccount(name, groupIds?)` - Creates a service account API key
+ * - `deleteServiceAccount(apiKeyId)` - Deletes a service account API key
+ *
  * **Projects:**
  * - `createProject(name)` - Creates a project with a name
  * - `deleteProject(projectId)` - Deletes a project
@@ -824,6 +828,37 @@ export class OnyxApiClient {
     );
     this.log(`Created MCP server: ${name} (ID: ${data.server_id})`);
     return data.server_id;
+  }
+
+  async createServiceAccount(
+    name: string,
+    groupIds: number[] = []
+  ): Promise<number> {
+    const response = await this.post("/admin/api-key", {
+      name,
+      group_ids: groupIds,
+    });
+
+    const data = await this.handleResponse<{ api_key_id: number }>(
+      response,
+      "Failed to create service account"
+    );
+    this.log(`Created service account: ${name} (ID: ${data.api_key_id})`);
+    return data.api_key_id;
+  }
+
+  async deleteServiceAccount(apiKeyId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/api-key/${apiKeyId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete service account ${apiKeyId}`
+    );
+    if (success) {
+      this.log(`Deleted service account ${apiKeyId}`);
+    }
+    return success;
   }
 
   async deleteCustomTool(toolId: number): Promise<boolean> {

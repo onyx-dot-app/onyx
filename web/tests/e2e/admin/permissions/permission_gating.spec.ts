@@ -482,3 +482,93 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
     }
   });
 });
+
+test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
+  test("Admin panel /admin/service-accounts is gated behind MANAGE_SERVICE_ACCOUNT_API_KEYS, with implied READ_USER_GROUPS", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates a service account
+    const accountName = `E2E Service Account ${Date.now()}`;
+    const apiKeyId = await adminClient.createServiceAccount(accountName);
+
+    // Admin creates a second user group (having 2 groups causes the full group selector to render)
+    const extraGroupName = `E2E SvcAcct Group ${Date.now()}`;
+    const extraGroupId = await adminClient.createUserGroup(extraGroupName, [
+      testUserContext.userId,
+    ]);
+
+    try {
+      // Phase 1: Without MANAGE_SERVICE_ACCOUNT_API_KEYS — /admin/service-accounts should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/service-accounts");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant MANAGE_SERVICE_ACCOUNT_API_KEYS — /admin/service-accounts should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/service-accounts");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/service-accounts");
+      await expect(
+        page
+          .getByLabel("admin-page-title")
+          .getByText("Service Accounts", { exact: true })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(accountName)).toBeVisible();
+
+      // Click "New Service Account" to open the creation modal
+      await page.getByText("New Service Account").click();
+      await expect(
+        page.getByText("Create Service Account", { exact: true })
+      ).toBeVisible({ timeout: 10000 });
+
+      // Open the groups search dropdown and verify the extra group is listed
+      // (proves implied READ_USER_GROUPS)
+      const groupsSearchInput = page.getByTestId("groups-search-input");
+      await expect(groupsSearchInput).toBeVisible({ timeout: 10000 });
+      await groupsSearchInput.click();
+      await expect(page.getByText(extraGroupName)).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Phase 3: Revoke MANAGE_SERVICE_ACCOUNT_API_KEYS — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/service-accounts");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete the service account and extra group
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteServiceAccount(apiKeyId);
+      await cleanupClient.deleteUserGroup(extraGroupId);
+    }
+  });
+});
