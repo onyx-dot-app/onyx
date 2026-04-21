@@ -383,7 +383,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 <InputHorizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  withLabel
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </InputHorizontal>
