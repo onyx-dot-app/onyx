@@ -2,6 +2,7 @@ import type { Settings } from "@/interfaces/settings";
 import {
   AdvancedSearchConfiguration,
   EmbeddingModelDescriptor,
+  EmbeddingPrecision,
   EmbeddingProvider,
   RerankingDetails,
   SavedSearchSettings,
@@ -89,7 +90,12 @@ export async function setNewSearchSettings(
   return await fetch("/api/search-settings/set-new-search-settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(model),
+    body: JSON.stringify({
+      ...model,
+      multipass_indexing: false,
+      embedding_precision: EmbeddingPrecision.FLOAT,
+      enable_contextual_rag: false,
+    }),
   });
 }
 

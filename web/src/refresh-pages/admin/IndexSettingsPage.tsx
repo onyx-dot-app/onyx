@@ -416,7 +416,11 @@ function ProviderGroup({
     }
 
     toast.success(`Selected ${model.model_name}`);
-    await mutate("/api/search-settings/get-secondary-search-settings");
+    await Promise.all([
+      mutate("/api/search-settings/get-secondary-search-settings"),
+      mutate(SWR_KEYS.currentSearchSettings),
+      mutate(EMBEDDING_PROVIDERS_ADMIN_URL),
+    ]);
   }, []);
 
   const getModelState = useCallback(
@@ -528,6 +532,7 @@ function ProviderGroup({
                   size="sm"
                   onClick={() => editCredentialsModal.toggle(true)}
                 />
+                <Spacer horizontal rem={0.375} />
               </GeneralLayouts.Section>
             )}
           </div>
