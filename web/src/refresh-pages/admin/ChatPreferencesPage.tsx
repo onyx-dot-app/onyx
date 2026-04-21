@@ -168,25 +168,27 @@ function MCPServerCard({
           ) : undefined
         }
       >
-        <ContentAction
-          icon={getActionIcon(server.server_url, server.name)}
-          title={server.name}
-          description={server.description}
-          sizePreset="main-ui"
-          variant="section"
-          padding="lg"
-          rightChildren={
-            <Tooltip tooltip={authTooltip} side="top">
-              <Switch
-                checked={serverEnabled}
-                onCheckedChange={(checked) =>
-                  onToggleTools(allToolIds, checked)
-                }
-                disabled={needsAuth}
-              />
-            </Tooltip>
-          }
-        />
+        <div className="p-2">
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <Tooltip tooltip={authTooltip} side="top">
+                <Switch
+                  checked={serverEnabled}
+                  onCheckedChange={(checked) =>
+                    onToggleTools(allToolIds, checked)
+                  }
+                  disabled={needsAuth}
+                />
+              </Tooltip>
+            }
+          />
+        </div>
       </CardLayout.Header>
     </Card>
   );
@@ -895,7 +897,7 @@ export default function ChatPreferencesPage() {
                             description={tool.description}
                             sizePreset="main-ui"
                             variant="section"
-                            padding="lg"
+                            padding="fit"
                             rightChildren={
                               <Switch
                                 checked={isToolEnabled(tool.id)}
