@@ -20,6 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 
 from onyx.auth.captcha import CAPTCHA_COOKIE_NAME
+from onyx.auth.captcha import CaptchaAction
 from onyx.auth.captcha import CaptchaVerificationError
 from onyx.auth.captcha import is_captcha_enabled
 from onyx.auth.captcha import issue_captcha_cookie_value
@@ -66,7 +67,7 @@ async def verify_oauth_captcha(
         return OAuthCaptchaVerifyResponse(ok=True)
 
     try:
-        await verify_captcha_token(body.token, expected_action="oauth")
+        await verify_captcha_token(body.token, CaptchaAction.OAUTH)
     except CaptchaVerificationError as exc:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(exc))
 

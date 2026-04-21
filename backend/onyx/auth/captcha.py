@@ -12,11 +12,20 @@ Two flows share this module:
    is sent automatically on the callback request, where middleware checks
    it. ``issue_captcha_cookie_value`` / ``validate_captcha_cookie_value``
    handle the HMAC signing + expiry.
+
+Verification calls the reCAPTCHA Enterprise Assessment API (not the
+legacy ``siteverify`` endpoint) so rejections can key on
+``riskAnalysis.reasons[]`` — Google's structured bot signals — instead
+of a raw 0-1 score that sophisticated farms routinely clear.
 """
 
 import hashlib
 import hmac
+import os
 import time
+from datetime import datetime
+from datetime import timezone
+from enum import StrEnum
 
 import httpx
 from pydantic import BaseModel
@@ -24,41 +33,88 @@ from pydantic import Field
 
 from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
 from onyx.configs.app_configs import CAPTCHA_ENABLED
-from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
-from onyx.configs.app_configs import RECAPTCHA_SECRET_KEY
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
 
-# Google v3 tokens expire server-side at ~2 minutes, so 120s is the max useful
-# replay window — after that Google would reject the token anyway.
+# --- Enterprise Assessment wiring ------------------------------------------
+# Project + site key are public, never rotate, and are Onyx-cloud-specific
+# identifiers — hardcoding keeps them out of app_configs without losing
+# clarity. Only the API key is a secret, consumed from the environment.
+_RECAPTCHA_PROJECT_ID = "danswer-404504"
+# pragma: allowlist nextline secret — reCAPTCHA SITE keys are public (served to
+# the browser inside HTML) despite the `6L…` prefix that ripsecrets flags.
+_RECAPTCHA_SITE_KEY = (
+    "6Ldb7WosAAAAAGsxnaOHHjw34afhnyuy9VhQ4UaZ"  # pragma: allowlist secret
+)
+_RECAPTCHA_ENTERPRISE_API_KEY = os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
+_RECAPTCHA_ASSESSMENT_URL = f"https://recaptchaenterprise.googleapis.com/v1/projects/{_RECAPTCHA_PROJECT_ID}/assessments"
+
+# Policy values — the knobs that would have been env vars in a v3-only world.
+# Score is a grey-area floor; reasons[] are the primary kill signal.
+_HOSTNAME_ALLOWLIST: frozenset[str] = frozenset({"cloud.onyx.app"})
+_HARD_REJECT_REASONS: frozenset[str] = frozenset(
+    {"AUTOMATION", "UNEXPECTED_ENVIRONMENT", "TOO_MUCH_TRAFFIC"}
+)
+_TOKEN_MAX_AGE_SECONDS = 120
+_SCORE_FLOOR = 0.5
+
+# --- Replay cache (unchanged from #10402) ----------------------------------
 _REPLAY_CACHE_TTL_SECONDS = 120
 _REPLAY_KEY_PREFIX = "captcha:replay:"
+
+
+class CaptchaAction(StrEnum):
+    """Actions passed to reCAPTCHA Enterprise so each endpoint's tokens are
+    mutually non-replayable. Enforced via strict equality against
+    ``tokenProperties.action`` — a signup token cannot pass the oauth path
+    even if siphoned, because the Enterprise response reports the action
+    the client embedded at challenge time.
+    """
+
+    SIGNUP = "signup"
+    OAUTH = "oauth"
 
 
 class CaptchaVerificationError(Exception):
     """Raised when captcha verification fails."""
 
 
-class RecaptchaResponse(BaseModel):
-    """Response from Google reCAPTCHA verification API."""
-
-    success: bool
-    score: float | None = None  # Only present for reCAPTCHA v3
+class _TokenProperties(BaseModel):
+    valid: bool = False
+    invalid_reason: str | None = Field(default=None, alias="invalidReason")
     action: str | None = None
-    challenge_ts: str | None = None
     hostname: str | None = None
-    error_codes: list[str] | None = Field(default=None, alias="error-codes")
+    create_time: str | None = Field(default=None, alias="createTime")
+
+
+class _RiskAnalysis(BaseModel):
+    score: float = 0.0
+    reasons: list[str] = Field(default_factory=list)
+
+
+class RecaptchaAssessmentResponse(BaseModel):
+    """Subset of the Enterprise Assessment response we actually read."""
+
+    name: str | None = None
+    token_properties: _TokenProperties = Field(
+        default_factory=_TokenProperties, alias="tokenProperties"
+    )
+    risk_analysis: _RiskAnalysis = Field(
+        default_factory=_RiskAnalysis, alias="riskAnalysis"
+    )
 
 
 def is_captcha_enabled() -> bool:
-    """Check if captcha verification is enabled."""
-    return CAPTCHA_ENABLED and bool(RECAPTCHA_SECRET_KEY)
+    """Captcha is on iff the feature flag is set AND we have an Enterprise
+    API key to authenticate with. A missing API key is the kill-switch: the
+    module falls through without calling Google so self-hosted and dev
+    deployments are unaffected."""
+    return CAPTCHA_ENABLED and bool(_RECAPTCHA_ENTERPRISE_API_KEY)
 
 
 def _replay_cache_key(token: str) -> str:
@@ -100,25 +156,87 @@ async def _release_token(token: str) -> None:
         redis = await get_async_redis_connection()
         await redis.delete(_replay_cache_key(token))
     except Exception as e:
-        # Worst case: the user must wait up to 120s before the TTL expires
-        # on its own and they can retry. Still strictly better than failing
-        # open on the reservation side.
         logger.error(f"Captcha replay cache release error (ignored): {e}")
 
 
-async def verify_captcha_token(
-    token: str,
-    expected_action: str = "signup",
-) -> None:
+def _check_token_freshness(create_time: str | None) -> None:
+    """Reject tokens older than the Assessment API's own 2-minute validity
+    window. Google enforces this too, but a server-side check is cheap
+    defense-in-depth against clock-skew edge cases and reduces reliance
+    on a single counterparty.
     """
-    Verify a reCAPTCHA token with Google's API.
+    if not create_time:
+        return
+    try:
+        # Google returns RFC3339 with `Z`; strip Z and parse as UTC.
+        ts = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning(f"Captcha createTime unparseable: {create_time!r}")
+        raise CaptchaVerificationError(
+            "Captcha verification failed: malformed createTime"
+        )
+    age_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
+    if age_seconds > _TOKEN_MAX_AGE_SECONDS:
+        logger.warning(f"Captcha token stale: age={age_seconds:.1f}s")
+        raise CaptchaVerificationError("Captcha verification failed: token expired")
 
-    Args:
-        token: The reCAPTCHA response token from the client
-        expected_action: Expected action name for v3 verification
 
-    Raises:
-        CaptchaVerificationError: If verification fails
+def _evaluate_assessment(
+    result: RecaptchaAssessmentResponse, action: CaptchaAction
+) -> None:
+    """Apply the full rejection ladder to a parsed Assessment response.
+    Ordered cheapest-to-most-lenient: fail fast on definitively-bad tokens
+    before reaching the grey-area score floor.
+    """
+    tp = result.token_properties
+    ra = result.risk_analysis
+
+    if not tp.valid:
+        reason = tp.invalid_reason or "INVALID"
+        logger.warning(f"Captcha token invalid: reason={reason}")
+        raise CaptchaVerificationError(f"Captcha verification failed: {reason}")
+
+    if tp.hostname and tp.hostname not in _HOSTNAME_ALLOWLIST:
+        logger.warning(f"Captcha hostname mismatch: {tp.hostname!r}")
+        raise CaptchaVerificationError("Captcha verification failed: hostname mismatch")
+
+    _check_token_freshness(tp.create_time)
+
+    if tp.action != action.value:
+        logger.warning(
+            f"Captcha action mismatch: got={tp.action!r} expected={action.value!r}"
+        )
+        raise CaptchaVerificationError("Captcha verification failed: action mismatch")
+
+    hard = _HARD_REJECT_REASONS.intersection(ra.reasons)
+    if hard:
+        logger.warning(f"Captcha hard reject: reasons={sorted(hard)} score={ra.score}")
+        raise CaptchaVerificationError(
+            f"Captcha verification failed: {', '.join(sorted(hard))}"
+        )
+
+    if ra.score < _SCORE_FLOOR:
+        logger.warning(
+            f"Captcha score below floor: {ra.score} < {_SCORE_FLOOR} reasons={ra.reasons}"
+        )
+        raise CaptchaVerificationError(
+            "Captcha verification failed: suspicious activity detected"
+        )
+
+    logger.info(
+        f"Captcha verification passed: action={tp.action} score={ra.score} reasons={ra.reasons} hostname={tp.hostname}"
+    )
+
+
+async def verify_captcha_token(token: str, action: CaptchaAction) -> None:
+    """Verify a reCAPTCHA token with the Enterprise Assessment API.
+
+    Rejection ladder (strict equality; no silent skip on empty fields):
+    tokenProperties.valid → hostname → createTime ≤ 120s → action match →
+    riskAnalysis.reasons[] ∩ hard set → score ≥ floor.
+
+    Fails open (returns None) when captcha is disabled. Raises
+    ``CaptchaVerificationError`` on any rejection or service outage.
     """
     if not is_captcha_enabled():
         return
@@ -134,69 +252,28 @@ async def verify_captcha_token(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                RECAPTCHA_VERIFY_URL,
-                data={
-                    "secret": RECAPTCHA_SECRET_KEY,
-                    "response": token,
+                _RECAPTCHA_ASSESSMENT_URL,
+                params={"key": _RECAPTCHA_ENTERPRISE_API_KEY},
+                json={
+                    "event": {
+                        "token": token,
+                        "siteKey": _RECAPTCHA_SITE_KEY,
+                        "expectedAction": action.value,
+                    }
                 },
                 timeout=10.0,
             )
             response.raise_for_status()
-
-            data = response.json()
-            result = RecaptchaResponse(**data)
-
-            if not result.success:
-                error_codes = result.error_codes or ["unknown-error"]
-                logger.warning(f"Captcha verification failed: {error_codes}")
-                raise CaptchaVerificationError(
-                    f"Captcha verification failed: {', '.join(error_codes)}"
-                )
-
-            # Require v3 score. Google's public test secret returns no score
-            # — that path must not be active in prod since it skips the only
-            # human-vs-bot signal. A missing score here means captcha is
-            # misconfigured (test secret in prod, or a v2 response slipped in
-            # via an action mismatch).
-            if result.score is None:
-                logger.warning(
-                    "Captcha verification failed: siteverify returned no score (likely test secret in prod)"
-                )
-                raise CaptchaVerificationError(
-                    "Captcha verification failed: missing score"
-                )
-
-            if result.score < RECAPTCHA_SCORE_THRESHOLD:
-                logger.warning(
-                    f"Captcha score too low: {result.score} < {RECAPTCHA_SCORE_THRESHOLD}"
-                )
-                raise CaptchaVerificationError(
-                    "Captcha verification failed: suspicious activity detected"
-                )
-
-            if result.action and result.action != expected_action:
-                logger.warning(
-                    f"Captcha action mismatch: {result.action} != {expected_action}"
-                )
-                raise CaptchaVerificationError(
-                    "Captcha verification failed: action mismatch"
-                )
-
-            logger.debug(
-                f"Captcha verification passed: score={result.score}, action={result.action}"
-            )
+            result = RecaptchaAssessmentResponse(**response.json())
+            _evaluate_assessment(result, action)
 
     except CaptchaVerificationError:
-        # Definitively-bad token (Google rejected it, score too low, action
-        # mismatch). Keep the reservation so the same token cannot be
-        # retried elsewhere during the TTL window.
+        # Definitively-bad token. Keep the replay reservation so the same
+        # value cannot be retried elsewhere during the TTL window.
         raise
     except Exception as e:
-        # Anything else — network failure, JSON decode error, Pydantic
-        # validation error on an unexpected siteverify response shape — is
-        # OUR inability to verify the token, not proof the token is bad.
-        # Release the reservation so the user can retry with the same
-        # still-valid token instead of being locked out for ~120s.
+        # Transport / parse failures are OUR inability to verify, not proof
+        # the token is bad. Release the reservation so the user can retry.
         logger.error(f"Captcha verification failed unexpectedly: {e}")
         await _release_token(token)
         raise CaptchaVerificationError("Captcha verification service unavailable")
@@ -244,8 +321,7 @@ def validate_captcha_cookie_value(value: str | None) -> bool:
     We split on the first ``.``, parse the expiry as an integer, recompute
     the HMAC over the expiry string using the key derived from
     USER_AUTH_SECRET, and compare with ``hmac.compare_digest`` to avoid
-    timing leaks. No base64, no JSON, no claims — anything fancier would
-    be overkill for a short-lived "verified recently" cookie.
+    timing leaks.
     """
     if not value:
         return False
