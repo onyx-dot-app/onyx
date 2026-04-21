@@ -18,6 +18,10 @@ ix_document_needs_sync partial index was deployed.
 - hierarchy_node.document_id: 18MB+ on large tenants, queried during
   document deletion and hierarchy rebuilds.
 
+Note: Index names follow SQLAlchemy's ix_<table>_<column> convention to match
+the `index=True` declarations in models.py. This prevents autogenerate from
+detecting a mismatch and creating duplicate indexes.
+
 Revision ID: 856bcbe14d79
 Revises: a6fcd3d631f9
 Create Date: 2026-04-19 18:00:00.000000
@@ -36,17 +40,17 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_index(
-        "ix_index_attempt_errors_attempt_id",
+        "ix_index_attempt_errors_index_attempt_id",
         "index_attempt_errors",
         ["index_attempt_id"],
     )
     op.create_index(
-        "ix_index_attempt_errors_cc_pair_id",
+        "ix_index_attempt_errors_connector_credential_pair_id",
         "index_attempt_errors",
         ["connector_credential_pair_id"],
     )
     op.create_index(
-        "ix_index_attempt_cc_pair_id",
+        "ix_index_attempt_connector_credential_pair_id",
         "index_attempt",
         ["connector_credential_pair_id"],
     )
@@ -59,10 +63,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_hierarchy_node_document_id", table_name="hierarchy_node")
-    op.drop_index("ix_index_attempt_cc_pair_id", table_name="index_attempt")
     op.drop_index(
-        "ix_index_attempt_errors_cc_pair_id", table_name="index_attempt_errors"
+        "ix_index_attempt_connector_credential_pair_id", table_name="index_attempt"
     )
     op.drop_index(
-        "ix_index_attempt_errors_attempt_id", table_name="index_attempt_errors"
+        "ix_index_attempt_errors_connector_credential_pair_id",
+        table_name="index_attempt_errors",
+    )
+    op.drop_index(
+        "ix_index_attempt_errors_index_attempt_id", table_name="index_attempt_errors"
     )
