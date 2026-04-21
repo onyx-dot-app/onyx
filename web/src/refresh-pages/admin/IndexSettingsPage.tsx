@@ -27,12 +27,16 @@ import {
 import {
   SvgArrowExchange,
   SvgCheckSquare,
+  SvgClock,
   SvgCloud,
+  SvgEmpty,
   SvgFold,
+  SvgNoImage,
   SvgPlusCircle,
   SvgRevert,
   SvgServer,
   SvgSettings,
+  SvgSlowTime,
   SvgUnplug,
 } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -88,6 +92,7 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
+const SWITCHOVER_NONE = "none";
 
 interface EmbeddingProviderInfoProps {
   providerType: string | null;
@@ -816,9 +821,9 @@ export default function IndexSettingsPage() {
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   );
-  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
-    SwitchoverType.REINDEX
-  );
+  const [switchoverType, setSwitchoverType] = useState<
+    SwitchoverType | typeof SWITCHOVER_NONE
+  >(SWITCHOVER_NONE);
 
   const allCloudProviders = useMemo(
     () =>
@@ -980,32 +985,52 @@ export default function IndexSettingsPage() {
                   <InputSelect
                     value={switchoverType}
                     onValueChange={(v) =>
-                      setSwitchoverType(v as SwitchoverType)
+                      setSwitchoverType(
+                        v as SwitchoverType | typeof SWITCHOVER_NONE
+                      )
                     }
                   >
                     <InputSelect.Trigger placeholder="Select a switchover strategy" />
                     <InputSelect.Content>
-                      <InputSelect.Item
-                        value={SwitchoverType.REINDEX}
-                        wrapDescription
-                        description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
-                      >
-                        Re-index All Connectors Then Switch
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value={SwitchoverType.ACTIVE_ONLY}
-                        wrapDescription
-                        description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
-                      >
-                        Re-index Active Connectors Then Switch
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value={SwitchoverType.INSTANT}
-                        wrapDescription
-                        description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
-                      >
-                        Switch Before Re-index
-                      </InputSelect.Item>
+                      <InputSelect.Group>
+                        <InputSelect.Label>Non-re-indexing</InputSelect.Label>
+                        <InputSelect.Item
+                          value={SWITCHOVER_NONE}
+                          icon={SvgNoImage}
+                          wrapDescription
+                          description="Safe option. Only apply changes to newly indexed content."
+                        >
+                          Do Not Re-index
+                        </InputSelect.Item>
+                      </InputSelect.Group>
+                      <InputSelect.Separator />
+                      <InputSelect.Group>
+                        <InputSelect.Label>Re-indexing</InputSelect.Label>
+                        <InputSelect.Item
+                          value={SwitchoverType.REINDEX}
+                          icon={SvgClock}
+                          wrapDescription
+                          description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                        >
+                          Re-index All Connectors Then Switch
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value={SwitchoverType.ACTIVE_ONLY}
+                          icon={SvgSlowTime}
+                          wrapDescription
+                          description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                        >
+                          Re-index Active Connectors Then Switch
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value={SwitchoverType.INSTANT}
+                          icon={SvgEmpty}
+                          wrapDescription
+                          description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                        >
+                          Switch Before Re-index
+                        </InputSelect.Item>
+                      </InputSelect.Group>
                     </InputSelect.Content>
                   </InputSelect>
                 </div>
@@ -1014,7 +1039,7 @@ export default function IndexSettingsPage() {
                     prominence="secondary"
                     onClick={() => {
                       setSelectedModelName(null);
-                      setSwitchoverType(SwitchoverType.REINDEX);
+                      setSwitchoverType(SWITCHOVER_NONE);
                     }}
                   >
                     Revert
@@ -1160,7 +1185,7 @@ export default function IndexSettingsPage() {
                                   prominence="internal"
                                   onClick={() => {
                                     setSelectedModelName(null);
-                                    setSwitchoverType(SwitchoverType.REINDEX);
+                                    setSwitchoverType(SWITCHOVER_NONE);
                                   }}
                                 />
                               )}
