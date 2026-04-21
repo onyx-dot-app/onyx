@@ -655,3 +655,69 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
     }
   });
 });
+
+test.describe("Permission gating — READ_QUERY_HISTORY", () => {
+  test("Admin panel /admin/performance/query-history is gated behind READ_QUERY_HISTORY", async ({
+    page,
+    adminClient,
+    testUserContext,
+  }) => {
+    const registryResponse = await page.request.get(
+      "/api/manage/admin/permissions/registry"
+    );
+    test.skip(
+      registryResponse.status() === 404,
+      "Permission registry unavailable (CE environment)"
+    );
+
+    const { groupId, email, password } = testUserContext;
+
+    // Admin creates a chat session so the query history table has data
+    const sessionDescription = `E2E Query History ${Date.now()}`;
+    const chatSessionId =
+      await adminClient.createChatSession(sessionDescription);
+
+    try {
+      // Phase 1: Without READ_QUERY_HISTORY — /admin/performance/query-history should redirect to /app
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/performance/query-history");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+
+      // Phase 2: Grant READ_QUERY_HISTORY — /admin/performance/query-history should be accessible
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, [
+        Permission.READ_QUERY_HISTORY,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/performance/query-history");
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain("/admin/performance/query-history");
+      await expect(
+        page.getByLabel("admin-page-title").getByText("Query History")
+      ).toBeVisible({ timeout: 10000 });
+
+      // Phase 3: Revoke READ_QUERY_HISTORY — should redirect again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(groupId, []);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/admin/performance/query-history");
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).toContain("/app");
+    } finally {
+      // Cleanup: delete the chat session
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const cleanupClient = new OnyxApiClient(page.request);
+      await cleanupClient.deleteChatSession(chatSessionId);
+    }
+  });
+});
