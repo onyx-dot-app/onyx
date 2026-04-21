@@ -10,105 +10,32 @@ file_store side effects of the swap, not the document index integration.
 """
 
 from collections.abc import Generator
-from io import BytesIO
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import InputType
-from onyx.connectors.models import TextSection
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import SwitchoverType
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Document as DBDocument
-from onyx.db.models import FileRecord
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import create_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing_helpers import get_doc_row
+from tests.external_dependency_unit.indexing_helpers import get_filerecord
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_doc
+from tests.external_dependency_unit.indexing_helpers import stage_file
 
 
 # ---------------------------------------------------------------------------
-# Helpers (kept inline; extract to a shared conftest if a 4th test file shows up)
+# Helpers (file-local)
 # ---------------------------------------------------------------------------
-
-
-def _make_doc(doc_id: str, file_id: str | None = None) -> Document:
-    return Document(
-        id=doc_id,
-        source=DocumentSource.MOCK_CONNECTOR,
-        semantic_identifier=f"semantic-{doc_id}",
-        sections=[TextSection(text="content", link=None)],
-        metadata={},
-        file_id=file_id,
-    )
-
-
-def _stage_file(content: bytes = b"raw bytes") -> str:
-    return get_default_file_store().save_file(
-        content=BytesIO(content),
-        display_name=None,
-        file_origin=FileOrigin.INDEXING_STAGING,
-        file_type="application/octet-stream",
-        file_metadata={"test": True},
-    )
-
-
-def _get_doc_row(db_session: Session, doc_id: str) -> DBDocument | None:
-    db_session.expire_all()
-    return db_session.query(DBDocument).filter(DBDocument.id == doc_id).one_or_none()
-
-
-def _get_filerecord(db_session: Session, file_id: str) -> FileRecord | None:
-    db_session.expire_all()
-    return get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
-
-
-def _make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
-    connector = Connector(
-        name=f"test-connector-{uuid4().hex[:8]}",
-        source=DocumentSource.MOCK_CONNECTOR,
-        input_type=InputType.LOAD_STATE,
-        connector_specific_config={},
-        refresh_freq=None,
-        prune_freq=None,
-        indexing_start=None,
-    )
-    db_session.add(connector)
-    db_session.flush()
-
-    credential = Credential(
-        source=DocumentSource.MOCK_CONNECTOR,
-        credential_json={},
-    )
-    db_session.add(credential)
-    db_session.flush()
-
-    pair = ConnectorCredentialPair(
-        connector_id=connector.id,
-        credential_id=credential.id,
-        name=f"test-cc-pair-{uuid4().hex[:8]}",
-        status=ConnectorCredentialPairStatus.ACTIVE,
-        access_type=AccessType.PUBLIC,
-        auto_sync_options=None,
-    )
-    db_session.add(pair)
-    db_session.commit()
-    db_session.refresh(pair)
-    return pair
 
 
 def _make_saved_search_settings(
@@ -145,7 +72,11 @@ def cc_pair(
     initialize_file_store: None,  # noqa: ARG001
     full_deployment_setup: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
-    yield _make_cc_pair(db_session)
+    pair = make_cc_pair(db_session)
+    try:
+        yield pair
+    finally:
+        cleanup_cc_pair(db_session, pair)
 
 
 @pytest.fixture
@@ -173,10 +104,10 @@ class TestInstantIndexSwap:
         attempt_metadata: IndexAttemptMetadata,
     ) -> None:
         # Index two docs with attached files via the normal pipeline.
-        file_id_a = _stage_file(content=b"alpha")
-        file_id_b = _stage_file(content=b"beta")
-        doc_a = _make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id_a)
-        doc_b = _make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id_b)
+        file_id_a = stage_file(content=b"alpha")
+        file_id_b = stage_file(content=b"beta")
+        doc_a = make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id_a)
+        doc_b = make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id_b)
 
         index_doc_batch_prepare(
             documents=[doc_a, doc_b],
@@ -187,10 +118,10 @@ class TestInstantIndexSwap:
         db_session.commit()
 
         # Sanity: docs and files exist before the swap.
-        assert _get_doc_row(db_session, doc_a.id) is not None
-        assert _get_doc_row(db_session, doc_b.id) is not None
-        assert _get_filerecord(db_session, file_id_a) is not None
-        assert _get_filerecord(db_session, file_id_b) is not None
+        assert get_doc_row(db_session, doc_a.id) is not None
+        assert get_doc_row(db_session, doc_b.id) is not None
+        assert get_filerecord(db_session, file_id_a) is not None
+        assert get_filerecord(db_session, file_id_b) is not None
 
         # Stage a FUTURE search settings with INSTANT switchover. The next
         # `check_and_perform_index_swap` call will see this and trigger the
@@ -214,13 +145,13 @@ class TestInstantIndexSwap:
         assert old_settings is not None, "INSTANT swap should have executed"
 
         # Documents are gone.
-        assert _get_doc_row(db_session, doc_a.id) is None
-        assert _get_doc_row(db_session, doc_b.id) is None
+        assert get_doc_row(db_session, doc_a.id) is None
+        assert get_doc_row(db_session, doc_b.id) is None
 
         # Files are gone — the workflow's bulk-delete path correctly
         # propagated through to file cleanup.
-        assert _get_filerecord(db_session, file_id_a) is None
-        assert _get_filerecord(db_session, file_id_b) is None
+        assert get_filerecord(db_session, file_id_a) is None
+        assert get_filerecord(db_session, file_id_b) is None
 
     def test_instant_swap_with_mixed_docs_does_not_break(
         self,
@@ -229,9 +160,9 @@ class TestInstantIndexSwap:
     ) -> None:
         """A mix of docs with and without file_ids must all be swept up
         without errors during the swap."""
-        file_id = _stage_file()
-        doc_with = _make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id)
-        doc_without = _make_doc(f"doc-{uuid4().hex[:8]}", file_id=None)
+        file_id = stage_file()
+        doc_with = make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id)
+        doc_without = make_doc(f"doc-{uuid4().hex[:8]}", file_id=None)
 
         index_doc_batch_prepare(
             documents=[doc_with, doc_without],
@@ -257,6 +188,6 @@ class TestInstantIndexSwap:
 
         assert old_settings is not None
 
-        assert _get_doc_row(db_session, doc_with.id) is None
-        assert _get_doc_row(db_session, doc_without.id) is None
-        assert _get_filerecord(db_session, file_id) is None
+        assert get_doc_row(db_session, doc_with.id) is None
+        assert get_doc_row(db_session, doc_without.id) is None
+        assert get_filerecord(db_session, file_id) is None
