@@ -67,25 +67,29 @@ const useTabsContext = () => {
    ============================================================================= */
 
 /** Style classes for TabsList variants */
+const PILL_LIST =
+  "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden";
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
-  underline:
-    "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
+  pill: PILL_LIST,
+  underline: PILL_LIST,
 } as const;
 
 /** Base style classes for TabsTrigger variants */
+const PILL_TRIGGER =
+  "p-1 font-secondary-action transition-all duration-200 ease-out";
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
-  pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
-  underline: "p-1 font-secondary-action transition-all duration-200 ease-out",
+  pill: PILL_TRIGGER,
+  underline: PILL_TRIGGER,
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
+const PILL_ICON = "stroke-current";
 const iconVariants = {
   contained: "stroke-text-03",
-  pill: "stroke-current",
-  underline: "stroke-current",
+  pill: PILL_ICON,
+  underline: PILL_ICON,
 } as const;
 
 /* =============================================================================
