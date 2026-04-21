@@ -69,11 +69,6 @@ def build_raw_file_callback(
 def delete_files_best_effort(file_ids: list[str]) -> None:
     """Delete a list of files from the file store, logging individual
     failures rather than raising.
-
-    Used at document-deletion time to reap raw files attached via
-    `Document.file_id`. The corresponding document rows have already been
-    deleted by the caller, so a failure here just leaves a recoverable
-    orphan rather than a broken pointer.
     """
     if not file_ids:
         return

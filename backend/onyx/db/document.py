@@ -932,11 +932,7 @@ def get_file_ids_for_document_ids(
     db_session: Session,
     document_ids: list[str],
 ) -> list[str]:
-    """Return the non-null `file_id` values attached to the given documents.
-
-    Used at deletion time to enumerate raw files that need to be reaped from
-    the file store once their owning document rows are gone.
-    """
+    """Return the non-null `file_id` values attached to the given documents."""
     if not document_ids:
         return []
     rows = (
@@ -997,13 +993,8 @@ def delete_documents_complete(
 ) -> None:
     """Fully remove documents AND best-effort delete their attached files.
 
-    This is the canonical path for "I'm done with these docs" — it captures
-    file_ids, removes the rows + every FK they hold, commits, then reaps
-    files. The order matters: file deletion happens after commit so a DB
-    rollback can never leave a `document` row pointing at a missing file.
-
-    Use this instead of `delete_documents_complete__no_commit` unless you
-    specifically need to compose with other operations in one transaction.
+    To be used when a document is finished and should be disposed of.
+    Removes the row and the potentially associated file.
     """
     file_ids_to_delete = get_file_ids_for_document_ids(
         db_session=db_session,
