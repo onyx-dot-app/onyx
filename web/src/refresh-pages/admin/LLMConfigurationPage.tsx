@@ -146,7 +146,6 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <CardLayout.Header
-            headerPadding="sm"
             headerChildren={
               <ContentAction
                 icon={icon}
@@ -154,7 +153,7 @@ function ExistingProviderCard({
                 description={companyName}
                 sizePreset="main-ui"
                 variant="section"
-                padding="fit"
+                padding="lg"
                 tag={
                   isDefault ? { title: "Default", color: "blue" } : undefined
                 }
@@ -218,7 +217,6 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
-        headerPadding="sm"
         headerChildren={
           <ContentAction
             icon={icon}
@@ -226,7 +224,7 @@ function NewProviderCard({
             description={companyName}
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding="lg"
             rightChildren={
               <Button
                 rightIcon={SvgArrowExchange}
