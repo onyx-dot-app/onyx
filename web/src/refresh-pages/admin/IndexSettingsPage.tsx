@@ -48,7 +48,10 @@ import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
-import type { EmbeddingModelState } from "@/lib/indexing/interfaces";
+import type {
+  ConfiguredEmbeddingProvider,
+  EmbeddingModelState,
+} from "@/lib/indexing/interfaces";
 import {
   CLOUD_EMBEDDING_PROVIDERS,
   SELF_HOSTED_MODELS,
@@ -137,30 +140,37 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Provider connection modal
+// Provider credentials modal (connect + edit)
 // ---------------------------------------------------------------------------
 
-interface ProviderConnectionModalProps {
+interface ProviderCredentialsModalProps {
   provider: CloudEmbeddingProvider;
-  onConnect: () => void;
+  existingCredentials?: ConfiguredEmbeddingProvider;
+  onSubmit: () => void;
   onCancel: () => void;
 }
 
-function ProviderConnectionModal({
+function ProviderCredentialsModal({
   provider,
-  onConnect,
+  existingCredentials,
+  onSubmit,
   onCancel,
-}: ProviderConnectionModalProps) {
+}: ProviderCredentialsModalProps) {
+  const isEditing = !!existingCredentials;
   const providerName = getFormattedProviderName(provider.provider_type);
   const isProxy = provider.provider_type === EmbeddingProvider.LITELLM;
   const isAzure = provider.provider_type === EmbeddingProvider.AZURE;
   const isGoogle = provider.provider_type === EmbeddingProvider.GOOGLE;
 
-  const [apiKey, setApiKey] = useState("");
-  const [apiUrl, setApiUrl] = useState("");
+  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
+  const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
   const [modelName, setModelName] = useState("");
-  const [deploymentName, setDeploymentName] = useState("");
-  const [apiVersion, setApiVersion] = useState("");
+  const [deploymentName, setDeploymentName] = useState(
+    existingCredentials?.deployment_name ?? ""
+  );
+  const [apiVersion, setApiVersion] = useState(
+    existingCredentials?.api_version ?? ""
+  );
   const [fileName, setFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -218,7 +228,7 @@ function ProviderConnectionModal({
         throw new Error(err.detail ?? "Failed to save provider");
       }
 
-      onConnect();
+      onSubmit();
     } catch (error: unknown) {
       setErrorMsg(
         error instanceof Error ? error.message : "An unknown error occurred"
@@ -242,8 +252,14 @@ function ProviderConnectionModal({
           icon={provider.icon}
           moreIcon1={SvgArrowExchange}
           moreIcon2={SvgOnyxLogo}
-          title={`Set up ${providerName}`}
-          description={`Connect to ${providerName} and set up your ${providerName} embedding models.`}
+          title={
+            isEditing ? `Manage ${providerName}` : `Set up ${providerName}`
+          }
+          description={
+            isEditing
+              ? `Manage ${providerName} provider and model details.`
+              : `Connect to ${providerName} and set up your ${providerName} embedding models.`
+          }
           onClose={onCancel}
         />
         <Modal.Body twoTone>
@@ -333,7 +349,13 @@ function ProviderConnectionModal({
             Cancel
           </Button>
           <Button disabled={!isValid || isSubmitting} onClick={handleSubmit}>
-            {isSubmitting ? "Connecting..." : "Connect"}
+            {isSubmitting
+              ? isEditing
+                ? "Updating..."
+                : "Connecting..."
+              : isEditing
+                ? "Update"
+                : "Connect"}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -350,7 +372,7 @@ interface ProviderGroupProps {
   models: CloudEmbeddingModel[];
   currentModelName?: string;
   selectedModelName?: string;
-  isConfigured?: boolean;
+  existingCredentials?: ConfiguredEmbeddingProvider;
 }
 
 function ProviderGroup({
@@ -358,10 +380,12 @@ function ProviderGroup({
   models,
   currentModelName,
   selectedModelName,
-  isConfigured,
+  existingCredentials,
 }: ProviderGroupProps) {
+  const isConfigured = !!existingCredentials;
   const disconnectModal = useCreateModal();
-  const providerCreationModal = useCreateModal();
+  const connectModal = useCreateModal();
+  const editCredentialsModal = useCreateModal();
   const providerName = getFormattedProviderName(provider.provider_type);
   const [pendingModel, setPendingModel] = useState<CloudEmbeddingModel | null>(
     null
@@ -407,18 +431,19 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: CloudEmbeddingModel) => {
+      if (provider.deprecated) return;
       const state = getModelState(model);
       if (state === "current" || state === "selected") return;
 
       if (state === "unconnected") {
         setPendingModel(model);
-        providerCreationModal.toggle(true);
+        connectModal.toggle(true);
         return;
       }
 
       void selectModel(model);
     },
-    [getModelState, selectModel, providerCreationModal]
+    [getModelState, selectModel, connectModal]
   );
 
   return (
@@ -441,23 +466,35 @@ function ProviderGroup({
         </ConfirmationModalLayout>
       </disconnectModal.Provider>
 
-      <providerCreationModal.Provider>
-        <ProviderConnectionModal
+      <connectModal.Provider>
+        <ProviderCredentialsModal
           provider={provider}
-          onConnect={async () => {
+          onSubmit={async () => {
             await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
-            providerCreationModal.toggle(false);
+            connectModal.toggle(false);
             if (pendingModel) {
               await selectModel(pendingModel);
               setPendingModel(null);
             }
           }}
           onCancel={() => {
-            providerCreationModal.toggle(false);
+            connectModal.toggle(false);
             setPendingModel(null);
           }}
         />
-      </providerCreationModal.Provider>
+      </connectModal.Provider>
+
+      <editCredentialsModal.Provider>
+        <ProviderCredentialsModal
+          provider={provider}
+          existingCredentials={existingCredentials}
+          onSubmit={async () => {
+            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+            editCredentialsModal.toggle(false);
+          }}
+          onCancel={() => editCredentialsModal.toggle(false)}
+        />
+      </editCredentialsModal.Provider>
 
       <div className="px-1 pt-1 w-full h-[var(--line-height-lg)]">
         <GeneralLayouts.Section flexDirection="row" gap={0}>
@@ -470,8 +507,8 @@ function ProviderGroup({
                   provider.docsLink
                 })`
               )}
+              suffix={provider.deprecated ? "(deprecated)" : undefined}
               sizePreset="secondary"
-              variant="body"
             />
             {isConfigured && (
               <GeneralLayouts.Section
@@ -485,8 +522,12 @@ function ProviderGroup({
                   size="sm"
                   onClick={() => disconnectModal.toggle(true)}
                 />
-                {/* TODO(@raunakab): wire up */}
-                <Button icon={SvgSettings} prominence="tertiary" size="sm" />
+                <Button
+                  icon={SvgSettings}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={() => editCredentialsModal.toggle(true)}
+                />
               </GeneralLayouts.Section>
             )}
           </div>
@@ -498,6 +539,7 @@ function ProviderGroup({
           model={model}
           providerIcon={provider.icon}
           modelState={getModelState(model)}
+          deprecated={provider.deprecated}
           onSelect={() => handleModelSelect(model)}
         />
       ))}
@@ -519,6 +561,7 @@ interface EmbeddingModelCardProps {
   model: CloudEmbeddingModel;
   providerIcon: IconFunctionComponent;
   modelState: EmbeddingModelState;
+  deprecated?: boolean;
   onSelect?: () => void;
 }
 
@@ -526,8 +569,12 @@ function EmbeddingModelCard({
   model,
   providerIcon,
   modelState,
+  deprecated,
   onSelect,
 }: EmbeddingModelCardProps) {
+  const canSelect =
+    !deprecated && (modelState === "unconnected" || modelState === "connected");
+
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -536,13 +583,18 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
+            disabled={deprecated}
           >
             Connect
           </Button>
         );
       case "connected":
         return (
-          <Button prominence="tertiary" onClick={onSelect}>
+          <Button
+            prominence="tertiary"
+            onClick={onSelect}
+            disabled={deprecated}
+          >
             Select Model
           </Button>
         );
@@ -566,11 +618,7 @@ function EmbeddingModelCard({
       state={SELECT_CARD_STATE[modelState]}
       rounding="md"
       padding="xs"
-      onClick={
-        modelState === "unconnected" || modelState === "connected"
-          ? onSelect
-          : undefined
-      }
+      onClick={canSelect ? onSelect : undefined}
     >
       <CardLayout.Header
         headerChildren={
@@ -655,9 +703,9 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
       </div>
 
       <providerCreationModal.Provider>
-        <ProviderConnectionModal
+        <ProviderCredentialsModal
           provider={provider}
-          onConnect={async () => {
+          onSubmit={async () => {
             await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
             providerCreationModal.toggle(false);
           }}
@@ -665,7 +713,12 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
         />
       </providerCreationModal.Provider>
 
-      <SelectCard state="filled" rounding="md" padding="sm">
+      <SelectCard
+        state="filled"
+        rounding="md"
+        padding="sm"
+        onClick={() => providerCreationModal.toggle(true)}
+      >
         <ContentAction
           title={`Add configs for your ${providerName} embedding providers.`}
           sizePreset="secondary"
@@ -895,7 +948,7 @@ export default function IndexSettingsPage() {
                                 selectedModelName={
                                   secondarySettings?.model_name
                                 }
-                                isConfigured={configuredProviders?.has(
+                                existingCredentials={configuredProviders?.get(
                                   provider.provider_type
                                 )}
                               />

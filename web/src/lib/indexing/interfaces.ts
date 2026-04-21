@@ -25,6 +25,13 @@ export interface CloudEmbeddingProvider {
   apiLink: string;
   costslink?: string;
 
+  /**
+   * When true, this provider is no longer recommended for new deployments.
+   * Existing usage is allowed, but selecting it as a new embedding model is
+   * blocked in the UI.
+   */
+  deprecated?: boolean;
+
   // Relationships
   embedding_models: CloudEmbeddingModel[];
   default_model?: CloudEmbeddingModel;
@@ -142,3 +149,12 @@ export type EmbeddingModelState =
   | "connected"
   | "current"
   | "selected";
+
+/** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
+export interface ConfiguredEmbeddingProvider {
+  provider_type: EmbeddingProvider;
+  api_key: string | null;
+  api_url: string | null;
+  api_version: string | null;
+  deployment_name: string | null;
+}

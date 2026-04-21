@@ -2,6 +2,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  ConfiguredEmbeddingProvider,
   EmbeddingModelDescriptor,
   EmbeddingProvider,
   LLMContextualCost,
@@ -68,16 +69,17 @@ export function useSecondarySearchSettings() {
 }
 
 /**
- * Fetches the set of cloud embedding provider types that have API keys
- * configured in the backend.
+ * Fetches cloud embedding providers that have credentials configured in the
+ * backend. Returns a Map keyed by provider type so callers can both check
+ * existence and access stored credentials (api_key is masked by the backend).
  */
 export function useConfiguredEmbeddingProviders() {
-  return useSWR<Set<EmbeddingProvider>>(
+  return useSWR<Map<EmbeddingProvider, ConfiguredEmbeddingProvider>>(
     EMBEDDING_PROVIDERS_ADMIN_URL,
     async (url: string) => {
-      const providers: { provider_type: EmbeddingProvider }[] =
+      const providers: ConfiguredEmbeddingProvider[] =
         await errorHandlingFetcher(url);
-      return new Set(providers.map((p) => p.provider_type));
+      return new Map(providers.map((p) => [p.provider_type, p]));
     }
   );
 }

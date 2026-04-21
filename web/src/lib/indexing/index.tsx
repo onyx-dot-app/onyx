@@ -242,6 +242,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
     website: "https://www.voyageai.com",
     icon: SvgVoyage,
     description: "Advanced NLP research startup born from Stanford AI Labs",
+    deprecated: true,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     apiLink: "https://www.voyageai.com/dashboard",
     costslink: "https://www.voyageai.com/pricing",
