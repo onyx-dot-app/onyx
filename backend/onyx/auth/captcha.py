@@ -27,12 +27,18 @@ from onyx.configs.app_configs import CAPTCHA_ENABLED
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
 from onyx.configs.app_configs import RECAPTCHA_SECRET_KEY
 from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
+
+# Google v3 tokens expire server-side at ~2 minutes, so 120s is the max useful
+# replay window — after that Google would reject the token anyway.
+_REPLAY_CACHE_TTL_SECONDS = 120
+_REPLAY_KEY_PREFIX = "captcha:replay:"
 
 
 class CaptchaVerificationError(Exception):
@@ -55,6 +61,36 @@ def is_captcha_enabled() -> bool:
     return CAPTCHA_ENABLED and bool(RECAPTCHA_SECRET_KEY)
 
 
+def _replay_cache_key(token: str) -> str:
+    """Avoid storing the raw token in Redis — hash it first."""
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return f"{_REPLAY_KEY_PREFIX}{digest}"
+
+
+async def _reserve_token_or_raise(token: str) -> None:
+    """SETNX a token fingerprint. If another caller already claimed it within
+    the TTL, reject as a replay. Fails open on Redis errors — losing replay
+    protection is strictly better than hard-failing legitimate registrations
+    if Redis blips."""
+    try:
+        redis = await get_async_redis_connection()
+        claimed = await redis.set(
+            _replay_cache_key(token),
+            "1",
+            nx=True,
+            ex=_REPLAY_CACHE_TTL_SECONDS,
+        )
+        if not claimed:
+            logger.warning("Captcha replay detected: token already used")
+            raise CaptchaVerificationError(
+                "Captcha verification failed: token already used"
+            )
+    except CaptchaVerificationError:
+        raise
+    except Exception as e:
+        logger.error(f"Captcha replay cache error (failing open): {e}")
+
+
 async def verify_captcha_token(
     token: str,
     expected_action: str = "signup",
@@ -74,6 +110,11 @@ async def verify_captcha_token(
 
     if not token:
         raise CaptchaVerificationError("Captcha token is required")
+
+    # Claim the token first so a concurrent replay of the same value cannot
+    # slip through the Google round-trip window. Done BEFORE calling Google
+    # because even a still-valid token should only redeem once.
+    await _reserve_token_or_raise(token)
 
     try:
         async with httpx.AsyncClient() as client:
