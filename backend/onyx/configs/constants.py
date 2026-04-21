@@ -644,12 +644,15 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS = {}
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
+# TCP_KEEPALIVE only exists on Darwin and TCP_KEEPIDLE only exists on Linux/BSD.
+# getattr keeps both branches type-checkable on either platform; any per-line
+# ty suppression (scoped or bare) would itself be flagged as unused on the
+# platform where the attribute actually resolves, since ty analyzes one
+# platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[
-        socket.TCP_KEEPIDLE  # ty: ignore[unresolved-attribute]
-    ] = 60
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60
 
 
 class OnyxCallTypes(str, Enum):
