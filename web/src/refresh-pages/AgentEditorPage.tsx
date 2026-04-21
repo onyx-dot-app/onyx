@@ -347,7 +347,6 @@ function MCPServerCard({
             <Disabled key={tool.id} disabled={toolDisabled}>
               <Card border="solid" rounding="lg" padding="sm">
                 <CardLayout.Header
-                  headerPadding="sm"
                   headerChildren={
                     <ContentAction
                       icon={tool.icon ?? SvgSliders}
