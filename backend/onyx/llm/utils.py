@@ -1,6 +1,7 @@
 import copy
 import re
 from collections.abc import Callable
+from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any
 from typing import cast
@@ -327,16 +328,105 @@ def check_number_of_tokens(
     return len(encode_fn(text))
 
 
+# Substrings that mark a `custom_config` key as containing credential material.
+# Source of truth shared by:
+#   - response masking in `onyx.server.manage.llm.api`
+#   - error-message scrubbing in `scrub_sensitive_values` (below)
+SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS: frozenset[str] = frozenset(
+    {
+        "vertex_credentials",
+        "aws_secret_access_key",
+        "aws_access_key_id",
+        "aws_bearer_token_bedrock",
+        "private_key",
+        "api_key",
+        "secret",
+        "password",
+        "token",
+        "credential",
+    }
+)
+
+
+def is_sensitive_custom_config_key(key: str) -> bool:
+    """True when `key` looks like a credential-bearing custom_config field."""
+    key_lower = key.lower()
+    return any(
+        fragment in key_lower for fragment in SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS
+    )
+
+
+_SCRUB_PLACEHOLDER = "[REDACTED]"
+
+
+def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
+    """Replace every literal secret in `message` with `[REDACTED]`.
+
+    Defense in depth on top of `litellm_exception_to_error_msg` — that helper
+    already maps known LiteLLM exception types to friendly messages and
+    swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
+    `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
+    strips any credential we already know about (typically the values pulled
+    off `llm.config` via `collect_llm_credential_values`) before the message
+    is surfaced to a client.
+
+    Short / empty secrets are ignored so we don't accidentally eat common
+    substrings.
+    """
+    if not message:
+        return message
+
+    scrubbed = message
+    for secret in secrets:
+        if not secret or len(secret) < 4:
+            continue
+        scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
+
+    return scrubbed
+
+
+def collect_llm_credential_values(llm: LLM | None) -> list[str]:
+    """Pull every credential-looking value out of an LLM's config.
+
+    Used to build the `secrets` argument for `scrub_sensitive_values`.
+    """
+    if llm is None:
+        return []
+    config_secrets: list[str] = []
+    if llm.config.api_key:
+        config_secrets.append(llm.config.api_key)
+    custom_config = llm.config.custom_config or {}
+    for key, value in custom_config.items():
+        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
+            config_secrets.append(value)
+    return config_secrets
+
+
 def test_llm(llm: LLM) -> str | None:
+    """Probe an LLM and return either `None` (success) or a sanitized error.
+
+    The returned message is intended to be safe to surface to admin callers:
+    raw upstream exception text is *not* echoed verbatim. Known LiteLLM
+    exception types are mapped to friendly messages via
+    `litellm_exception_to_error_msg`, and the result is then scrubbed of any
+    credential values pulled from `llm.config` plus common header/JSON
+    credential patterns.
+
+    The full raw error is still logged at WARNING for ops debugging.
+    """
+    secrets = collect_llm_credential_values(llm)
+    error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
-    error_msg = None
     for _ in range(2):
         try:
             llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
             return None
         except Exception as e:
-            error_msg = str(e)
-            logger.warning(f"Failed to call LLM with the following error: {error_msg}")
+            logger.warning(f"Failed to call LLM with the following error: {e!s}")
+            safe_msg, _, _ = litellm_exception_to_error_msg(
+                e, llm, fallback_to_error_msg=False
+            )
+            error_msg = scrub_sensitive_values(safe_msg, secrets)
 
     return error_msg
 
