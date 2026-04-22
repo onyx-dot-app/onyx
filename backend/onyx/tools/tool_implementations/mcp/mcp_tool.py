@@ -36,6 +36,18 @@ DENYLISTED_MCP_HEADERS = {
 #     server_name: str
 
 
+def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
+    # Azure OpenAI rejects object schemas that omit `properties` with
+    # "object schema missing properties". MCP servers (e.g. AWS Knowledge MCP's
+    # aws___list_regions) may legally return `{"type": "object"}` with no
+    # properties for zero-arg tools, so seed `properties: {}` ourselves.
+    if not schema:
+        return {"type": "object", "properties": {}}
+    if schema.get("type", "object") == "object" and "properties" not in schema:
+        return {**schema, "type": "object", "properties": {}}
+    return schema
+
+
 class MCPTool(Tool[None]):
     """Tool implementation for MCP (Model Context Protocol) servers"""
 
@@ -97,7 +109,7 @@ class MCPTool(Tool[None]):
             "function": {
                 "name": self._name,
                 "description": self._description,
-                "parameters": self._tool_definition,
+                "parameters": _normalize_parameters_schema(self._tool_definition),
             },
         }
 
