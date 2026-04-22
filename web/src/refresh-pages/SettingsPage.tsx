@@ -855,16 +855,15 @@ function ChatPreferencesSettings() {
             />
           </InputLayouts.Horizontal>
 
-          <InputHorizontal
+          <InputLayouts.Horizontal
             title="Smooth Streaming"
             description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
-            withLabel
           >
             <Switch
               checked={smoothStreamingEnabled}
               onCheckedChange={setSmoothStreamingEnabled}
             />
-          </InputHorizontal>
+          </InputLayouts.Horizontal>
 
           {isPaidEnterpriseFeaturesEnabled && (
             <SimpleTooltip
