@@ -1,13 +1,22 @@
 """End-to-end test for docfetching orphan-file cleanup.
 
-Simulates the full scenario the docfetching cleanup hooks are designed to
-handle:
+Two cleanup seams are covered:
 
-    run 1: a mock connector stages a raw file via raw_file_callback, then
-           crashes hard BEFORE the attempt's `finally` can fire (OOM kill
-           or pod eviction leave that block unrunnable).
-    run 2: the same cc_pair's next attempt starts up, and the start-of-run
-           sweep detects the orphan from run 1 and reaps it.
+    Start-of-run sweep (`reap_prior_attempt_staged_files`):
+        run 1: a mock connector stages a raw file via raw_file_callback,
+               then crashes — docfetching re-raises without reaping,
+               because promotion happens in a separate docprocessing pod
+               and the files may still be in-flight.
+        run 2: the same cc_pair's next attempt starts up, and the
+               start-of-run sweep detects the orphan from run 1 and
+               reaps it.
+
+    Attempt-end cleanup (`cleanup_staged_files_for_attempt`):
+        Exercised directly. Called from `check_indexing_completion` in
+        docprocessing once every batch has been processed — at that point
+        any file still INDEXING_STAGING for the attempt is a real drop
+        (connector emitted no Document, or the Document was filtered as
+        stale by `index_doc_batch_prepare`).
 
 Runs against real Postgres + real file store because the sweep's query
 depends on JSONB metadata filtering and the file_store client is what
@@ -240,16 +249,17 @@ def test_run_one_crashes_after_staging_then_run_two_cleans_up(
     )
 
 
-def test_run_one_exception_path_finally_cleans_up(
+def test_attempt_end_cleanup_wipes_staged_files(
     db_session: Session,
     tenant_and_cc_pair_ids: tuple[str, int],
     file_cleanup: list[str],
 ) -> None:
-    """Softer failure mode: connector raises but the attempt's own
-    `try/finally` gets to run. The finally's cleanup wipes the file.
+    """Attempt-end cleanup path: connector stages and raises, then the
+    attempt-completion hook (in production, `check_indexing_completion`)
+    invokes `cleanup_staged_files_for_attempt` and wipes the orphan.
 
     Distinguishes the attempt-end cleanup from the attempt-start sweep —
-    here we never get to run 2, because the finally handles it.
+    here we never get to run 2, because the completion hook handles it.
     """
     tenant_id, cc_pair_id = tenant_and_cc_pair_ids
 
@@ -266,23 +276,17 @@ def test_run_one_exception_path_finally_cleans_up(
     )
     connector.set_raw_file_callback(callback)
 
-    try:
-        try:
-            for _ in connector.load_from_state():
-                pass
-        finally:
-            cleanup_staged_files_for_attempt(
-                index_attempt_id=attempt_id, db_session=db_session
-            )
-    except RuntimeError:
-        # Expected — the connector's crash propagates through the finally.
-        pass
+    with pytest.raises(RuntimeError, match="simulated connector crash"):
+        for _ in connector.load_from_state():
+            pass
 
     assert connector.staged_file_id is not None
     file_cleanup.append(connector.staged_file_id)
 
-    # The finally wiped the staged file even though the original exception
-    # still propagated up (modeling `run_docfetching_entrypoint`'s shape).
+    # Simulate the completion-path cleanup (what `check_indexing_completion`
+    # calls once every docprocessing batch has finished).
+    cleanup_staged_files_for_attempt(index_attempt_id=attempt_id, db_session=db_session)
+
     assert (
         get_filerecord_by_file_id_optional(
             file_id=connector.staged_file_id, db_session=db_session
@@ -384,9 +388,9 @@ def test_real_factory_path_with_injected_mock_connector(
 ) -> None:
     """Full factory-path exercise: the real `instantiate_connector` resolves
     our mock via `_connector_cache`, wires the `raw_file_callback` via
-    `set_raw_file_callback`, and returns a ready-to-run connector. We then
-    drive it inside the same `try/finally` shape `run_docfetching_entrypoint`
-    uses, and verify the cleanup hook wipes the staged file.
+    `set_raw_file_callback`, and returns a ready-to-run connector. We drive
+    it, let it crash, and then invoke the attempt-end cleanup directly
+    (standing in for `check_indexing_completion`'s completion-path call).
 
     What this proves over the direct-construction tests:
     - Injection into the production factory works — a mock connector can be
@@ -394,7 +398,7 @@ def test_real_factory_path_with_injected_mock_connector(
     - `set_raw_file_callback` is called by the factory at the right point
       (after `load_credentials`), so the staging metadata flows through.
     - The complete path — factory → connector.run → callback → file_store →
-      exception → finally → cleanup — matches what the entrypoint wires up.
+      exception → cleanup — reaps the orphan.
 
     This uses the real factory module but stays below the `run_docfetching_entrypoint`
     seam (no IndexAttempt / SearchSettings / Celery app / DocumentBatchStorage
@@ -450,21 +454,16 @@ def test_real_factory_path_with_injected_mock_connector(
     connector.doc_id = f"doc-{uuid4().hex[:8]}"
     connector.raise_after_first = True
 
-    # Drive the connector inside the same try/finally shape the entrypoint
-    # uses. Exception propagates; cleanup runs regardless.
-    try:
-        try:
-            for _ in connector.load_from_state():
-                pass
-        finally:
-            cleanup_staged_files_for_attempt(
-                index_attempt_id=attempt_id, db_session=db_session
-            )
-    except RuntimeError:
-        pass
+    # Drive the connector, let it crash, then run the completion-path
+    # cleanup directly.
+    with pytest.raises(RuntimeError, match="simulated connector crash"):
+        for _ in connector.load_from_state():
+            pass
 
     assert connector.staged_file_id is not None
     file_cleanup.append(connector.staged_file_id)
+
+    cleanup_staged_files_for_attempt(index_attempt_id=attempt_id, db_session=db_session)
 
     # Attempt-end cleanup wiped the staged file, even though the connector
     # raised after the callback fired.
@@ -480,7 +479,7 @@ def test_real_factory_path_with_injected_mock_connector(
     db_session.commit()
 
 
-def test_run_docfetching_entrypoint_cleans_up_on_connector_crash(
+def test_run_docfetching_entrypoint_leaves_crash_orphans_for_next_sweep(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     initialize_file_store: None,  # noqa: ARG001
@@ -496,15 +495,15 @@ def test_run_docfetching_entrypoint_cleans_up_on_connector_crash(
       batch completes so this is never actually exercised.
 
     Everything else is production code: `transition_attempt_to_in_progress`,
-    the real factory, the real ConnectorRunner, the real file_store,
-    `connector_document_extraction`'s DocumentBatchStorage setup, and
-    crucially `run_docfetching_entrypoint`'s own `try/finally` block — the
-    code under test.
+    the real factory, the real ConnectorRunner, the real file_store, and
+    `connector_document_extraction`'s DocumentBatchStorage setup.
 
     The mock stages a file via the real raw_file_callback, then raises.
-    We expect the exception to propagate out of the entrypoint (per its
-    "Don't swallow exceptions here" contract), and for the staged file
-    to be gone afterward because the `finally` ran the cleanup.
+    The entrypoint deliberately does NOT reap on crash — attempt-end
+    cleanup lives in docprocessing's `check_indexing_completion`, not
+    here, because docprocessing runs in a separate pod and may still be
+    promoting files. Instead, the orphan survives and is picked up by
+    the next attempt's start-of-run sweep.
     """
     # Subclass of the mock connector so we can (a) preset the crash config
     # at construction time — the factory calls `connector_class(**{})`, so
@@ -581,14 +580,33 @@ def test_run_docfetching_entrypoint_cleans_up_on_connector_crash(
             "raw_file_callback wiring likely broken."
         )
 
-        # `run_docfetching_entrypoint`'s own `finally` ran
-        # `cleanup_staged_files_for_attempt` — the staged file should be gone.
+        # Entrypoint no longer reaps on crash — the file must still exist.
+        # Any cleanup now happens via the completion path in docprocessing
+        # or the next attempt's start-of-run sweep.
+        record = get_filerecord_by_file_id_optional(
+            file_id=staged_file_id, db_session=db_session
+        )
+        assert record is not None, (
+            "Staged file was unexpectedly reaped by the entrypoint; "
+            "attempt-end cleanup should live in check_indexing_completion."
+        )
+        assert record.file_origin == FileOrigin.INDEXING_STAGING
+
+        # Now simulate the next attempt starting up — the start-of-run
+        # sweep should reap the orphan from the crashed attempt.
+        reaped = reap_prior_attempt_staged_files(
+            current_attempt_id=attempt_id + 1,
+            cc_pair_id=cc_pair.id,
+            tenant_id=TEST_TENANT_ID,
+            db_session=db_session,
+        )
+        assert reaped == 1
         assert (
             get_filerecord_by_file_id_optional(
                 file_id=staged_file_id, db_session=db_session
             )
             is None
-        ), "Staged file should have been reaped by the entrypoint's finally block"
+        )
 
     finally:
         # Clean up seeded rows in FK-safe order: attempt → settings → cc_pair.
