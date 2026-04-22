@@ -278,27 +278,45 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     )
 
                 # 3.c. Index the OpenSearch chunks into OpenSearch.
+                # Wrapped in its own try/except so that a bulk failure (e.g. an
+                # oversized Lucene term that slipped past transformer-level
+                # truncation, or a transient OpenSearch error) does not prevent
+                # the continuation token from being advanced.  Without this
+                # guard the exception would escape to the outer except and the
+                # task would retry the same page forever.
                 index_opensearch_chunks_start_time = time.monotonic()
-                opensearch_document_index.index_raw_chunks(
-                    chunks=opensearch_document_chunks
-                )
-                task_logger.debug(
-                    f"Indexed {len(opensearch_document_chunks)} chunks into OpenSearch in "
-                    f"{time.monotonic() - index_opensearch_chunks_start_time:.3f} seconds."
-                )
+                index_errored_count = 0
+                try:
+                    opensearch_document_index.index_raw_chunks(
+                        chunks=opensearch_document_chunks
+                    )
+                    task_logger.debug(
+                        f"Indexed {len(opensearch_document_chunks)} chunks into OpenSearch in "
+                        f"{time.monotonic() - index_opensearch_chunks_start_time:.3f} seconds."
+                    )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to bulk-index {len(opensearch_document_chunks)} chunks into "
+                        "OpenSearch for this page. Skipping page and advancing the continuation "
+                        "token to prevent a permanent migration stall."
+                    )
+                    index_errored_count = len(opensearch_document_chunks)
 
-                total_chunks_migrated_this_task += len(opensearch_document_chunks)
-                total_chunks_errored_this_task += len(errored_chunks)
+                total_chunks_migrated_this_task += (
+                    len(opensearch_document_chunks) - index_errored_count
+                )
+                total_chunks_errored_this_task += len(errored_chunks) + index_errored_count
 
                 # Do as much as we can with a DB session in one spot to not hold a
                 # session during a migration batch.
                 with get_session_with_current_tenant() as db_session:
-                    # 3.d. Update the migration state.
+                    # 3.d. Always advance the continuation token — even when
+                    # indexing failed entirely — so the migration never stalls.
                     update_vespa_visit_progress_with_commit(
                         db_session,
                         continuation_token_map=next_continuation_token_map,
-                        chunks_processed=len(opensearch_document_chunks),
-                        chunks_errored=len(errored_chunks),
+                        chunks_processed=len(opensearch_document_chunks) - index_errored_count,
+                        chunks_errored=len(errored_chunks) + index_errored_count,
                         approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
                     )
 
