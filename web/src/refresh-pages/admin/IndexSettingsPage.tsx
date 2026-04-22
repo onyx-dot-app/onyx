@@ -259,6 +259,18 @@ function ProviderCredentialsModal({
             {isProxy && (
               <>
                 <InputVertical
+                  title="API Key"
+                  subDescription={markdown(
+                    `Paste your [API key](${provider.apiLink}) from ${providerName} to access your models.`
+                  )}
+                >
+                  <PasswordInputTypeIn
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                  />
+                </InputVertical>
+
+                <InputVertical
                   title="Model Name"
                   subDescription={`Onyx will connect to this model on your ${providerName} proxy.`}
                 >
@@ -315,7 +327,7 @@ function ProviderCredentialsModal({
               </>
             )}
 
-            {isGoogle ? (
+            {isProxy ? null : isGoogle ? (
               <InputVertical title="Upload JSON credentials file">
                 <input
                   ref={fileInputRef}
