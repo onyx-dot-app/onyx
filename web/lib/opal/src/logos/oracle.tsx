@@ -3,10 +3,6 @@ const SvgOracle = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    style={{
-      display: "block",
-    }}
-    className="u30-oicn"
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 32 21"
     {...props}

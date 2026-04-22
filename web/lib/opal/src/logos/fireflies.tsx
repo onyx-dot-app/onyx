@@ -145,10 +145,10 @@ const SvgFireflies = ({ size, ...props }: IconProps) => (
       </linearGradient>
       <linearGradient
         id="paint7_linear_2168_60622"
-        x1={-971.672}
-        y1={970.265}
-        x2={-964.021}
-        y2={1030.69}
+        x1={-7.944}
+        y1={-23.442}
+        x2={70.386}
+        y2={72.486}
         gradientUnits="userSpaceOnUse"
       >
         <stop stopColor="#E82A73" stopOpacity={0.18} />
