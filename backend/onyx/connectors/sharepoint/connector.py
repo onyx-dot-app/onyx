@@ -603,8 +603,7 @@ def _convert_driveitem_to_document_with_permissions(
             )
 
     sections: list[TextSection | ImageSection | TabularSection] = []
-    # Only tabular files carry a `file_id` on the Document — the code-
-    # interpreter staging path needs the original bytes for pandas/analysis.
+    # Only tabular files carry a `file_id` on the Document
     staged_file_id: str | None = None
     file_ext = get_file_ext(driveitem.name)
 
