@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ElevenLabsIcon } from "@/components/icons/icons";
-import { SvgAzure, SvgOpenai } from "@opal/logos";
+import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -110,10 +109,6 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
   },
 ];
 
-const FallbackMicrophoneIcon = ({ size, className }: IconProps) => (
-  <SvgMicrophone size={size} className={className} />
-);
-
 function getProviderIcon(
   providerType: string
 ): React.FunctionComponent<IconProps> {
@@ -123,9 +118,9 @@ function getProviderIcon(
     case "azure":
       return SvgAzure;
     case "elevenlabs":
-      return ElevenLabsIcon;
+      return SvgElevenLabs;
     default:
-      return FallbackMicrophoneIcon;
+      return SvgMicrophone;
   }
 }
 
