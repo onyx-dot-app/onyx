@@ -1,5 +1,5 @@
 import { JSX } from "react";
-import { OpenAIISVG, OpenSourceIcon } from "@/components/icons/icons";
+import { OpenSourceIcon } from "@/components/icons/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -7,6 +7,7 @@ import {
   SvgLitellm,
   SvgMicrosoft,
   SvgNomic,
+  SvgOpenai,
   SvgVoyage,
 } from "@opal/logos";
 import type { IconProps } from "@opal/types";
@@ -219,7 +220,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
     provider_type: EmbeddingProvider.OPENAI,
     website: "https://openai.com",
-    icon: OpenAIISVG,
+    icon: SvgOpenai,
     description: "AI industry leader known for ChatGPT and DALL-E",
     apiLink: "https://platform.openai.com/api-keys",
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
