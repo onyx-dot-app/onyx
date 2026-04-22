@@ -154,6 +154,7 @@ def mt_cloud_telemetry(
     distinct_id: str,
     event: MilestoneRecordType,
     properties: dict[str, Any] | None = None,
+    client_ip: str | None = None,
 ) -> None:
     if not MULTI_TENANT:
         return
@@ -173,12 +174,13 @@ def mt_cloud_telemetry(
         module="onyx.utils.telemetry",
         attribute="event_telemetry",
         fallback=noop_fallback,
-    )(distinct_id, event, all_properties)
+    )(distinct_id, event, all_properties, client_ip)
 
 
 def mt_cloud_identify(
     distinct_id: str,
     properties: dict[str, Any] | None = None,
+    client_ip: str | None = None,
 ) -> None:
     """Create/update a PostHog person profile (Cloud only)."""
     if not MULTI_TENANT:
@@ -188,7 +190,7 @@ def mt_cloud_identify(
         module="onyx.utils.telemetry",
         attribute="identify_user",
         fallback=noop_fallback,
-    )(distinct_id, properties)
+    )(distinct_id, properties, client_ip)
 
 
 def mt_cloud_alias(

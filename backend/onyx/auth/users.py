@@ -139,6 +139,7 @@ from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_alias
 from onyx.utils.telemetry import mt_cloud_get_anon_id
@@ -855,6 +856,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.exception("Error deleting anonymous user cookie")
 
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        client_ip = get_client_ip(request) if request else None
 
         # Link the anonymous PostHog session to the identified user so that
         # pre-login session recordings and events merge into one person profile.
@@ -864,6 +866,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         mt_cloud_identify(
             distinct_id=str(user.id),
             properties={"email": user.email, "tenant_id": tenant_id},
+            client_ip=client_ip,
         )
 
     async def on_after_register(
@@ -879,6 +882,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
         user_count = None
+        client_ip = get_client_ip(request) if request else None
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -893,12 +897,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             mt_cloud_identify(
                 distinct_id=str(user.id),
                 properties={"email": user.email, "tenant_id": tenant_id},
+                client_ip=client_ip,
             )
 
             mt_cloud_telemetry(
                 tenant_id=tenant_id,
                 distinct_id=str(user.id),
                 event=MilestoneRecordType.USER_SIGNED_UP,
+                client_ip=client_ip,
             )
 
             if user_count == 1:
@@ -906,6 +912,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     tenant_id=tenant_id,
                     distinct_id=str(user.id),
                     event=MilestoneRecordType.TENANT_CREATED,
+                    client_ip=client_ip,
                 )
 
             # Assign user to the appropriate default group (Admin or Basic).
