@@ -331,9 +331,7 @@ function ProviderCredentialsModal({
               </InputVertical>
             ) : (
               <InputVertical
-                title={`API Key${
-                  isProxy ? " (for non-local deployments)" : ""
-                }`}
+                title="API Key"
                 subDescription={markdown(
                   `Paste your [API key](${provider.apiLink}) from ${providerName} to access your models.`
                 )}
