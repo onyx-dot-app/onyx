@@ -7,6 +7,7 @@ interface QueuedMessageBarProps {
   highlightedIndex: number | null;
   awaitingPreferredSelection: boolean;
   onDiscard: (index: number) => void;
+  onHighlight: (index: number | null) => void;
 }
 
 function QueuedMessageBar({
@@ -14,6 +15,7 @@ function QueuedMessageBar({
   highlightedIndex,
   awaitingPreferredSelection,
   onDiscard,
+  onHighlight,
 }: QueuedMessageBarProps) {
   const isEmpty = messages.length === 0;
 
@@ -36,9 +38,10 @@ function QueuedMessageBar({
                 key={index}
                 data-testid="queued-message-bar"
                 className={cn(
-                  "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2",
+                  "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2 cursor-pointer",
                   isHighlighted ? "border-border-03" : "border-border-01"
                 )}
+                onClick={() => onHighlight(isHighlighted ? null : index)}
               >
                 <div className="flex-1 min-w-0">
                   <Text font="secondary-body" color="text-03" maxLines={1}>
@@ -63,7 +66,10 @@ function QueuedMessageBar({
                   icon={SvgTrash}
                   prominence="tertiary"
                   size="xs"
-                  onClick={() => onDiscard(index)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDiscard(index);
+                  }}
                 />
               </div>
             );

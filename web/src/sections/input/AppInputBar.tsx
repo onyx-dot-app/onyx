@@ -737,6 +737,7 @@ const AppInputBar = React.memo(
           highlightedIndex={highlightedQueueIndex}
           awaitingPreferredSelection={awaitingPreferredSelection}
           onDiscard={removeCurrentQueuedMessage}
+          onHighlight={setHighlightedQueueIndex}
         />
         <Disabled disabled={disabled} allowClick>
           <div
