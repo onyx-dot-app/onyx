@@ -21,6 +21,15 @@ type ContentActionProps = ContentProps & {
    * @see {@link ContainerSizeVariants} for the full list of presets.
    */
   padding?: ContainerSizeVariants;
+
+  /**
+   * When true, vertically centers the Content and rightChildren.
+   * When false (default), Content is top-aligned and rightChildren
+   * stretches to full height.
+   *
+   * @default false
+   */
+  centered?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -55,17 +64,36 @@ type ContentActionProps = ContentProps & {
 function ContentAction({
   rightChildren,
   padding = "lg",
+  centered = false,
   ...contentProps
 }: ContentActionProps) {
   const { padding: paddingClass } = containerSizeVariants[padding];
 
   return (
-    <div className="flex flex-row items-stretch w-full">
-      <div className={cn("flex-1 min-w-0 self-start", paddingClass)}>
+    <div
+      className={cn(
+        "flex flex-row w-full",
+        centered ? "items-center" : "items-stretch"
+      )}
+    >
+      <div
+        className={cn(
+          "flex-1 min-w-0",
+          centered ? "self-center" : "self-start",
+          paddingClass
+        )}
+      >
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div className="flex items-stretch shrink-0">{rightChildren}</div>
+        <div
+          className={cn(
+            "flex shrink-0",
+            centered ? "items-center" : "items-stretch"
+          )}
+        >
+          {rightChildren}
+        </div>
       )}
     </div>
   );
