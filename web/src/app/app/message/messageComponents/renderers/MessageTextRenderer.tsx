@@ -28,6 +28,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { cn, transformLinkUri } from "@/lib/utils";
+import { NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING } from "@/lib/constants";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -247,7 +248,8 @@ export const MessageTextRenderer: MessageRenderer<
   const isStreamingAnimationEnabled =
     animate &&
     !shouldUseAutoPlaybackSync &&
-    stopReason !== StopReason.USER_CANCELLED;
+    stopReason !== StopReason.USER_CANCELLED &&
+    !NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING;
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 

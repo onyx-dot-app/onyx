@@ -81,6 +81,11 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
+// When true, disables the per-character typewriter reveal and renders
+// streamed chat content as chunks arrive.
+export const NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING =
+  process.env.NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING?.toLowerCase() === "true";
+
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
