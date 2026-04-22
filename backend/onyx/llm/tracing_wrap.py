@@ -23,8 +23,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
+    from onyx.llm.model_response import ChatCompletionDeltaToolCall
     from onyx.llm.model_response import ModelResponse
     from onyx.llm.model_response import ModelResponseStream
+    from onyx.llm.models import ToolCall
 
 
 _ALREADY_WRAPPED_ATTR = "_onyx_tracing_wrapped"
@@ -162,11 +164,12 @@ def wrap_stream(
 ) -> Callable[..., Iterator["ModelResponseStream"]]:
     """Wrap a concrete ``LLM.stream`` implementation with a fallback generation_span.
 
-    Accumulates content + final usage across yielded chunks and records them on
-    the span when the stream is fully consumed. Tool-call deltas are
-    intentionally NOT accumulated — streaming deltas are partial fragments
-    keyed on ``index`` that need ``litellm.stream_chunk_builder``-style
-    reassembly before being safe to log.
+    Accumulates content, final usage, and tool-call deltas across yielded
+    chunks and records them on the span when the stream is fully consumed.
+    Tool-call deltas arrive as partial fragments keyed on ``index`` — this
+    wrap reassembles them via ``_merge_tool_call_delta`` before logging so
+    Braintrust shows one complete tool-call entry per invocation rather than
+    fragmented duplicates.
     """
     if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):
         return stream_fn
@@ -191,6 +194,7 @@ def wrap_stream(
         ) as span:
             accumulated_content: list[str] = []
             final_usage: Usage | None = None
+            tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
 
             try:
                 for chunk in stream_fn(self, *args, **kwargs):
@@ -198,6 +202,9 @@ def wrap_stream(
                         final_usage = chunk.usage
                     if span is not None and chunk.choice.delta.content:
                         accumulated_content.append(chunk.choice.delta.content)
+                    if span is not None and chunk.choice.delta.tool_calls:
+                        for delta_tc in chunk.choice.delta.tool_calls:
+                            _merge_tool_call_delta(tool_call_buffer, delta_tc)
                     yield chunk
             except Exception as exc:
                 if span is not None:
@@ -217,8 +224,99 @@ def wrap_stream(
                     span,
                     output="".join(accumulated_content) or None,
                     usage=final_usage,
-                    tool_calls=None,
+                    tool_calls=_finalize_tool_calls(tool_call_buffer),
                 )
 
     setattr(wrapper, _ALREADY_WRAPPED_ATTR, True)
     return wrapper
+
+
+def _merge_tool_call_delta(
+    buffer: dict[int, "ChatCompletionDeltaToolCall"],
+    delta: "ChatCompletionDeltaToolCall",
+) -> None:
+    """Merge a single streaming tool-call delta into the per-``index`` buffer.
+
+    Streaming tool calls from LiteLLM arrive as partial fragments:
+    - Early chunks for a given ``index`` usually carry ``id`` and
+      ``function.name`` (and possibly the first slice of ``function.arguments``).
+    - Subsequent chunks for the same ``index`` carry additional
+      ``function.arguments`` fragments with ``id`` / ``name`` set to ``None``.
+
+    This helper merges them in place: it preserves the first seen ``id`` and
+    ``function.name`` and concatenates ``function.arguments`` fragments. The
+    result is a dict of complete ``ChatCompletionDeltaToolCall`` objects
+    keyed by ``index`` that can be converted to fully-formed ``ToolCall``
+    objects via :func:`_finalize_tool_calls`.
+    """
+    from onyx.llm.model_response import ChatCompletionDeltaToolCall
+    from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
+
+    existing = buffer.get(delta.index)
+    if existing is None:
+        # Copy into a fresh pydantic model so later mutations don't leak back
+        # into the caller's chunk object.
+        delta_fn = delta.function
+        buffer[delta.index] = ChatCompletionDeltaToolCall(
+            id=delta.id,
+            index=delta.index,
+            type=delta.type,
+            function=(
+                DeltaFunctionCall(
+                    name=delta_fn.name if delta_fn else None,
+                    arguments=delta_fn.arguments if delta_fn else None,
+                )
+                if delta_fn is not None
+                else None
+            ),
+        )
+        return
+
+    if delta.id and not existing.id:
+        existing.id = delta.id
+    if delta.function is not None:
+        if existing.function is None:
+            existing.function = DeltaFunctionCall(
+                name=delta.function.name,
+                arguments=delta.function.arguments,
+            )
+        else:
+            if delta.function.name and not existing.function.name:
+                existing.function.name = delta.function.name
+            if delta.function.arguments:
+                existing.function.arguments = (
+                    existing.function.arguments or ""
+                ) + delta.function.arguments
+
+
+def _finalize_tool_calls(
+    buffer: dict[int, "ChatCompletionDeltaToolCall"],
+) -> list["ToolCall"] | None:
+    """Convert a reassembled delta buffer into a list of complete ``ToolCall``.
+
+    Entries missing a required field (``id`` or ``function.name``) are skipped
+    — these would indicate a truncated / malformed stream, and it's safer to
+    log nothing for that index than to fabricate a partial record.
+    """
+    if not buffer:
+        return None
+
+    from onyx.llm.models import FunctionCall as ModelFunctionCall
+    from onyx.llm.models import ToolCall
+
+    finalized: list[ToolCall] = []
+    for idx in sorted(buffer.keys()):
+        delta = buffer[idx]
+        if delta.id is None or delta.function is None or delta.function.name is None:
+            continue
+        finalized.append(
+            ToolCall(
+                id=delta.id,
+                type="function",
+                function=ModelFunctionCall(
+                    name=delta.function.name,
+                    arguments=delta.function.arguments or "",
+                ),
+            )
+        )
+    return finalized or None
