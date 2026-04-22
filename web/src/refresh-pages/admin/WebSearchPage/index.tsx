@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
-import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -25,7 +24,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Button, SelectCard } from "@opal/components";
+import { Button, MessageCard, SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
@@ -999,31 +998,14 @@ export default function WebSearchPage() {
             )}
 
             {!hasActiveSearchProvider && (
-              <div
-                className="flex items-start rounded-16 border p-1"
-                style={{
-                  backgroundColor: "var(--status-info-00)",
-                  borderColor: "var(--status-info-02)",
-                }}
-              >
-                <div className="flex items-start gap-1 p-2">
-                  <div
-                    className="flex size-5 items-center justify-center rounded-full p-0.5"
-                    style={{
-                      backgroundColor: "var(--status-info-01)",
-                    }}
-                  >
-                    <div style={{ color: "var(--status-text-info-05)" }}>
-                      <InfoIcon size={16} />
-                    </div>
-                  </div>
-                  <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
-                    {hasConfiguredSearchProvider
-                      ? "Select a search engine to enable web search."
-                      : "Connect a search engine to set up web search."}
-                  </Text>
-                </div>
-              </div>
+              <MessageCard
+                variant="info"
+                title={
+                  hasConfiguredSearchProvider
+                    ? "Select a search engine to enable web search."
+                    : "Connect a search engine to set up web search."
+                }
+              />
             )}
 
             <div className="flex flex-col gap-2">
