@@ -15,7 +15,7 @@ from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocument
 from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
-from onyx.db.document import delete_documents_complete__no_commit
+from onyx.db.document import delete_documents_complete
 from onyx.db.document import fetch_chunk_count_for_document
 from onyx.db.document import get_document
 from onyx.db.document import get_document_connector_count
@@ -129,11 +129,10 @@ def document_by_cc_pair_cleanup_task(
                     document_id=document_id,
                 )
 
-                delete_documents_complete__no_commit(
+                delete_documents_complete(
                     db_session=db_session,
                     document_ids=[document_id],
                 )
-                db_session.commit()
 
                 completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
             elif count > 1:

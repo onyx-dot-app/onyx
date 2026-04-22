@@ -6,7 +6,7 @@ import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content, Card } from "@opal/layouts";
+import { Content, ContentAction, Card } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
@@ -277,50 +277,6 @@ function ProviderCard({
         }
       >
         <Card.Header
-          headerPadding="sm"
-          headerChildren={
-            <Content
-              sizePreset="main-ui"
-              variant="section"
-              icon={icon}
-              title={title}
-              description={description}
-            />
-          }
-          topRightChildren={
-            isDisconnected && onConnect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowExchange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConnect();
-                }}
-              >
-                Connect
-              </Button>
-            ) : isConnected && onSelect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowRightCircle}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect();
-                }}
-              >
-                Set as Default
-              </Button>
-            ) : isSelected ? (
-              <div className="p-2">
-                <Content
-                  title={selectedLabel}
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgCheckSquare}
-                />
-              </div>
-            ) : undefined
-          }
           bottomRightChildren={
             !isDisconnected ? (
               <div className="flex flex-row px-1 pb-1">
@@ -355,7 +311,50 @@ function ProviderCard({
               </div>
             ) : undefined
           }
-        />
+        >
+          <ContentAction
+            sizePreset="main-ui"
+            variant="section"
+            icon={icon}
+            title={title}
+            description={description}
+            padding="lg"
+            rightChildren={
+              isDisconnected && onConnect ? (
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowExchange}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConnect();
+                  }}
+                >
+                  Connect
+                </Button>
+              ) : isConnected && onSelect ? (
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect();
+                  }}
+                >
+                  Set as Default
+                </Button>
+              ) : isSelected ? (
+                <div className="p-2">
+                  <Content
+                    title={selectedLabel}
+                    sizePreset="main-ui"
+                    variant="section"
+                    icon={SvgCheckSquare}
+                  />
+                </div>
+              ) : undefined
+            }
+          />
+        </Card.Header>
       </SelectCard>
     </Hoverable.Root>
   );

@@ -775,7 +775,7 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     == "true"
 )
 
-DEFAULT_PRUNING_FREQ = 60 * 60 * 24  # Once a day
+DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 25  # 25 days
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
@@ -1155,11 +1155,14 @@ INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() ==
 # Enable captcha verification for new user registration
 CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "").lower() == "true"
 
-# Google reCAPTCHA secret key (server-side validation)
-RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
-
-# Minimum score threshold for reCAPTCHA v3 (0.0-1.0, higher = more likely human)
-# 0.5 is the recommended default
+RECAPTCHA_ENTERPRISE_PROJECT_ID = os.environ.get("RECAPTCHA_ENTERPRISE_PROJECT_ID", "")
+RECAPTCHA_ENTERPRISE_API_KEY = os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
+RECAPTCHA_SITE_KEY = os.environ.get("RECAPTCHA_SITE_KEY", "")
+RECAPTCHA_HOSTNAME_ALLOWLIST = frozenset(
+    h.strip()
+    for h in os.environ.get("RECAPTCHA_HOSTNAME_ALLOWLIST", "").split(",")
+    if h.strip()
+)
 RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
 
 # Opt-in per-IP rate limit on /auth/register.

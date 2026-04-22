@@ -120,17 +120,14 @@ function MCPServerCard({
           <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
               <Card key={tool.id} border="solid" rounding="md" padding="sm">
-                <CardLayout.Header
-                  headerChildren={
-                    <Content
-                      icon={tool.icon}
-                      title={tool.name}
-                      description={tool.description}
-                      sizePreset="main-ui"
-                      variant="section"
-                    />
-                  }
-                  topRightChildren={
+                <ContentAction
+                  icon={tool.icon}
+                  title={tool.name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                  padding="fit"
+                  rightChildren={
                     <Tooltip tooltip={authTooltip} side="top">
                       <Switch
                         checked={isToolEnabled(tool.id)}
@@ -149,28 +146,6 @@ function MCPServerCard({
       }
     >
       <CardLayout.Header
-        headerPadding="sm"
-        headerChildren={
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <Tooltip tooltip={authTooltip} side="top">
-                <Switch
-                  checked={serverEnabled}
-                  onCheckedChange={(checked) =>
-                    onToggleTools(allToolIds, checked)
-                  }
-                  disabled={needsAuth}
-                />
-              </Tooltip>
-            }
-          />
-        }
         bottomChildren={
           tools.length > 0 ? (
             <Section flexDirection="row" gap={0.5}>
@@ -192,7 +167,29 @@ function MCPServerCard({
             </Section>
           ) : undefined
         }
-      />
+      >
+        <div className="p-2">
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <Tooltip tooltip={authTooltip} side="top">
+                <Switch
+                  checked={serverEnabled}
+                  onCheckedChange={(checked) =>
+                    onToggleTools(allToolIds, checked)
+                  }
+                  disabled={needsAuth}
+                />
+              </Tooltip>
+            }
+          />
+        </div>
+      </CardLayout.Header>
     </Card>
   );
 }
@@ -894,17 +891,14 @@ export default function ChatPreferencesPage() {
                           rounding="lg"
                           padding="md"
                         >
-                          <CardLayout.Header
-                            headerChildren={
-                              <Content
-                                icon={SvgActions}
-                                title={tool.display_name || tool.name}
-                                description={tool.description}
-                                sizePreset="main-ui"
-                                variant="section"
-                              />
-                            }
-                            topRightChildren={
+                          <ContentAction
+                            icon={SvgActions}
+                            title={tool.display_name || tool.name}
+                            description={tool.description}
+                            sizePreset="main-ui"
+                            variant="section"
+                            padding="fit"
+                            rightChildren={
                               <Switch
                                 checked={isToolEnabled(tool.id)}
                                 onCheckedChange={(checked) =>

@@ -6,11 +6,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  Content,
-  Card as CardLayout,
-  IllustrationContent,
-} from "@opal/layouts";
+import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -698,24 +694,21 @@ function EmbeddingModelCard({
       padding="xs"
       onClick={isClickable ? onSelect : undefined}
     >
-      <CardLayout.Header
-        headerChildren={
-          <div className="flex flex-col">
-            <Content
-              icon={providerIcon}
-              title={model.model_name}
-              description={model.description}
-              sizePreset="main-ui"
-              variant="section"
-            />
-            <div className="flex flex-row px-6 pt-2 gap-4">
-              <EmbeddingProviderInfo providerType={model.provider_type} />
-            </div>
+      <div className="flex flex-row items-start w-full p-2">
+        <div className="flex flex-col flex-1 min-w-0">
+          <Content
+            icon={providerIcon}
+            title={model.model_name}
+            description={model.description}
+            sizePreset="main-ui"
+            variant="section"
+          />
+          <div className="flex flex-row px-6 pt-2 gap-4">
+            <EmbeddingProviderInfo providerType={model.provider_type} />
           </div>
-        }
-        headerPadding="sm"
-        topRightChildren={topRightButton}
-      />
+        </div>
+        {topRightButton && <div className="shrink-0">{topRightButton}</div>}
+      </div>
     </SelectCard>
   );
 }
@@ -779,29 +772,26 @@ function SelfHostedModelCard({
           : undefined
       }
     >
-      <CardLayout.Header
-        headerChildren={
-          <div className="flex flex-col">
-            <Content
-              icon={SvgServer}
-              title={model.model_name}
-              description={model.description}
-              sizePreset="main-ui"
-              variant="section"
-            />
-            <div className="flex flex-row px-6 pt-2 gap-4">
-              <EmbeddingProviderInfo providerType={null} />
-              {model.link && (
-                <LinkButton href={model.link} target="_blank">
-                  Docs
-                </LinkButton>
-              )}
-            </div>
+      <div className="flex flex-row items-start w-full p-2">
+        <div className="flex flex-col flex-1 min-w-0">
+          <Content
+            icon={SvgServer}
+            title={model.model_name}
+            description={model.description}
+            sizePreset="main-ui"
+            variant="section"
+          />
+          <div className="flex flex-row px-6 pt-2 gap-4">
+            <EmbeddingProviderInfo providerType={null} />
+            {model.link && (
+              <LinkButton href={model.link} target="_blank">
+                Docs
+              </LinkButton>
+            )}
           </div>
-        }
-        headerPadding="sm"
-        topRightChildren={topRightButton}
-      />
+        </div>
+        {topRightButton && <div className="shrink-0">{topRightButton}</div>}
+      </div>
     </SelectCard>
   );
 }
@@ -1267,117 +1257,108 @@ export default function IndexSettingsPage() {
                     </>
                   }
                 >
-                  <CardLayout.Header
-                    headerChildren={
-                      viewAllModelsOpen ? (
-                        <div className="pt-1 px-1">
-                          <div className="pt-2 px-2 flex flex-row items-center justify-between">
-                            <InputTypeIn
-                              placeholder="Search models..."
-                              variant="internal"
-                              leftSearchIcon
-                              value={modelSearchQuery}
-                              onChange={(e) =>
-                                setModelSearchQuery(e.target.value)
-                              }
+                  {viewAllModelsOpen ? (
+                    <div className="pt-1 px-1">
+                      <div className="pt-2 px-2 flex flex-row items-center justify-between">
+                        <InputTypeIn
+                          placeholder="Search models..."
+                          variant="internal"
+                          leftSearchIcon
+                          value={modelSearchQuery}
+                          onChange={(e) => setModelSearchQuery(e.target.value)}
+                        />
+                        <div className="flex flex-row">
+                          {selectedModelName && (
+                            <Button
+                              icon={SvgRevert}
+                              prominence="internal"
+                              onClick={() => {
+                                setSelectedModelName(null);
+                                setSwitchoverType(SWITCHOVER_NONE);
+                              }}
                             />
-                            <div className="flex flex-row">
-                              {selectedModelName && (
-                                <Button
-                                  icon={SvgRevert}
-                                  prominence="internal"
-                                  onClick={() => {
-                                    setSelectedModelName(null);
-                                    setSwitchoverType(SWITCHOVER_NONE);
-                                  }}
-                                />
-                              )}
-                              <Button
-                                prominence="internal"
-                                onClick={() => setViewAllModelsOpen(false)}
-                                rightIcon={SvgFold}
-                              >
-                                Fold Models
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="px-2">
-                            <Tabs.List variant="underline">
-                              <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                Cloud-based
-                              </Tabs.Trigger>
-                              <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                Self-hosted
-                              </Tabs.Trigger>
-                            </Tabs.List>
-                          </div>
-                        </div>
-                      ) : (
-                        <GeneralLayouts.Section alignItems="start" gap={0}>
-                          <Content
-                            icon={
-                              getEmbeddingProvider(
-                                currentEmbeddingModel.provider_type
-                              ).icon
-                            }
-                            title={currentEmbeddingModel.model_name}
-                            description={
-                              getCurrentModelCopy(
-                                currentEmbeddingModel.model_name
-                              )?.description
-                            }
-                            sizePreset="main-ui"
-                            variant="section"
-                          />
-                          <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                            <EmbeddingProviderInfo
-                              providerType={currentEmbeddingModel.provider_type}
-                            />
-                          </div>
-                        </GeneralLayouts.Section>
-                      )
-                    }
-                    headerPadding={viewAllModelsOpen ? undefined : "sm"}
-                    topRightChildren={
-                      viewAllModelsOpen ? undefined : (
-                        <div className="flex flex-col items-end justify-between p-2 gap-1">
-                          <Button
-                            prominence="secondary"
-                            onClick={() => {
-                              const isSelectedSelfHosted =
-                                selectedModelName &&
-                                SELF_HOSTED_MODELS.some(
-                                  (m) => m.model_name === selectedModelName
-                                );
-                              setActiveModelTab(
-                                isSelectedSelfHosted
-                                  ? MODEL_TAB_SELF
-                                  : selectedModelName
-                                    ? MODEL_TAB_CLOUD
-                                    : currentEmbeddingModel?.provider_type
-                                      ? MODEL_TAB_CLOUD
-                                      : MODEL_TAB_SELF
-                              );
-                              setViewAllModelsOpen(true);
-                            }}
-                          >
-                            View All Models
-                          </Button>
-                          {currentCloudProvider && (
-                            <div className="p-1">
-                              <Button
-                                icon={SvgSettings}
-                                prominence="tertiary"
-                                size="md"
-                                onClick={() => collapsedEditModal.toggle(true)}
-                              />
-                            </div>
                           )}
+                          <Button
+                            prominence="internal"
+                            onClick={() => setViewAllModelsOpen(false)}
+                            rightIcon={SvgFold}
+                          >
+                            Fold Models
+                          </Button>
                         </div>
-                      )
-                    }
-                  />
+                      </div>
+
+                      <div className="px-2">
+                        <Tabs.List variant="underline">
+                          <Tabs.Trigger value={MODEL_TAB_CLOUD}>
+                            Cloud-based
+                          </Tabs.Trigger>
+                          <Tabs.Trigger value={MODEL_TAB_SELF}>
+                            Self-hosted
+                          </Tabs.Trigger>
+                        </Tabs.List>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-row items-start w-full p-2">
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <Content
+                          icon={
+                            getEmbeddingProvider(
+                              currentEmbeddingModel.provider_type
+                            ).icon
+                          }
+                          title={currentEmbeddingModel.model_name}
+                          description={
+                            getCurrentModelCopy(
+                              currentEmbeddingModel.model_name
+                            )?.description
+                          }
+                          sizePreset="main-ui"
+                          variant="section"
+                        />
+                        <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                          <EmbeddingProviderInfo
+                            providerType={currentEmbeddingModel.provider_type}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end shrink-0 gap-1 p-2">
+                        <Button
+                          prominence="secondary"
+                          onClick={() => {
+                            const isSelectedSelfHosted =
+                              selectedModelName &&
+                              SELF_HOSTED_MODELS.some(
+                                (m) => m.model_name === selectedModelName
+                              );
+                            setActiveModelTab(
+                              isSelectedSelfHosted
+                                ? MODEL_TAB_SELF
+                                : selectedModelName
+                                  ? MODEL_TAB_CLOUD
+                                  : currentEmbeddingModel?.provider_type
+                                    ? MODEL_TAB_CLOUD
+                                    : MODEL_TAB_SELF
+                            );
+                            setViewAllModelsOpen(true);
+                          }}
+                        >
+                          View All Models
+                        </Button>
+                        {currentCloudProvider && (
+                          <div className="p-1">
+                            <Button
+                              icon={SvgSettings}
+                              prominence="tertiary"
+                              size="md"
+                              onClick={() => collapsedEditModal.toggle(true)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </Card>
               </Tabs>
             </>

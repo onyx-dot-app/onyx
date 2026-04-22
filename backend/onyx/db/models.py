@@ -2100,10 +2100,6 @@ class SearchSettings(Base):
         String, nullable=True
     )
 
-    multilingual_expansion: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), default=[]
-    )
-
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
         "CloudEmbeddingProvider",
         back_populates="search_settings",

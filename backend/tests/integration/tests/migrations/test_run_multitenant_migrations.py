@@ -6,7 +6,7 @@ The script is invoked as a subprocess — the same way it would be used in
 production.  Tests verify exit codes and stdout messages.
 
 Usage:
-    pytest tests/integration/tests/migrations/test_run_multitenant_migrations.py -v
+    pytest -m alembic tests/integration/tests/migrations/test_run_multitenant_migrations.py -v
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from onyx.db.engine.sql_engine import SqlEngine
+
+pytestmark = pytest.mark.alembic
 
 # Resolve the backend/ directory once so every helper can use it as cwd.
 _BACKEND_DIR = os.path.normpath(
@@ -43,14 +45,13 @@ def _run_script(
     env_override: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``python alembic/run_multitenant_migrations.py`` from the backend/ directory."""
-    env = {**os.environ, **(env_override or {})}
     return subprocess.run(
         [sys.executable, "alembic/run_multitenant_migrations.py", *extra_args],
         cwd=_BACKEND_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env=env,
+        env={**os.environ, "PYTHONPATH": _BACKEND_DIR, **(env_override or {})},
     )
 
 
@@ -110,6 +111,7 @@ def current_head_rev() -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env={**os.environ, "PYTHONPATH": _BACKEND_DIR},
     )
     assert (
         result.returncode == 0

@@ -423,6 +423,9 @@ jobs:
               -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e S3_ENDPOINT_URL=http://minio:9000 \
+              -e S3_AWS_ACCESS_KEY_ID=minioadmin \
+              -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \

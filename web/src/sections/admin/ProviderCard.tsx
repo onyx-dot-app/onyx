@@ -2,7 +2,7 @@
 
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
-import { Content, Card } from "@opal/layouts";
+import { Content, ContentAction, Card } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
@@ -93,50 +93,6 @@ export default function ProviderCard({
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
       <Card.Header
-        headerPadding="sm"
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={icon}
-            title={title}
-            description={description}
-          />
-        }
-        topRightChildren={
-          isDisconnected && onConnect ? (
-            <Button
-              prominence="tertiary"
-              rightIcon={SvgArrowExchange}
-              onClick={(e) => {
-                e.stopPropagation();
-                onConnect();
-              }}
-            >
-              Connect
-            </Button>
-          ) : isConnected && onSelect ? (
-            <Button
-              prominence="tertiary"
-              rightIcon={SvgArrowRightCircle}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect();
-              }}
-            >
-              Set as Default
-            </Button>
-          ) : isSelected ? (
-            <div className="p-2">
-              <Content
-                title={selectedLabel}
-                sizePreset="main-ui"
-                variant="section"
-                icon={SvgCheckSquare}
-              />
-            </div>
-          ) : undefined
-        }
         bottomRightChildren={
           !isDisconnected ? (
             <div className="flex flex-row px-1 pb-1">
@@ -169,7 +125,50 @@ export default function ProviderCard({
             </div>
           ) : undefined
         }
-      />
+      >
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={icon}
+          title={title}
+          description={description}
+          padding="lg"
+          rightChildren={
+            isDisconnected && onConnect ? (
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowExchange}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect();
+                }}
+              >
+                Connect
+              </Button>
+            ) : isConnected && onSelect ? (
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowRightCircle}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect();
+                }}
+              >
+                Set as Default
+              </Button>
+            ) : isSelected ? (
+              <div className="p-2">
+                <Content
+                  title={selectedLabel}
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgCheckSquare}
+                />
+              </div>
+            ) : undefined
+          }
+        />
+      </Card.Header>
     </SelectCard>
   );
 }

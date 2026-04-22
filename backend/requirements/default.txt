@@ -757,7 +757,7 @@ python-dateutil==2.8.2
     #   opensearch-py
     #   pandas
 python-docx==1.1.2
-python-dotenv==1.1.1
+python-dotenv==1.2.2
     # via
     #   braintrust
     #   fastmcp
@@ -772,7 +772,7 @@ python-iso639==2025.11.16
     # via unstructured
 python-magic==0.4.27
     # via unstructured
-python-multipart==0.0.22
+python-multipart==0.0.26
     # via
     #   fastapi-users
     #   mcp
