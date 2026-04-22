@@ -1,3 +1,4 @@
+import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
   containerSizeVariants,
@@ -70,30 +71,12 @@ function ContentAction({
   const { padding: paddingClass } = containerSizeVariants[padding];
 
   return (
-    <div
-      className={cn(
-        "flex flex-row w-full",
-        centered ? "items-center" : "items-stretch"
-      )}
-    >
-      <div
-        className={cn(
-          "flex-1 min-w-0",
-          centered ? "self-center" : "self-start",
-          paddingClass
-        )}
-      >
+    <div className="opal-content-action" data-centered={centered || undefined}>
+      <div className={cn("opal-content-action-content", paddingClass)}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div
-          className={cn(
-            "flex shrink-0",
-            centered ? "items-center" : "items-stretch"
-          )}
-        >
-          {rightChildren}
-        </div>
+        <div className="opal-content-action-right">{rightChildren}</div>
       )}
     </div>
   );
