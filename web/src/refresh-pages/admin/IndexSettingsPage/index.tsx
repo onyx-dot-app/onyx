@@ -10,7 +10,7 @@ import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { InputHorizontal, InputVertical } from "@opal/layouts";
+import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
   Card,
@@ -35,10 +35,8 @@ import {
   SvgSlowTime,
   SvgUnplug,
 } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
@@ -67,12 +65,10 @@ import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
-  connectEmbeddingProvider,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import Modal from "@/refresh-components/Modal";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
@@ -145,229 +141,25 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 // Provider credentials modal (connect + edit)
 // ---------------------------------------------------------------------------
 
+import type { ProviderModalProps } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 import {
-  ApiKeyField,
-  ApiUrlField,
-  GoogleCredentialsField,
-} from "@/refresh-pages/admin/IndexSettingsPage/shared";
+  StandardProviderModal,
+  GoogleProviderModal,
+  AzureProviderModal,
+  LiteLLMProviderModal,
+} from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
-// ---------------------------------------------------------------------------
-// Provider credentials modal
-// ---------------------------------------------------------------------------
-
-interface ProviderCredentialsModalProps {
-  provider: CloudEmbeddingProvider;
-  existingCredentials?: ConfiguredEmbeddingProvider;
-  onSubmit: () => void;
-  onCancel: () => void;
-}
-
-function ProviderCredentialsModal({
-  provider,
-  existingCredentials,
-  onSubmit,
-  onCancel,
-}: ProviderCredentialsModalProps) {
-  const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.provider_type);
-  const isProxy = provider.provider_type === EmbeddingProvider.LITELLM;
-  const isAzure = provider.provider_type === EmbeddingProvider.AZURE;
-  const isGoogle = provider.provider_type === EmbeddingProvider.GOOGLE;
-
-  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
-  const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
-  const [modelName, setModelName] = useState("");
-  const [modelDim, setModelDim] = useState("");
-  const [queryPrefix, setQueryPrefix] = useState("");
-  const [passagePrefix, setPassagePrefix] = useState("");
-  const [normalize, setNormalize] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileName("");
-    if (!file) return;
-    setFileName(file.name);
-    try {
-      const content = JSON.parse(await file.text());
-      setApiKey(JSON.stringify(content));
-    } catch {
-      setApiKey("");
-    }
-  };
-
-  const handleSubmit = async () => {
-    setErrorMsg("");
-    setIsSubmitting(true);
-
-    try {
-      await connectEmbeddingProvider({
-        providerType: provider.provider_type,
-        apiKey,
-        apiUrl,
-      });
-      onSubmit();
-    } catch (error: unknown) {
-      setErrorMsg(
-        error instanceof Error ? error.message : "An unknown error occurred"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const isValid = (() => {
-    if (isProxy) return !!apiUrl && !!modelName && !!modelDim;
-    if (isAzure) return !!apiUrl && !!apiKey;
-    if (isGoogle) return !!apiKey;
-    return !!apiKey;
-  })();
-
-  return (
-    <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <Modal.Content width="md">
-        <Modal.Header
-          icon={provider.icon}
-          moreIcon1={SvgArrowExchange}
-          moreIcon2={SvgOnyxLogo}
-          title={
-            isEditing ? `Manage ${providerName}` : `Set up ${providerName}`
-          }
-          description={
-            isEditing
-              ? `Manage ${providerName} provider and model details.`
-              : `Connect to ${providerName} and set up your ${providerName} embedding models.`
-          }
-          onClose={onCancel}
-        />
-        <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={0.5}>
-            {/* URL field — Azure and LiteLLM */}
-            {(isProxy || isAzure) && (
-              <ApiUrlField
-                title={isAzure ? "Target URL" : "API Base URL"}
-                placeholder={
-                  isAzure
-                    ? "https://your_resource_name.openai.azure.com/openai/v1/embeddings"
-                    : "https://..."
-                }
-                subDescription={
-                  isProxy
-                    ? `Paste your ${providerName}-compatible endpoint URL.`
-                    : undefined
-                }
-                value={apiUrl}
-                onChange={setApiUrl}
-              />
-            )}
-
-            {/* API Key — all providers except Google (which uses file upload) */}
-            {isGoogle ? (
-              <GoogleCredentialsField
-                fileInputRef={fileInputRef}
-                fileName={fileName}
-                onFileUpload={handleFileUpload}
-              />
-            ) : (
-              <ApiKeyField
-                apiLink={provider.apiLink}
-                providerName={providerName}
-                value={apiKey}
-                onChange={setApiKey}
-              />
-            )}
-
-            {/* LiteLLM-specific fields */}
-            {isProxy && (
-              <>
-                <InputVertical
-                  title="Model Name"
-                  subDescription={`Onyx will connect to this model on your ${providerName} proxy.`}
-                >
-                  <InputTypeIn
-                    placeholder="model-name"
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                  />
-                </InputVertical>
-
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-
-                <InputVertical
-                  title="Model Dimension"
-                  subDescription="Number of dimensions in the embeddings generated by this model."
-                >
-                  <InputTypeIn
-                    inputMode="numeric"
-                    placeholder="e.g., 768"
-                    value={modelDim}
-                    onChange={(e) => setModelDim(e.target.value)}
-                  />
-                </InputVertical>
-
-                <InputVertical
-                  title="Query Prefix"
-                  suffix="optional"
-                  subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-                >
-                  <InputTypeIn
-                    placeholder="e.g., 'query: '"
-                    value={queryPrefix}
-                    onChange={(e) => setQueryPrefix(e.target.value)}
-                  />
-                </InputVertical>
-
-                <InputVertical
-                  title="Passage Prefix"
-                  suffix="optional"
-                  subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-                >
-                  <InputTypeIn
-                    placeholder="e.g., 'passage: '"
-                    value={passagePrefix}
-                    onChange={(e) => setPassagePrefix(e.target.value)}
-                  />
-                </InputVertical>
-
-                <InputHorizontal
-                  title="Normalize Embeddings"
-                  description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
-                  withLabel
-                >
-                  <Switch checked={normalize} onCheckedChange={setNormalize} />
-                </InputHorizontal>
-              </>
-            )}
-
-            {errorMsg && (
-              <MessageCard
-                variant="error"
-                title="Error"
-                description={errorMsg}
-              />
-            )}
-          </GeneralLayouts.Section>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button prominence="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button disabled={!isValid || isSubmitting} onClick={handleSubmit}>
-            {isSubmitting
-              ? isEditing
-                ? "Updating..."
-                : "Connecting..."
-              : isEditing
-                ? "Update"
-                : "Connect"}
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
-  );
+function ProviderCredentialsModal(props: ProviderModalProps) {
+  switch (props.provider.provider_type) {
+    case EmbeddingProvider.GOOGLE:
+      return <GoogleProviderModal {...props} />;
+    case EmbeddingProvider.AZURE:
+      return <AzureProviderModal {...props} />;
+    case EmbeddingProvider.LITELLM:
+      return <LiteLLMProviderModal {...props} />;
+    default:
+      return <StandardProviderModal {...props} />;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1419,7 +1211,7 @@ export default function IndexSettingsPage() {
           </Card>
         </GeneralLayouts.Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider />
 
         {/* ── Image Processing ── */}
         <GeneralLayouts.Section
