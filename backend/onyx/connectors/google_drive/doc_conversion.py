@@ -56,7 +56,7 @@ from onyx.utils.variable_functionality import noop_fallback
 logger = setup_logger()
 
 
-class BasicExtractionResult(BaseModel):
+class FileExtractionResult(BaseModel):
     sections: list[TextSection | ImageSection | TabularSection]
     staged_file_id: str | None = None
 
@@ -311,7 +311,7 @@ def _download_and_extract_sections_basic(
     allow_images: bool,
     size_threshold: int,
     raw_file_callback: RawFileCallback | None = None,
-) -> BasicExtractionResult:
+) -> FileExtractionResult:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
     file_name = file["name"]
@@ -326,7 +326,7 @@ def _download_and_extract_sections_basic(
 
     def _extract_tabular(
         raw_bytes: bytes, name: str, content_type: str
-    ) -> BasicExtractionResult:
+    ) -> FileExtractionResult:
         staged_file_id: str | None = None
         if raw_file_callback is not None:
             result = extract_and_stage_tabular_file(
@@ -347,12 +347,12 @@ def _download_and_extract_sections_basic(
         sections: list[TextSection | ImageSection | TabularSection] = list(
             tabular_sections
         )
-        return BasicExtractionResult(sections=sections, staged_file_id=staged_file_id)
+        return FileExtractionResult(sections=sections, staged_file_id=staged_file_id)
 
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
         if not allow_images:
-            return BasicExtractionResult(sections=[])
+            return FileExtractionResult(sections=[])
 
         # Store images for later processing
         sections: list[TextSection | ImageSection | TabularSection] = []
@@ -368,7 +368,7 @@ def _download_and_extract_sections_basic(
             sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process image {file_name}: {e}")
-        return BasicExtractionResult(sections=sections)
+        return FileExtractionResult(sections=sections)
 
     # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
@@ -379,7 +379,7 @@ def _download_and_extract_sections_basic(
         response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
-            return BasicExtractionResult(sections=[])
+            return FileExtractionResult(sections=[])
 
         if export_mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
             # Synthesize an extension on the filename
@@ -391,23 +391,23 @@ def _download_and_extract_sections_basic(
             )
 
         text = response.decode("utf-8")
-        return BasicExtractionResult(sections=[TextSection(link=link, text=text)])
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     # Process based on mime type
     if mime_type == "text/plain":
         try:
             text = response_call().decode("utf-8")
-            return BasicExtractionResult(sections=[TextSection(link=link, text=text)])
+            return FileExtractionResult(sections=[TextSection(link=link, text=text)])
         except UnicodeDecodeError as e:
             logger.warning(f"Failed to extract text from {file_name}: {e}")
-            return BasicExtractionResult(sections=[])
+            return FileExtractionResult(sections=[])
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
         text, _ = read_docx_file(io.BytesIO(response_call()))
-        return BasicExtractionResult(sections=[TextSection(link=link, text=text)])
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -432,7 +432,7 @@ def _download_and_extract_sections_basic(
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
         text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
-        return BasicExtractionResult(
+        return FileExtractionResult(
             sections=[TextSection(link=link, text=text)] if text else []
         )
 
@@ -454,20 +454,20 @@ def _download_and_extract_sections_basic(
                 pdf_sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process PDF images in {file_name}: {e}")
-        return BasicExtractionResult(sections=pdf_sections)
+        return FileExtractionResult(sections=pdf_sections)
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
     if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(f"Skipping file {file.get('name')} due to extension.")
-        return BasicExtractionResult(sections=[])
+        return FileExtractionResult(sections=[])
 
     try:
         text = extract_file_text(io.BytesIO(response_call()), file_name)
-        return BasicExtractionResult(sections=[TextSection(link=link, text=text)])
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
     except Exception as e:
         logger.warning(f"Failed to extract text from {file_name}: {e}")
-        return BasicExtractionResult(sections=[])
+        return FileExtractionResult(sections=[])
 
 
 def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
