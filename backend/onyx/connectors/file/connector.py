@@ -186,7 +186,11 @@ def _process_file(
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
+    doc_file_id = None
     if is_tabular_file(file_name):
+        # Only set the file id if it is a tabular document
+        doc_file_id = file_id
+
         # Produce TabularSections
         lowered_name = file_name.lower()
         if lowered_name.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
@@ -238,9 +242,6 @@ def _process_file(
             logger.warning(
                 f"Failed to process embedded image {idx} in {file_name}: {e}"
             )
-
-    # Only set the file id if it is a tabular document
-    doc_file_id = file_id if is_tabular_file(file_name) else None
 
     return [
         Document(
