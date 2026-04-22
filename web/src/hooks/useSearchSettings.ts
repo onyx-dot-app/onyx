@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -50,21 +52,6 @@ export function useLLMContextualCosts() {
   return useSWR<LLMContextualCost[]>(
     LLM_CONTEXTUAL_COST_ADMIN_URL,
     errorHandlingFetcher
-  );
-}
-
-/**
- * Fetches the secondary (FUTURE) search settings — the model the admin has
- * selected as the next embedding model. Returns `null` when no switch is
- * pending.
- *
- * Polls every 5 seconds to stay in sync with backend state.
- */
-export function useSecondarySearchSettings() {
-  return useSWR<EmbeddingModelResponse | null>(
-    "/api/search-settings/get-secondary-search-settings",
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
   );
 }
 

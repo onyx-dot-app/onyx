@@ -15,14 +15,6 @@ export enum EmbeddingProviderName {
   NOMIC = "nomic",
   MICROSOFT = "microsoft",
 }
-export type CloudBasedEmbeddingProviderName = Exclude<
-  EmbeddingProviderName,
-  EmbeddingProviderName.NOMIC | EmbeddingProviderName.MICROSOFT
->;
-export type SelfHostedEmbeddingProviderName = Extract<
-  EmbeddingProviderName,
-  EmbeddingProviderName.NOMIC | EmbeddingProviderName.MICROSOFT
->;
 
 // Backend API Response Type
 
@@ -46,17 +38,7 @@ export interface EmbeddingModelResponse {
   switchover_type?: SwitchoverType;
 }
 
-export interface EmbeddingModel {
-  model_name: string;
-  model_dim: number;
-  normalize: boolean;
-  query_prefix: string | null;
-  passage_prefix: string | null;
-  provider_type: EmbeddingProviderName | null;
-  description: string;
-}
-
-// Embedding Providers (Cloud-based + Self-hosted)
+// Embedding Providers + Models
 
 export interface EmbeddingProvider {
   providerName: EmbeddingProviderName;
@@ -72,6 +54,16 @@ export interface EmbeddingProvider {
    * blocked in the UI.
    */
   deprecated?: boolean;
+}
+
+export interface EmbeddingModel {
+  modelName: string;
+  modelDim: number;
+  normalize: boolean;
+  queryPrefix: string | null;
+  passagePrefix: string | null;
+  providerType: EmbeddingProviderName | null;
+  description: string;
 }
 
 // Reranking

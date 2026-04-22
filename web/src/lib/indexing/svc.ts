@@ -1,25 +1,10 @@
 import type { Settings } from "@/interfaces/settings";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import {
-  AdvancedSearchConfiguration,
   EmbeddingModel,
-  EmbeddingModelResponse,
   EmbeddingPrecision,
-  EmbeddingProviderName,
-  RerankingDetails,
-  SavedSearchSettings,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
-
-export async function deleteSearchSettings(search_settings_id: number) {
-  return await fetch(`/api/search-settings/delete-search-settings`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ search_settings_id }),
-  });
-}
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -132,30 +117,6 @@ export async function saveAdminSettings(settings: Settings) {
   }
 }
 
-export async function updateSearchSettings(
-  searchSettings: SavedSearchSettings
-) {
-  return await fetch("/api/search-settings/update-inference-settings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ...searchSettings,
-    }),
-  });
-}
-
-/**
- * Cancels the FUTURE embedding model selection, reverting to just the
- * current (PRESENT) model.
- */
-export async function cancelNewEmbedding(): Promise<Response> {
-  return await fetch("/api/search-settings/cancel-new-embedding", {
-    method: "POST",
-  });
-}
-
 /**
  * Marks a model as the FUTURE embedding model. Does NOT start re-indexing —
  * that is a separate, explicit action.
@@ -171,12 +132,12 @@ export async function setNewSearchSettings(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model_name: model.model_name,
-      model_dim: model.model_dim,
+      model_name: model.modelName,
+      model_dim: model.modelDim,
       normalize: model.normalize,
-      query_prefix: model.query_prefix,
-      passage_prefix: model.passage_prefix,
-      provider_type: model.provider_type,
+      query_prefix: model.queryPrefix,
+      passage_prefix: model.passagePrefix,
+      provider_type: model.providerType,
       api_key: null,
       api_url: null,
       index_name: null,
@@ -186,23 +147,4 @@ export async function setNewSearchSettings(
       switchover_type: switchoverType,
     }),
   });
-}
-
-// We use a spread operation to merge properties from multiple objects into a single object.
-// Advanced embedding details may update default values.
-// Do NOT modify the order unless you are positive the new hierarchy is correct.
-export function combineSearchSettings(
-  selectedProvider: EmbeddingModelResponse,
-  advancedEmbeddingDetails: AdvancedSearchConfiguration,
-  rerankingDetails: RerankingDetails,
-  provider_type: EmbeddingProviderName | null,
-  switchover_type?: SwitchoverType
-): SavedSearchSettings {
-  return {
-    ...selectedProvider,
-    ...advancedEmbeddingDetails,
-    ...rerankingDetails,
-    provider_type: provider_type,
-    switchover_type,
-  };
 }

@@ -98,7 +98,7 @@ const SELECT_CARD_STATE: Record<
 };
 
 interface EmbeddingProviderInfoProps {
-  providerType: string | null;
+  providerType: EmbeddingProviderName | null;
 }
 
 function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
@@ -230,8 +230,8 @@ function ProviderGroup({
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
       if (isCloud && !isConfigured) return "unconnected";
-      if (model.model_name === selectedModelName) return "selected";
-      if (model.model_name === currentModelName) return "current";
+      if (model.modelName === selectedModelName) return "selected";
+      if (model.modelName === currentModelName) return "current";
       return "connected";
     },
     [isCloud, isConfigured, selectedModelName, currentModelName]
@@ -253,7 +253,7 @@ function ProviderGroup({
         return;
       }
 
-      onSelectModel(model.model_name);
+      onSelectModel(model.modelName);
     },
     [
       getModelState,
@@ -294,7 +294,7 @@ function ProviderGroup({
                 await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
                 connectModal.toggle(false);
                 if (pendingModel) {
-                  onSelectModel(pendingModel.model_name);
+                  onSelectModel(pendingModel.modelName);
                   setPendingModel(null);
                 }
               }}
@@ -331,7 +331,7 @@ function ProviderGroup({
                 icon={SvgUnplug}
                 prominence="tertiary"
                 size="sm"
-                disabled={models.some((m) => m.model_name === currentModelName)}
+                disabled={models.some((m) => m.modelName === currentModelName)}
                 onClick={() => disconnectModal.toggle(true)}
               />
               <Button
@@ -347,11 +347,11 @@ function ProviderGroup({
       />
       {models.map((model) => (
         <EmbeddingModelCard
-          key={model.model_name}
+          key={model.modelName}
           icon={icon}
-          modelName={model.model_name}
+          modelName={model.modelName}
           description={model.description}
-          providerType={model.provider_type}
+          providerType={model.providerType}
           modelState={getModelState(model)}
           deprecated={deprecated}
           onSelect={() => handleModelSelect(model)}
@@ -365,7 +365,7 @@ interface EmbeddingModelCardProps {
   icon: IconFunctionComponent;
   modelName: string;
   description: string;
-  providerType: string | null;
+  providerType: EmbeddingProviderName | null;
   docsLink?: string;
   modelState: EmbeddingModelState;
   deprecated?: boolean;
@@ -538,18 +538,12 @@ export default function IndexSettingsPage() {
   >(SWITCHOVER_NONE);
 
   const allCloudProviders = useMemo(
-    () =>
-      Object.values(CLOUD_BASED_PROVIDERS).filter(
-        (p) => p.embeddingModels.length > 0
-      ),
+    () => CLOUD_BASED_PROVIDERS.filter((p) => p.embeddingModels.length > 0),
     []
   );
 
   const configOnlyProviders = useMemo(
-    () =>
-      Object.values(CLOUD_BASED_PROVIDERS).filter(
-        (p) => p.embeddingModels.length === 0
-      ),
+    () => CLOUD_BASED_PROVIDERS.filter((p) => p.embeddingModels.length === 0),
     []
   );
 
@@ -568,7 +562,7 @@ export default function IndexSettingsPage() {
   } = useFilter(
     allCloudModels,
     (item) =>
-      `${item.model.model_name} ${
+      `${item.model.modelName} ${
         item.model.description
       } ${getFormattedProviderName(item.provider.providerName)}`
   );
@@ -595,7 +589,7 @@ export default function IndexSettingsPage() {
       models: trimmed
         ? provider.embeddingModels.filter(
             (m) =>
-              m.model_name.toLowerCase().includes(trimmed) ||
+              m.modelName.toLowerCase().includes(trimmed) ||
               m.description.toLowerCase().includes(trimmed) ||
               provider.providerName.toLowerCase().includes(trimmed)
           )
@@ -1015,7 +1009,7 @@ export default function IndexSettingsPage() {
                               selectedModelName &&
                               SELF_HOSTED_PROVIDERS.some((p) =>
                                 p.embeddingModels.some(
-                                  (m) => m.model_name === selectedModelName
+                                  (m) => m.modelName === selectedModelName
                                 )
                               );
                             setActiveModelTab(

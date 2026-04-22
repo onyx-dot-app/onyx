@@ -12,7 +12,6 @@ import {
 } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import {
-  CloudBasedEmbeddingProviderName,
   EmbeddingModel,
   EmbeddingProvider,
   EmbeddingProviderName,
@@ -39,12 +38,12 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
     docsLink: "https://huggingface.co/nomic-ai",
     embeddingModels: [
       {
-        model_name: "nomic-ai/nomic-embed-text-v1",
-        model_dim: 768,
+        modelName: "nomic-ai/nomic-embed-text-v1",
+        modelDim: 768,
         normalize: true,
-        query_prefix: "search_query: ",
-        passage_prefix: "search_document: ",
-        provider_type: null,
+        queryPrefix: "search_query: ",
+        passagePrefix: "search_document: ",
+        providerType: null,
         description:
           "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
       },
@@ -56,42 +55,42 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
     docsLink: "https://huggingface.co/intfloat",
     embeddingModels: [
       {
-        model_name: "intfloat/e5-base-v2",
-        model_dim: 768,
+        modelName: "intfloat/e5-base-v2",
+        modelDim: 768,
         normalize: true,
-        query_prefix: "query: ",
-        passage_prefix: "passage: ",
-        provider_type: null,
+        queryPrefix: "query: ",
+        passagePrefix: "passage: ",
+        providerType: null,
         description:
           "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
       },
       {
-        model_name: "intfloat/e5-small-v2",
-        model_dim: 384,
+        modelName: "intfloat/e5-small-v2",
+        modelDim: 384,
         normalize: true,
-        query_prefix: "query: ",
-        passage_prefix: "passage: ",
-        provider_type: null,
+        queryPrefix: "query: ",
+        passagePrefix: "passage: ",
+        providerType: null,
         description:
           "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
       },
       {
-        model_name: "intfloat/multilingual-e5-base",
-        model_dim: 768,
+        modelName: "intfloat/multilingual-e5-base",
+        modelDim: 768,
         normalize: true,
-        query_prefix: "query: ",
-        passage_prefix: "passage: ",
-        provider_type: null,
+        queryPrefix: "query: ",
+        passagePrefix: "passage: ",
+        providerType: null,
         description:
           "For corpora in other languages besides English, this is the one to choose.",
       },
       {
-        model_name: "intfloat/multilingual-e5-small",
-        model_dim: 384,
+        modelName: "intfloat/multilingual-e5-small",
+        modelDim: 384,
         normalize: true,
-        query_prefix: "query: ",
-        passage_prefix: "passage: ",
-        provider_type: null,
+        queryPrefix: "query: ",
+        passagePrefix: "passage: ",
+        providerType: null,
         description:
           "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
       },
@@ -99,20 +98,8 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
   },
 ];
 
-// ─── Cloud embedding providers ───────────────────────────────────────────────
-
-/**
- * Registry of cloud embedding providers, keyed by {@link EmbeddingProviderName}.
- *
- * This is the single source of truth for cloud embedding providers. Add new
- * entries here when introducing a new provider — the `Record` typing forces
- * exhaustiveness, so a missing entry is a compile-time error.
- */
-export const CLOUD_BASED_PROVIDERS: Record<
-  CloudBasedEmbeddingProviderName,
-  EmbeddingProvider
-> = {
-  [EmbeddingProviderName.COHERE]: {
+export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
+  {
     providerName: EmbeddingProviderName.COHERE,
     icon: SvgCohere,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -120,28 +107,28 @@ export const CLOUD_BASED_PROVIDERS: Record<
     costslink: "https://cohere.com/pricing",
     embeddingModels: [
       {
-        provider_type: EmbeddingProviderName.COHERE,
-        model_name: "embed-english-v3.0",
-        model_dim: 1024,
+        providerType: EmbeddingProviderName.COHERE,
+        modelName: "embed-english-v3.0",
+        modelDim: 1024,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "Cohere's English embedding model. Good performance for English-language tasks.",
       },
       {
-        provider_type: EmbeddingProviderName.COHERE,
-        model_name: "embed-english-light-v3.0",
-        model_dim: 384,
+        providerType: EmbeddingProviderName.COHERE,
+        modelName: "embed-english-light-v3.0",
+        modelDim: 384,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
       },
     ],
   },
-  [EmbeddingProviderName.OPENAI]: {
+  {
     providerName: EmbeddingProviderName.OPENAI,
     icon: SvgOpenai,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -149,28 +136,28 @@ export const CLOUD_BASED_PROVIDERS: Record<
     costslink: "https://openai.com/pricing",
     embeddingModels: [
       {
-        provider_type: EmbeddingProviderName.OPENAI,
-        model_name: "text-embedding-3-large",
-        model_dim: 3072,
+        providerType: EmbeddingProviderName.OPENAI,
+        modelName: "text-embedding-3-large",
+        modelDim: 3072,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "OpenAI's large embedding model. Best performance, but more expensive.",
       },
       {
-        provider_type: EmbeddingProviderName.OPENAI,
-        model_name: "text-embedding-3-small",
-        model_dim: 1536,
+        providerType: EmbeddingProviderName.OPENAI,
+        modelName: "text-embedding-3-small",
+        modelDim: 1536,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
       },
     ],
   },
-  [EmbeddingProviderName.GOOGLE]: {
+  {
     providerName: EmbeddingProviderName.GOOGLE,
     icon: SvgGoogle,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -178,26 +165,26 @@ export const CLOUD_BASED_PROVIDERS: Record<
     costslink: "https://cloud.google.com/vertex-ai/pricing",
     embeddingModels: [
       {
-        provider_type: EmbeddingProviderName.GOOGLE,
-        model_name: "gemini-embedding-001",
-        model_dim: 3072,
+        providerType: EmbeddingProviderName.GOOGLE,
+        modelName: "gemini-embedding-001",
+        modelDim: 3072,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description: "Google's Gemini embedding model. Powerful and efficient.",
       },
       {
-        provider_type: EmbeddingProviderName.GOOGLE,
-        model_name: "text-embedding-005",
-        model_dim: 768,
+        providerType: EmbeddingProviderName.GOOGLE,
+        modelName: "text-embedding-005",
+        modelDim: 768,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description: "Smaller, lighter-weight embedding model from Google.",
       },
     ],
   },
-  [EmbeddingProviderName.VOYAGE]: {
+  {
     providerName: EmbeddingProviderName.VOYAGE,
     icon: SvgVoyage,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -206,34 +193,34 @@ export const CLOUD_BASED_PROVIDERS: Record<
     deprecated: true,
     embeddingModels: [
       {
-        provider_type: EmbeddingProviderName.VOYAGE,
-        model_name: "voyage-large-2-instruct",
-        model_dim: 1024,
+        providerType: EmbeddingProviderName.VOYAGE,
+        modelName: "voyage-large-2-instruct",
+        modelDim: 1024,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "Voyage's large embedding model. High performance with instruction fine-tuning.",
       },
       {
-        provider_type: EmbeddingProviderName.VOYAGE,
-        model_name: "voyage-light-2-instruct",
-        model_dim: 1024,
+        providerType: EmbeddingProviderName.VOYAGE,
+        modelName: "voyage-light-2-instruct",
+        modelDim: 1024,
         normalize: false,
-        query_prefix: "",
-        passage_prefix: "",
+        queryPrefix: "",
+        passagePrefix: "",
         description:
           "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
       },
     ],
   },
-  [EmbeddingProviderName.LITELLM]: {
+  {
     providerName: EmbeddingProviderName.LITELLM,
     icon: SvgLitellm,
     apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
     embeddingModels: [],
   },
-  [EmbeddingProviderName.AZURE]: {
+  {
     providerName: EmbeddingProviderName.AZURE,
     icon: SvgAzure,
     apiLink:
@@ -242,28 +229,32 @@ export const CLOUD_BASED_PROVIDERS: Record<
       "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
     embeddingModels: [],
   },
-};
+];
 
 // ─── Embedding helpers ───────────────────────────────────────────────────────
 
-export function getFormattedProviderName(providerType: string | null) {
+export function getFormattedProviderName(
+  providerType: EmbeddingProviderName | null
+): string {
   if (!providerType) return "Self-hosted";
 
   switch (providerType) {
-    case "openai":
+    case EmbeddingProviderName.OPENAI:
       return "OpenAI";
-    case "cohere":
+    case EmbeddingProviderName.COHERE:
       return "Cohere";
-    case "voyage":
+    case EmbeddingProviderName.VOYAGE:
       return "Voyage AI";
-    case "google":
+    case EmbeddingProviderName.GOOGLE:
       return "Google";
-    case "litellm":
+    case EmbeddingProviderName.LITELLM:
       return "LiteLLM";
-    case "azure":
+    case EmbeddingProviderName.AZURE:
       return "Azure";
-    default:
-      return providerType.charAt(0).toUpperCase() + providerType.slice(1);
+    case EmbeddingProviderName.NOMIC:
+      return "Nomic";
+    case EmbeddingProviderName.MICROSOFT:
+      return "Microsoft";
   }
 }
 
@@ -272,16 +263,17 @@ export function getFormattedProviderName(providerType: string | null) {
  * `null` if none matches (e.g. self-hosted models).
  */
 export function findCloudProvider(
-  providerType: string | null
+  providerType: EmbeddingProviderName | null
 ): EmbeddingProvider | null {
   if (!providerType) return null;
   return (
-    CLOUD_BASED_PROVIDERS[providerType as CloudBasedEmbeddingProviderName] ??
-    null
+    CLOUD_BASED_PROVIDERS.find((p) => p.providerName === providerType) ?? null
   );
 }
 
-export function getEmbeddingProvider(providerType: string | null): {
+export function getEmbeddingProvider(
+  providerType: EmbeddingProviderName | null
+): {
   icon: IconFunctionComponent;
   displayName: string;
 } {
@@ -297,10 +289,10 @@ export function getCurrentModelCopy(
 ): EmbeddingModel | null {
   const allModels = [
     ...SELF_HOSTED_PROVIDERS,
-    ...Object.values(CLOUD_BASED_PROVIDERS),
+    ...CLOUD_BASED_PROVIDERS,
   ].flatMap((p) => p.embeddingModels);
 
-  return allModels.find((m) => m.model_name === currentModelName) ?? null;
+  return allModels.find((m) => m.modelName === currentModelName) ?? null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
