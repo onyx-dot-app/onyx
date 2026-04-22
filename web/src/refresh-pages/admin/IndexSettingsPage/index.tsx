@@ -62,7 +62,6 @@ import {
   getFormattedProviderName,
   MAX_IMAGE_SIZE_OPTIONS,
 } from "@/lib/indexing";
-import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
@@ -355,8 +354,10 @@ function ProviderGroup({
       {models.map((model) => (
         <EmbeddingModelCard
           key={model.model_name}
-          model={model}
-          providerIcon={provider.icon}
+          icon={provider.icon}
+          modelName={model.model_name}
+          description={model.description}
+          providerType={model.provider_type}
           modelState={getModelState(model)}
           deprecated={provider.deprecated}
           onSelect={() => handleModelSelect(model)}
@@ -377,16 +378,22 @@ const SELECT_CARD_STATE: Record<
 };
 
 interface EmbeddingModelCardProps {
-  model: CloudEmbeddingModel;
-  providerIcon: IconFunctionComponent;
+  icon: IconFunctionComponent;
+  modelName: string;
+  description: string;
+  providerType: string | null;
+  docsLink?: string;
   modelState: EmbeddingModelState;
   deprecated?: boolean;
   onSelect?: () => void;
 }
 
 function EmbeddingModelCard({
-  model,
-  providerIcon,
+  icon,
+  modelName,
+  description,
+  providerType,
+  docsLink,
   modelState,
   deprecated,
   onSelect,
@@ -453,97 +460,19 @@ function EmbeddingModelCard({
       padding="xs"
       onClick={isClickable ? onSelect : undefined}
     >
-      <div className="flex flex-row items-start w-full">
-        <GeneralLayouts.Section padding={0.5} gap={0} alignItems="start">
-          <Content
-            icon={providerIcon}
-            title={model.model_name}
-            description={model.description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-          <div className="flex flex-row px-6 pt-2 gap-4">
-            <EmbeddingProviderInfo providerType={model.provider_type} />
-          </div>
-        </GeneralLayouts.Section>
-        {topRightButton && <div className="shrink-0">{topRightButton}</div>}
-      </div>
-    </SelectCard>
-  );
-}
-
-interface SelfHostedModelCardProps {
-  model: SelfHostedEmbeddingModel;
-  modelState: EmbeddingModelState;
-  onSelect?: () => void;
-}
-
-function SelfHostedModelCard({
-  model,
-  modelState,
-  onSelect,
-}: SelfHostedModelCardProps) {
-  const topRightButton = (() => {
-    switch (modelState) {
-      case "connected":
-        return (
-          <Button prominence="tertiary" onClick={onSelect}>
-            Select Model
-          </Button>
-        );
-      case "current":
-        return (
-          <Button
-            variant="action"
-            prominence="tertiary"
-            rightIcon={SvgCheckSquare}
-            onClick={onSelect}
-          >
-            Current Model
-          </Button>
-        );
-      case "selected":
-        return (
-          <Button
-            variant="action"
-            prominence="tertiary"
-            rightIcon={SvgCheckSquare}
-            onClick={onSelect}
-          >
-            Selected
-          </Button>
-        );
-      default:
-        return null;
-    }
-  })();
-
-  return (
-    <SelectCard
-      state={SELECT_CARD_STATE[modelState]}
-      rounding="md"
-      padding="xs"
-      onClick={
-        modelState === "connected" ||
-        modelState === "current" ||
-        modelState === "selected"
-          ? onSelect
-          : undefined
-      }
-    >
       <div className="flex flex-row items-start w-full p-2">
         <div className="flex flex-col flex-1 min-w-0">
           <Content
-            icon={SvgServer}
-            title={model.model_name}
-            description={model.description}
+            icon={icon}
+            title={modelName}
+            description={description}
             sizePreset="main-ui"
             variant="section"
           />
           <div className="flex flex-row px-6 pt-2 gap-4">
-            <EmbeddingProviderInfo providerType={null} />
-            {model.link && (
-              <LinkButton href={model.link} target="_blank">
+            <EmbeddingProviderInfo providerType={providerType} />
+            {docsLink && (
+              <LinkButton href={docsLink} target="_blank">
                 Docs
               </LinkButton>
             )}
@@ -1004,9 +933,13 @@ export default function IndexSettingsPage() {
                                           ? "current"
                                           : "connected";
                                     return (
-                                      <SelfHostedModelCard
+                                      <EmbeddingModelCard
                                         key={model.model_name}
-                                        model={model}
+                                        icon={shProvider.icon}
+                                        modelName={model.model_name}
+                                        description={model.description}
+                                        providerType={null}
+                                        docsLink={model.link}
                                         modelState={state}
                                         onSelect={() => {
                                           if (
