@@ -563,8 +563,6 @@ def get_llm_max_output_tokens(
         )
         return default_output_tokens
 
-    # LiteLLM may include the keys with a literal `None` value, so check the
-    # value rather than just key presence and fall through to the next option.
     max_output_tokens = model_obj.get("max_output_tokens")
     if max_output_tokens is not None:
         return max_output_tokens
