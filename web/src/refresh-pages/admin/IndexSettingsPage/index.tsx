@@ -55,6 +55,7 @@ import type {
 import {
   CLOUD_EMBEDDING_PROVIDERS,
   SELF_HOSTED_MODELS,
+  SELF_HOSTED_PROVIDERS,
   findCloudProvider,
   getCurrentModelCopy,
   getEmbeddingProvider,
@@ -167,25 +168,29 @@ function ProviderCredentialsModal(props: ProviderModalProps) {
 // ---------------------------------------------------------------------------
 
 interface ProviderGroupHeaderProps {
-  provider: CloudEmbeddingProvider;
+  icon: IconFunctionComponent;
+  name: string;
+  docsLink?: string;
+  suffix?: string;
   rightChildren?: React.ReactNode;
 }
 
 function ProviderGroupHeader({
-  provider,
+  icon,
+  name,
+  docsLink,
+  suffix,
   rightChildren,
 }: ProviderGroupHeaderProps) {
-  const providerName = getFormattedProviderName(provider.provider_type);
-
   return (
     <div className="px-1 pt-1 w-full h-[var(--opal-line-height-lg)]">
       <GeneralLayouts.Section flexDirection="row" gap={0}>
         <Spacer horizontal rem={0.675} />
         <div className="flex flex-row justify-between items-center w-full py-1">
           <Content
-            icon={provider.icon}
-            title={markdown(`[${providerName}](${provider.docsLink})`)}
-            suffix={provider.deprecated ? "(deprecated)" : undefined}
+            icon={icon}
+            title={docsLink ? markdown(`[${name}](${docsLink})`) : name}
+            suffix={suffix}
             sizePreset="secondary"
           />
           {rightChildren}
@@ -322,7 +327,10 @@ function ProviderGroup({
       </editCredentialsModal.Provider>
 
       <ProviderGroupHeader
-        provider={provider}
+        icon={provider.icon}
+        name={getFormattedProviderName(provider.provider_type)}
+        docsLink={provider.docsLink}
+        suffix={provider.deprecated ? "(deprecated)" : undefined}
         rightChildren={
           isConfigured ? (
             <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
@@ -557,7 +565,11 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
 
   return (
     <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
-      <ProviderGroupHeader provider={provider} />
+      <ProviderGroupHeader
+        icon={provider.icon}
+        name={getFormattedProviderName(provider.provider_type)}
+        docsLink={provider.docsLink}
+      />
 
       <providerCreationModal.Provider>
         <ProviderCredentialsModal
@@ -663,14 +675,19 @@ export default function IndexSettingsPage() {
       }));
   }, [filteredCloudModels, allCloudProviders]);
 
-  const filteredSelfHostedModels = useMemo(() => {
+  const filteredSelfHostedProviders = useMemo(() => {
     const trimmed = modelSearchQuery.trim().toLowerCase();
-    if (!trimmed) return SELF_HOSTED_MODELS;
-    return SELF_HOSTED_MODELS.filter(
-      (m) =>
-        m.model_name.toLowerCase().includes(trimmed) ||
-        m.description.toLowerCase().includes(trimmed)
-    );
+    return SELF_HOSTED_PROVIDERS.map((provider) => ({
+      provider,
+      models: trimmed
+        ? provider.embedding_models.filter(
+            (m) =>
+              m.model_name.toLowerCase().includes(trimmed) ||
+              m.description.toLowerCase().includes(trimmed) ||
+              provider.provider_name.toLowerCase().includes(trimmed)
+          )
+        : provider.embedding_models,
+    })).filter(({ models }) => models.length > 0);
   }, [modelSearchQuery]);
 
   const saveSettings = useCallback(
@@ -965,34 +982,50 @@ export default function IndexSettingsPage() {
                       </Tabs.Content>
 
                       <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
-                        {filteredSelfHostedModels.length > 0 ? (
-                          <GeneralLayouts.Section gap={0.25} padding={0.5}>
-                            {filteredSelfHostedModels.map((model) => {
-                              const state: EmbeddingModelState =
-                                model.model_name === selectedModelName
-                                  ? "selected"
-                                  : model.model_name ===
-                                      currentEmbeddingModel?.model_name
-                                    ? "current"
-                                    : "connected";
-                              return (
-                                <SelfHostedModelCard
-                                  key={model.model_name}
-                                  model={model}
-                                  modelState={state}
-                                  onSelect={() => {
-                                    if (
-                                      state === "selected" ||
-                                      state === "current"
-                                    ) {
-                                      setSelectedModelName(null);
-                                      return;
-                                    }
-                                    setSelectedModelName(model.model_name);
-                                  }}
-                                />
-                              );
-                            })}
+                        {filteredSelfHostedProviders.length > 0 ? (
+                          <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                            {filteredSelfHostedProviders.map(
+                              ({ provider: shProvider, models }) => (
+                                <GeneralLayouts.Section
+                                  key={shProvider.provider_name}
+                                  gap={0.25}
+                                >
+                                  <ProviderGroupHeader
+                                    icon={shProvider.icon}
+                                    name={shProvider.provider_name}
+                                    docsLink={shProvider.docsLink}
+                                  />
+                                  {models.map((model) => {
+                                    const state: EmbeddingModelState =
+                                      model.model_name === selectedModelName
+                                        ? "selected"
+                                        : model.model_name ===
+                                            currentEmbeddingModel?.model_name
+                                          ? "current"
+                                          : "connected";
+                                    return (
+                                      <SelfHostedModelCard
+                                        key={model.model_name}
+                                        model={model}
+                                        modelState={state}
+                                        onSelect={() => {
+                                          if (
+                                            state === "selected" ||
+                                            state === "current"
+                                          ) {
+                                            setSelectedModelName(null);
+                                            return;
+                                          }
+                                          setSelectedModelName(
+                                            model.model_name
+                                          );
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                </GeneralLayouts.Section>
+                              )
+                            )}
                           </GeneralLayouts.Section>
                         ) : (
                           <IllustrationContent
