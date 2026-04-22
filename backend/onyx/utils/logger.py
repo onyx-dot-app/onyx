@@ -5,6 +5,7 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
+from onyx.utils.platform import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import LOG_FILE_NAME
@@ -167,13 +168,6 @@ def get_standard_formatter() -> ColoredFormatter:
         "%(asctime)s %(filename)30s %(lineno)4s: %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
-
-
-DANSWER_DOCKER_ENV_STR = "DANSWER_RUNNING_IN_DOCKER"
-
-
-def is_running_in_container() -> bool:
-    return os.getenv(DANSWER_DOCKER_ENV_STR) == "true"
 
 
 def setup_logger(

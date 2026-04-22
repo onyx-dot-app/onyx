@@ -463,7 +463,7 @@ export default function BillingPage() {
         title={viewConfig.title}
         backButton={viewConfig.showBackButton}
         onBack={handleBack}
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <div className="flex flex-col items-center gap-6">

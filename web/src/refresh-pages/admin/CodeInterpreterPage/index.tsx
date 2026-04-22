@@ -110,7 +110,7 @@ export default function CodeInterpreterPage() {
         icon={route.icon}
         title={route.title}
         description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
-        separator
+        divider
       />
 
       <SettingsLayouts.Body>

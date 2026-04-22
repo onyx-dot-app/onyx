@@ -1,3 +1,4 @@
+import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
   containerSizeVariants,
@@ -21,6 +22,15 @@ type ContentActionProps = ContentProps & {
    * @see {@link ContainerSizeVariants} for the full list of presets.
    */
   padding?: ContainerSizeVariants;
+
+  /**
+   * When true, vertically centers the Content and rightChildren.
+   * When false (default), Content is top-aligned and rightChildren
+   * stretches to full height.
+   *
+   * @default false
+   */
+  center?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -55,17 +65,18 @@ type ContentActionProps = ContentProps & {
 function ContentAction({
   rightChildren,
   padding = "lg",
+  center = false,
   ...contentProps
 }: ContentActionProps) {
   const { padding: paddingClass } = containerSizeVariants[padding];
 
   return (
-    <div className="flex flex-row items-stretch w-full">
-      <div className={cn("flex-1 min-w-0 self-start", paddingClass)}>
+    <div className="opal-content-action" data-centered={center || undefined}>
+      <div className={cn("opal-content-action-content", paddingClass)}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div className="flex items-stretch shrink-0">{rightChildren}</div>
+        <div className="opal-content-action-right">{rightChildren}</div>
       )}
     </div>
   );
