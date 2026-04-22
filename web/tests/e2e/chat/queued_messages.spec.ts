@@ -37,7 +37,6 @@ async function sendAndHoldResponse(
 
   return () => {
     release();
-    page.unroute(routePattern, handler);
   };
 }
 
