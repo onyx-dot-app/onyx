@@ -1022,11 +1022,7 @@ export default function IndexSettingsPage() {
   if (isLoadingCurrentModel || isLoadingSearchSettings) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={route.title}
-          separator
-        />
+        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
         <SettingsLayouts.Body>
           <ThreeDotsLoader />
         </SettingsLayouts.Body>
@@ -1040,7 +1036,7 @@ export default function IndexSettingsPage() {
         icon={route.icon}
         title={route.title}
         description="Configure how documents are indexed, embedded, and prepared for search and retrieval."
-        separator
+        divider
       />
 
       <SettingsLayouts.Body>
