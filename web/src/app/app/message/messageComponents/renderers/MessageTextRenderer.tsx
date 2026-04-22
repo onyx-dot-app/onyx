@@ -28,7 +28,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { cn, transformLinkUri } from "@/lib/utils";
-import { NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING } from "@/lib/constants";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -97,6 +97,8 @@ export const MessageTextRenderer: MessageRenderer<
   stopReason,
   children,
 }) => {
+  const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
+
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
 
@@ -249,7 +251,7 @@ export const MessageTextRenderer: MessageRenderer<
     animate &&
     !shouldUseAutoPlaybackSync &&
     stopReason !== StopReason.USER_CANCELLED &&
-    !NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING;
+    smoothStreamingEnabled;
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 

@@ -81,10 +81,9 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
-// When true, disables the per-character typewriter reveal and renders
-// streamed chat content as chunks arrive.
-export const NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING =
-  process.env.NEXT_PUBLIC_DISABLE_SMOOTH_STREAMING?.toLowerCase() === "true";
+// Cookie controlling the per-character typewriter reveal in chat.
+// "false" disables smooth streaming — chunks render as they arrive.
+export const SMOOTH_STREAMING_COOKIE_NAME = "smoothStreamingEnabled";
 
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
