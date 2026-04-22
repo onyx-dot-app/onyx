@@ -126,6 +126,7 @@ export async function saveAdminSettings(settings: Settings) {
  */
 export async function setNewSearchSettings(
   model: EmbeddingModel,
+  providerName: string,
   switchoverType: SwitchoverType
 ): Promise<Response> {
   return await fetch("/api/search-settings/set-new-search-settings", {
@@ -137,7 +138,7 @@ export async function setNewSearchSettings(
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,
-      provider_type: model.providerType,
+      provider_type: providerName,
       api_key: null,
       api_url: null,
       index_name: null,

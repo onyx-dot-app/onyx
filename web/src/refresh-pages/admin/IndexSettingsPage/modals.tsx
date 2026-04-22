@@ -14,7 +14,6 @@ import {
   type ConfiguredEmbeddingProvider,
   type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
-import { getFormattedProviderName } from "@/lib/indexing";
 import { connectEmbeddingProvider } from "@/lib/indexing/svc";
 import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
 
@@ -43,8 +42,6 @@ function ModalShell({
   onCancel,
   children,
 }: ModalShellProps) {
-  const providerName = getFormattedProviderName(provider.providerName);
-
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <Modal.Content width="md">
@@ -53,12 +50,14 @@ function ModalShell({
           moreIcon1={SvgArrowExchange}
           moreIcon2={SvgOnyxLogo}
           title={
-            isEditing ? `Manage ${providerName}` : `Set up ${providerName}`
+            isEditing
+              ? `Manage ${provider.displayName}`
+              : `Set up ${provider.displayName}`
           }
           description={
             isEditing
-              ? `Manage ${providerName} provider and model details.`
-              : `Connect to ${providerName} and set up your ${providerName} embedding models.`
+              ? `Manage ${provider.displayName} provider and model details.`
+              : `Connect to ${provider.displayName} and set up your ${provider.displayName} embedding models.`
           }
           onClose={onCancel}
         />
@@ -151,7 +150,7 @@ export function StandardProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.providerName);
+  const providerName = provider.displayName;
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
 
   const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
@@ -173,7 +172,7 @@ export function StandardProviderModal({
     >
       <ApiKeyField
         apiLink={provider.apiLink ?? ""}
-        providerName={providerName}
+        providerName={provider.displayName}
         value={apiKey}
         onChange={setApiKey}
       />
@@ -246,7 +245,7 @@ export function AzureProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.providerName);
+  const providerName = provider.displayName;
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
 
@@ -275,7 +274,7 @@ export function AzureProviderModal({
       />
       <ApiKeyField
         apiLink={provider.apiLink ?? ""}
-        providerName={providerName}
+        providerName={provider.displayName}
         value={apiKey}
         onChange={setApiKey}
       />
@@ -294,7 +293,7 @@ export function LiteLLMProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.providerName);
+  const providerName = provider.displayName;
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
   const [modelName, setModelName] = useState("");
@@ -323,21 +322,21 @@ export function LiteLLMProviderModal({
       <ApiUrlField
         title="API Base URL"
         placeholder="https://..."
-        subDescription={`Paste your ${providerName}-compatible endpoint URL.`}
+        subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
         value={apiUrl}
         onChange={setApiUrl}
       />
 
       <ApiKeyField
         apiLink={provider.apiLink ?? ""}
-        providerName={providerName}
+        providerName={provider.displayName}
         value={apiKey}
         onChange={setApiKey}
       />
 
       <InputVertical
         title="Model Name"
-        subDescription={`Onyx will connect to this model on your ${providerName} proxy.`}
+        subDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
       >
         <InputTypeIn
           placeholder="model-name"

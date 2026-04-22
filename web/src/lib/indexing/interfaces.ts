@@ -42,6 +42,7 @@ export interface EmbeddingModelResponse {
 
 export interface EmbeddingProvider {
   providerName: EmbeddingProviderName;
+  displayName: string;
   icon: IconFunctionComponent;
   docsLink?: string;
   costslink?: string;
@@ -62,7 +63,6 @@ export interface EmbeddingModel {
   normalize: boolean;
   queryPrefix: string | null;
   passagePrefix: string | null;
-  providerType: EmbeddingProviderName | null;
   description: string;
 }
 
