@@ -174,9 +174,7 @@ class TestCodeInterpreterFilenameInLLMJson:
         llm_string, _ = convert_inference_sections_to_llm_string([section])
         payload = json.loads(llm_string)
 
-        assert payload["results"][0]["code_interpreter_file"] == (
-            "Q3 Sales Report_file-abc123.pdf"
-        )
+        assert payload["results"][0]["file_name"] == ("Q3 Sales Report_file-abc123.pdf")
         assert "file_id" not in payload["results"][0]
 
     def test_omitted_when_no_file_id(self) -> None:
@@ -186,7 +184,7 @@ class TestCodeInterpreterFilenameInLLMJson:
         llm_string, _ = convert_inference_sections_to_llm_string([section])
         payload = json.loads(llm_string)
 
-        assert "code_interpreter_file" not in payload["results"][0]
+        assert "file_name" not in payload["results"][0]
 
     def test_same_title_distinct_file_ids_produce_distinct_names(self) -> None:
         a = _make_chunk("doc-a", semantic_identifier="Report.pdf", file_id="fid-A")
@@ -195,7 +193,7 @@ class TestCodeInterpreterFilenameInLLMJson:
         llm_string, _ = convert_inference_sections_to_llm_string(
             [_make_section(a), _make_section(b)]
         )
-        names = [r["code_interpreter_file"] for r in json.loads(llm_string)["results"]]
+        names = [r["file_name"] for r in json.loads(llm_string)["results"]]
         assert names == ["Report_fid-A.pdf", "Report_fid-B.pdf"]
 
     def test_filename_matches_shared_helper(self) -> None:
@@ -206,9 +204,9 @@ class TestCodeInterpreterFilenameInLLMJson:
         llm_string, _ = convert_inference_sections_to_llm_string([section])
         payload = json.loads(llm_string)
 
-        assert payload["results"][0][
-            "code_interpreter_file"
-        ] == sandbox_filename_for_document(title, "file-match")
+        assert payload["results"][0]["file_name"] == sandbox_filename_for_document(
+            title, "file-match"
+        )
 
     def test_citation_mapping_unchanged_by_file_presence(self) -> None:
         chunk = _make_chunk(
@@ -301,7 +299,7 @@ class TestContentFieldWrappingForFileBearingHits:
         assert "sheet_file-mixed.xlsx" in results[0]["content"]
         assert "code interpreter" in results[0]["content"].lower()
         assert results[1]["content"] == "plain combined"
-        assert "code_interpreter_file" not in results[1]
+        assert "file_name" not in results[1]
 
 
 if __name__ == "__main__":
