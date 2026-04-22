@@ -79,7 +79,7 @@ class TestUnsafeCharacterReplacement:
         """`../` attacks lose the slash, so the result is just a filename."""
         result = sandbox_filename_for_document_title("../etc/passwd")
         assert "/" not in result
-        assert result == ".._etc_passwd"
+        assert result == "_etc_passwd"
 
 
 class TestTrimmingAndFallbacks:
