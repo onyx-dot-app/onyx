@@ -18,7 +18,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import SearchDoc
-from onyx.context.search.utils import resolve_sandbox_filenames
+from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -877,38 +877,37 @@ def build_python_chat_files_from_search_docs(
 
     file_store = get_default_file_store()
 
-    candidates: list[tuple[str, str]] = [
-        (doc.file_id, doc.semantic_identifier) for doc in search_docs if doc.file_id
-    ]
-    filename_by_file_id = resolve_sandbox_filenames(candidates)
-    if not filename_by_file_id:
-        return []
-
     chat_files: list[ChatFile] = []
-    for file_id, filename in filename_by_file_id.items():
+    seen_file_ids: set[str] = set()
+    for doc in search_docs:
+        if not doc.file_id or doc.file_id in seen_file_ids:
+            continue
+        seen_file_ids.add(doc.file_id)
+
         try:
-            record = file_store.read_file_record(file_id)
+            record = file_store.read_file_record(doc.file_id)
         except Exception as e:
             logger.warning(
-                f"file_id={file_id!r} not found in file store ({e}); skipping."
+                f"file_id={doc.file_id!r} not found in file store ({e}); skipping."
             )
             continue
 
         if record.file_origin != FileOrigin.CONNECTOR:
             logger.warning(
-                f"file_id={file_id!r} has origin={record.file_origin!r}, "
+                f"file_id={doc.file_id!r} has origin={record.file_origin!r}, "
                 "not eligible for code-interpreter staging; skipping."
             )
             continue
 
         try:
-            content = file_store.read_file(file_id, mode="b").read()
+            content = file_store.read_file(doc.file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                f"Failed to read bytes for file_id={file_id!r}: {e}; skipping."
+                f"Failed to read bytes for file_id={doc.file_id!r}: {e}; skipping."
             )
             continue
 
+        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
         chat_files.append(ChatFile(filename=filename, content=content))
 
     return chat_files

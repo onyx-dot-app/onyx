@@ -1,7 +1,7 @@
 import json
 
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import resolve_sandbox_filenames
+from onyx.context.search.utils import sandbox_filename_for_document
 
 
 CODE_INTERPRETER_GUIDANCE = (
@@ -41,14 +41,6 @@ def convert_inference_sections_to_llm_string(
             document_id_to_citation_id[document_id] = current_citation_id
             citation_mapping[current_citation_id] = document_id
             current_citation_id += 1
-
-    sandbox_filename_by_file_id = resolve_sandbox_filenames(
-        [
-            (section.center_chunk.file_id, section.center_chunk.semantic_identifier)
-            for section in top_sections
-            if section.center_chunk.file_id is not None
-        ]
-    )
 
     # Second pass: build results with citation_ids assigned per document
     results = []
@@ -94,7 +86,9 @@ def convert_inference_sections_to_llm_string(
         if include_document_id:
             result["document_identifier"] = chunk.document_id
         if chunk.file_id is not None:
-            filename = sandbox_filename_by_file_id[chunk.file_id]
+            filename = sandbox_filename_for_document(
+                chunk.semantic_identifier, chunk.file_id
+            )
             result["code_interpreter_file"] = filename
 
             result["content"] = CODE_INTERPRETER_GUIDANCE.format(

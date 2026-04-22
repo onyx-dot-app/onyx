@@ -1,17 +1,4 @@
-"""Unit tests for the search-result → LLM surface.
-
-Two concerns, one test file — they're the same pipeline end-to-end:
-
-  1. `sandbox_filename_for_document_title` turns a Document title into the
-     sandbox-safe filename used both in the LLM JSON and in the actual
-     `ChatFile` staged to the Python sandbox. It's load-bearing that both
-     paths produce identical names, so we pin the helper here.
-
-  2. `convert_inference_sections_to_llm_string` wraps file-bearing hits
-     with `CODE_INTERPRETER_GUIDANCE` and emits `code_interpreter_file` =
-     the same sanitized filename, so the LLM knows which filename to
-     reference in Python code.
-"""
+"""Unit tests for the search-result → LLM surface."""
 
 import json
 
@@ -20,122 +7,116 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import sandbox_filename_for_document_title
+from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.tools.tool_implementations.utils import CODE_INTERPRETER_GUIDANCE
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
 
 
-# =============================================================================
-# sandbox_filename_for_document_title
-# =============================================================================
+FID = "550e8400-e29b-41d4-a716-446655440000"
 
 
 class TestSafeTitlePassthrough:
-    def test_plain_name_with_extension_is_preserved(self) -> None:
-        assert sandbox_filename_for_document_title("Q3 Sales.pdf") == "Q3 Sales.pdf"
-
-    def test_extensionless_title_is_preserved_as_is(self) -> None:
-        """No extension gets synthesized — the helper only sanitizes."""
-        assert sandbox_filename_for_document_title("Quarterly Plan") == "Quarterly Plan"
-
-    def test_spaces_and_underscores_are_preserved(self) -> None:
+    def test_plain_name_with_extension(self) -> None:
         assert (
-            sandbox_filename_for_document_title("my_report v2.csv")
-            == "my_report v2.csv"
+            sandbox_filename_for_document("Q3 Sales.pdf", FID) == f"Q3 Sales_{FID}.pdf"
+        )
+
+    def test_extensionless_title(self) -> None:
+        assert (
+            sandbox_filename_for_document("Quarterly Plan", FID)
+            == f"Quarterly Plan_{FID}"
+        )
+
+    def test_spaces_and_underscores_preserved(self) -> None:
+        assert (
+            sandbox_filename_for_document("my_report v2.csv", FID)
+            == f"my_report v2_{FID}.csv"
         )
 
 
 class TestUnsafeCharacterReplacement:
     def test_forward_slash_becomes_underscore(self) -> None:
-        assert sandbox_filename_for_document_title("Q1/Q2 Report") == "Q1_Q2 Report"
+        assert (
+            sandbox_filename_for_document("Q1/Q2 Report", FID) == f"Q1_Q2 Report_{FID}"
+        )
 
     def test_backslash_becomes_underscore(self) -> None:
-        assert sandbox_filename_for_document_title("path\\to\\file") == "path_to_file"
+        assert (
+            sandbox_filename_for_document("path\\to\\file", FID)
+            == f"path_to_file_{FID}"
+        )
 
     def test_colon_becomes_underscore(self) -> None:
-        assert sandbox_filename_for_document_title("Re: meeting") == "Re_ meeting"
+        assert sandbox_filename_for_document("Re: meeting", FID) == f"Re_ meeting_{FID}"
 
     def test_wildcards_and_pipes_replaced(self) -> None:
-        assert sandbox_filename_for_document_title("file*?|<>") == "file_"
+        assert sandbox_filename_for_document("file*?|<>", FID) == f"file__{FID}"
 
     def test_quotes_and_angle_brackets_replaced(self) -> None:
         assert (
-            sandbox_filename_for_document_title('"quoted" <html>') == "_quoted_ _html_"
+            sandbox_filename_for_document('"quoted" <html>', FID)
+            == f"_quoted_ _html__{FID}"
         )
 
     def test_null_byte_replaced(self) -> None:
-        assert sandbox_filename_for_document_title("ok\x00bad") == "ok_bad"
+        assert sandbox_filename_for_document("ok\x00bad", FID) == f"ok_bad_{FID}"
 
     def test_control_chars_replaced(self) -> None:
-        assert sandbox_filename_for_document_title("line\x01\x02\x1fok") == "line_ok"
+        assert (
+            sandbox_filename_for_document("line\x01\x02\x1fok", FID) == f"line_ok_{FID}"
+        )
 
-    def test_consecutive_unsafe_chars_collapse_to_single_underscore(self) -> None:
-        """The regex uses `+`, so runs of unsafe chars produce exactly one `_`."""
-        assert sandbox_filename_for_document_title("a///b\\\\c") == "a_b_c"
+    def test_consecutive_unsafe_chars_collapse(self) -> None:
+        assert sandbox_filename_for_document("a///b\\\\c", FID) == f"a_b_c_{FID}"
 
     def test_path_traversal_is_neutralized(self) -> None:
-        """`../` attacks lose the slash, so the result is just a filename."""
-        result = sandbox_filename_for_document_title("../etc/passwd")
+        result = sandbox_filename_for_document("../etc/passwd", FID)
         assert "/" not in result
-        assert result == "_etc_passwd"
+        assert result == f"_etc_passwd_{FID}"
 
 
 class TestTrimmingAndFallbacks:
     def test_leading_and_trailing_whitespace_stripped(self) -> None:
-        assert sandbox_filename_for_document_title("   report.csv   ") == "report.csv"
+        assert (
+            sandbox_filename_for_document("   report.csv   ", FID)
+            == f"report_{FID}.csv"
+        )
 
     def test_leading_and_trailing_dots_stripped(self) -> None:
-        assert sandbox_filename_for_document_title("...hidden...") == "hidden"
+        assert sandbox_filename_for_document("...hidden...", FID) == f"hidden_{FID}"
 
-    def test_empty_input_returns_document_fallback(self) -> None:
-        assert sandbox_filename_for_document_title("") == "document"
+    def test_empty_input_falls_back_to_document(self) -> None:
+        assert sandbox_filename_for_document("", FID) == f"document_{FID}"
 
-    def test_spaces_only_returns_document_fallback(self) -> None:
-        """Plain spaces aren't matched by the unsafe-char regex, so the
-        subsequent `.strip()` empties the string → fallback."""
-        assert sandbox_filename_for_document_title("     ") == "document"
+    def test_spaces_only_falls_back_to_document(self) -> None:
+        assert sandbox_filename_for_document("     ", FID) == f"document_{FID}"
 
-    def test_only_unsafe_chars_does_not_fall_back_to_document(self) -> None:
-        """Unsafe chars get replaced with underscores BEFORE the empty-check,
-        so a title that's all unsafe chars becomes `_`, not `document`.
-        Same story for whitespace mixed with control chars (tabs are
-        `\\x09` and get replaced, not stripped). Pinned here because the
-        interaction is subtle."""
-        assert sandbox_filename_for_document_title("////") == "_"
-        assert sandbox_filename_for_document_title("   \t  ") == "_"
+    def test_only_unsafe_chars_does_not_fall_back(self) -> None:
+        assert sandbox_filename_for_document("////", FID) == f"__{FID}"
+        assert sandbox_filename_for_document("   \t  ", FID) == f"__{FID}"
 
-    def test_only_dots_returns_document_fallback(self) -> None:
-        """Leading/trailing dot stripping eats the whole string, which
-        triggers the empty-name fallback."""
-        assert sandbox_filename_for_document_title("....") == "document"
+    def test_only_dots_falls_back_to_document(self) -> None:
+        assert sandbox_filename_for_document("....", FID) == f"document_{FID}"
 
 
 class TestLengthCap:
-    def test_long_name_truncated_to_max_length(self) -> None:
-        long_title = "x" * 500
-        result = sandbox_filename_for_document_title(long_title)
+    def test_long_base_truncated_but_file_id_and_ext_preserved(self) -> None:
+        fid = "abc"
+        result = sandbox_filename_for_document("x" * 500 + ".pdf", fid)
         assert len(result) == 200
-        assert result == "x" * 200
+        assert result.endswith(f"_{fid}.pdf")
 
-    def test_just_under_cap_is_unchanged(self) -> None:
-        title = "y" * 200
-        assert sandbox_filename_for_document_title(title) == title
-
-    def test_truncation_ignores_extension(self) -> None:
-        """The cap is a raw char count — extensions aren't protected, so a
-        very long title followed by `.pdf` still gets chopped. Deliberate
-        tradeoff (simplicity over preserving extensions on pathological
-        inputs)."""
-        result = sandbox_filename_for_document_title("x" * 300 + ".pdf")
+    def test_extension_survives_pathological_input(self) -> None:
+        fid = "abc"
+        result = sandbox_filename_for_document("x" * 300 + ".pdf", fid)
         assert len(result) == 200
-        assert not result.endswith(".pdf")
+        assert result.endswith(".pdf")
 
-
-# =============================================================================
-# convert_inference_sections_to_llm_string
-# =============================================================================
+    def test_file_id_never_truncated(self) -> None:
+        result = sandbox_filename_for_document("x" * 500, FID)
+        assert result.endswith(f"_{FID}")
 
 
 def _make_chunk(
@@ -182,7 +163,7 @@ def _make_section(
 
 
 class TestCodeInterpreterFilenameInLLMJson:
-    def test_filename_derived_from_title_when_file_id_present(self) -> None:
+    def test_filename_embeds_file_id_when_present(self) -> None:
         chunk = _make_chunk(
             "doc-a",
             semantic_identifier="Q3 Sales Report.pdf",
@@ -193,10 +174,9 @@ class TestCodeInterpreterFilenameInLLMJson:
         llm_string, _ = convert_inference_sections_to_llm_string([section])
         payload = json.loads(llm_string)
 
-        # Sandbox filename = sanitized title; same helper the staging
-        # pipeline uses, so the LLM-visible name matches the filesystem.
-        assert payload["results"][0]["code_interpreter_file"] == "Q3 Sales Report.pdf"
-        # Internal-only — must not leak into the LLM JSON.
+        assert payload["results"][0]["code_interpreter_file"] == (
+            "Q3 Sales Report_file-abc123.pdf"
+        )
         assert "file_id" not in payload["results"][0]
 
     def test_omitted_when_no_file_id(self) -> None:
@@ -208,25 +188,17 @@ class TestCodeInterpreterFilenameInLLMJson:
 
         assert "code_interpreter_file" not in payload["results"][0]
 
-    def test_title_with_unsafe_chars_is_sanitized(self) -> None:
-        chunk = _make_chunk(
-            "doc-c",
-            semantic_identifier="Report: Q1/Q2 Analysis",
-            file_id="file-xyz",
-        )
-        section = _make_section(chunk)
+    def test_same_title_distinct_file_ids_produce_distinct_names(self) -> None:
+        a = _make_chunk("doc-a", semantic_identifier="Report.pdf", file_id="fid-A")
+        b = _make_chunk("doc-b", semantic_identifier="Report.pdf", file_id="fid-B")
 
-        llm_string, _ = convert_inference_sections_to_llm_string([section])
-        payload = json.loads(llm_string)
-
-        assert payload["results"][0]["code_interpreter_file"] == (
-            "Report_ Q1_Q2 Analysis"
+        llm_string, _ = convert_inference_sections_to_llm_string(
+            [_make_section(a), _make_section(b)]
         )
+        names = [r["code_interpreter_file"] for r in json.loads(llm_string)["results"]]
+        assert names == ["Report_fid-A.pdf", "Report_fid-B.pdf"]
 
     def test_filename_matches_shared_helper(self) -> None:
-        """The serializer must route through the same helper the staging
-        pipeline uses — otherwise the LLM-visible name and the actual
-        sandbox filename can drift apart."""
         title = "Weird/Name*With:Stuff"
         chunk = _make_chunk("doc-d", semantic_identifier=title, file_id="file-match")
         section = _make_section(chunk)
@@ -236,11 +208,9 @@ class TestCodeInterpreterFilenameInLLMJson:
 
         assert payload["results"][0][
             "code_interpreter_file"
-        ] == sandbox_filename_for_document_title(title)
+        ] == sandbox_filename_for_document(title, "file-match")
 
     def test_citation_mapping_unchanged_by_file_presence(self) -> None:
-        """Adding code-interpreter guidance is purely additive — citation
-        numbering still keys off document_id."""
         chunk = _make_chunk(
             "doc-e",
             semantic_identifier="Anything.csv",
@@ -256,8 +226,6 @@ class TestCodeInterpreterFilenameInLLMJson:
 
 
 class TestContentFieldWrappingForFileBearingHits:
-    """The `content` value differs for file-bearing hits vs. ordinary hits."""
-
     def test_file_hit_wraps_content_with_guidance(self) -> None:
         chunk = _make_chunk(
             "doc-f",
@@ -273,18 +241,14 @@ class TestContentFieldWrappingForFileBearingHits:
         payload = json.loads(llm_string)
         content = payload["results"][0]["content"]
 
-        # Content is the guidance template wrapped around the center chunk.
-        # Expanded section content is NOT included (code interpreter is
-        # the better path for the full file).
         expected = CODE_INTERPRETER_GUIDANCE.format(
-            filename="data.csv", content="just the center chunk"
+            filename="data_file-wrap.csv", content="just the center chunk"
         )
         assert content == expected
-        # Concrete properties we care about for LLM steering:
-        assert "data.csv" in content
+        assert "data_file-wrap.csv" in content
         assert "just the center chunk" in content
         assert "code interpreter" in content.lower()
-        assert "PLUS adjacent" not in content  # combined_content suppressed
+        assert "PLUS adjacent" not in content
 
     def test_non_file_hit_uses_combined_content_unchanged(self) -> None:
         chunk = _make_chunk(
@@ -302,9 +266,6 @@ class TestContentFieldWrappingForFileBearingHits:
         assert payload["results"][0]["content"] == "full combined section text here"
 
     def test_guidance_mentions_filename_and_interpreter(self) -> None:
-        """Load-bearing phrasing: the LLM should be able to read the
-        content field and know (1) this is an excerpt, (2) what the real
-        filename is, (3) which tool gets it the full file."""
         chunk = _make_chunk(
             "doc-h",
             semantic_identifier="report.pdf",
@@ -318,9 +279,7 @@ class TestContentFieldWrappingForFileBearingHits:
         content = payload["results"][0]["content"]
 
         assert "excerpt" in content.lower()
-        assert "report.pdf" in content
-        # Whichever exact wording CODE_INTERPRETER_GUIDANCE uses, the
-        # Python code interpreter recommendation must be there.
+        assert "report_file-phrasing.pdf" in content
         assert "python code interpreter" in content.lower()
 
     def test_mixed_batch_only_file_hits_get_guidance(self) -> None:
@@ -339,9 +298,8 @@ class TestContentFieldWrappingForFileBearingHits:
         llm_string, _ = convert_inference_sections_to_llm_string(sections)
         results = json.loads(llm_string)["results"]
 
-        assert "sheet.xlsx" in results[0]["content"]
+        assert "sheet_file-mixed.xlsx" in results[0]["content"]
         assert "code interpreter" in results[0]["content"].lower()
-        # Plain hit carries its combined_content as-is, no guidance text.
         assert results[1]["content"] == "plain combined"
         assert "code_interpreter_file" not in results[1]
 

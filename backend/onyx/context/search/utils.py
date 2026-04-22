@@ -109,44 +109,18 @@ def convert_inference_sections_to_search_docs(
     return search_docs
 
 
-def sandbox_filename_for_document_title(title: str) -> str:
-    """Sanitize a document title into a sandbox-safe filename; extensions on
-    the title are preserved verbatim, extensionless titles get no suffix."""
+def sandbox_filename_for_document(title: str, file_id: str) -> str:
+    """Sanitize a document title and append its file_id to produce a globally
+    unique sandbox filename. Extensions on the title are preserved verbatim."""
     max_length = 200
 
-    name = _UNSAFE_CHARS_RE.sub("_", title).strip().strip(".")
-    if not name:
-        name = "document"
-    return name[:max_length]
-
-
-def _dedupe_filename(name: str, taken: set[str]) -> str:
-    if name not in taken:
-        return name
-    base, ext = os.path.splitext(name)
-    counter = 2
-    while True:
-        candidate = f"{base}_{counter}{ext}"
-        if candidate not in taken:
-            return candidate
-        counter += 1
-
-
-def resolve_sandbox_filenames(
-    items: list[tuple[str, str]],
-) -> dict[str, str]:
-    """Deterministic `file_id -> sandbox_filename` map. First occurrence of a
-    file_id wins; later distinct file_ids with colliding titles get `_2`, `_3`
-    suffixes."""
-    taken: set[str] = set()
-    result: dict[str, str] = {}
-    for file_id, title in items:
-        if not file_id or file_id in result:
-            continue
-        name = _dedupe_filename(sandbox_filename_for_document_title(title), taken)
-        taken.add(name)
-        result[file_id] = name
-    return result
+    sanitized = _UNSAFE_CHARS_RE.sub("_", title).strip().strip(".")
+    base, ext = os.path.splitext(sanitized)
+    if not base:
+        base = "document"
+    suffix = f"_{file_id}{ext}"
+    max_base_len = max(1, max_length - len(suffix))
+    return f"{base[:max_base_len]}{suffix}"
 
 
 def populate_file_ids_on_sections(

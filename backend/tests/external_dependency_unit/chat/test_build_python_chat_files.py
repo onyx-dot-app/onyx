@@ -122,7 +122,7 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert len(chat_files) == 1
-        assert chat_files[0].filename == "greetings.csv"
+        assert chat_files[0].filename == f"greetings_{file_id}.csv"
         assert chat_files[0].content == b"hello,world\n1,2\n"
 
     def test_disallowed_origin_is_rejected(
@@ -168,7 +168,7 @@ class TestBuildPythonChatFiles:
 
         chat_files = build_python_chat_files_from_search_docs(docs)
 
-        assert [cf.filename for cf in chat_files] == ["ok.csv"]
+        assert [cf.filename for cf in chat_files] == [f"ok_{good_id}.csv"]
 
     def test_duplicate_file_ids_deduped_first_hit_wins(
         self,
@@ -190,15 +190,15 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert len(chat_files) == 1
-        assert chat_files[0].filename == "first.csv"
+        assert chat_files[0].filename == f"first_{file_id}.csv"
 
-    def test_filename_collisions_resolved_with_numeric_suffix(
+    def test_distinct_file_ids_with_same_title_get_distinct_names(
         self,
         file_cleanup: list[str],
     ) -> None:
-        """Two distinct file_ids with IDENTICAL sanitized titles must each
-        get a unique sandbox filename — else the second upload overwrites
-        the first in the workspace."""
+        """Two distinct file_ids with IDENTICAL titles must each get a unique
+        sandbox filename — file_id is embedded in the filename so collisions
+        are impossible by construction."""
         file_a = _write_file(b"first")
         file_b = _write_file(b"second")
         file_c = _write_file(b"third")
@@ -213,11 +213,10 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert [cf.filename for cf in chat_files] == [
-            "Report.pdf",
-            "Report_2.pdf",
-            "Report_3.pdf",
+            f"Report_{file_a}.pdf",
+            f"Report_{file_b}.pdf",
+            f"Report_{file_c}.pdf",
         ]
-        # Bytes are intact (no cross-contamination from the rename).
         assert chat_files[0].content == b"first"
         assert chat_files[1].content == b"second"
         assert chat_files[2].content == b"third"
@@ -226,8 +225,6 @@ class TestBuildPythonChatFiles:
         self,
         file_cleanup: list[str],
     ) -> None:
-        """Unsafe chars in the title get replaced — same sanitizer the LLM
-        JSON path uses, so the LLM-visible filename == sandbox filename."""
         file_id = _write_file(b"payload")
         file_cleanup.append(file_id)
 
@@ -236,15 +233,13 @@ class TestBuildPythonChatFiles:
         chat_files = build_python_chat_files_from_search_docs(docs)
 
         assert len(chat_files) == 1
-        assert chat_files[0].filename == "Q1_Q2 Report"
+        assert chat_files[0].filename == f"Q1_Q2 Report_{file_id}"
 
     def test_original_order_preserved(
         self,
         file_cleanup: list[str],
     ) -> None:
-        """Output order follows the input SearchDoc order, not DB order or
-        any implicit sort — the first search hit's file appears first in
-        the ChatFile list."""
+        """Output order follows the input SearchDoc order."""
         ids = [_write_file(f"body-{i}".encode()) for i in range(3)]
         file_cleanup.extend(ids)
 
@@ -256,4 +251,8 @@ class TestBuildPythonChatFiles:
 
         chat_files = build_python_chat_files_from_search_docs(docs)
 
-        assert [cf.filename for cf in chat_files] == ["a.csv", "b.csv", "c.csv"]
+        assert [cf.filename for cf in chat_files] == [
+            f"a_{ids[0]}.csv",
+            f"b_{ids[1]}.csv",
+            f"c_{ids[2]}.csv",
+        ]
