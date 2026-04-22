@@ -158,6 +158,50 @@ def _build_oauth_admin_config_data(
     return config_data
 
 
+def _build_oauth_admin_config_data_for_update(
+    *,
+    client_id: str | None,
+    client_secret: str | None,
+    existing_client: OAuthClientInformationFull,
+) -> MCPConnectionData:
+    """Construct the admin connection config payload for an OAuth client
+    that already has a stored `client_info`, preserving provider-managed
+    fields (DCR registration token, expiry timestamps, negotiated auth
+    method, etc.) wherever possible.
+
+    When `client_id` matches the stored client_id, the merged payload
+    starts from `existing_client` and only overwrites the admin-managed
+    fields (`client_secret`, `redirect_uris`, `scope`). When `client_id`
+    differs, the admin is pointing at a brand-new OAuth registration so
+    the old DCR metadata is stale; we fall back to the template path.
+    """
+    if not client_id:
+        # No id means we have nothing to seed client_info with; matches
+        # the template-path behavior of returning an empty config so the
+        # OAuth provider can attempt DCR.
+        return _build_oauth_admin_config_data(
+            client_id=client_id, client_secret=client_secret
+        )
+
+    if existing_client.client_id != client_id:
+        logger.info(
+            "OAuth client_id changed for existing MCP server; discarding "
+            "stored DCR registration metadata and starting fresh."
+        )
+        return _build_oauth_admin_config_data(
+            client_id=client_id, client_secret=client_secret
+        )
+
+    merged = existing_client.model_copy(deep=True)
+    merged.client_secret = client_secret
+    merged.redirect_uris = [AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")]
+    merged.scope = REQUESTED_SCOPE  # TODO(evan): allow specifying scopes?
+
+    config_data = MCPConnectionData(headers={})
+    config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
+    return config_data
+
+
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
@@ -478,9 +522,21 @@ async def _connect_oauth(
         existing_client=existing_client,
     )
 
-    config_data = _build_oauth_admin_config_data(
-        client_id=request.oauth_client_id,
-        client_secret=request.oauth_client_secret,
+    # When we already have a stored `client_info`, merge into it so we
+    # preserve any provider-managed fields (DCR registration token,
+    # `client_secret_expires_at`, negotiated `token_endpoint_auth_method`,
+    # etc.) that the hardcoded template would otherwise drop.
+    config_data = (
+        _build_oauth_admin_config_data_for_update(
+            client_id=request.oauth_client_id,
+            client_secret=request.oauth_client_secret,
+            existing_client=existing_client,
+        )
+        if existing_client is not None
+        else _build_oauth_admin_config_data(
+            client_id=request.oauth_client_id,
+            client_secret=request.oauth_client_secret,
+        )
     )
 
     if mcp_server.admin_connection_config_id is None:
