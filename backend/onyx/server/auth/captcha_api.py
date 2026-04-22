@@ -34,6 +34,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -142,15 +143,12 @@ def _health_check_bypass_ok(request: Request) -> bool:
 
 
 def _client_ip_for_log(request: Request) -> str:
-    """Return the external client IP for log attribution. Prefers the first
-    hop in ``X-Forwarded-For`` (set by nginx-ingress) so logs identify the
-    real source rather than the in-cluster proxy address.
+    """Return the external client IP for log attribution. Delegates to the
+    shared ``get_client_ip`` helper, which walks ``X-Forwarded-For``
+    right-to-left and ignores spoofed left-side entries. Falls back to
+    ``"unknown"`` so the log line never drops its ``client=`` field.
     """
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    first_hop = forwarded.split(",")[0].strip() if forwarded else ""
-    if first_hop:
-        return first_hop
-    return request.client.host if request.client else "unknown"
+    return get_client_ip(request) or "unknown"
 
 
 class LoginCaptchaMiddleware(BaseHTTPMiddleware):

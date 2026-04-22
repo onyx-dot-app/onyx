@@ -1,6 +1,5 @@
 """Per-IP rate limit on email/password signup."""
 
-import ipaddress
 import time
 
 from fastapi import Request
@@ -9,6 +8,7 @@ from onyx.configs.app_configs import SIGNUP_RATE_LIMIT_ENABLED
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
+from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -19,21 +19,16 @@ _BUCKET_SECONDS = 3600
 _REDIS_KEY_PREFIX = "signup_rate:"
 
 
-def _is_usable_client_ip(ip_str: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    return ip.is_global
-
-
 def _client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        parts = [p.strip() for p in xff.split(",") if p.strip()]
-        if parts and _is_usable_client_ip(parts[0]):
-            return parts[0]
-    return request.client.host if request.client else "unknown"
+    """Return the rate-limit bucket key for this request.
+
+    Delegates to the shared ``get_client_ip`` helper, which walks
+    ``X-Forwarded-For`` right-to-left so attacker-prepended IPs at the
+    left of the chain can't carve out their own bucket. Falls back to
+    the string ``"unknown"`` when no routable address is available,
+    so bucket_key stays deterministic.
+    """
+    return get_client_ip(request) or "unknown"
 
 
 def _bucket_key(ip: str) -> str:
