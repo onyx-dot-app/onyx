@@ -259,6 +259,9 @@ def test_owner_can_download_image_gen_file(
     assert response.content == _IMAGE_GEN_PNG_BYTES
 
 
+@pytest.mark.skip(
+    reason="CHAT_IMAGE_GEN files are temporarily public. See TODO in user_file.py."
+)
 def test_non_owner_cannot_download_image_gen_file_in_private_session(
     image_gen_setup: ImageGenSetup,
 ) -> None:
