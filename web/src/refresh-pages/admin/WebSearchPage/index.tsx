@@ -906,15 +906,15 @@ export default function WebSearchPage() {
                             }
                           : undefined
                       }
-                      onSelectChange={
+                      onSelect={
                         providerId
-                          ? (selected) => {
-                              if (selected) {
-                                void handleActivateSearchProvider(providerId);
-                              } else {
-                                void handleDeactivateSearchProvider(providerId);
-                              }
-                            }
+                          ? () => void handleActivateSearchProvider(providerId)
+                          : undefined
+                      }
+                      onDeselect={
+                        providerId
+                          ? () =>
+                              void handleDeactivateSearchProvider(providerId)
                           : undefined
                       }
                       onEdit={
@@ -1022,19 +1022,16 @@ export default function WebSearchPage() {
                       openContentModal(provider.provider_type, provider);
                       setContentActivationError(null);
                     }}
-                    onSelectChange={
+                    onSelect={
                       canActivate
-                        ? (selected) => {
-                            if (selected) {
-                              void handleActivateContentProvider(provider);
-                            } else {
-                              void handleDeactivateContentProvider(
-                                providerId,
-                                provider.provider_type
-                              );
-                            }
-                          }
+                        ? () => void handleActivateContentProvider(provider)
                         : undefined
+                    }
+                    onDeselect={() =>
+                      void handleDeactivateContentProvider(
+                        providerId,
+                        provider.provider_type
+                      )
                     }
                     onEdit={
                       provider.provider_type !== "onyx_web_crawler" &&

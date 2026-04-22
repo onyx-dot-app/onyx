@@ -40,7 +40,8 @@ import {
  *   description="Exa.ai"
  *   status="connected"
  *   onConnect={() => openModal()}
- *   onSelectChange={(selected) => selected ? setDefault(id) : removeDefault(id)}
+ *   onSelect={() => setDefault(id)}
+ *   onDeselect={() => removeDefault(id)}
  *   onEdit={() => openEditModal()}
  *   onDisconnect={() => confirmDisconnect(id)}
  * />
@@ -55,8 +56,8 @@ interface ProviderCardProps {
   description: string;
   status: ProviderStatus;
   onConnect?: () => void;
-  /** Called with `true` when selecting (set as default), `false` when deselecting. */
-  onSelectChange?: (selected: boolean) => void;
+  onSelect?: () => void;
+  onDeselect?: () => void;
   onEdit?: () => void;
   onDisconnect?: () => void;
   /** When true, keeps the disconnect button visible (as if hovered). */
@@ -77,7 +78,8 @@ export default function ProviderCard({
   description,
   status,
   onConnect,
-  onSelectChange,
+  onSelect,
+  onDeselect,
   onEdit,
   onDisconnect,
   disconnectModalOpen,
@@ -101,10 +103,10 @@ export default function ProviderCard({
         onClick={
           isDisconnected && onConnect
             ? onConnect
-            : isConnected && onSelectChange
-              ? () => onSelectChange(true)
-              : isSelected && onSelectChange
-                ? () => onSelectChange(false)
+            : isConnected && onSelect
+              ? onSelect
+              : isSelected && onDeselect
+                ? onDeselect
                 : undefined
         }
       >
@@ -129,13 +131,13 @@ export default function ProviderCard({
               </Button>
             ) : (
               <Section alignItems="end" justifyContent="start" gap={0}>
-                {isConnected && onSelectChange ? (
+                {isConnected && onSelect ? (
                   <Button
                     prominence="tertiary"
                     rightIcon={SvgArrowRightCircle}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectChange(true);
+                      onSelect();
                     }}
                   >
                     Set as Default
