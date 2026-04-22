@@ -184,6 +184,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.freshdesk.connector",
         class_name="FreshdeskConnector",
     ),
+    DocumentSource.FRESHDESK_SOLUTIONS: ConnectorMapping(
+        module_path="onyx.connectors.freshdesk_solutions.connector",
+        class_name="FreshdeskSolutionsConnector",
+    ),
     DocumentSource.FIREFLIES: ConnectorMapping(
         module_path="onyx.connectors.fireflies.connector",
         class_name="FirefliesConnector",
