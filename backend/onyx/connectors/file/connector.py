@@ -239,6 +239,9 @@ def _process_file(
                 f"Failed to process embedded image {idx} in {file_name}: {e}"
             )
 
+    # Only set the file id if it is a tabular document
+    doc_file_id = file_id if is_tabular_file(file_name) else None
+
     return [
         Document(
             id=doc_id,
@@ -250,7 +253,7 @@ def _process_file(
             primary_owners=primary_owners,
             secondary_owners=secondary_owners,
             metadata=custom_tags,
-            file_id=file_id,
+            file_id=doc_file_id,
         )
     ]
 
