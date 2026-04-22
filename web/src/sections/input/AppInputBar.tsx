@@ -318,6 +318,7 @@ const AppInputBar = React.memo(
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
         isAutoSending.current = true;
+        stopTTS();
         onSubmit(nextMessage);
         isAutoSending.current = false;
         removeCurrentQueuedMessage(0);
@@ -327,6 +328,7 @@ const AppInputBar = React.memo(
       awaitingPreferredSelection,
       queuedMessages,
       removeCurrentQueuedMessage,
+      stopTTS,
       onSubmit,
     ]);
 
