@@ -300,6 +300,39 @@ class TestExtractContextFiles:
         assert result.file_texts == []
         assert result.total_token_count == 50
 
+    @patch("onyx.chat.process_message.extract_file_text")
+    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    def test_doc_files_use_text_only_extraction(
+        self,
+        mock_load: MagicMock,
+        mock_extract_file_text: MagicMock,
+    ) -> None:
+        file_id = str(uuid4())
+        uf = _make_user_file(token_count=100, file_id=file_id, name="report.docx")
+        uf.file_type = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        mock_load.return_value = [
+            InMemoryChatFile(
+                file_id=file_id,
+                content=b"doc bytes",
+                file_type=ChatFileType.DOC,
+                filename="report.docx",
+            )
+        ]
+        mock_extract_file_text.return_value = "document body"
+
+        result = extract_context_files(
+            user_files=[uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+
+        assert result.file_texts == ["document body"]
+        assert result.total_token_count == 100
+        mock_extract_file_text.assert_called_once()
+
     @patch("onyx.chat.process_message.load_in_memory_chat_files")
     def test_tool_metadata_file_id_matches_chat_history_file_id(
         self, mock_load: MagicMock
