@@ -1,0 +1,231 @@
+# ruff: noqa: ARG002
+"""Unit tests for `onyx.llm.tracing_wrap`.
+
+Cover:
+- `LLM.__init_subclass__` auto-wraps `invoke` and `stream` on concrete subclasses
+- Wrapper is idempotent (double-application is a no-op)
+- Outer-span guard (``_outer_generation_span_active``) skips fallback when
+  an outer ``generation_span`` is active
+- Stale-span guard: a finished ``GenerationSpanData`` in the contextvar does
+  not suppress fallback tracing (regression guard for the ``GeneratorExit``
+  corner case)
+- `_extract_prompt` helper reads positional and keyword arguments
+
+The `_FakeLLM` test double's `invoke` / `stream` signatures intentionally
+mirror the `LLM` abstract interface, which means many parameters are
+declared but unused — hence the `ARG002` suppression at the file level.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+
+from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.model_response import Choice
+from onyx.llm.model_response import Delta
+from onyx.llm.model_response import Message
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.model_response import StreamingChoice
+from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.models import UserMessage
+from onyx.llm.tracing_wrap import _ALREADY_WRAPPED_ATTR
+from onyx.llm.tracing_wrap import _extract_prompt
+from onyx.llm.tracing_wrap import _outer_generation_span_active
+from onyx.llm.tracing_wrap import wrap_invoke
+from onyx.llm.tracing_wrap import wrap_stream
+from onyx.tracing.framework.create import generation_span
+from onyx.tracing.framework.create import trace
+
+_TEST_MODEL_RESPONSE = ModelResponse(
+    id="test-id",
+    created="2026-04-22T00:00:00Z",
+    choice=Choice(message=Message(content="hi")),
+)
+
+
+class _FakeLLM(LLM):
+    """Minimal concrete subclass used to exercise `__init_subclass__`."""
+
+    def __init__(self) -> None:
+        self._invoke_calls = 0
+        self._stream_calls = 0
+        self._last_prompt: Any = None
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider="test",
+            model_name="test-model",
+            temperature=0.0,
+            max_input_tokens=1000,
+        )
+
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        self._invoke_calls += 1
+        self._last_prompt = prompt
+        return _TEST_MODEL_RESPONSE
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        self._stream_calls += 1
+        self._last_prompt = prompt
+        for chunk_text in ("hello", " ", "world"):
+            yield ModelResponseStream(
+                id="stream-id",
+                created="2026-04-22T00:00:00Z",
+                choice=StreamingChoice(delta=Delta(content=chunk_text)),
+            )
+
+
+class _NoOverrideLLM(_FakeLLM):
+    """Subclass that does not override ``invoke`` / ``stream`` — the inherited
+    (already-wrapped) methods must not be wrapped a second time."""
+
+
+def test_init_subclass_auto_wraps_invoke_and_stream() -> None:
+    assert getattr(_FakeLLM.invoke, _ALREADY_WRAPPED_ATTR, False) is True
+    assert getattr(_FakeLLM.stream, _ALREADY_WRAPPED_ATTR, False) is True
+
+
+def test_inherited_methods_are_not_rewrapped() -> None:
+    # _NoOverrideLLM inherits from _FakeLLM without redefining invoke/stream,
+    # so __init_subclass__ should not wrap them again.
+    assert _NoOverrideLLM.invoke is _FakeLLM.invoke
+    assert _NoOverrideLLM.stream is _FakeLLM.stream
+
+
+def test_wrap_invoke_is_idempotent() -> None:
+    # Calling wrap_invoke on an already-wrapped function returns the same
+    # function instance rather than wrapping it again.
+    wrapped_once = _FakeLLM.invoke
+    wrapped_twice = wrap_invoke(wrapped_once)
+    assert wrapped_twice is wrapped_once
+
+
+def test_wrap_stream_is_idempotent() -> None:
+    wrapped_once = _FakeLLM.stream
+    wrapped_twice = wrap_stream(wrapped_once)
+    assert wrapped_twice is wrapped_once
+
+
+def test_invoke_returns_inner_response() -> None:
+    llm = _FakeLLM()
+    prompt = UserMessage(content="hello")
+    result = llm.invoke(prompt)
+    assert result is _TEST_MODEL_RESPONSE
+    assert llm._invoke_calls == 1
+    assert llm._last_prompt is prompt
+
+
+def test_stream_yields_all_chunks() -> None:
+    llm = _FakeLLM()
+    prompt = UserMessage(content="hello")
+    chunks = list(llm.stream(prompt))
+    assert len(chunks) == 3
+    assert llm._stream_calls == 1
+    assert llm._last_prompt is prompt
+
+
+def test_outer_guard_false_when_no_span_active() -> None:
+    assert _outer_generation_span_active() is False
+
+
+def test_outer_guard_true_inside_generation_span() -> None:
+    # An active trace is required for `generation_span` to return a real
+    # SpanImpl rather than a NoOpSpan (see provider.py).
+    with trace("test_outer_guard_true"):
+        with generation_span(model="test", model_config={"model_provider": "test"}):
+            assert _outer_generation_span_active() is True
+    # Span exited cleanly — contextvar reset, guard flips back to False.
+    assert _outer_generation_span_active() is False
+
+
+def test_outer_guard_false_for_finished_span_leaked_into_contextvar() -> None:
+    """Regression guard for the ``GeneratorExit`` corner case.
+
+    ``SpanImpl.__exit__`` intentionally skips ``Scope.reset_current_span``
+    when the exit was triggered by ``GeneratorExit`` (abandoned streaming
+    generator). That leaves a finished span object in the contextvar.
+    The outer-span guard must ignore it so subsequent LLM calls in the same
+    asyncio task still receive fallback tracing.
+    """
+    with trace("test_stale_span_guard"):
+        span = generation_span(model="test", model_config={"model_provider": "test"})
+        # Simulate the GeneratorExit exit path: start the span so it lives
+        # in the contextvar, then call __exit__ with GeneratorExit, which
+        # sets ended_at but does NOT reset the contextvar.
+        span.start(mark_as_current=True)
+        span.__exit__(GeneratorExit, GeneratorExit(), None)
+        try:
+            assert span.ended_at is not None  # span is finished
+            assert _outer_generation_span_active() is False
+        finally:
+            # Clean up the leaked contextvar so later code in this test
+            # isn't polluted.
+            span.finish(reset_current=True)
+
+
+def test_extract_prompt_reads_positional_arg() -> None:
+    assert _extract_prompt(("hi",), {}) == "hi"
+
+
+def test_extract_prompt_reads_keyword_arg() -> None:
+    assert _extract_prompt((), {"prompt": "hi"}) == "hi"
+
+
+def test_extract_prompt_returns_none_when_missing() -> None:
+    assert _extract_prompt((), {}) is None
+
+
+def test_invoke_does_not_nest_inside_outer_generation_span() -> None:
+    """When an outer caller has already opened a ``generation_span``, the
+    fallback wrap must skip creating a new span (so cost is not
+    double-counted). We can't observe span creation directly here, but we can
+    verify the guard sees the outer span and that the inner call still
+    executes and returns the response."""
+    llm = _FakeLLM()
+    prompt = UserMessage(content="hello")
+    with trace("test_no_nesting"):
+        with generation_span(model="test", model_config={"model_provider": "test"}):
+            assert _outer_generation_span_active() is True
+            result = llm.invoke(prompt)
+    assert result is _TEST_MODEL_RESPONSE
+    assert llm._invoke_calls == 1
+
+
+@pytest.mark.parametrize("prompt_kind", ["positional", "keyword"])
+def test_invoke_records_prompt_via_both_call_styles(prompt_kind: str) -> None:
+    llm = _FakeLLM()
+    prompt = UserMessage(content=f"p-{prompt_kind}")
+    if prompt_kind == "positional":
+        llm.invoke(prompt)
+    else:
+        llm.invoke(prompt=prompt)
+    assert llm._last_prompt is prompt
