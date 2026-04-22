@@ -1,5 +1,4 @@
 import json
-import os
 import re
 from collections.abc import Callable
 from typing import cast
@@ -19,7 +18,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import SearchDoc
-from onyx.context.search.utils import sandbox_filename_for_document_title
+from onyx.context.search.utils import resolve_sandbox_filenames
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -866,19 +865,6 @@ def create_tool_call_failure_messages(
     return messages
 
 
-def _dedupe_filename(name: str, taken: set[str]) -> str:
-    """Append `_2`, `_3`, ... before the extension on filename collision."""
-    if name not in taken:
-        return name
-    base, ext = os.path.splitext(name)
-    counter = 2
-    while True:
-        candidate = f"{base}_{counter}{ext}"
-        if candidate not in taken:
-            return candidate
-        counter += 1
-
-
 def build_python_chat_files_from_search_docs(
     search_docs: list[SearchDoc],
 ) -> list[ChatFile]:
@@ -891,24 +877,15 @@ def build_python_chat_files_from_search_docs(
 
     file_store = get_default_file_store()
 
-    # Dedupe by file_id while preserving order (first hit wins).
-    seen_file_ids: set[str] = set()
-    ordered_candidates: list[tuple[str, str]] = []  # (file_id, doc_title)
-    for doc in search_docs:
-        if not doc.file_id:
-            continue
-        if doc.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(doc.file_id)
-        ordered_candidates.append((doc.file_id, doc.semantic_identifier))
-
-    if not ordered_candidates:
+    candidates: list[tuple[str, str]] = [
+        (doc.file_id, doc.semantic_identifier) for doc in search_docs if doc.file_id
+    ]
+    filename_by_file_id = resolve_sandbox_filenames(candidates)
+    if not filename_by_file_id:
         return []
 
     chat_files: list[ChatFile] = []
-    taken_names: set[str] = set()
-
-    for file_id, doc_title in ordered_candidates:
+    for file_id, filename in filename_by_file_id.items():
         try:
             record = file_store.read_file_record(file_id)
         except Exception as e:
@@ -931,14 +908,6 @@ def build_python_chat_files_from_search_docs(
                 f"Failed to read bytes for file_id={file_id!r}: {e}; skipping."
             )
             continue
-
-        # Derive filename from the document title + resolve collisions
-        # against files already added in THIS search. Uses the same helper
-        # the LLM-facing JSON uses, so the filename the LLM sees matches
-        # the filename that actually lands in the sandbox.
-        sandbox_name = sandbox_filename_for_document_title(doc_title)
-        filename = _dedupe_filename(sandbox_name, taken_names)
-        taken_names.add(filename)
 
         chat_files.append(ChatFile(filename=filename, content=content))
 
