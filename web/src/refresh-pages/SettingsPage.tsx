@@ -63,6 +63,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 interface PAT {
   id: number;
@@ -755,6 +756,10 @@ function ChatPreferencesSettings() {
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
+  const {
+    enabled: smoothStreamingEnabled,
+    setEnabled: setSmoothStreamingEnabled,
+  } = useSmoothStreaming();
 
   const {
     personalizationValues,
@@ -847,6 +852,16 @@ function ChatPreferencesSettings() {
               onCheckedChange={(checked) => {
                 updateUserAutoScroll(checked);
               }}
+            />
+          </InputLayouts.Horizontal>
+
+          <InputLayouts.Horizontal
+            title="Smooth Streaming"
+            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+          >
+            <Switch
+              checked={smoothStreamingEnabled}
+              onCheckedChange={setSmoothStreamingEnabled}
             />
           </InputLayouts.Horizontal>
 
