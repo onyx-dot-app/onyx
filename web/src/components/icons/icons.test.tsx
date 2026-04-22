@@ -9,19 +9,19 @@ import { render } from "@tests/setup/test-utils";
 import { GitbookIcon, ConfluenceIcon } from "./icons";
 
 describe("Logo Icons", () => {
-  test("renders with alt text", () => {
+  test("renders as an SVG element", () => {
     const { container } = render(<SvgGithub />);
-    const image = container.querySelector("img");
+    const svg = container.querySelector("svg");
 
-    expect(image).toBeInTheDocument();
-    expect(image).toHaveAttribute("alt");
+    expect(svg).toBeInTheDocument();
   });
 
   test("applies custom size", () => {
     const { container } = render(<SvgGithub size={48} />);
-    const image = container.querySelector("img");
+    const svg = container.querySelector("svg");
 
-    expect(image).toHaveStyle({ width: "48px", height: "48px" });
+    expect(svg).toHaveAttribute("width", "48");
+    expect(svg).toHaveAttribute("height", "48");
   });
 
   test("applies size adjustments", () => {
