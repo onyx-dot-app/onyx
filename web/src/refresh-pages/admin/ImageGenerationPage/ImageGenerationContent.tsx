@@ -22,7 +22,7 @@ import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, SelectCard, Text } from "@opal/components";
-import { Content, ContentAction, Card } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -255,86 +255,89 @@ export default function ImageGenerationContent() {
                           : undefined
                     }
                   >
-                    <Card.Header
-                      bottomRightChildren={
-                        !isDisconnected ? (
-                          <div className="flex flex-row px-1 pb-1">
-                            <Hoverable.Item group="image-gen/ProviderCard">
+                    <ContentAction
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={() => (
+                        <ModelIcon
+                          provider={provider.provider_name}
+                          size={16}
+                        />
+                      )}
+                      title={provider.title}
+                      description={provider.description}
+                      padding="lg"
+                      rightChildren={
+                        isDisconnected ? (
+                          <Button
+                            prominence="tertiary"
+                            rightIcon={SvgArrowExchange}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConnect(provider);
+                            }}
+                          >
+                            Connect
+                          </Button>
+                        ) : (
+                          <Section alignItems="end" gap={0}>
+                            {isConnected ? (
                               <Button
-                                icon={SvgUnplug}
-                                tooltip="Disconnect"
-                                aria-label={`Disconnect ${provider.title}`}
                                 prominence="tertiary"
+                                rightIcon={SvgArrowRightCircle}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setDisconnectProvider(provider);
+                                  handleSelect(provider);
                                 }}
-                                size="md"
-                              />
-                            </Hoverable.Item>
-                            <Button
-                              icon={SvgSettings}
-                              tooltip="Edit"
-                              aria-label={`Edit ${provider.title}`}
-                              prominence="tertiary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(provider);
-                              }}
-                              size="md"
-                            />
-                          </div>
-                        ) : undefined
-                      }
-                    >
-                      <ContentAction
-                        sizePreset="main-ui"
-                        variant="section"
-                        icon={() => (
-                          <ModelIcon
-                            provider={provider.provider_name}
-                            size={16}
-                          />
-                        )}
-                        title={provider.title}
-                        description={provider.description}
-                        padding="lg"
-                        rightChildren={
-                          isDisconnected ? (
-                            <Button
-                              prominence="tertiary"
-                              rightIcon={SvgArrowExchange}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleConnect(provider);
-                              }}
-                            >
-                              Connect
-                            </Button>
-                          ) : isConnected ? (
-                            <Button
-                              prominence="tertiary"
-                              rightIcon={SvgArrowRightCircle}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelect(provider);
-                              }}
-                            >
-                              Set as Default
-                            </Button>
-                          ) : isSelected ? (
-                            <div className="p-2">
-                              <Content
-                                title="Current Default"
-                                sizePreset="main-ui"
-                                variant="section"
-                                icon={SvgCheckSquare}
-                              />
+                              >
+                                Set as Default
+                              </Button>
+                            ) : isSelected ? (
+                              <div className="p-2">
+                                <Content
+                                  title="Current Default"
+                                  sizePreset="main-ui"
+                                  variant="section"
+                                  icon={SvgCheckSquare}
+                                />
+                              </div>
+                            ) : undefined}
+                            <div className="px-1 pb-1">
+                              <Section
+                                flexDirection="row"
+                                justifyContent="end"
+                                gap={0.25}
+                              >
+                                <Hoverable.Item group="image-gen/ProviderCard">
+                                  <Button
+                                    icon={SvgUnplug}
+                                    tooltip="Disconnect"
+                                    aria-label={`Disconnect ${provider.title}`}
+                                    prominence="tertiary"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDisconnectProvider(provider);
+                                    }}
+                                    size="md"
+                                  />
+                                </Hoverable.Item>
+                                <Button
+                                  icon={SvgSettings}
+                                  tooltip="Edit"
+                                  aria-label={`Edit ${provider.title}`}
+                                  prominence="tertiary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(provider);
+                                  }}
+                                  size="md"
+                                />
+                              </Section>
                             </div>
-                          ) : undefined
-                        }
-                      />
-                    </Card.Header>
+                          </Section>
+                        )
+                      }
+                    />
                   </SelectCard>
                 </Hoverable.Root>
               );
