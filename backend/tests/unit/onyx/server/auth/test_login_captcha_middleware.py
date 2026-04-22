@@ -115,3 +115,114 @@ def test_does_not_gate_other_endpoints() -> None:
     assert register_res.status_code == 200
     assert get_login_res.status_code == 200
     verify_mock.assert_not_awaited()
+
+
+def test_health_check_bypass_allows_request() -> None:
+    """Valid X-Healthcheck-Token header skips captcha verification entirely."""
+    app = build_app()
+    client = TestClient(app)
+    with (
+        patch.object(captcha_api_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_api_module,
+            "HEALTH_CHECK_BYPASS_TOKEN",
+            "super-secret-bypass-token",
+        ),
+        patch.object(
+            captcha_api_module,
+            "verify_captcha_token",
+            new=AsyncMock(),
+        ) as verify_mock,
+    ):
+        res = client.post(
+            "/auth/login",
+            headers={"X-Healthcheck-Token": "super-secret-bypass-token"},
+        )
+    assert res.status_code == 200
+    assert res.json() == {"status": "logged-in"}
+    verify_mock.assert_not_awaited()
+
+
+def test_health_check_bypass_wrong_secret_falls_through_to_captcha() -> None:
+    """Wrong secret in X-Healthcheck-Token must NOT bypass — normal captcha path runs."""
+    app = build_app()
+    client = TestClient(app)
+    with (
+        patch.object(captcha_api_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_api_module,
+            "HEALTH_CHECK_BYPASS_TOKEN",
+            "super-secret-bypass-token",
+        ),
+        patch.object(
+            captcha_api_module,
+            "verify_captcha_token",
+            new=AsyncMock(
+                side_effect=CaptchaVerificationError(
+                    "Captcha verification failed: Captcha token is required"
+                )
+            ),
+        ) as verify_mock,
+    ):
+        res = client.post(
+            "/auth/login",
+            headers={"X-Healthcheck-Token": "wrong-guess"},
+        )
+    assert res.status_code == 403
+    verify_mock.assert_awaited_once_with("", CaptchaAction.LOGIN)
+
+
+def test_health_check_bypass_disabled_when_env_empty_is_fail_closed() -> None:
+    """Empty HEALTH_CHECK_BYPASS_TOKEN env var must never match any header value."""
+    app = build_app()
+    client = TestClient(app)
+    with (
+        patch.object(captcha_api_module, "is_captcha_enabled", return_value=True),
+        patch.object(captcha_api_module, "HEALTH_CHECK_BYPASS_TOKEN", ""),
+        patch.object(
+            captcha_api_module,
+            "verify_captcha_token",
+            new=AsyncMock(
+                side_effect=CaptchaVerificationError(
+                    "Captcha verification failed: Captcha token is required"
+                )
+            ),
+        ) as verify_mock,
+    ):
+        res = client.post(
+            "/auth/login",
+            headers={"X-Healthcheck-Token": ""},
+        )
+    assert res.status_code == 403
+    verify_mock.assert_awaited_once_with("", CaptchaAction.LOGIN)
+
+
+def test_health_check_bypass_uses_constant_time_compare() -> None:
+    """Assert hmac.compare_digest is the comparison primitive (no `==` timing oracle)."""
+    app = build_app()
+    client = TestClient(app)
+    with (
+        patch.object(captcha_api_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_api_module,
+            "HEALTH_CHECK_BYPASS_TOKEN",
+            "super-secret-bypass-token",
+        ),
+        patch.object(
+            captcha_api_module.hmac,
+            "compare_digest",
+            wraps=captcha_api_module.hmac.compare_digest,
+        ) as compare_spy,
+        patch.object(
+            captcha_api_module,
+            "verify_captcha_token",
+            new=AsyncMock(),
+        ),
+    ):
+        client.post(
+            "/auth/login",
+            headers={"X-Healthcheck-Token": "super-secret-bypass-token"},
+        )
+    compare_spy.assert_called_once_with(
+        "super-secret-bypass-token", "super-secret-bypass-token"
+    )
