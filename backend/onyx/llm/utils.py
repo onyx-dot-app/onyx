@@ -531,11 +531,13 @@ def llm_max_input_tokens(
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
-    if "max_input_tokens" in model_obj:
-        return model_obj["max_input_tokens"]
+    max_input_tokens = model_obj.get("max_input_tokens")
+    if max_input_tokens is not None:
+        return max_input_tokens
 
-    if "max_tokens" in model_obj:
-        return model_obj["max_tokens"]
+    max_tokens = model_obj.get("max_tokens")
+    if max_tokens is not None:
+        return max_tokens
 
     logger.warning(
         f"No max tokens found for '{model_name}'. Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
@@ -561,12 +563,16 @@ def get_llm_max_output_tokens(
         )
         return default_output_tokens
 
-    if "max_output_tokens" in model_obj:
-        return model_obj["max_output_tokens"]
+    # LiteLLM may include the keys with a literal `None` value, so check the
+    # value rather than just key presence and fall through to the next option.
+    max_output_tokens = model_obj.get("max_output_tokens")
+    if max_output_tokens is not None:
+        return max_output_tokens
 
     # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-    if "max_tokens" in model_obj:
-        return int(model_obj["max_tokens"] * 0.1)
+    max_tokens = model_obj.get("max_tokens")
+    if max_tokens is not None:
+        return int(max_tokens * 0.1)
 
     logger.warning(
         f"No max output tokens found for '{model_name}'. Falling back to {default_output_tokens} output tokens."
