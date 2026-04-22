@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState, useReducer } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content } from "@opal/layouts";
+import ProviderCard from "@/sections/admin/ProviderCard";
 import { markdown } from "@opal/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
@@ -14,18 +15,9 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import {
-  SvgArrowExchange,
-  SvgArrowRightCircle,
-  SvgCheckSquare,
-  SvgGlobe,
-  SvgSettings,
-  SvgSlash,
-  SvgUnplug,
-} from "@opal/icons";
+import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Button, MessageCard, SelectCard } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import { Button, MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -217,144 +209,6 @@ function WebSearchDisconnectModal({
         </>
       )}
     </ConfirmationModalLayout>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ProviderCard — uses SelectCard for stateful interactive provider cards
-// ---------------------------------------------------------------------------
-
-type ProviderStatus = "disconnected" | "connected" | "selected";
-
-interface ProviderCardProps {
-  icon: React.FunctionComponent<{ size?: number; className?: string }>;
-  title: string;
-  description: string;
-  status: ProviderStatus;
-  onConnect?: () => void;
-  onSelect?: () => void;
-  onDeselect?: () => void;
-  onEdit?: () => void;
-  onDisconnect?: () => void;
-  selectedLabel?: string;
-}
-
-const STATUS_TO_STATE = {
-  disconnected: "empty",
-  connected: "filled",
-  selected: "selected",
-} as const;
-
-function ProviderCard({
-  icon,
-  title,
-  description,
-  status,
-  onConnect,
-  onSelect,
-  onDeselect,
-  onEdit,
-  onDisconnect,
-  selectedLabel = "Current Default",
-}: ProviderCardProps) {
-  const isDisconnected = status === "disconnected";
-  const isConnected = status === "connected";
-  const isSelected = status === "selected";
-
-  return (
-    <Hoverable.Root group="web-search/ProviderCard">
-      <SelectCard
-        state={STATUS_TO_STATE[status]}
-        padding="sm"
-        rounding="lg"
-        onClick={
-          isDisconnected && onConnect
-            ? onConnect
-            : isSelected && onDeselect
-              ? onDeselect
-              : undefined
-        }
-      >
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          icon={icon}
-          title={title}
-          description={description}
-          padding="lg"
-          rightChildren={
-            isDisconnected && onConnect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowExchange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConnect();
-                }}
-              >
-                Connect
-              </Button>
-            ) : (
-              <Section alignItems="end" gap={0}>
-                {isConnected && onSelect ? (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowRightCircle}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelect();
-                    }}
-                  >
-                    Set as Default
-                  </Button>
-                ) : isSelected ? (
-                  <div className="p-2">
-                    <Content
-                      title={selectedLabel}
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={SvgCheckSquare}
-                    />
-                  </div>
-                ) : undefined}
-                <div className="px-1 pb-1">
-                  <Section flexDirection="row" justifyContent="end" gap={0.25}>
-                    {onDisconnect && (
-                      <Hoverable.Item group="web-search/ProviderCard">
-                        <Button
-                          icon={SvgUnplug}
-                          tooltip="Disconnect"
-                          aria-label={`Disconnect ${title}`}
-                          prominence="tertiary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDisconnect();
-                          }}
-                          size="md"
-                        />
-                      </Hoverable.Item>
-                    )}
-                    {onEdit && (
-                      <Button
-                        icon={SvgSettings}
-                        tooltip="Edit"
-                        aria-label={`Edit ${title}`}
-                        prominence="tertiary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit();
-                        }}
-                        size="md"
-                      />
-                    )}
-                  </Section>
-                </div>
-              </Section>
-            )
-          }
-        />
-      </SelectCard>
-    </Hoverable.Root>
   );
 }
 
