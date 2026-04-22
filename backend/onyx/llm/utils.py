@@ -669,10 +669,12 @@ def get_bedrock_token_limit(model_id: str) -> int:
         for key in [f"bedrock/{model_id}", model_id]:
             if key in model_map:
                 model_info = model_map[key]
-                if "max_input_tokens" in model_info:
-                    return model_info["max_input_tokens"]
-                if "max_tokens" in model_info:
-                    return model_info["max_tokens"]
+                max_input_tokens = model_info.get("max_input_tokens")
+                if max_input_tokens is not None:
+                    return max_input_tokens
+                max_tokens = model_info.get("max_tokens")
+                if max_tokens is not None:
+                    return max_tokens
     except Exception:
         pass  # Fall through to mapping
 
