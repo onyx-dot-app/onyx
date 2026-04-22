@@ -12,6 +12,8 @@ Three entry points are gated:
    ``UserManager.create`` via the body's ``captcha_token`` field.
 """
 
+import hmac
+
 from fastapi import APIRouter
 from fastapi import Request
 from fastapi import Response
@@ -27,6 +29,7 @@ from onyx.auth.captcha import issue_captcha_cookie_value
 from onyx.auth.captcha import validate_captcha_cookie_value
 from onyx.auth.captcha import verify_captcha_token
 from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
+from onyx.configs.app_configs import HEALTH_CHECK_BYPASS_TOKEN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import onyx_error_to_json_response
@@ -121,6 +124,33 @@ class CaptchaCookieMiddleware(BaseHTTPMiddleware):
 
 GUARDED_LOGIN_PATHS = frozenset({"/auth/login"})
 LOGIN_CAPTCHA_HEADER = "X-Captcha-Token"
+HEALTH_CHECK_BYPASS_HEADER = "X-Healthcheck-Token"
+
+
+def _health_check_bypass_ok(request: Request) -> bool:
+    """Constant-time compare of the request's health-check header against the
+    server-side shared secret. Empty env var = bypass disabled (fail-closed)
+    so an accidentally-unset secret never matches a blank client header.
+    """
+    expected = HEALTH_CHECK_BYPASS_TOKEN
+    if not expected:
+        return False
+    provided = request.headers.get(HEALTH_CHECK_BYPASS_HEADER, "")
+    if not provided:
+        return False
+    return hmac.compare_digest(expected, provided)
+
+
+def _client_ip_for_log(request: Request) -> str:
+    """Return the external client IP for log attribution. Prefers the first
+    hop in ``X-Forwarded-For`` (set by nginx-ingress) so logs identify the
+    real source rather than the in-cluster proxy address.
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    first_hop = forwarded.split(",")[0].strip() if forwarded else ""
+    if first_hop:
+        return first_hop
+    return request.client.host if request.client else "unknown"
 
 
 class LoginCaptchaMiddleware(BaseHTTPMiddleware):
@@ -129,6 +159,11 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
     Enforced before the fastapi-users handler runs, so credential-stuffing
     attempts cost the attacker a fresh captcha token per try. No-op when
     ``is_captcha_enabled()`` is false.
+
+    Automated health-check clients that present a valid
+    ``X-Healthcheck-Token`` header skip the captcha step — the token is a
+    backend-only shared secret, so possession alone does not grant auth
+    (credentials are still required by the login handler).
     """
 
     async def dispatch(
@@ -139,12 +174,17 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
             and request.url.path in GUARDED_LOGIN_PATHS
             and is_captcha_enabled()
         ):
-            token = request.headers.get(LOGIN_CAPTCHA_HEADER, "")
-            try:
-                await verify_captcha_token(token, CaptchaAction.LOGIN)
-            except CaptchaVerificationError as exc:
-                return onyx_error_to_json_response(
-                    OnyxError(OnyxErrorCode.UNAUTHORIZED, str(exc))
+            if _health_check_bypass_ok(request):
+                logger.info(
+                    f"Login captcha bypassed via health-check token client={_client_ip_for_log(request)}"
                 )
+            else:
+                token = request.headers.get(LOGIN_CAPTCHA_HEADER, "")
+                try:
+                    await verify_captcha_token(token, CaptchaAction.LOGIN)
+                except CaptchaVerificationError as exc:
+                    return onyx_error_to_json_response(
+                        OnyxError(OnyxErrorCode.UNAUTHORIZED, str(exc))
+                    )
 
         return await call_next(request)
