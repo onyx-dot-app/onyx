@@ -218,77 +218,106 @@ class TestDocprocessingPriorityInDocumentExtraction:
             db_session, cc_pair, search_settings, from_beginning=False
         )
 
-        # Setup mocks
-        mock_batch_storage = MagicMock()
-        mock_get_batch_storage.return_value = mock_batch_storage
+        try:
+            # Setup mocks
+            mock_batch_storage = MagicMock()
+            mock_get_batch_storage.return_value = mock_batch_storage
 
-        mock_memory_tracer = MagicMock()
-        mock_memory_tracer_class.return_value = mock_memory_tracer
+            mock_memory_tracer = MagicMock()
+            mock_memory_tracer_class.return_value = mock_memory_tracer
 
-        # Mock Redis-related functions (not the focus of this test)
-        # Configure mock Redis client to return None for common operations
-        # as a safety net in case any patches don't work as expected
-        mock_redis_client = MagicMock()
-        mock_redis_client.get.return_value = None
-        mock_redis_client.hget.return_value = None
-        mock_redis_client.hset.return_value = None
-        mock_redis_client.exists.return_value = 0
-        mock_redis_client.expire.return_value = True
-        mock_get_redis_client.return_value = mock_redis_client
+            # Mock Redis-related functions (not the focus of this test)
+            # Configure mock Redis client to return None for common operations
+            # as a safety net in case any patches don't work as expected
+            mock_redis_client = MagicMock()
+            mock_redis_client.get.return_value = None
+            mock_redis_client.hget.return_value = None
+            mock_redis_client.hset.return_value = None
+            mock_redis_client.exists.return_value = 0
+            mock_redis_client.expire.return_value = True
+            mock_get_redis_client.return_value = mock_redis_client
 
-        # Mock hierarchy/cache functions
-        mock_ensure_source_node_exists.return_value = 1  # Return a valid node ID
-        mock_get_source_node_id_from_cache.return_value = (
-            1  # Return a valid source node ID
-        )
-        mock_get_node_id_from_raw_id.return_value = (None, False)  # (node_id, found)
-        # cache_hierarchy_nodes_batch doesn't need a return value (returns None)
+            # Mock hierarchy/cache functions
+            mock_ensure_source_node_exists.return_value = 1  # Return a valid node ID
+            mock_get_source_node_id_from_cache.return_value = (
+                1  # Return a valid source node ID
+            )
+            mock_get_node_id_from_raw_id.return_value = (
+                None,
+                False,
+            )  # (node_id, found)
+            # cache_hierarchy_nodes_batch doesn't need a return value (returns None)
 
-        # Create checkpoint mocks - initial checkpoint has_more=True, final has_more=False
-        mock_initial_checkpoint = MagicMock(has_more=True)
-        mock_final_checkpoint = MagicMock(has_more=False)
+            # Create checkpoint mocks - initial checkpoint has_more=True, final has_more=False
+            mock_initial_checkpoint = MagicMock(has_more=True)
+            mock_final_checkpoint = MagicMock(has_more=False)
 
-        # get_latest_valid_checkpoint returns (checkpoint, resuming_from_checkpoint)
-        mock_get_latest_valid_checkpoint.return_value = (mock_initial_checkpoint, False)
+            # get_latest_valid_checkpoint returns (checkpoint, resuming_from_checkpoint)
+            mock_get_latest_valid_checkpoint.return_value = (
+                mock_initial_checkpoint,
+                False,
+            )
 
-        # Create a mock connector runner that yields one document batch
-        mock_connector = MagicMock()
-        mock_connector_runner = MagicMock()
-        mock_connector_runner.connector = mock_connector
-        # The connector runner yields (document_batch, hierarchy_nodes, failure, next_checkpoint)
-        # We provide one batch of documents to trigger a send_task call
-        mock_doc = MagicMock()
-        mock_doc.to_short_descriptor.return_value = "test_doc"
-        mock_doc.sections = []
-        # Set to None to avoid Redis operations trying to resolve hierarchy
-        mock_doc.parent_hierarchy_raw_node_id = None
-        mock_doc.parent_hierarchy_node_id = None
-        mock_connector_runner.run.return_value = iter(
-            [([mock_doc], None, None, mock_final_checkpoint)]
-        )
-        mock_get_connector_runner.return_value = mock_connector_runner
+            # Create a mock connector runner that yields one document batch
+            mock_connector = MagicMock()
+            mock_connector_runner = MagicMock()
+            mock_connector_runner.connector = mock_connector
+            # The connector runner yields (document_batch, hierarchy_nodes, failure, next_checkpoint)
+            # We provide one batch of documents to trigger a send_task call
+            mock_doc = MagicMock()
+            mock_doc.to_short_descriptor.return_value = "test_doc"
+            mock_doc.sections = []
+            # Set to None to avoid Redis operations trying to resolve hierarchy
+            mock_doc.parent_hierarchy_raw_node_id = None
+            mock_doc.parent_hierarchy_node_id = None
+            mock_connector_runner.run.return_value = iter(
+                [([mock_doc], None, None, mock_final_checkpoint)]
+            )
+            mock_get_connector_runner.return_value = mock_connector_runner
 
-        mock_get_recent_completed_attempts.return_value = iter([])
-        mock_get_last_successful_attempt_poll_range_end.return_value = 0
+            mock_get_recent_completed_attempts.return_value = iter([])
+            mock_get_last_successful_attempt_poll_range_end.return_value = 0
 
-        # Mock celery app to capture task submission
-        mock_celery_app = MagicMock()
-        mock_celery_app.send_task.return_value = MagicMock()
+            # Mock celery app to capture task submission
+            mock_celery_app = MagicMock()
+            mock_celery_app.send_task.return_value = MagicMock()
 
-        # Call the function
-        connector_document_extraction(
-            app=mock_celery_app,
-            index_attempt_id=index_attempt.id,
-            cc_pair_id=cc_pair.id,
-            search_settings_id=search_settings.id,
-            tenant_id=TEST_TENANT_ID,
-            callback=None,
-        )
+            # Call the function
+            connector_document_extraction(
+                app=mock_celery_app,
+                index_attempt_id=index_attempt.id,
+                cc_pair_id=cc_pair.id,
+                search_settings_id=search_settings.id,
+                tenant_id=TEST_TENANT_ID,
+                callback=None,
+            )
 
-        # Verify send_task was called with the expected priority for docprocessing
-        assert mock_celery_app.send_task.called, "send_task should have been called"
-        call_kwargs = mock_celery_app.send_task.call_args
-        actual_priority = call_kwargs.kwargs["priority"]
-        assert (
-            actual_priority == expected_priority
-        ), f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"
+            # Verify send_task was called with the expected priority for docprocessing
+            assert mock_celery_app.send_task.called, "send_task should have been called"
+            call_kwargs = mock_celery_app.send_task.call_args
+            actual_priority = call_kwargs.kwargs["priority"]
+            assert (
+                actual_priority == expected_priority
+            ), f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"
+        finally:
+            # Drop rows in FK-safe order so the test doesn't pollute a shared
+            # database. Important: the seeded SearchSettings carries
+            # `status=PRESENT`, so if it lingers the production "current
+            # embedding model" lookup can pick it up and corrupt later real
+            # indexing attempts.
+            db_session.query(IndexAttempt).filter(
+                IndexAttempt.id == index_attempt.id
+            ).delete(synchronize_session="fetch")
+            db_session.query(SearchSettings).filter(
+                SearchSettings.id == search_settings.id
+            ).delete(synchronize_session="fetch")
+            db_session.query(ConnectorCredentialPair).filter(
+                ConnectorCredentialPair.id == cc_pair.id
+            ).delete(synchronize_session="fetch")
+            db_session.query(Credential).filter(Credential.id == credential.id).delete(
+                synchronize_session="fetch"
+            )
+            db_session.query(Connector).filter(Connector.id == connector.id).delete(
+                synchronize_session="fetch"
+            )
+            db_session.commit()
