@@ -443,7 +443,7 @@ python-dotenv==1.2.2
     #   litellm
     #   pydantic-settings
     #   pytest-dotenv
-python-multipart==0.0.22
+python-multipart==0.0.26
     # via mcp
 pytokens==0.4.1
     # via black
