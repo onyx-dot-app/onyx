@@ -45,6 +45,8 @@ from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.db.tasks import get_task_with_id
 from onyx.db.tasks import register_task
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
@@ -63,9 +65,9 @@ def ensure_query_history_is_enabled(
 ) -> None:
     query_history_type = load_settings().query_history_type
     if query_history_type in disallowed:
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Query history has been disabled by the administrator.",
         )
 
 

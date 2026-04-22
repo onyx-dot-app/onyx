@@ -65,8 +65,9 @@ def export_query_history_task(
                 end=end,
             )
 
+            query_history_type = load_settings().query_history_type
             for snapshot in snapshot_generator:
-                if load_settings().query_history_type == QueryHistoryType.ANONYMIZED:
+                if query_history_type == QueryHistoryType.ANONYMIZED:
                     snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
                 writer.writerows(
