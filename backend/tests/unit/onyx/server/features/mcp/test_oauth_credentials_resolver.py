@@ -178,11 +178,9 @@ class TestResolveOAuthCredentials:
             )
 
     def test_no_existing_client_passes_request_values_through(self) -> None:
-        # Create flow: nothing is stored yet; both flags are False (the default)
-        # but there's nothing to fall back to. The resolver should resolve to
-        # None for both fields, leaving the caller to handle the create path
-        # explicitly (which `_upsert_mcp_server` does by only invoking the
-        # resolver when an `existing_client` is present).
+        # Nothing stored yet but the form replayed defaults (both *_changed False).
+        # `_connect_oauth` always runs the resolver; we must keep the submitted
+        # credentials so OAuth config is not rebuilt empty after upsert.
         resolved_id, resolved_secret = _resolve_oauth_credentials(
             request_client_id="user-typed-id",
             request_client_id_changed=False,
@@ -191,8 +189,8 @@ class TestResolveOAuthCredentials:
             existing_client=None,
         )
 
-        assert resolved_id is None
-        assert resolved_secret is None
+        assert resolved_id == "user-typed-id"
+        assert resolved_secret == "user-typed-secret"
 
     def test_no_existing_client_with_changed_flags_uses_request_values(self) -> None:
         resolved_id, resolved_secret = _resolve_oauth_credentials(

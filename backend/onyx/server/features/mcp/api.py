@@ -113,16 +113,25 @@ def _resolve_oauth_credentials(
     frontend flags a field as changed, take the request value as-is, but
     defensively reject masked placeholders so a buggy client can't write
     a mask to the database.
+
+    When there is no stored client yet (`existing_client is None`), an
+    unchanged flag means the user did not edit since load — still use the
+    request body (`_connect_oauth` runs after upsert with the same payload).
+    Treating unchanged plus no storage as None would rebuild empty OAuth config.
     """
     resolved_id = request_client_id
     if not request_client_id_changed:
-        resolved_id = existing_client.client_id if existing_client else None
+        resolved_id = (
+            existing_client.client_id if existing_client else request_client_id
+        )
     elif resolved_id:
         reject_masked_credentials({"oauth_client_id": resolved_id})
 
     resolved_secret = request_client_secret
     if not request_client_secret_changed:
-        resolved_secret = existing_client.client_secret if existing_client else None
+        resolved_secret = (
+            existing_client.client_secret if existing_client else request_client_secret
+        )
     elif resolved_secret:
         reject_masked_credentials({"oauth_client_secret": resolved_secret})
 
