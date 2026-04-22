@@ -115,7 +115,10 @@ export default function CodeInterpreterPage() {
 
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
-          <Hoverable.Root group="code-interpreter/Card">
+          <Hoverable.Root
+            group="code-interpreter/Card"
+            interaction={showDisconnectModal ? "hover" : "rest"}
+          >
             <SelectCard state="filled" padding="sm" rounding="lg">
               <Card.Header>
                 <ContentAction
