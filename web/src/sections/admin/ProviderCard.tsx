@@ -2,7 +2,8 @@
 
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
-import { Content, ContentAction, Card } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
+import { Section } from "@/layouts/general-layouts";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
@@ -92,83 +93,82 @@ export default function ProviderCard({
       aria-label={ariaLabel}
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
-      <Card.Header
-        bottomRightChildren={
-          !isDisconnected ? (
-            <div className="flex flex-row px-1 pb-1">
-              {onDisconnect && (
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={icon}
+        title={title}
+        description={description}
+        padding="lg"
+        rightChildren={
+          isDisconnected && onConnect ? (
+            <Button
+              prominence="tertiary"
+              rightIcon={SvgArrowExchange}
+              onClick={(e) => {
+                e.stopPropagation();
+                onConnect();
+              }}
+            >
+              Connect
+            </Button>
+          ) : (
+            <Section alignItems="end" gap={0}>
+              {isConnected && onSelect ? (
                 <Button
-                  icon={SvgUnplug}
-                  tooltip="Disconnect"
-                  aria-label={`Disconnect ${title}`}
                   prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDisconnect();
+                    onSelect();
                   }}
-                  size="md"
-                />
-              )}
-              {onEdit && (
-                <Button
-                  icon={SvgSettings}
-                  tooltip="Edit"
-                  aria-label={`Edit ${title}`}
-                  prominence="tertiary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit();
-                  }}
-                  size="md"
-                />
-              )}
-            </div>
-          ) : undefined
-        }
-      >
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          icon={icon}
-          title={title}
-          description={description}
-          padding="lg"
-          rightChildren={
-            isDisconnected && onConnect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowExchange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConnect();
-                }}
-              >
-                Connect
-              </Button>
-            ) : isConnected && onSelect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowRightCircle}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect();
-                }}
-              >
-                Set as Default
-              </Button>
-            ) : isSelected ? (
-              <div className="p-2">
-                <Content
-                  title={selectedLabel}
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgCheckSquare}
-                />
+                >
+                  Set as Default
+                </Button>
+              ) : isSelected ? (
+                <div className="p-2">
+                  <Content
+                    title={selectedLabel}
+                    sizePreset="main-ui"
+                    variant="section"
+                    icon={SvgCheckSquare}
+                  />
+                </div>
+              ) : undefined}
+              <div className="px-1 pb-1">
+                <Section flexDirection="row" justifyContent="end" gap={0.25}>
+                  {onDisconnect && (
+                    <Button
+                      icon={SvgUnplug}
+                      tooltip="Disconnect"
+                      aria-label={`Disconnect ${title}`}
+                      prominence="tertiary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDisconnect();
+                      }}
+                      size="md"
+                    />
+                  )}
+                  {onEdit && (
+                    <Button
+                      icon={SvgSettings}
+                      tooltip="Edit"
+                      aria-label={`Edit ${title}`}
+                      prominence="tertiary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit();
+                      }}
+                      size="md"
+                    />
+                  )}
+                </Section>
               </div>
-            ) : undefined
-          }
-        />
-      </Card.Header>
+            </Section>
+          )
+        }
+      />
     </SelectCard>
   );
 }
