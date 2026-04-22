@@ -35,12 +35,16 @@ def _outer_generation_span_active() -> bool:
     The fallback wrap becomes a no-op in that case so we don't double-count
     cost or produce nested duplicate spans in Braintrust.
 
-    ``ended_at is None`` guard: ``SpanImpl.__exit__`` intentionally skips
-    ``Scope.reset_current_span`` when the exit was triggered by
-    ``GeneratorExit`` (i.e. a streaming consumer abandoned the generator
-    early). That leaves a finished ``GenerationSpanData`` in the contextvar.
-    Without this guard, every subsequent LLM call in the same asyncio task
-    would see a stale "outer span" and silently skip fallback tracing.
+    Uses both ``started_at is not None`` and ``ended_at is None`` to reject
+    two edge cases:
+
+    - ``SpanImpl.__exit__`` intentionally skips ``Scope.reset_current_span``
+      when the exit was triggered by ``GeneratorExit`` (streaming consumer
+      abandoned the generator early). That leaves a finished span in the
+      contextvar; the ``ended_at`` check filters it out.
+    - ``NoOpSpan`` (returned when tracing is disabled or no trace is active)
+      always has ``started_at = None``. The ``started_at`` check prevents a
+      stale ``NoOpSpan`` from suppressing fallback tracing.
     """
     from onyx.tracing.framework.create import get_current_span
     from onyx.tracing.framework.span_data import GenerationSpanData
@@ -49,6 +53,7 @@ def _outer_generation_span_active() -> bool:
     return (
         current is not None
         and isinstance(current.span_data, GenerationSpanData)
+        and current.started_at is not None
         and current.ended_at is None
     )
 
@@ -85,7 +90,17 @@ def wrap_invoke(
         with llm_generation_span(
             self, flow="llm_invoke_fallback", input_messages=prompt
         ) as span:
-            response = invoke_fn(self, *args, **kwargs)
+            try:
+                response = invoke_fn(self, *args, **kwargs)
+            except Exception as exc:
+                if span is not None:
+                    span.set_error(
+                        {
+                            "message": f"{type(exc).__name__}: {exc}",
+                            "data": None,
+                        }
+                    )
+                raise
             if span is not None and response is not None:
                 record_llm_response(span, response)
             return response
@@ -127,12 +142,22 @@ def wrap_stream(
             accumulated_content: list[str] = []
             final_usage: Usage | None = None
 
-            for chunk in stream_fn(self, *args, **kwargs):
-                if chunk.usage:
-                    final_usage = chunk.usage
-                if span is not None and chunk.choice.delta.content:
-                    accumulated_content.append(chunk.choice.delta.content)
-                yield chunk
+            try:
+                for chunk in stream_fn(self, *args, **kwargs):
+                    if chunk.usage:
+                        final_usage = chunk.usage
+                    if span is not None and chunk.choice.delta.content:
+                        accumulated_content.append(chunk.choice.delta.content)
+                    yield chunk
+            except Exception as exc:
+                if span is not None:
+                    span.set_error(
+                        {
+                            "message": f"{type(exc).__name__}: {exc}",
+                            "data": None,
+                        }
+                    )
+                raise
 
             # Only reached on clean stream completion. If the consumer abandons
             # the generator or an exception propagates, the context manager

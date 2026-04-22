@@ -229,3 +229,72 @@ def test_invoke_records_prompt_via_both_call_styles(prompt_kind: str) -> None:
     else:
         llm.invoke(prompt=prompt)
     assert llm._last_prompt is prompt
+
+
+class _ExplodingLLM(LLM):
+    """Test double whose `invoke` / `stream` always raise."""
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider="test",
+            model_name="test-model",
+            temperature=0.0,
+            max_input_tokens=1000,
+        )
+
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        raise RuntimeError("invoke-boom")
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        raise RuntimeError("stream-boom")
+        yield  # pragma: no cover — unreachable, keeps this a generator
+
+
+def test_invoke_propagates_exception_from_inner_call() -> None:
+    llm = _ExplodingLLM()
+    with pytest.raises(RuntimeError, match="invoke-boom"):
+        llm.invoke(UserMessage(content="hi"))
+
+
+def test_stream_propagates_exception_from_inner_call() -> None:
+    llm = _ExplodingLLM()
+    with pytest.raises(RuntimeError, match="stream-boom"):
+        list(llm.stream(UserMessage(content="hi")))
+
+
+def test_outer_guard_false_for_noop_span_in_contextvar() -> None:
+    """A ``NoOpSpan`` (returned when no trace is active) always has
+    ``started_at = None`` and ``ended_at = None``. Without the ``started_at``
+    guard, a stale ``NoOpSpan`` left in the contextvar (e.g. after an
+    abandoned generator) would cause ``_outer_generation_span_active`` to
+    return ``True`` and silently suppress fallback tracing. Verify the guard
+    filters it out."""
+    # Generating a span outside any `trace()` context returns a NoOpSpan.
+    noop_span = generation_span(model="test", model_config={"model_provider": "test"})
+    noop_span.start(mark_as_current=True)
+    try:
+        assert noop_span.started_at is None
+        assert _outer_generation_span_active() is False
+    finally:
+        noop_span.finish(reset_current=True)
