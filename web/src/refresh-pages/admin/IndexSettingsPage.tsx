@@ -67,8 +67,9 @@ import type { SelfHostedEmbeddingModel } from "@/lib/indexing/interfaces";
 import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
+  connectEmbeddingProvider,
+  disconnectEmbeddingProvider,
   setNewSearchSettings,
-  testEmbedding,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
@@ -92,24 +93,6 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const SWITCHOVER_NONE = "none";
-
-const AZURE_EMBEDDING_MODELS = [
-  {
-    model_name: "text-embedding-3-large",
-    model_dim: 3072,
-    description: "OpenAI's large embedding model via Azure.",
-  },
-  {
-    model_name: "text-embedding-3-small",
-    model_dim: 1536,
-    description: "OpenAI's small embedding model via Azure.",
-  },
-  {
-    model_name: "text-embedding-ada-002",
-    model_dim: 1536,
-    description: "OpenAI's legacy embedding model via Azure.",
-  },
-] as const;
 
 interface EmbeddingProviderInfoProps {
   providerType: string | null;
@@ -184,13 +167,6 @@ function ProviderCredentialsModal({
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
   const [modelName, setModelName] = useState("");
-  const [deploymentName, setDeploymentName] = useState(
-    existingCredentials?.deployment_name ?? ""
-  );
-  const [apiVersion, setApiVersion] = useState(
-    existingCredentials?.api_version ?? ""
-  );
-  const [azureModel, setAzureModel] = useState("");
   const [fileName, setFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -214,40 +190,11 @@ function ProviderCredentialsModal({
     setIsSubmitting(true);
 
     try {
-      const testResponse = await testEmbedding({
-        provider_type: provider.provider_type,
-        modelName: isAzure ? azureModel : modelName,
+      await connectEmbeddingProvider({
+        providerType: provider.provider_type,
         apiKey,
         apiUrl,
-        apiVersion: isAzure ? apiVersion : null,
-        deploymentName: isAzure ? deploymentName : null,
       });
-
-      if (!testResponse.ok) {
-        const err = await testResponse.json();
-        setErrorMsg(err.detail ?? "Embedding test failed");
-        return;
-      }
-
-      const saveResponse = await fetch(EMBEDDING_PROVIDERS_ADMIN_URL, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider_type: provider.provider_type,
-          api_key: apiKey,
-          api_url: apiUrl,
-          deployment_name: isAzure ? deploymentName : undefined,
-          api_version: isAzure ? apiVersion : undefined,
-          is_default_provider: false,
-          is_configured: true,
-        }),
-      });
-
-      if (!saveResponse.ok) {
-        const err = await saveResponse.json();
-        throw new Error(err.detail ?? "Failed to save provider");
-      }
-
       onSubmit();
     } catch (error: unknown) {
       setErrorMsg(
@@ -260,8 +207,7 @@ function ProviderCredentialsModal({
 
   const isValid = (() => {
     if (isProxy) return !!apiUrl && !!modelName;
-    if (isAzure)
-      return !!apiUrl && !!deploymentName && !!apiVersion && !!azureModel;
+    if (isAzure) return !!apiUrl && !!apiKey;
     if (isGoogle) return !!apiKey;
     return !!apiKey;
   })();
@@ -286,9 +232,13 @@ function ProviderCredentialsModal({
         <Modal.Body twoTone>
           <GeneralLayouts.Section gap={0.5}>
             {(isProxy || isAzure) && (
-              <InputVertical title="API URL">
+              <InputVertical title={isAzure ? "Target URL" : "API URL"}>
                 <InputTypeIn
-                  placeholder="https://..."
+                  placeholder={
+                    isAzure
+                      ? "https://your_resource_name.openai.azure.com/openai/v1/embeddings"
+                      : "https://..."
+                  }
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
                 />
@@ -302,45 +252,6 @@ function ProviderCredentialsModal({
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
                 />
-              </InputVertical>
-            )}
-
-            {isAzure && (
-              <InputVertical title="Deployment Name">
-                <InputTypeIn
-                  placeholder="Deployment Name"
-                  value={deploymentName}
-                  onChange={(e) => setDeploymentName(e.target.value)}
-                />
-              </InputVertical>
-            )}
-
-            {isAzure && (
-              <InputVertical title="API Version">
-                <InputTypeIn
-                  placeholder="API Version"
-                  value={apiVersion}
-                  onChange={(e) => setApiVersion(e.target.value)}
-                />
-              </InputVertical>
-            )}
-
-            {isAzure && (
-              <InputVertical title="Embedding Model">
-                <InputSelect value={azureModel} onValueChange={setAzureModel}>
-                  <InputSelect.Trigger placeholder="Select an embedding model" />
-                  <InputSelect.Content>
-                    {AZURE_EMBEDDING_MODELS.map((m) => (
-                      <InputSelect.Item
-                        key={m.model_name}
-                        value={m.model_name}
-                        description={m.description}
-                      >
-                        {m.model_name}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
               </InputVertical>
             )}
 
@@ -368,7 +279,6 @@ function ProviderCredentialsModal({
                 )}
               >
                 <PasswordInputTypeIn
-                  placeholder="API Key"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -465,19 +375,14 @@ function ProviderGroup({
   );
 
   const handleDisconnect = useCallback(async () => {
-    const response = await fetch(
-      `${EMBEDDING_PROVIDERS_ADMIN_URL}/${provider.provider_type}`,
-      { method: "DELETE" }
-    );
-
-    if (!response.ok) {
+    try {
+      await disconnectEmbeddingProvider(provider.provider_type);
+      toast.success(`Disconnected ${providerName}`);
+      await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+      disconnectModal.toggle(false);
+    } catch {
       toast.error(`Failed to disconnect ${providerName}`);
-      return;
     }
-
-    toast.success(`Disconnected ${providerName}`);
-    await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
-    disconnectModal.toggle(false);
   }, [provider.provider_type, providerName, disconnectModal]);
 
   const getModelState = useCallback(
@@ -838,6 +743,7 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
               Add Configuration
             </Button>
           }
+          center
         />
       </SelectCard>
     </GeneralLayouts.Section>

@@ -1,4 +1,5 @@
 import type { Settings } from "@/interfaces/settings";
+import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import {
   AdvancedSearchConfiguration,
   EmbeddingModelDescriptor,
@@ -51,6 +52,70 @@ export async function testEmbedding({
       deployment_name: deploymentName,
     }),
   });
+}
+
+/**
+ * Tests and saves embedding provider credentials.
+ * Tests the connection first, then persists the credentials.
+ * Throws on failure with a user-facing error message.
+ */
+export async function connectEmbeddingProvider({
+  providerType,
+  apiKey,
+  apiUrl,
+}: {
+  providerType: string;
+  apiKey: string;
+  apiUrl: string;
+}): Promise<void> {
+  const testResponse = await testEmbedding({
+    provider_type: providerType,
+    modelName: "",
+    apiKey,
+    apiUrl,
+    apiVersion: null,
+    deploymentName: null,
+  });
+
+  if (!testResponse.ok) {
+    const err = await testResponse.json();
+    throw new Error(err.detail ?? "Embedding test failed");
+  }
+
+  const saveResponse = await fetch(EMBEDDING_PROVIDERS_ADMIN_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_type: providerType,
+      api_key: apiKey,
+      api_url: apiUrl,
+      is_default_provider: false,
+      is_configured: true,
+    }),
+  });
+
+  if (!saveResponse.ok) {
+    const err = await saveResponse.json();
+    throw new Error(err.detail ?? "Failed to save provider");
+  }
+}
+
+/**
+ * Disconnects an embedding provider by deleting its credentials.
+ * Throws on failure with a user-facing error message.
+ */
+export async function disconnectEmbeddingProvider(
+  providerType: string
+): Promise<void> {
+  const response = await fetch(
+    `${EMBEDDING_PROVIDERS_ADMIN_URL}/${providerType}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.detail ?? "Failed to disconnect provider");
+  }
 }
 
 export async function saveAdminSettings(settings: Settings) {
