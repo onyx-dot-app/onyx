@@ -7,6 +7,8 @@ from io import BytesIO
 from typing import Any
 from typing import cast
 
+from enum import Enum
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -92,6 +94,8 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
+from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
@@ -1522,19 +1526,11 @@ def bulk_update_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> BulkCCPairStatusResponse:
-    filters = IndexingStatusRequest(**request.filters.dict())
-    filters.get_all_connectors = True
-    filters.source_to_page = {}
-
-    response_list = get_connector_indexing_status(
-        request=filters,
-        user=user,
-        db_session=db_session,
-    )
-
-    editable_statuses, non_editable_statuses = (
-        _flatten_cc_pair_statuses_from_indexing_status_response(response_list)
-    )
+    editable_statuses, non_editable_statuses = _get_bulk_target_cc_pair_statuses(
+    filters=request.filters,
+    user=user,
+    db_session=db_session,
+)
 
     target_status = (
         ConnectorCredentialPairStatus.PAUSED
@@ -1619,6 +1615,187 @@ def bulk_update_connector_status(
         skipped_count=skipped_count,
         skipped_reasons={k: v for k, v in skipped_reasons.items() if v > 0},
     )
+
+def _get_bulk_target_cc_pair_statuses(
+    filters: IndexingStatusRequest,
+    user: User,
+    db_session: Session,
+) -> tuple[list[ConnectorIndexingStatusLite], list[ConnectorIndexingStatusLite]]:
+    resolved_filters = IndexingStatusRequest(**filters.dict())
+    resolved_filters.get_all_connectors = True
+    resolved_filters.source_to_page = {}
+
+    response_list = get_connector_indexing_status(
+        request=resolved_filters,
+        user=user,
+        db_session=db_session,
+    )
+
+    return _flatten_cc_pair_statuses_from_indexing_status_response(response_list)
+
+
+class BulkCCPairManageAction(str, Enum):
+    REINDEX = "reindex"
+    DELETE = "delete"
+
+
+class BulkCCPairManageRequest(BaseModel):
+    action: BulkCCPairManageAction
+    filters: IndexingStatusRequest
+
+
+class BulkCCPairManageResponse(BaseModel):
+    action: BulkCCPairManageAction
+    matched_count: int
+    eligible_count: int
+    updated_count: int
+    skipped_count: int
+    skipped_reasons: dict[str, int]
+
+
+def _status_is_not_currently_active(
+    status: ConnectorCredentialPairStatus,
+) -> bool:
+    return status in {
+        ConnectorCredentialPairStatus.PAUSED,
+        ConnectorCredentialPairStatus.INVALID,
+    }
+
+
+@router.post("/admin/connector/bulk/manage", tags=PUBLIC_API_TAGS)
+def bulk_manage_connectors(
+    request: BulkCCPairManageRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> BulkCCPairManageResponse:
+    editable_statuses, non_editable_statuses = _get_bulk_target_cc_pair_statuses(
+        filters=request.filters,
+        user=user,
+        db_session=db_session,
+    )
+
+    skipped_reasons = {
+        "forbidden": len(non_editable_statuses),
+        "missing_cc_pair_status": 0,
+        "indexing_in_progress": 0,
+        "not_eligible_for_action": 0,
+        "missing_cc_pair": 0,
+        "update_failed": 0,
+    }
+
+    eligible_cc_pair_ids: list[int] = []
+
+    for status in editable_statuses:
+        current_status = status.cc_pair_status
+
+        if current_status is None:
+            skipped_reasons["missing_cc_pair_status"] += 1
+            continue
+
+        if request.action == BulkCCPairManageAction.REINDEX:
+            if status.in_progress:
+                skipped_reasons["indexing_in_progress"] += 1
+                continue
+
+            if current_status in {
+                ConnectorCredentialPairStatus.PAUSED,
+                ConnectorCredentialPairStatus.INVALID,
+                ConnectorCredentialPairStatus.DELETING,
+            }:
+                skipped_reasons["not_eligible_for_action"] += 1
+                continue
+
+            eligible_cc_pair_ids.append(status.cc_pair_id)
+            continue
+
+        if request.action == BulkCCPairManageAction.DELETE:
+            if not _status_is_not_currently_active(current_status):
+                skipped_reasons["not_eligible_for_action"] += 1
+                continue
+
+            eligible_cc_pair_ids.append(status.cc_pair_id)
+            continue
+
+    updated_count = 0
+
+    for cc_pair_id in eligible_cc_pair_ids:
+        try:
+            if request.action == BulkCCPairManageAction.REINDEX:
+                mark_ccpair_with_indexing_trigger(
+                    cc_pair_id,
+                    IndexingMode.REINDEX,
+                    db_session,
+                )
+
+            elif request.action == BulkCCPairManageAction.DELETE:
+                cancel_indexing_attempts_for_ccpair(
+                    cc_pair_id=cc_pair_id,
+                    db_session=db_session,
+                    include_secondary_index=True,
+                )
+
+                update_connector_credential_pair_from_id(
+                    db_session=db_session,
+                    cc_pair_id=cc_pair_id,
+                    status=ConnectorCredentialPairStatus.DELETING,
+                )
+
+            updated_count += 1
+
+        except HTTPException:
+            db_session.rollback()
+            skipped_reasons["update_failed"] += 1
+        except Exception:
+            db_session.rollback()
+            logger.exception(
+                "Bulk %s failed for cc_pair_id=%s",
+                request.action,
+                cc_pair_id,
+            )
+            skipped_reasons["update_failed"] += 1
+
+        except HTTPException:
+            db_session.rollback()
+            skipped_reasons["update_failed"] += 1
+        except Exception:
+            db_session.rollback()
+            logger.exception(
+                "Bulk %s failed for cc_pair_id=%s",
+                request.action,
+                cc_pair_id,
+            )
+            skipped_reasons["update_failed"] += 1
+
+    if updated_count > 0:
+        db_session.commit()
+        tenant_id = get_current_tenant_id()
+
+        if request.action == BulkCCPairManageAction.REINDEX:
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_INDEXING,
+                priority=OnyxCeleryPriority.HIGH,
+                kwargs={"tenant_id": tenant_id},
+            )
+        elif request.action == BulkCCPairManageAction.DELETE:
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+                priority=OnyxCeleryPriority.HIGH,
+                kwargs={"tenant_id": tenant_id},
+            )
+
+    matched_count = len(editable_statuses) + len(non_editable_statuses)
+    eligible_count = len(eligible_cc_pair_ids)
+    skipped_count = sum(skipped_reasons.values())
+
+    return BulkCCPairManageResponse(
+        action=request.action,
+        matched_count=matched_count,
+        eligible_count=eligible_count,
+        updated_count=updated_count,
+        skipped_count=skipped_count,
+        skipped_reasons=skipped_reasons,
+    )
+
 
 def _apply_federated_connector_status_filters(
     statuses: list[FederatedConnectorStatus],
