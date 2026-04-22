@@ -1,6 +1,7 @@
 from typing import Any
 
 from ee.onyx.utils.posthog_client import posthog
+from onyx.utils.client_ip import current_client_ip
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -9,14 +10,20 @@ logger = setup_logger()
 def _with_client_ip(
     properties: dict[str, Any] | None, client_ip: str | None
 ) -> dict[str, Any] | None:
-    """Merge the caller-supplied client IP into properties as ``$ip`` so that
-    PostHog's GeoIP enricher populates ``$geoip_*`` fields. Server-side
-    captures otherwise attribute every event to the pod's own outbound IP.
+    """Merge the client IP into properties as ``$ip`` so PostHog's GeoIP
+    enricher populates ``$geoip_*`` fields. Server-side captures otherwise
+    attribute every event to the pod's own outbound IP.
+
+    Resolution order: explicit ``client_ip`` > per-request contextvar (set by
+    ``ClientIPMiddleware``) > nothing. An explicit value always wins so
+    callers with a more specific IP (e.g. replaying a stored event) can
+    override the ambient request IP.
     """
-    if not client_ip:
+    effective_ip = client_ip or current_client_ip()
+    if not effective_ip:
         return properties
     merged = dict(properties) if properties else {}
-    merged.setdefault("$ip", client_ip)
+    merged.setdefault("$ip", effective_ip)
     return merged
 
 

@@ -155,6 +155,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_endpoint_context_middleware
@@ -664,6 +665,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # (requires CAPTCHA_ENABLED=true and RECAPTCHA_SECRET_KEY set).
     application.add_middleware(CaptchaCookieMiddleware)
     application.add_middleware(LoginCaptchaMiddleware)
+
+    # Registered last so it is the outermost middleware and the client-IP
+    # contextvar is set before any downstream middleware, handler, or telemetry
+    # call runs. Added in place once — downstream capture sites read it via
+    # ``current_client_ip()`` rather than threading the request through.
+    application.add_middleware(ClientIPMiddleware)
+
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
