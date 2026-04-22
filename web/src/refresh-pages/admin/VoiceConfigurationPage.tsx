@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  AzureIcon,
-  ElevenLabsIcon,
-  IconProps,
-  OpenAIIcon,
-} from "@/components/icons/icons";
+import { ElevenLabsIcon } from "@/components/icons/icons";
+import { SvgAzure, SvgOpenai } from "@opal/logos";
+import type { IconProps } from "@opal/types";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { FetchError } from "@/lib/fetcher";
@@ -122,9 +119,9 @@ function getProviderIcon(
 ): React.FunctionComponent<IconProps> {
   switch (providerType) {
     case "openai":
-      return OpenAIIcon;
+      return SvgOpenai;
     case "azure":
-      return AzureIcon;
+      return SvgAzure;
     case "elevenlabs":
       return ElevenLabsIcon;
     default:

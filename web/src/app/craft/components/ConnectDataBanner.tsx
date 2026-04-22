@@ -8,9 +8,9 @@ import {
   GoogleDriveIcon,
   GithubIcon,
   NotionIcon,
-  ColorSlackIcon,
   HubSpotIcon,
 } from "@/components/icons/icons";
+import { SvgSlack } from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
@@ -71,7 +71,7 @@ export default function ConnectDataBanner({
           {/* Outermost - no movement */}
           <div>
             <IconWrapper>
-              <ColorSlackIcon size={16} />
+              <SvgSlack size={16} />
             </IconWrapper>
           </div>
           {/* Middle - slight movement */}

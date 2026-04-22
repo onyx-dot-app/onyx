@@ -1,16 +1,15 @@
 import { JSX } from "react";
+import { OpenAIISVG, OpenSourceIcon } from "@/components/icons/icons";
 import {
-  AzureIcon,
-  CohereIcon,
-  GoogleIcon,
-  IconProps,
-  LiteLLMIcon,
-  MicrosoftIcon,
-  NomicIcon,
-  OpenAIISVG,
-  OpenSourceIcon,
-  VoyageIconSVG,
-} from "@/components/icons/icons";
+  SvgAzure,
+  SvgCohere,
+  SvgGoogle,
+  SvgLitellm,
+  SvgMicrosoft,
+  SvgNomic,
+  SvgVoyage,
+} from "@opal/logos";
+import type { IconProps } from "@opal/types";
 import { SwitchoverType } from "@/app/admin/embeddings/interfaces";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
@@ -156,7 +155,7 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
 export const LITELLM_CLOUD_PROVIDER: CloudEmbeddingProvider = {
   provider_type: EmbeddingProvider.LITELLM,
   website: "https://github.com/BerriAI/litellm",
-  icon: LiteLLMIcon,
+  icon: SvgLitellm,
   description: "Open-source library to call LLM APIs using OpenAI format",
   apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
   embedding_models: [], // No default embedding models
@@ -166,7 +165,7 @@ export const AZURE_CLOUD_PROVIDER: CloudEmbeddingProvider = {
   provider_type: EmbeddingProvider.AZURE,
   website:
     "https://azure.microsoft.com/en-us/products/cognitive-services/openai/",
-  icon: AzureIcon,
+  icon: SvgAzure,
   description:
     "Azure OpenAI is a cloud-based AI service that provides access to OpenAI models.",
   apiLink:
@@ -180,7 +179,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
     provider_type: EmbeddingProvider.COHERE,
     website: "https://cohere.ai",
-    icon: CohereIcon,
+    icon: SvgCohere,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     description:
       "AI company specializing in NLP models for various text-based tasks",
@@ -260,7 +259,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
     provider_type: EmbeddingProvider.GOOGLE,
     website: "https://ai.google",
-    icon: GoogleIcon,
+    icon: SvgGoogle,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     description:
       "Offers a wide range of AI services including language and vision models",
@@ -298,7 +297,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
   {
     provider_type: EmbeddingProvider.VOYAGE,
     website: "https://www.voyageai.com",
-    icon: VoyageIconSVG,
+    icon: SvgVoyage,
     description: "Advanced NLP research startup born from Stanford AI Labs",
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     apiLink: "https://www.voyageai.com/dashboard",
@@ -371,9 +370,9 @@ export const getTitleForRerankType = (type: string) => {
 export const getIconForRerankType = (type: string) => {
   switch (type) {
     case "nomic-ai":
-      return <NomicIcon size={40} />;
+      return <SvgNomic size={40} />;
     case "intfloat":
-      return <MicrosoftIcon size={40} />;
+      return <SvgMicrosoft size={40} />;
     default:
       return <OpenSourceIcon size={40} />;
   }

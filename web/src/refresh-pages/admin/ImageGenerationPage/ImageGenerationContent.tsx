@@ -18,7 +18,6 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
-import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, Text } from "@opal/components";
@@ -27,6 +26,7 @@ import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms";
 import ProviderCard from "@/sections/admin/ProviderCard";
+import { getModelIcon } from "@/lib/llmConfig";
 
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -227,9 +227,7 @@ export default function ImageGenerationContent() {
               return (
                 <ProviderCard
                   key={provider.image_provider_id}
-                  icon={() => (
-                    <ModelIcon provider={provider.provider_name} size={16} />
-                  )}
+                  icon={getModelIcon(provider.provider_name)}
                   title={provider.title}
                   description={provider.description}
                   status={status}
@@ -296,12 +294,7 @@ export default function ImageGenerationContent() {
                             <InputSelect.Item
                               key={p.image_provider_id}
                               value={p.image_provider_id}
-                              icon={() => (
-                                <ModelIcon
-                                  provider={p.provider_name}
-                                  size={16}
-                                />
-                              )}
+                              icon={getModelIcon(p.provider_name)}
                             >
                               {p.title}
                             </InputSelect.Item>

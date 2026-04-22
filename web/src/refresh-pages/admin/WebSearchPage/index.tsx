@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
+import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -347,7 +347,7 @@ export default function WebSearchPage() {
         providerType,
         label: getSearchProviderDisplayLabel(providerType, provider?.name),
         subtitle: details.subtitle,
-        logoSrc: details.logoSrc,
+        logo: details.logo,
         provider,
       };
     });
@@ -362,7 +362,7 @@ export default function WebSearchPage() {
           provider.name
         ),
         subtitle: "Custom integration",
-        logoSrc: undefined,
+        logo: undefined,
         provider,
       }));
 
@@ -411,14 +411,12 @@ export default function WebSearchPage() {
     );
 
   const renderLogo = ({
-    logoSrc,
-    alt,
+    logo: Logo,
     fallback,
     size = 16,
     containerSize,
   }: {
-    logoSrc?: string;
-    alt: string;
+    logo?: IconFunctionComponent;
     fallback?: React.ReactNode;
     size?: number;
     containerSize?: number;
@@ -433,8 +431,8 @@ export default function WebSearchPage() {
           containerSizeClass
         )}
       >
-        {logoSrc ? (
-          <Image src={logoSrc} alt={alt} width={size} height={size} />
+        {Logo ? (
+          <Logo size={size} />
         ) : fallback ? (
           fallback
         ) : (
@@ -863,7 +861,14 @@ export default function WebSearchPage() {
 
             <div className="flex flex-col gap-2">
               {combinedSearchProviders.map(
-                ({ key, providerType, label, subtitle, logoSrc, provider }) => {
+                ({
+                  key,
+                  providerType,
+                  label,
+                  subtitle,
+                  logo: Logo,
+                  provider,
+                }) => {
                   const isConfigured = isSearchProviderConfigured(
                     providerType,
                     provider
@@ -884,16 +889,7 @@ export default function WebSearchPage() {
                     <ProviderCard
                       key={`${key}-${providerType}`}
                       icon={() =>
-                        logoSrc ? (
-                          <Image
-                            src={logoSrc}
-                            alt={`${label} logo`}
-                            width={16}
-                            height={16}
-                          />
-                        ) : (
-                          <SvgGlobe size={16} />
-                        )
+                        Logo ? <Logo size={16} /> : <SvgGlobe size={16} />
                       }
                       title={label}
                       description={subtitle}
@@ -994,20 +990,15 @@ export default function WebSearchPage() {
                   provider.provider_type === "onyx_web_crawler" ||
                   isConfigured;
 
-                const contentLogoSrc =
-                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logoSrc;
+                const ContentLogo =
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logo;
 
                 return (
                   <ProviderCard
                     key={`${provider.provider_type}-${provider.id}`}
                     icon={() =>
-                      contentLogoSrc ? (
-                        <Image
-                          src={contentLogoSrc}
-                          alt={`${label} logo`}
-                          width={16}
-                          height={16}
-                        />
+                      ContentLogo ? (
+                        <ContentLogo size={16} />
                       ) : provider.provider_type === "onyx_web_crawler" ? (
                         <SvgOnyxLogo size={16} />
                       ) : (
@@ -1088,10 +1079,9 @@ export default function WebSearchPage() {
         }}
         providerLabel={providerLabel}
         providerLogo={renderLogo({
-          logoSrc: selectedProviderType
-            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc
+          logo: selectedProviderType
+            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logo
             : undefined,
-          alt: `${providerLabel} logo`,
           size: 24,
           containerSize: 28,
         })}
@@ -1207,12 +1197,9 @@ export default function WebSearchPage() {
         }}
         providerLabel={contentProviderLabel}
         providerLogo={renderLogo({
-          logoSrc: selectedContentProviderType
-            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logoSrc
+          logo: selectedContentProviderType
+            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logo
             : undefined,
-          alt: `${
-            contentProviderLabel || selectedContentProviderType || "provider"
-          } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
               <SvgOnyxLogo size={24} />

@@ -7,9 +7,9 @@ import {
   GoogleDriveIcon,
   GithubIcon,
   NotionIcon,
-  ColorSlackIcon,
   HubSpotIcon,
 } from "@/components/icons/icons";
+import { SvgSlack } from "@opal/logos";
 import { SvgChevronRight, SvgCalendar } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import {
@@ -89,7 +89,7 @@ export default function ConnectorBannersRow({
           {/* Outermost - no movement */}
           <div>
             <IconWrapper>
-              <ColorSlackIcon size={16} />
+              <SvgSlack size={16} />
             </IconWrapper>
           </div>
           {/* Middle - slight movement */}

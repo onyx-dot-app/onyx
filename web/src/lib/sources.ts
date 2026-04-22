@@ -35,9 +35,7 @@ import {
   S3Icon,
   OCIStorageIcon,
   GoogleStorageIcon,
-  ColorSlackIcon,
   XenforoIcon,
-  ColorDiscordIcon,
   FreshdeskIcon,
   FirefliesIcon,
   EgnyteIcon,
@@ -54,6 +52,7 @@ import { Persona } from "@/app/admin/agents/interfaces";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "./constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud } from "@opal/icons";
+import { SvgSlack, SvgDiscord } from "@opal/logos";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -79,7 +78,7 @@ type SourceMap = {
 };
 
 const slackMetadata = {
-  icon: ColorSlackIcon,
+  icon: SvgSlack,
   displayName: "Slack",
   category: SourceCategory.Messaging,
   isPopular: true,
@@ -318,7 +317,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
   },
   discord: {
-    icon: ColorDiscordIcon,
+    icon: SvgDiscord,
     displayName: "Discord",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/discord`,

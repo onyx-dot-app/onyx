@@ -11,7 +11,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
-import { IconProps, OnyxIcon } from "@/components/icons/icons";
+import { OnyxIcon } from "@/components/icons/icons";
+import type { IconProps } from "@opal/types";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";

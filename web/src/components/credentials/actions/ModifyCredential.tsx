@@ -3,7 +3,8 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
-import { EditIcon, NewChatIcon, SwapIcon } from "@/components/icons/icons";
+import { NewChatIcon, SwapIcon } from "@/components/icons/icons";
+import { SvgEdit } from "@opal/icons";
 import {
   ConfluenceCredentialJson,
   Credential,
@@ -132,7 +133,7 @@ function CredentialSelectionTable({
                         onClick={() => onEditCredential(credential)}
                         className="cursor-pointer my-auto"
                       >
-                        <EditIcon />
+                        <SvgEdit />
                       </button>
                     )}
                   </td>

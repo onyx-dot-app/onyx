@@ -15,7 +15,6 @@ import {
   LinearIcon,
   FirefliesIcon,
   GmailIcon,
-  ColorSlackIcon,
 } from "@/components/icons/icons";
 
 interface OnboardingInfoPagesProps {
