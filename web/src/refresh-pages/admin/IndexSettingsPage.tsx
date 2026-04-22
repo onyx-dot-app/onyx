@@ -585,7 +585,7 @@ function ProviderGroup({
                 size="sm"
                 onClick={() => editCredentialsModal.toggle(true)}
               />
-              <Spacer horizontal rem={0.375} />
+              <Spacer horizontal rem={0.25} />
             </GeneralLayouts.Section>
           ) : undefined
         }
@@ -629,9 +629,6 @@ function EmbeddingModelCard({
   deprecated,
   onSelect,
 }: EmbeddingModelCardProps) {
-  const canSelect =
-    !deprecated && (modelState === "unconnected" || modelState === "connected");
-
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -694,8 +691,8 @@ function EmbeddingModelCard({
       padding="xs"
       onClick={isClickable ? onSelect : undefined}
     >
-      <div className="flex flex-row items-start w-full p-2">
-        <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-row items-start w-full">
+        <GeneralLayouts.Section padding={0.5} gap={0} alignItems="start">
           <Content
             icon={providerIcon}
             title={model.model_name}
@@ -706,7 +703,7 @@ function EmbeddingModelCard({
           <div className="flex flex-row px-6 pt-2 gap-4">
             <EmbeddingProviderInfo providerType={model.provider_type} />
           </div>
-        </div>
+        </GeneralLayouts.Section>
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
       </div>
     </SelectCard>
@@ -831,7 +828,7 @@ function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
           variant="body"
           prominence="muted"
           nonInteractive
-          padding="sm"
+          padding="md"
           rightChildren={
             <Button
               prominence="tertiary"
@@ -1259,7 +1256,7 @@ export default function IndexSettingsPage() {
                 >
                   {viewAllModelsOpen ? (
                     <div className="pt-1 px-1">
-                      <div className="pt-2 px-2 flex flex-row items-center justify-between">
+                      <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
                         <InputTypeIn
                           placeholder="Search models..."
                           variant="internal"
@@ -1300,8 +1297,12 @@ export default function IndexSettingsPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-row items-start w-full p-2">
-                      <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex flex-row items-start w-full">
+                      <GeneralLayouts.Section
+                        padding={0.5}
+                        gap={0}
+                        alignItems="start"
+                      >
                         <Content
                           icon={
                             getEmbeddingProvider(
@@ -1322,8 +1323,9 @@ export default function IndexSettingsPage() {
                             providerType={currentEmbeddingModel.provider_type}
                           />
                         </div>
-                      </div>
-                      <div className="flex flex-col items-end shrink-0 gap-1 p-2">
+                      </GeneralLayouts.Section>
+
+                      <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
                         <Button
                           prominence="secondary"
                           onClick={() => {
