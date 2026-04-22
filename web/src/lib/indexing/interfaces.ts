@@ -1,6 +1,6 @@
 import type { IconFunctionComponent } from "@opal/types";
 
-// ─── Embedding providers ─────────────────────────────────────────────────────
+// Base embedding types
 
 export enum EmbeddingProviderName {
   // Cloud-based
@@ -15,26 +15,56 @@ export enum EmbeddingProviderName {
   NOMIC = "nomic",
   MICROSOFT = "microsoft",
 }
-
-/** Cloud-only subset of EmbeddingProviderName. */
-export type CloudEmbeddingProviderType = Exclude<
+export type CloudBasedEmbeddingProviderName = Exclude<
+  EmbeddingProviderName,
+  EmbeddingProviderName.NOMIC | EmbeddingProviderName.MICROSOFT
+>;
+export type SelfHostedEmbeddingProviderName = Extract<
   EmbeddingProviderName,
   EmbeddingProviderName.NOMIC | EmbeddingProviderName.MICROSOFT
 >;
 
-export interface CloudEmbeddingProvider {
-  provider_type: EmbeddingProviderName;
-  api_key?: string;
-  api_url?: string;
-  custom_config?: Record<string, string>;
-  docsLink?: string;
+// Backend API Response Type
 
-  // Frontend-specific properties
-  website: string;
-  icon: IconFunctionComponent;
+/**
+ * The backend-persisted shape for an embedding model. Reflects what the
+ * server actually sends/stores — notably **no `description`**, since
+ * descriptions are frontend-only marketing copy on the registry types
+ * ({@link EmbeddingModel}).
+ */
+export interface EmbeddingModelResponse {
+  id?: number;
+  model_name: string;
+  model_dim: number;
+  normalize: boolean;
+  query_prefix: string | null;
+  passage_prefix: string | null;
+  provider_type: EmbeddingProviderName | null;
+  api_key: string | null;
+  api_url: string | null;
+  index_name: string | null;
+  switchover_type?: SwitchoverType;
+}
+
+export interface EmbeddingModel {
+  model_name: string;
+  model_dim: number;
+  normalize: boolean;
+  query_prefix: string | null;
+  passage_prefix: string | null;
+  provider_type: EmbeddingProviderName | null;
   description: string;
-  apiLink: string;
+}
+
+// Embedding Providers (Cloud-based + Self-hosted)
+
+export interface EmbeddingProvider {
+  providerName: EmbeddingProviderName;
+  icon: IconFunctionComponent;
+  docsLink?: string;
   costslink?: string;
+  apiLink?: string;
+  embeddingModels: EmbeddingModel[];
 
   /**
    * When true, this provider is no longer recommended for new deployments.
@@ -42,55 +72,9 @@ export interface CloudEmbeddingProvider {
    * blocked in the UI.
    */
   deprecated?: boolean;
-
-  // Relationships
-  embedding_models: CloudEmbeddingModel[];
-  default_model?: CloudEmbeddingModel;
 }
 
-// ─── Embedding models ────────────────────────────────────────────────────────
-
-/**
- * The backend-persisted shape for an embedding model. Reflects what the
- * server actually sends/stores — notably **no `description`**, since
- * descriptions are frontend-only marketing copy on the registry types
- * ({@link CloudEmbeddingModel}, {@link SelfHostedEmbeddingModel}).
- */
-export interface EmbeddingModelDescriptor {
-  id?: number;
-  model_name: string;
-  model_dim: number;
-  normalize: boolean;
-  query_prefix: string;
-  passage_prefix: string;
-  provider_type: EmbeddingProviderName | null;
-  api_key: string | null;
-  api_url: string | null;
-  api_version?: string | null;
-  deployment_name?: string | null;
-  index_name: string | null;
-  switchover_type?: SwitchoverType;
-}
-
-export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
-  description: string;
-  pricePerMillion: number;
-}
-
-export interface SelfHostedEmbeddingModel extends EmbeddingModelDescriptor {
-  description: string;
-  link?: string;
-  isDefault?: boolean;
-}
-
-export interface SelfHostedEmbeddingProvider {
-  provider_name: string;
-  icon: IconFunctionComponent;
-  docsLink?: string;
-  embedding_models: SelfHostedEmbeddingModel[];
-}
-
-// ─── Reranking ───────────────────────────────────────────────────────────────
+// Reranking
 
 export enum RerankerProvider {
   COHERE = "cohere",
@@ -116,7 +100,7 @@ export interface RerankingModel {
   cloud: boolean;
 }
 
-// ─── Search / indexing settings ──────────────────────────────────────────────
+// Search / indexing settings
 
 export enum SwitchoverType {
   REINDEX = "reindex",
@@ -156,7 +140,7 @@ export interface LLMContextualCost {
   cost: number;
 }
 
-// ─── Embedding model card state ─────────────────────────────────────────────
+// Embedding model card state
 
 export type EmbeddingModelState =
   | "unconnected"

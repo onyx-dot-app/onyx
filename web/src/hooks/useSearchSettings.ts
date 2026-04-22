@@ -3,7 +3,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   ConfiguredEmbeddingProvider,
-  EmbeddingModelDescriptor,
+  EmbeddingModelResponse,
   EmbeddingProviderName,
   LLMContextualCost,
   SavedSearchSettings,
@@ -35,7 +35,7 @@ export function useCurrentSearchSettings() {
  * Descriptions are frontend-only — look them up via `getCurrentModelCopy`.
  */
 export function useCurrentEmbeddingModel() {
-  return useSWR<EmbeddingModelDescriptor | null>(
+  return useSWR<EmbeddingModelResponse | null>(
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 }
@@ -61,7 +61,7 @@ export function useLLMContextualCosts() {
  * Polls every 5 seconds to stay in sync with backend state.
  */
 export function useSecondarySearchSettings() {
-  return useSWR<EmbeddingModelDescriptor | null>(
+  return useSWR<EmbeddingModelResponse | null>(
     "/api/search-settings/get-secondary-search-settings",
     errorHandlingFetcher,
     { refreshInterval: 5000 }

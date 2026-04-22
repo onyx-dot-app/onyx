@@ -2,7 +2,8 @@ import type { Settings } from "@/interfaces/settings";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import {
   AdvancedSearchConfiguration,
-  EmbeddingModelDescriptor,
+  EmbeddingModel,
+  EmbeddingModelResponse,
   EmbeddingPrecision,
   EmbeddingProviderName,
   RerankingDetails,
@@ -158,16 +159,27 @@ export async function cancelNewEmbedding(): Promise<Response> {
 /**
  * Marks a model as the FUTURE embedding model. Does NOT start re-indexing —
  * that is a separate, explicit action.
+ *
+ * Accepts a frontend {@link EmbeddingModel} and constructs the API payload
+ * explicitly — no frontend-only fields leak to the backend.
  */
 export async function setNewSearchSettings(
-  model: EmbeddingModelDescriptor,
+  model: EmbeddingModel,
   switchoverType: SwitchoverType
 ): Promise<Response> {
   return await fetch("/api/search-settings/set-new-search-settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...model,
+      model_name: model.model_name,
+      model_dim: model.model_dim,
+      normalize: model.normalize,
+      query_prefix: model.query_prefix,
+      passage_prefix: model.passage_prefix,
+      provider_type: model.provider_type,
+      api_key: null,
+      api_url: null,
+      index_name: null,
       multipass_indexing: false,
       embedding_precision: EmbeddingPrecision.FLOAT,
       enable_contextual_rag: false,
@@ -180,7 +192,7 @@ export async function setNewSearchSettings(
 // Advanced embedding details may update default values.
 // Do NOT modify the order unless you are positive the new hierarchy is correct.
 export function combineSearchSettings(
-  selectedProvider: EmbeddingModelDescriptor,
+  selectedProvider: EmbeddingModelResponse,
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
   provider_type: EmbeddingProviderName | null,

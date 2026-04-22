@@ -42,20 +42,16 @@ import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
-  SavedSearchSettings,
-  CloudEmbeddingModel,
-  CloudEmbeddingProvider,
   EmbeddingProviderName,
-  SelfHostedEmbeddingModel,
   SwitchoverType,
-} from "@/lib/indexing/interfaces";
-import type {
-  ConfiguredEmbeddingProvider,
-  EmbeddingModelState,
+  type ConfiguredEmbeddingProvider,
+  type EmbeddingModel,
+  type EmbeddingModelState,
+  type EmbeddingProvider,
+  type SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
 import {
-  CLOUD_EMBEDDING_PROVIDERS,
-  SELF_HOSTED_MODELS,
+  CLOUD_BASED_PROVIDERS,
   SELF_HOSTED_PROVIDERS,
   findCloudProvider,
   getCurrentModelCopy,
@@ -190,10 +186,10 @@ interface ProviderGroupProps {
   name: string;
   docsLink?: string;
   deprecated?: boolean;
-  models: (CloudEmbeddingModel | SelfHostedEmbeddingModel)[];
+  models: EmbeddingModel[];
   currentModelName?: string;
   selectedModelName?: string;
-  cloudProvider?: CloudEmbeddingProvider;
+  cloudProvider?: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   onSelectModel: (modelName: string) => void;
   onDeselectModel: () => void;
@@ -217,14 +213,12 @@ function ProviderGroup({
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
   const editCredentialsModal = useCreateModal();
-  const [pendingModel, setPendingModel] = useState<
-    CloudEmbeddingModel | SelfHostedEmbeddingModel | null
-  >(null);
+  const [pendingModel, setPendingModel] = useState<EmbeddingModel | null>(null);
 
   const handleDisconnect = useCallback(async () => {
     if (!cloudProvider) return;
     try {
-      await disconnectEmbeddingProvider(cloudProvider.provider_type);
+      await disconnectEmbeddingProvider(cloudProvider.providerName);
       toast.success(`Disconnected ${name}`);
       await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
       disconnectModal.toggle(false);
@@ -234,9 +228,7 @@ function ProviderGroup({
   }, [cloudProvider, name, disconnectModal]);
 
   const getModelState = useCallback(
-    (
-      model: CloudEmbeddingModel | SelfHostedEmbeddingModel
-    ): EmbeddingModelState => {
+    (model: EmbeddingModel): EmbeddingModelState => {
       if (isCloud && !isConfigured) return "unconnected";
       if (model.model_name === selectedModelName) return "selected";
       if (model.model_name === currentModelName) return "current";
@@ -246,7 +238,7 @@ function ProviderGroup({
   );
 
   const handleModelSelect = useCallback(
-    (model: CloudEmbeddingModel | SelfHostedEmbeddingModel) => {
+    (model: EmbeddingModel) => {
       if (deprecated) return;
       const state = getModelState(model);
 
@@ -360,7 +352,6 @@ function ProviderGroup({
           modelName={model.model_name}
           description={model.description}
           providerType={model.provider_type}
-          docsLink={"link" in model ? model.link : undefined}
           modelState={getModelState(model)}
           deprecated={deprecated}
           onSelect={() => handleModelSelect(model)}
@@ -478,18 +469,18 @@ function EmbeddingModelCard({
 }
 
 interface ConfigOnlyProviderCardProps {
-  provider: CloudEmbeddingProvider;
+  provider: EmbeddingProvider;
 }
 
 function ConfigOnlyProviderCard({ provider }: ConfigOnlyProviderCardProps) {
   const providerCreationModal = useCreateModal();
-  const providerName = getFormattedProviderName(provider.provider_type);
+  const providerName = getFormattedProviderName(provider.providerName);
 
   return (
-    <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
+    <GeneralLayouts.Section key={provider.providerName} gap={0.25}>
       <ProviderGroupHeader
         icon={provider.icon}
-        name={getFormattedProviderName(provider.provider_type)}
+        name={getFormattedProviderName(provider.providerName)}
         docsLink={provider.docsLink}
       />
 
@@ -548,16 +539,16 @@ export default function IndexSettingsPage() {
 
   const allCloudProviders = useMemo(
     () =>
-      Object.values(CLOUD_EMBEDDING_PROVIDERS).filter(
-        (p) => p.embedding_models.length > 0
+      Object.values(CLOUD_BASED_PROVIDERS).filter(
+        (p) => p.embeddingModels.length > 0
       ),
     []
   );
 
   const configOnlyProviders = useMemo(
     () =>
-      Object.values(CLOUD_EMBEDDING_PROVIDERS).filter(
-        (p) => p.embedding_models.length === 0
+      Object.values(CLOUD_BASED_PROVIDERS).filter(
+        (p) => p.embeddingModels.length === 0
       ),
     []
   );
@@ -565,7 +556,7 @@ export default function IndexSettingsPage() {
   const allCloudModels = useMemo(
     () =>
       allCloudProviders.flatMap((p) =>
-        p.embedding_models.map((m) => ({ model: m, provider: p }))
+        p.embeddingModels.map((m) => ({ model: m, provider: p }))
       ),
     [allCloudProviders]
   );
@@ -579,21 +570,21 @@ export default function IndexSettingsPage() {
     (item) =>
       `${item.model.model_name} ${
         item.model.description
-      } ${getFormattedProviderName(item.provider.provider_type)}`
+      } ${getFormattedProviderName(item.provider.providerName)}`
   );
 
   const filteredProviders = useMemo(() => {
-    const modelsByProvider = new Map<string, CloudEmbeddingModel[]>();
+    const modelsByProvider = new Map<string, EmbeddingModel[]>();
     for (const { model, provider } of filteredCloudModels) {
-      const key = provider.provider_type;
+      const key = provider.providerName;
       if (!modelsByProvider.has(key)) modelsByProvider.set(key, []);
       modelsByProvider.get(key)!.push(model);
     }
     return allCloudProviders
-      .filter((p) => modelsByProvider.has(p.provider_type))
+      .filter((p) => modelsByProvider.has(p.providerName))
       .map((p) => ({
         provider: p,
-        models: modelsByProvider.get(p.provider_type)!,
+        models: modelsByProvider.get(p.providerName)!,
       }));
   }, [filteredCloudModels, allCloudProviders]);
 
@@ -602,13 +593,13 @@ export default function IndexSettingsPage() {
     return SELF_HOSTED_PROVIDERS.map((provider) => ({
       provider,
       models: trimmed
-        ? provider.embedding_models.filter(
+        ? provider.embeddingModels.filter(
             (m) =>
               m.model_name.toLowerCase().includes(trimmed) ||
               m.description.toLowerCase().includes(trimmed) ||
-              provider.provider_name.toLowerCase().includes(trimmed)
+              provider.providerName.toLowerCase().includes(trimmed)
           )
-        : provider.embedding_models,
+        : provider.embeddingModels,
     })).filter(({ models }) => models.length > 0);
   }, [modelSearchQuery]);
 
@@ -841,7 +832,7 @@ export default function IndexSettingsPage() {
                   <ProviderCredentialsModal
                     provider={currentCloudProvider}
                     existingCredentials={configuredProviders?.get(
-                      currentCloudProvider.provider_type
+                      currentCloudProvider.providerName
                     )}
                     onSubmit={async () => {
                       await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
@@ -869,10 +860,10 @@ export default function IndexSettingsPage() {
                           <GeneralLayouts.Section gap={0.5} padding={0.5}>
                             {filteredProviders.map(({ provider, models }) => (
                               <ProviderGroup
-                                key={provider.provider_type}
+                                key={provider.providerName}
                                 icon={provider.icon}
                                 name={getFormattedProviderName(
-                                  provider.provider_type
+                                  provider.providerName
                                 )}
                                 docsLink={provider.docsLink}
                                 deprecated={provider.deprecated}
@@ -885,7 +876,7 @@ export default function IndexSettingsPage() {
                                 }
                                 cloudProvider={provider}
                                 existingCredentials={configuredProviders?.get(
-                                  provider.provider_type
+                                  provider.providerName
                                 )}
                                 onSelectModel={setSelectedModelName}
                                 onDeselectModel={() =>
@@ -895,7 +886,7 @@ export default function IndexSettingsPage() {
                             ))}
                             {configOnlyProviders.map((provider) => (
                               <ConfigOnlyProviderCard
-                                key={provider.provider_type}
+                                key={provider.providerName}
                                 provider={provider}
                               />
                             ))}
@@ -915,9 +906,9 @@ export default function IndexSettingsPage() {
                             {filteredSelfHostedProviders.map(
                               ({ provider: shProvider, models }) => (
                                 <ProviderGroup
-                                  key={shProvider.provider_name}
+                                  key={shProvider.providerName}
                                   icon={shProvider.icon}
-                                  name={shProvider.provider_name}
+                                  name={shProvider.providerName}
                                   docsLink={shProvider.docsLink}
                                   models={models}
                                   currentModelName={
@@ -1022,8 +1013,10 @@ export default function IndexSettingsPage() {
                           onClick={() => {
                             const isSelectedSelfHosted =
                               selectedModelName &&
-                              SELF_HOSTED_MODELS.some(
-                                (m) => m.model_name === selectedModelName
+                              SELF_HOSTED_PROVIDERS.some((p) =>
+                                p.embeddingModels.some(
+                                  (m) => m.model_name === selectedModelName
+                                )
                               );
                             setActiveModelTab(
                               isSelectedSelfHosted

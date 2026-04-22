@@ -9,11 +9,11 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Switch from "@/refresh-components/inputs/Switch";
-import type {
-  CloudEmbeddingProvider,
-  ConfiguredEmbeddingProvider,
+import {
+  EmbeddingProviderName,
+  type ConfiguredEmbeddingProvider,
+  type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
-import { EmbeddingProviderName } from "@/lib/indexing/interfaces";
 import { getFormattedProviderName } from "@/lib/indexing";
 import { connectEmbeddingProvider } from "@/lib/indexing/svc";
 import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
@@ -23,7 +23,7 @@ import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
 // ---------------------------------------------------------------------------
 
 interface ModalShellProps {
-  provider: CloudEmbeddingProvider;
+  provider: EmbeddingProvider;
   isEditing: boolean;
   isValid: boolean;
   isSubmitting: boolean;
@@ -43,7 +43,7 @@ function ModalShell({
   onCancel,
   children,
 }: ModalShellProps) {
-  const providerName = getFormattedProviderName(provider.provider_type);
+  const providerName = getFormattedProviderName(provider.providerName);
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
@@ -99,7 +99,7 @@ function ModalShell({
 // ---------------------------------------------------------------------------
 
 function useProviderSubmit(
-  provider: CloudEmbeddingProvider,
+  provider: EmbeddingProvider,
   apiKey: string,
   apiUrl: string,
   onSubmit: () => void
@@ -112,7 +112,7 @@ function useProviderSubmit(
     setIsSubmitting(true);
     try {
       await connectEmbeddingProvider({
-        providerType: provider.provider_type,
+        providerType: provider.providerName,
         apiKey,
         apiUrl,
       });
@@ -134,7 +134,7 @@ function useProviderSubmit(
 // ---------------------------------------------------------------------------
 
 export interface ProviderModalProps {
-  provider: CloudEmbeddingProvider;
+  provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   onSubmit: () => void;
   onCancel: () => void;
@@ -151,7 +151,7 @@ export function StandardProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.provider_type);
+  const providerName = getFormattedProviderName(provider.providerName);
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
 
   const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
@@ -172,7 +172,7 @@ export function StandardProviderModal({
       onCancel={onCancel}
     >
       <ApiKeyField
-        apiLink={provider.apiLink}
+        apiLink={provider.apiLink ?? ""}
         providerName={providerName}
         value={apiKey}
         onChange={setApiKey}
@@ -246,7 +246,7 @@ export function AzureProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.provider_type);
+  const providerName = getFormattedProviderName(provider.providerName);
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
 
@@ -274,7 +274,7 @@ export function AzureProviderModal({
         onChange={setApiUrl}
       />
       <ApiKeyField
-        apiLink={provider.apiLink}
+        apiLink={provider.apiLink ?? ""}
         providerName={providerName}
         value={apiKey}
         onChange={setApiKey}
@@ -294,7 +294,7 @@ export function LiteLLMProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = getFormattedProviderName(provider.provider_type);
+  const providerName = getFormattedProviderName(provider.providerName);
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
   const [modelName, setModelName] = useState("");
@@ -329,7 +329,7 @@ export function LiteLLMProviderModal({
       />
 
       <ApiKeyField
-        apiLink={provider.apiLink}
+        apiLink={provider.apiLink ?? ""}
         providerName={providerName}
         value={apiKey}
         onChange={setApiKey}
@@ -400,7 +400,7 @@ export function LiteLLMProviderModal({
 // ---------------------------------------------------------------------------
 
 export function ProviderCredentialsModal(props: ProviderModalProps) {
-  switch (props.provider.provider_type) {
+  switch (props.provider.providerName) {
     case EmbeddingProviderName.GOOGLE:
       return <GoogleProviderModal {...props} />;
     case EmbeddingProviderName.AZURE:
