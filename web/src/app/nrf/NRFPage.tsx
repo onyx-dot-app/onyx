@@ -554,6 +554,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                 }
+                awaitingPreferredSelection={false}
                 {...(isSidePanel && {
                   tabReadingEnabled,
                   currentTabUrl,

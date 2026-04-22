@@ -155,6 +155,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
+      awaitingPreferredSelection={false}
     />
   );
 }
