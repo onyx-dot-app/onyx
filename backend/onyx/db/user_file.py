@@ -15,7 +15,6 @@ from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import FileRecord
 from onyx.db.models import Persona
 from onyx.db.models import Project__UserFile
-from onyx.db.models import ToolCall
 from onyx.db.models import UserFile
 
 
@@ -138,9 +137,11 @@ def user_can_access_chat_file(file_id: str, user_id: UUID, db_session: Session) 
     - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
       session the user owns or a session publicly shared via
       `ChatSessionSharedStatus.PUBLIC`.
-    - The `file_id` appears in a `ToolCall.generated_images` entry on a chat
-      session the user owns or a publicly shared session (image-generation
-      outputs are persisted there, not on `ChatMessage.files`).
+    - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
+      tool call database entry is added. This the file is there and the FE can
+      request it despite us not having the linking tool call. We currently
+      hackily get around this by making these files public, but this will need
+      to change with a larger refactor.
     """
     owns_user_file = db_session.query(
         select(UserFile.id)
@@ -185,19 +186,18 @@ def user_can_access_chat_file(file_id: str, user_id: UUID, db_session: Session) 
     if db_session.execute(chat_file_stmt).first() is not None:
         return True
 
-    generated_image_stmt = (
-        select(ToolCall.id)
-        .join(ChatSession, ToolCall.chat_session_id == ChatSession.id)
-        .where(ToolCall.generated_images.op("@>")([{"file_id": file_id}]))
+    # TODO: Chat image generated images are currently public
+    # We will want to make this private but it requires a larger
+    # refactor.
+    is_chat_image_gen = db_session.query(
+        select(FileRecord.file_id)
         .where(
-            or_(
-                ChatSession.user_id == user_id,
-                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
-            )
+            FileRecord.file_id == file_id,
+            FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
         )
-        .limit(1)
-    )
-    return db_session.execute(generated_image_stmt).first() is not None
+        .exists()
+    ).scalar()
+    return bool(is_chat_image_gen)
 
 
 def get_file_ids_by_user_file_ids(
