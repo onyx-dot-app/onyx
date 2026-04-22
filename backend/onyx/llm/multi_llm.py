@@ -50,11 +50,6 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.tracing.framework.create import get_current_span
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
-from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
@@ -247,30 +242,6 @@ def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
         adaptive_model in normalized_model_name
         for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
     )
-
-
-def _outer_generation_span_active() -> bool:
-    """Return True if we're already inside a `generation_span` created by an outer caller.
-
-    Used as a guard so the fallback tracing around `invoke`/`stream` doesn't double-count
-    LLM cost for code paths that already wrap their calls with `llm_generation_span`.
-    """
-    current = get_current_span()
-    return current is not None and isinstance(current.span_data, GenerationSpanData)
-
-
-@contextmanager
-def _fallback_generation_span(llm: LLM, flow: str) -> Iterator[Any]:
-    """Open an `llm_generation_span` only if no outer caller has already wrapped the call.
-
-    Yields the created span (to be used for recording output/usage) or ``None`` when an
-    outer wrapper is active — callers must guard recording logic with `if span is not None`.
-    """
-    if _outer_generation_span_active():
-        yield None
-        return
-    with llm_generation_span(llm, flow=flow) as span:
-        yield span
 
 
 class LitellmLLM(LLM):
@@ -782,39 +753,35 @@ class LitellmLLM(LLM):
             from litellm import stream_chunk_builder
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
 
-            with _fallback_generation_span(self, flow="llm_invoke_fallback") as span:
-                stream_response = cast(
-                    LiteLLMCustomStreamWrapper,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=True,
-                        structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                    ),
-                )
-                chunks = list(stream_response)
-                response = cast(
-                    LiteLLMModelResponse,
-                    stream_chunk_builder(chunks),
-                )
+            stream_response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
+            chunks = list(stream_response)
+            response = cast(
+                LiteLLMModelResponse,
+                stream_chunk_builder(chunks),
+            )
 
-                model_response = from_litellm_model_response(response)
+            model_response = from_litellm_model_response(response)
 
-                # Track LLM cost for Onyx-managed API keys
-                if model_response.usage:
-                    self._track_llm_cost(model_response.usage)
+            # Track LLM cost for Onyx-managed API keys
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
 
-                if span is not None:
-                    record_llm_response(span, model_response)
-
-                return model_response
+            return model_response
         finally:
             if client is not None:
                 client.close()
@@ -869,54 +836,31 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            with _fallback_generation_span(self, flow="llm_stream_fallback") as span:
-                response = cast(
-                    LiteLLMCustomStreamWrapper,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=True,
-                        structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                    ),
-                )
+            response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
 
-                accumulated_content: list[str] = []
-                final_usage: Usage | None = None
-                for chunk in response:
-                    model_response = from_litellm_model_response_stream(chunk)
+            for chunk in response:
+                model_response = from_litellm_model_response_stream(chunk)
 
-                    # Track LLM cost when usage info is available (typically in the last chunk)
-                    if model_response.usage:
-                        self._track_llm_cost(model_response.usage)
-                        final_usage = model_response.usage
+                # Track LLM cost when usage info is available (typically in the last chunk)
+                if model_response.usage:
+                    self._track_llm_cost(model_response.usage)
 
-                    if span is not None and model_response.choice.delta.content:
-                        accumulated_content.append(model_response.choice.delta.content)
-
-                    yield model_response
-
-                # Only reached if the stream is fully consumed without error.
-                # If the consumer abandons the generator or an exception
-                # propagates out, we skip the final record and the span will
-                # exit via the context-manager __exit__ without output set.
-                # We intentionally do NOT record per-chunk delta tool_calls —
-                # they arrive as partial fragments (arguments streamed char
-                # by char keyed on `index`) and would need stream_chunk_builder
-                # to reassemble before being safe to log.
-                if span is not None:
-                    record_llm_span_output(
-                        span,
-                        output="".join(accumulated_content) or None,
-                        usage=final_usage,
-                        tool_calls=None,
-                    )
+                yield model_response
         finally:
             if client is not None:
                 client.close()

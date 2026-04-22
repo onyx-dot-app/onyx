@@ -1,7 +1,7 @@
 import abc
 from collections.abc import Iterator
+from typing import Any
 
-from braintrust import traced
 from pydantic import BaseModel
 
 from onyx.llm.model_response import ModelResponse
@@ -9,6 +9,8 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.tracing_wrap import wrap_invoke
+from onyx.llm.tracing_wrap import wrap_stream
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,12 +36,31 @@ class LLMConfig(BaseModel):
 
 
 class LLM(abc.ABC):
+    """Abstract base for every LLM backend used by Onyx.
+
+    Concrete subclasses have their ``invoke`` and ``stream`` methods
+    auto-wrapped (via ``__init_subclass__`` below) with a fallback braintrust
+    ``generation_span``. This guarantees that every LLM call — from any call
+    site, including future subclasses — is captured in braintrust without
+    per-callsite instrumentation. Callers that explicitly wrap their calls
+    with ``llm_generation_span`` are unaffected: the fallback detects the
+    outer span and no-ops.
+    """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        invoke_fn = cls.__dict__.get("invoke")
+        if invoke_fn is not None:
+            setattr(cls, "invoke", wrap_invoke(invoke_fn))
+        stream_fn = cls.__dict__.get("stream")
+        if stream_fn is not None:
+            setattr(cls, "stream", wrap_stream(stream_fn))
+
     @property
     @abc.abstractmethod
     def config(self) -> LLMConfig:
         raise NotImplementedError
 
-    @traced(name="invoke llm", type="llm")
     def invoke(
         self,
         prompt: LanguageModelInput,
