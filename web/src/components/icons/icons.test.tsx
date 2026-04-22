@@ -4,9 +4,9 @@
  * Tests logo icons to ensure they render correctly with proper accessibility
  * and support various display sizes.
  */
-import { SvgBifrost, SvgGithub } from "@opal/logos";
+import { SvgBifrost, SvgConfluence, SvgGitbook, SvgGithub } from "@opal/logos";
 import { render } from "@tests/setup/test-utils";
-import { GitbookIcon, ConfluenceIcon } from "./icons";
+import { GoogleStorageIcon } from "./icons";
 
 describe("Logo Icons", () => {
   test("renders as an SVG element", () => {
@@ -24,26 +24,30 @@ describe("Logo Icons", () => {
     expect(svg).toHaveAttribute("height", "48");
   });
 
+  test("renders opal SVG logo at correct size", () => {
+    const { container } = render(<SvgConfluence size={24} />);
+    const svg = container.querySelector("svg");
+
+    expect(svg).toHaveAttribute("width", "24");
+    expect(svg).toHaveAttribute("height", "24");
+  });
+
   test("applies size adjustments", () => {
-    // ConfluenceIcon has a +4px size adjustment
-    const { container } = render(<ConfluenceIcon size={16} />);
+    // GoogleStorageIcon has a +4px size adjustment
+    const { container } = render(<GoogleStorageIcon size={16} />);
     const image = container.querySelector("img");
 
     // Base 16 + adjustment 4 = 20
     expect(image).toHaveStyle({ width: "20px", height: "20px" });
   });
 
-  // This test is for icons that have light and dark variants (e.g. GitbookIcon)
-  // Both exist in the DOM, one is hidden via CSS.
-  test("renders both light and dark variants", () => {
-    const { container } = render(<GitbookIcon />);
-    const images = container.querySelectorAll("img");
+  test("renders opal SVG logo as single element", () => {
+    const { container } = render(<SvgGitbook size={32} />);
+    const svg = container.querySelector("svg");
 
-    // Should render both light and dark variants in the DOM (one hidden via CSS)
-    expect(images).toHaveLength(2);
-    images.forEach((img) => {
-      expect(img).toHaveAttribute("alt");
-    });
+    expect(svg).toBeInTheDocument();
+    expect(svg).toHaveAttribute("width", "32");
+    expect(svg).toHaveAttribute("height", "32");
   });
 
   test("accepts className and size props", () => {
