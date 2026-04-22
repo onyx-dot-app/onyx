@@ -54,32 +54,6 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
         "12345678-1234-1234-1234-123456789abc",
         MilestoneRecordType.USER_MESSAGE_SENT,
         {"origin": "web", "tenant_id": "tenant-1"},
-        None,
-    )
-
-
-def test_mt_cloud_telemetry_passes_client_ip_through(monkeypatch: Any) -> None:
-    event_telemetry = Mock()
-    fetch_impl = Mock(return_value=event_telemetry)
-    monkeypatch.setattr(
-        telemetry_utils,
-        "fetch_versioned_implementation_with_fallback",
-        fetch_impl,
-    )
-    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", True)
-
-    telemetry_utils.mt_cloud_telemetry(
-        tenant_id="tenant-1",
-        distinct_id="12345678-1234-1234-1234-123456789abc",
-        event=MilestoneRecordType.USER_SIGNED_UP,
-        client_ip="203.0.113.9",
-    )
-
-    event_telemetry.assert_called_once_with(
-        "12345678-1234-1234-1234-123456789abc",
-        MilestoneRecordType.USER_SIGNED_UP,
-        {"tenant_id": "tenant-1"},
-        "203.0.113.9",
     )
 
 
@@ -125,28 +99,4 @@ def test_mt_cloud_identify_calls_identify_user_when_multi_tenant(
     identify_user.assert_called_once_with(
         "12345678-1234-1234-1234-123456789abc",
         {"email": "user@example.com"},
-        None,
-    )
-
-
-def test_mt_cloud_identify_passes_client_ip_through(monkeypatch: Any) -> None:
-    identify_user = Mock()
-    fetch_impl = Mock(return_value=identify_user)
-    monkeypatch.setattr(
-        telemetry_utils,
-        "fetch_versioned_implementation_with_fallback",
-        fetch_impl,
-    )
-    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", True)
-
-    telemetry_utils.mt_cloud_identify(
-        distinct_id="12345678-1234-1234-1234-123456789abc",
-        properties={"email": "user@example.com"},
-        client_ip="198.51.100.7",
-    )
-
-    identify_user.assert_called_once_with(
-        "12345678-1234-1234-1234-123456789abc",
-        {"email": "user@example.com"},
-        "198.51.100.7",
     )

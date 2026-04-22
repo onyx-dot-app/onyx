@@ -27,29 +27,7 @@ def test_event_telemetry_reads_client_ip_from_contextvar(monkeypatch):  # type: 
     )
 
 
-def test_event_telemetry_prefers_explicit_client_ip_over_contextvar(monkeypatch):  # type: ignore[no-untyped-def]
-    fake_posthog = MagicMock()
-    monkeypatch.setattr(ee_telemetry, "posthog", fake_posthog)
-
-    token = client_ip_mod._CLIENT_IP_CONTEXTVAR.set("8.8.8.8")
-    try:
-        ee_telemetry.event_telemetry(
-            distinct_id="u-1",
-            event="user_signed_up",
-            properties={"email": "user@example.com"},
-            client_ip="1.1.1.1",
-        )
-    finally:
-        client_ip_mod._CLIENT_IP_CONTEXTVAR.reset(token)
-
-    fake_posthog.capture.assert_called_once_with(
-        "u-1",
-        "user_signed_up",
-        {"email": "user@example.com", "$ip": "1.1.1.1"},
-    )
-
-
-def test_event_telemetry_omits_ip_when_neither_source_has_one(monkeypatch):  # type: ignore[no-untyped-def]
+def test_event_telemetry_omits_ip_when_contextvar_not_set(monkeypatch):  # type: ignore[no-untyped-def]
     fake_posthog = MagicMock()
     monkeypatch.setattr(ee_telemetry, "posthog", fake_posthog)
     # Contextvar defaults to None — no need to set it.
