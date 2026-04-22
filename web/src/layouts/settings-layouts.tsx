@@ -113,7 +113,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  * - Optional right-aligned action buttons via rightChildren
  * - Optional children content below title/description
  * - Optional back button
- * - Optional bottom separator
+ * - Optional bottom divider
  * - Automatic scroll shadow effect
  *
  * @example
@@ -141,12 +141,12 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  *   }
  * />
  *
- * // With search/filter below and bottom separator
+ * // With search/filter below and bottom divider
  * <SettingsLayouts.Header
  *   icon={SvgDatabase}
  *   title="Data Sources"
  *   description="Manage your connected data sources"
- *   separator
+ *   divider
  * >
  *   <InputTypeIn placeholder="Search data sources..." />
  * </SettingsLayouts.Header>
@@ -175,7 +175,7 @@ export interface SettingsHeaderProps {
   rightChildren?: React.ReactNode;
   backButton?: boolean;
   onBack?: () => void;
-  separator?: boolean;
+  divider?: boolean;
 }
 function SettingsHeader({
   icon: Icon,
@@ -185,7 +185,7 @@ function SettingsHeader({
   rightChildren,
   backButton,
   onBack,
-  separator,
+  divider,
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -249,7 +249,7 @@ function SettingsHeader({
         {children}
       </div>
 
-      {separator ? (
+      {divider ? (
         <>
           <Spacer vertical rem={1.5} />
           <Divider paddingParallel="md" paddingPerpendicular="fit" />

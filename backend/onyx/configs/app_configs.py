@@ -1165,6 +1165,11 @@ RECAPTCHA_HOSTNAME_ALLOWLIST = frozenset(
 )
 RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
 
+# Shared secret for automated health-check clients (e.g. BetterStack Playwright)
+# to bypass login captcha. Empty value = bypass disabled (fail-closed). Sent by
+# the client as the `X-Healthcheck-Token` header and compared constant-time.
+HEALTH_CHECK_BYPASS_TOKEN = os.environ.get("HEALTH_CHECK_BYPASS_TOKEN", "")
+
 # Opt-in per-IP rate limit on /auth/register.
 SIGNUP_RATE_LIMIT_ENABLED = (
     os.environ.get("SIGNUP_RATE_LIMIT_ENABLED", "").lower() == "true"

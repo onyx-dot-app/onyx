@@ -279,16 +279,15 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg" padding="md">
-      <ContentAction
+    <Card border="solid" rounding="lg">
+      <InputHorizontal
         icon={SvgActions}
         title={tool.display_name || tool.name}
         description={tool.description}
-        sizePreset="main-ui"
-        variant="section"
-        padding="fit"
-        rightChildren={<SwitchField name={toolFieldName} />}
-      />
+        withLabel={toolFieldName}
+      >
+        <SwitchField name={toolFieldName} />
+      </InputHorizontal>
     </Card>
   );
 }
@@ -1283,7 +1282,7 @@ export default function AgentEditorPage({
                         </div>
                       }
                       backButton
-                      separator
+                      divider
                     />
 
                     {/* Agent Form Content */}
@@ -1480,7 +1479,7 @@ export default function AgentEditorPage({
 
                             {/* Tools */}
                             <>
-                              {/* render the separator if there is at least one mcp-server or open-api-tool */}
+                              {/* render the divider if there is at least one mcp-server or open-api-tool */}
                               {(mcpServers.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider

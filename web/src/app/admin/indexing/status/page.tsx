@@ -224,7 +224,7 @@ export default function Status() {
         rightChildren={
           <Button href="/admin/add-connector">Add Connector</Button>
         }
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <Main />

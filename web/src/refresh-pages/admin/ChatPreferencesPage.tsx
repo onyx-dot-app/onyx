@@ -119,26 +119,23 @@ function MCPServerCard({
         hasContent ? (
           <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
-              <Card key={tool.id} border="solid" rounding="md" padding="sm">
-                <ContentAction
+              <Card key={tool.id} border="solid" rounding="md">
+                <InputHorizontal
                   icon={tool.icon}
                   title={tool.name}
                   description={tool.description}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding="fit"
-                  rightChildren={
-                    <Tooltip tooltip={authTooltip} side="top">
-                      <Switch
-                        checked={isToolEnabled(tool.id)}
-                        onCheckedChange={(checked) =>
-                          onToggleTool(tool.id, checked)
-                        }
-                        disabled={needsAuth}
-                      />
-                    </Tooltip>
-                  }
-                />
+                  withLabel
+                >
+                  <Tooltip tooltip={authTooltip} side="top">
+                    <Switch
+                      checked={isToolEnabled(tool.id)}
+                      onCheckedChange={(checked) =>
+                        onToggleTool(tool.id, checked)
+                      }
+                      disabled={needsAuth}
+                    />
+                  </Tooltip>
+                </InputHorizontal>
               </Card>
             ))}
           </Section>
@@ -549,7 +546,7 @@ export default function ChatPreferencesPage() {
           icon={route.icon}
           title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>
@@ -885,28 +882,20 @@ export default function ChatPreferencesPage() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <Card
-                          key={tool.id}
-                          border="solid"
-                          rounding="lg"
-                          padding="md"
-                        >
-                          <ContentAction
+                        <Card key={tool.id} border="solid" rounding="lg">
+                          <InputHorizontal
                             icon={SvgActions}
                             title={tool.display_name || tool.name}
                             description={tool.description}
-                            sizePreset="main-ui"
-                            variant="section"
-                            padding="fit"
-                            rightChildren={
-                              <Switch
-                                checked={isToolEnabled(tool.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleTool(tool.id, checked)
-                                }
-                              />
-                            }
-                          />
+                            withLabel
+                          >
+                            <Switch
+                              checked={isToolEnabled(tool.id)}
+                              onCheckedChange={(checked) =>
+                                toggleTool(tool.id, checked)
+                              }
+                            />
+                          </InputHorizontal>
                         </Card>
                       ))}
                     </Section>
@@ -928,6 +917,7 @@ export default function ChatPreferencesPage() {
                     title="Keep Chat History"
                     description="Specify how long Onyx should retain chats in your organization."
                     withLabel
+                    center
                   >
                     <InputSelect
                       value={

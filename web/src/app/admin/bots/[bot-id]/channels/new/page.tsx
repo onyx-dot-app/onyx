@@ -109,7 +109,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
       <SettingsLayouts.Header
         icon={SvgSlack}
         title="Configure OnyxBot for Slack Channel"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>
