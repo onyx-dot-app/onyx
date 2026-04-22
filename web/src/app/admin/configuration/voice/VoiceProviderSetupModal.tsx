@@ -3,8 +3,7 @@
 import { markdown } from "@opal/utils";
 import Image from "next/image";
 import { FunctionComponent, useState, useEffect } from "react";
-import { ElevenLabsIcon } from "@/components/icons/icons";
-import { SvgAzure, SvgOpenai } from "@opal/logos";
+import { SvgOnyxLogo, SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -15,7 +14,6 @@ import { FormField } from "@/refresh-components/form/FormField";
 import { InputVertical, InputHorizontal } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
 import { Disabled } from "@opal/core";
 import type { IconProps } from "@opal/types";
 import { VoiceProviderView } from "@/hooks/useVoiceProviders";
@@ -244,7 +242,7 @@ export default function VoiceProviderSetupModal({
         ) : providerType === "azure" ? (
           <SvgAzure size={24} />
         ) : providerType === "elevenlabs" ? (
-          <ElevenLabsIcon size={24} />
+          <SvgElevenLabs size={24} />
         ) : (
           <Image
             src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
