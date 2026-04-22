@@ -34,12 +34,36 @@ def _outer_generation_span_active() -> bool:
 
     The fallback wrap becomes a no-op in that case so we don't double-count
     cost or produce nested duplicate spans in Braintrust.
+
+    ``ended_at is None`` guard: ``SpanImpl.__exit__`` intentionally skips
+    ``Scope.reset_current_span`` when the exit was triggered by
+    ``GeneratorExit`` (i.e. a streaming consumer abandoned the generator
+    early). That leaves a finished ``GenerationSpanData`` in the contextvar.
+    Without this guard, every subsequent LLM call in the same asyncio task
+    would see a stale "outer span" and silently skip fallback tracing.
     """
     from onyx.tracing.framework.create import get_current_span
     from onyx.tracing.framework.span_data import GenerationSpanData
 
     current = get_current_span()
-    return current is not None and isinstance(current.span_data, GenerationSpanData)
+    return (
+        current is not None
+        and isinstance(current.span_data, GenerationSpanData)
+        and current.ended_at is None
+    )
+
+
+def _extract_prompt(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
+    """Return the ``prompt`` argument passed to ``invoke``/``stream``, if any.
+
+    ``LLM.invoke`` and ``LLM.stream`` take ``prompt`` as the first positional
+    parameter. Fallback to ``kwargs['prompt']`` when callers pass it by keyword.
+    Returns ``None`` if the argument cannot be located — the fallback span will
+    simply omit input messages rather than fail the request.
+    """
+    if args:
+        return args[0]
+    return kwargs.get("prompt")
 
 
 def wrap_invoke(
@@ -57,7 +81,10 @@ def wrap_invoke(
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_response
 
-        with llm_generation_span(self, flow="llm_invoke_fallback") as span:
+        prompt = _extract_prompt(args, kwargs)
+        with llm_generation_span(
+            self, flow="llm_invoke_fallback", input_messages=prompt
+        ) as span:
             response = invoke_fn(self, *args, **kwargs)
             if span is not None and response is not None:
                 record_llm_response(span, response)
@@ -93,7 +120,10 @@ def wrap_stream(
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_span_output
 
-        with llm_generation_span(self, flow="llm_stream_fallback") as span:
+        prompt = _extract_prompt(args, kwargs)
+        with llm_generation_span(
+            self, flow="llm_stream_fallback", input_messages=prompt
+        ) as span:
             accumulated_content: list[str] = []
             final_usage: Usage | None = None
 
