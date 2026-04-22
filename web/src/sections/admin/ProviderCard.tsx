@@ -101,9 +101,11 @@ export default function ProviderCard({
         onClick={
           isDisconnected && onConnect
             ? onConnect
-            : isSelected && onSelectChange
-              ? () => onSelectChange(false)
-              : undefined
+            : isConnected && onSelectChange
+              ? () => onSelectChange(true)
+              : isSelected && onSelectChange
+                ? () => onSelectChange(false)
+                : undefined
         }
       >
         <ContentAction
