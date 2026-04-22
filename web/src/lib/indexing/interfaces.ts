@@ -76,6 +76,13 @@ export interface SelfHostedEmbeddingModel extends EmbeddingModelDescriptor {
   isDefault?: boolean;
 }
 
+export interface SelfHostedEmbeddingProvider {
+  provider_name: string;
+  icon: IconFunctionComponent;
+  docsLink?: string;
+  embedding_models: SelfHostedEmbeddingModel[];
+}
+
 // ─── Reranking ───────────────────────────────────────────────────────────────
 
 export enum RerankerProvider {

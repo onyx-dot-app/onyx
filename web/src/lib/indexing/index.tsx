@@ -16,6 +16,7 @@ import {
   CloudEmbeddingProvider,
   EmbeddingProvider,
   SelfHostedEmbeddingModel,
+  SelfHostedEmbeddingProvider,
   RerankerProvider,
   RerankingModel,
 } from "@/lib/indexing/interfaces";
@@ -33,79 +34,97 @@ export const EMBEDDING_MODELS_ADMIN_URL = "/api/admin/embedding";
 
 // ─── Hosted (self-hosted) embedding models ───────────────────────────────────
 
-export const SELF_HOSTED_MODELS: SelfHostedEmbeddingModel[] = [
+export const SELF_HOSTED_PROVIDERS: SelfHostedEmbeddingProvider[] = [
   {
-    model_name: "nomic-ai/nomic-embed-text-v1",
-    model_dim: 768,
-    normalize: true,
-    description:
-      "Nomic’s embedding model specialized for retrieval, similarity, clustering and classification.",
-    isDefault: true,
-    link: "https://huggingface.co/nomic-ai/nomic-embed-text-v1",
-    query_prefix: "search_query: ",
-    passage_prefix: "search_document: ",
-    index_name: "",
-    provider_type: null,
-    api_key: null,
-    api_url: null,
+    provider_name: "Nomic",
+    icon: SvgNomic,
+    docsLink: "https://huggingface.co/nomic-ai",
+    embedding_models: [
+      {
+        model_name: "nomic-ai/nomic-embed-text-v1",
+        model_dim: 768,
+        normalize: true,
+        description:
+          "Nomic’s embedding model specialized for retrieval, similarity, clustering and classification.",
+        isDefault: true,
+        link: "https://huggingface.co/nomic-ai/nomic-embed-text-v1",
+        query_prefix: "search_query: ",
+        passage_prefix: "search_document: ",
+        index_name: "",
+        provider_type: null,
+        api_key: null,
+        api_url: null,
+      },
+    ],
   },
   {
-    model_name: "intfloat/e5-base-v2",
-    model_dim: 768,
-    normalize: true,
-    description:
-      "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
-    link: "https://huggingface.co/intfloat/e5-base-v2",
-    query_prefix: "query: ",
-    passage_prefix: "passage: ",
-    index_name: "",
-    provider_type: null,
-    api_url: null,
-    api_key: null,
-  },
-  {
-    model_name: "intfloat/e5-small-v2",
-    model_dim: 384,
-    normalize: true,
-    description:
-      "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
-    link: "https://huggingface.co/intfloat/e5-small-v2",
-    query_prefix: "query: ",
-    passage_prefix: "passage: ",
-    index_name: "",
-    provider_type: null,
-    api_key: null,
-    api_url: null,
-  },
-  {
-    model_name: "intfloat/multilingual-e5-base",
-    model_dim: 768,
-    normalize: true,
-    description:
-      "For corpora in other languages besides English, this is the one to choose.",
-    link: "https://huggingface.co/intfloat/multilingual-e5-base",
-    query_prefix: "query: ",
-    passage_prefix: "passage: ",
-    index_name: "",
-    provider_type: null,
-    api_key: null,
-    api_url: null,
-  },
-  {
-    model_name: "intfloat/multilingual-e5-small",
-    model_dim: 384,
-    normalize: true,
-    description:
-      "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
-    link: "https://huggingface.co/intfloat/multilingual-e5-base",
-    query_prefix: "query: ",
-    passage_prefix: "passage: ",
-    index_name: "",
-    provider_type: null,
-    api_key: null,
-    api_url: null,
+    provider_name: "Microsoft",
+    icon: SvgMicrosoft,
+    docsLink: "https://huggingface.co/intfloat",
+    embedding_models: [
+      {
+        model_name: "intfloat/e5-base-v2",
+        model_dim: 768,
+        normalize: true,
+        description:
+          "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
+        link: "https://huggingface.co/intfloat/e5-base-v2",
+        query_prefix: "query: ",
+        passage_prefix: "passage: ",
+        index_name: "",
+        provider_type: null,
+        api_url: null,
+        api_key: null,
+      },
+      {
+        model_name: "intfloat/e5-small-v2",
+        model_dim: 384,
+        normalize: true,
+        description:
+          "The smallest and fastest version of the E5 line of models. If you’re running Onyx on a resource constrained system, then this may be a good choice.",
+        link: "https://huggingface.co/intfloat/e5-small-v2",
+        query_prefix: "query: ",
+        passage_prefix: "passage: ",
+        index_name: "",
+        provider_type: null,
+        api_key: null,
+        api_url: null,
+      },
+      {
+        model_name: "intfloat/multilingual-e5-base",
+        model_dim: 768,
+        normalize: true,
+        description:
+          "For corpora in other languages besides English, this is the one to choose.",
+        link: "https://huggingface.co/intfloat/multilingual-e5-base",
+        query_prefix: "query: ",
+        passage_prefix: "passage: ",
+        index_name: "",
+        provider_type: null,
+        api_key: null,
+        api_url: null,
+      },
+      {
+        model_name: "intfloat/multilingual-e5-small",
+        model_dim: 384,
+        normalize: true,
+        description:
+          "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
+        link: "https://huggingface.co/intfloat/multilingual-e5-base",
+        query_prefix: "query: ",
+        passage_prefix: "passage: ",
+        index_name: "",
+        provider_type: null,
+        api_key: null,
+        api_url: null,
+      },
+    ],
   },
 ];
+
+/** Flat list of all self-hosted models (for backward compat / search). */
+export const SELF_HOSTED_MODELS: SelfHostedEmbeddingModel[] =
+  SELF_HOSTED_PROVIDERS.flatMap((p) => p.embedding_models);
 
 // ─── Cloud embedding providers ───────────────────────────────────────────────
 
