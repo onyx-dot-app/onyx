@@ -948,12 +948,7 @@ def get_document_id_to_file_id_map(
     db_session: Session,
     document_ids: list[str],
 ) -> dict[str, str]:
-    """Return a `{document_id: file_id}` map for docs that have a file_id.
-
-    Intended for post-retrieval enrichment of search results: one round-trip
-    to look up attached files for a batch of hits. Docs without a file_id are
-    omitted from the map — callers can treat a missing key as "no file".
-    """
+    """Return a `{document_id: file_id}` map for docs that have a file_id."""
     if not document_ids:
         return {}
     rows = (
