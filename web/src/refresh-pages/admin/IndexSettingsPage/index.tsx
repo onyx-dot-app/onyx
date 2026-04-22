@@ -46,6 +46,7 @@ import {
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
   EmbeddingProviderName,
+  SelfHostedEmbeddingModel,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
 import type {
@@ -83,12 +84,22 @@ import {
 } from "@/hooks/useSearchSettings";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
+import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const SWITCHOVER_NONE = "none";
+const SELECT_CARD_STATE: Record<
+  EmbeddingModelState,
+  "empty" | "filled" | "selected"
+> = {
+  unconnected: "filled",
+  connected: "filled",
+  current: "filled",
+  selected: "selected",
+};
 
 interface EmbeddingProviderInfoProps {
   providerType: string | null;
@@ -138,31 +149,6 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Provider credentials modal (connect + edit)
-// ---------------------------------------------------------------------------
-
-import type { ProviderModalProps } from "@/refresh-pages/admin/IndexSettingsPage/modals";
-import {
-  StandardProviderModal,
-  GoogleProviderModal,
-  AzureProviderModal,
-  LiteLLMProviderModal,
-} from "@/refresh-pages/admin/IndexSettingsPage/modals";
-
-function ProviderCredentialsModal(props: ProviderModalProps) {
-  switch (props.provider.provider_type) {
-    case EmbeddingProviderName.GOOGLE:
-      return <GoogleProviderModal {...props} />;
-    case EmbeddingProviderName.AZURE:
-      return <AzureProviderModal {...props} />;
-    case EmbeddingProviderName.LITELLM:
-      return <LiteLLMProviderModal {...props} />;
-    default:
-      return <StandardProviderModal {...props} />;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Embedding model picker components
 // ---------------------------------------------------------------------------
 
@@ -200,57 +186,68 @@ function ProviderGroupHeader({
 }
 
 interface ProviderGroupProps {
-  provider: CloudEmbeddingProvider;
-  models: CloudEmbeddingModel[];
+  icon: IconFunctionComponent;
+  name: string;
+  docsLink?: string;
+  deprecated?: boolean;
+  models: (CloudEmbeddingModel | SelfHostedEmbeddingModel)[];
   currentModelName?: string;
   selectedModelName?: string;
+  cloudProvider?: CloudEmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   onSelectModel: (modelName: string) => void;
   onDeselectModel: () => void;
 }
 
 function ProviderGroup({
-  provider,
+  icon,
+  name,
+  docsLink,
+  deprecated,
   models,
   currentModelName,
   selectedModelName,
+  cloudProvider,
   existingCredentials,
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
-  const isConfigured = !!existingCredentials;
+  const isCloud = !!cloudProvider;
+  const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
   const editCredentialsModal = useCreateModal();
-  const providerName = getFormattedProviderName(provider.provider_type);
-  const [pendingModel, setPendingModel] = useState<CloudEmbeddingModel | null>(
-    null
-  );
+  const [pendingModel, setPendingModel] = useState<
+    CloudEmbeddingModel | SelfHostedEmbeddingModel | null
+  >(null);
 
   const handleDisconnect = useCallback(async () => {
+    if (!cloudProvider) return;
     try {
-      await disconnectEmbeddingProvider(provider.provider_type);
-      toast.success(`Disconnected ${providerName}`);
+      await disconnectEmbeddingProvider(cloudProvider.provider_type);
+      toast.success(`Disconnected ${name}`);
       await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
       disconnectModal.toggle(false);
     } catch {
-      toast.error(`Failed to disconnect ${providerName}`);
+      toast.error(`Failed to disconnect ${name}`);
     }
-  }, [provider.provider_type, providerName, disconnectModal]);
+  }, [cloudProvider, name, disconnectModal]);
 
   const getModelState = useCallback(
-    (model: CloudEmbeddingModel): EmbeddingModelState => {
-      if (!isConfigured) return "unconnected";
+    (
+      model: CloudEmbeddingModel | SelfHostedEmbeddingModel
+    ): EmbeddingModelState => {
+      if (isCloud && !isConfigured) return "unconnected";
       if (model.model_name === selectedModelName) return "selected";
       if (model.model_name === currentModelName) return "current";
       return "connected";
     },
-    [isConfigured, selectedModelName, currentModelName]
+    [isCloud, isConfigured, selectedModelName, currentModelName]
   );
 
   const handleModelSelect = useCallback(
-    (model: CloudEmbeddingModel) => {
-      if (provider.deprecated) return;
+    (model: CloudEmbeddingModel | SelfHostedEmbeddingModel) => {
+      if (deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
@@ -258,7 +255,7 @@ function ProviderGroup({
         return;
       }
 
-      if (state === "unconnected") {
+      if (state === "unconnected" && cloudProvider) {
         setPendingModel(model);
         connectModal.toggle(true);
         return;
@@ -271,67 +268,72 @@ function ProviderGroup({
       onSelectModel,
       onDeselectModel,
       connectModal,
-      provider.deprecated,
+      deprecated,
+      cloudProvider,
     ]
   );
 
   return (
-    <GeneralLayouts.Section key={provider.provider_type} gap={0.25}>
-      <disconnectModal.Provider>
-        <ConfirmationModalLayout
-          icon={SvgUnplug}
-          title={`Disconnect ${providerName}`}
-          submit={
-            <Button variant="danger" onClick={handleDisconnect}>
-              Disconnect
-            </Button>
-          }
-        >
-          <Text font="main-ui-body" color="text-03" as="p">
-            {markdown(
-              `This will disconnect all embedding models from provider **${providerName}**.`
-            )}
-          </Text>
-        </ConfirmationModalLayout>
-      </disconnectModal.Provider>
+    <GeneralLayouts.Section gap={0.25}>
+      {cloudProvider && (
+        <>
+          <disconnectModal.Provider>
+            <ConfirmationModalLayout
+              icon={SvgUnplug}
+              title={`Disconnect ${name}`}
+              submit={
+                <Button variant="danger" onClick={handleDisconnect}>
+                  Disconnect
+                </Button>
+              }
+            >
+              <Text font="main-ui-body" color="text-03" as="p">
+                {markdown(
+                  `This will disconnect all embedding models from provider **${name}**.`
+                )}
+              </Text>
+            </ConfirmationModalLayout>
+          </disconnectModal.Provider>
 
-      <connectModal.Provider>
-        <ProviderCredentialsModal
-          provider={provider}
-          onSubmit={async () => {
-            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
-            connectModal.toggle(false);
-            if (pendingModel) {
-              onSelectModel(pendingModel.model_name);
-              setPendingModel(null);
-            }
-          }}
-          onCancel={() => {
-            connectModal.toggle(false);
-            setPendingModel(null);
-          }}
-        />
-      </connectModal.Provider>
+          <connectModal.Provider>
+            <ProviderCredentialsModal
+              provider={cloudProvider}
+              onSubmit={async () => {
+                await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+                connectModal.toggle(false);
+                if (pendingModel) {
+                  onSelectModel(pendingModel.model_name);
+                  setPendingModel(null);
+                }
+              }}
+              onCancel={() => {
+                connectModal.toggle(false);
+                setPendingModel(null);
+              }}
+            />
+          </connectModal.Provider>
 
-      <editCredentialsModal.Provider>
-        <ProviderCredentialsModal
-          provider={provider}
-          existingCredentials={existingCredentials}
-          onSubmit={async () => {
-            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
-            editCredentialsModal.toggle(false);
-          }}
-          onCancel={() => editCredentialsModal.toggle(false)}
-        />
-      </editCredentialsModal.Provider>
+          <editCredentialsModal.Provider>
+            <ProviderCredentialsModal
+              provider={cloudProvider}
+              existingCredentials={existingCredentials}
+              onSubmit={async () => {
+                await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+                editCredentialsModal.toggle(false);
+              }}
+              onCancel={() => editCredentialsModal.toggle(false)}
+            />
+          </editCredentialsModal.Provider>
+        </>
+      )}
 
       <ProviderGroupHeader
-        icon={provider.icon}
-        name={getFormattedProviderName(provider.provider_type)}
-        docsLink={provider.docsLink}
-        suffix={provider.deprecated ? "(deprecated)" : undefined}
+        icon={icon}
+        name={name}
+        docsLink={docsLink}
+        suffix={deprecated ? "(deprecated)" : undefined}
         rightChildren={
-          isConfigured ? (
+          isCloud && isConfigured ? (
             <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
               <Button
                 icon={SvgUnplug}
@@ -354,28 +356,19 @@ function ProviderGroup({
       {models.map((model) => (
         <EmbeddingModelCard
           key={model.model_name}
-          icon={provider.icon}
+          icon={icon}
           modelName={model.model_name}
           description={model.description}
           providerType={model.provider_type}
+          docsLink={"link" in model ? model.link : undefined}
           modelState={getModelState(model)}
-          deprecated={provider.deprecated}
+          deprecated={deprecated}
           onSelect={() => handleModelSelect(model)}
         />
       ))}
     </GeneralLayouts.Section>
   );
 }
-
-const SELECT_CARD_STATE: Record<
-  EmbeddingModelState,
-  "empty" | "filled" | "selected"
-> = {
-  unconnected: "filled",
-  connected: "filled",
-  current: "filled",
-  selected: "selected",
-};
 
 interface EmbeddingModelCardProps {
   icon: IconFunctionComponent;
@@ -460,8 +453,8 @@ function EmbeddingModelCard({
       padding="xs"
       onClick={isClickable ? onSelect : undefined}
     >
-      <div className="flex flex-row items-start w-full p-2">
-        <div className="flex flex-col flex-1 min-w-0">
+      <GeneralLayouts.Section flexDirection="row" alignItems="start">
+        <GeneralLayouts.Section gap={0} padding={0.5} alignItems="start">
           <Content
             icon={icon}
             title={modelName}
@@ -477,9 +470,9 @@ function EmbeddingModelCard({
               </LinkButton>
             )}
           </div>
-        </div>
+        </GeneralLayouts.Section>
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
-      </div>
+      </GeneralLayouts.Section>
     </SelectCard>
   );
 }
@@ -877,7 +870,12 @@ export default function IndexSettingsPage() {
                             {filteredProviders.map(({ provider, models }) => (
                               <ProviderGroup
                                 key={provider.provider_type}
-                                provider={provider}
+                                icon={provider.icon}
+                                name={getFormattedProviderName(
+                                  provider.provider_type
+                                )}
+                                docsLink={provider.docsLink}
+                                deprecated={provider.deprecated}
                                 models={models}
                                 currentModelName={
                                   currentEmbeddingModel?.model_name
@@ -885,6 +883,7 @@ export default function IndexSettingsPage() {
                                 selectedModelName={
                                   selectedModelName ?? undefined
                                 }
+                                cloudProvider={provider}
                                 existingCredentials={configuredProviders?.get(
                                   provider.provider_type
                                 )}
@@ -915,48 +914,23 @@ export default function IndexSettingsPage() {
                           <GeneralLayouts.Section gap={0.5} padding={0.5}>
                             {filteredSelfHostedProviders.map(
                               ({ provider: shProvider, models }) => (
-                                <GeneralLayouts.Section
+                                <ProviderGroup
                                   key={shProvider.provider_name}
-                                  gap={0.25}
-                                >
-                                  <ProviderGroupHeader
-                                    icon={shProvider.icon}
-                                    name={shProvider.provider_name}
-                                    docsLink={shProvider.docsLink}
-                                  />
-                                  {models.map((model) => {
-                                    const state: EmbeddingModelState =
-                                      model.model_name === selectedModelName
-                                        ? "selected"
-                                        : model.model_name ===
-                                            currentEmbeddingModel?.model_name
-                                          ? "current"
-                                          : "connected";
-                                    return (
-                                      <EmbeddingModelCard
-                                        key={model.model_name}
-                                        icon={shProvider.icon}
-                                        modelName={model.model_name}
-                                        description={model.description}
-                                        providerType={null}
-                                        docsLink={model.link}
-                                        modelState={state}
-                                        onSelect={() => {
-                                          if (
-                                            state === "selected" ||
-                                            state === "current"
-                                          ) {
-                                            setSelectedModelName(null);
-                                            return;
-                                          }
-                                          setSelectedModelName(
-                                            model.model_name
-                                          );
-                                        }}
-                                      />
-                                    );
-                                  })}
-                                </GeneralLayouts.Section>
+                                  icon={shProvider.icon}
+                                  name={shProvider.provider_name}
+                                  docsLink={shProvider.docsLink}
+                                  models={models}
+                                  currentModelName={
+                                    currentEmbeddingModel?.model_name
+                                  }
+                                  selectedModelName={
+                                    selectedModelName ?? undefined
+                                  }
+                                  onSelectModel={setSelectedModelName}
+                                  onDeselectModel={() =>
+                                    setSelectedModelName(null)
+                                  }
+                                />
                               )
                             )}
                           </GeneralLayouts.Section>

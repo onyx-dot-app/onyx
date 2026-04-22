@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { markdown } from "@opal/utils";
 import { Button, Divider, MessageCard } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -14,6 +13,7 @@ import type {
   CloudEmbeddingProvider,
   ConfiguredEmbeddingProvider,
 } from "@/lib/indexing/interfaces";
+import { EmbeddingProviderName } from "@/lib/indexing/interfaces";
 import { getFormattedProviderName } from "@/lib/indexing";
 import { connectEmbeddingProvider } from "@/lib/indexing/svc";
 import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
@@ -393,4 +393,21 @@ export function LiteLLMProviderModal({
       </InputHorizontal>
     </ModalShell>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Provider credentials modal (connect + edit)
+// ---------------------------------------------------------------------------
+
+export function ProviderCredentialsModal(props: ProviderModalProps) {
+  switch (props.provider.provider_type) {
+    case EmbeddingProviderName.GOOGLE:
+      return <GoogleProviderModal {...props} />;
+    case EmbeddingProviderName.AZURE:
+      return <AzureProviderModal {...props} />;
+    case EmbeddingProviderName.LITELLM:
+      return <LiteLLMProviderModal {...props} />;
+    default:
+      return <StandardProviderModal {...props} />;
+  }
 }
