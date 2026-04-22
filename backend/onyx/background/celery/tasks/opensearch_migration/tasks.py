@@ -294,11 +294,13 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                         f"Indexed {len(opensearch_document_chunks)} chunks into OpenSearch in "
                         f"{time.monotonic() - index_opensearch_chunks_start_time:.3f} seconds."
                     )
-                except Exception:
+                except Exception as e:
                     task_logger.exception(
                         f"Failed to bulk-index {len(opensearch_document_chunks)} chunks into "
-                        "OpenSearch for this page. Skipping page and advancing the continuation "
-                        "token to prevent a permanent migration stall."
+                        f"OpenSearch for this page after "
+                        f"{time.monotonic() - index_opensearch_chunks_start_time:.3f} seconds "
+                        f"(exception_type={type(e).__name__}). Skipping page and advancing the "
+                        "continuation token to prevent a permanent migration stall."
                     )
                     index_errored_count = len(opensearch_document_chunks)
 
