@@ -2,12 +2,12 @@ from collections.abc import Callable
 from typing import Any
 from typing import IO
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.file_record import get_staged_file_ids_by_index_attempt_id
+from onyx.db.file_record import get_staged_file_ids_for_cc_pair_excluding_attempt
 from onyx.db.file_record import update_filerecord_origin
-from onyx.db.models import FileRecord
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -126,15 +126,8 @@ def cleanup_staged_files_for_attempt(
     wasn't produced (filtered, connector skipped it) or the upsert never
     reached `_promote_new_staged_files`. In either case it's an orphan.
     """
-    file_ids = list(
-        db_session.scalars(
-            select(FileRecord.file_id)
-            .where(FileRecord.file_origin == FileOrigin.INDEXING_STAGING)
-            .where(
-                FileRecord.file_metadata["index_attempt_id"].as_string()
-                == str(index_attempt_id)
-            )
-        ).all()
+    file_ids = get_staged_file_ids_by_index_attempt_id(
+        index_attempt_id=index_attempt_id, db_session=db_session
     )
     return delete_files_best_effort(
         file_ids, context=f"attempt-end-cleanup attempt={index_attempt_id}"
@@ -155,19 +148,11 @@ def reap_prior_attempt_staged_files(
     either crashed hard (its `finally` couldn't run) or finished without
     promoting the file. Scoped to the cc_pair + tenant to stay bounded.
     """
-    file_ids = list(
-        db_session.scalars(
-            select(FileRecord.file_id)
-            .where(FileRecord.file_origin == FileOrigin.INDEXING_STAGING)
-            .where(
-                FileRecord.file_metadata["cc_pair_id"].as_string() == str(cc_pair_id)
-            )
-            .where(FileRecord.file_metadata["tenant_id"].as_string() == tenant_id)
-            .where(
-                FileRecord.file_metadata["index_attempt_id"].as_string()
-                != str(current_attempt_id)
-            )
-        ).all()
+    file_ids = get_staged_file_ids_for_cc_pair_excluding_attempt(
+        cc_pair_id=cc_pair_id,
+        tenant_id=tenant_id,
+        excluding_attempt_id=current_attempt_id,
+        db_session=db_session,
     )
     return delete_files_best_effort(
         file_ids,
