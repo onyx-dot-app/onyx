@@ -68,20 +68,29 @@ def build_raw_file_callback(
     return _callback
 
 
-def delete_files_best_effort(file_ids: list[str]) -> None:
+def delete_files_best_effort(
+    file_ids: list[str],
+    context: str = "document cleanup",
+) -> int:
     """Delete a list of files from the file store, logging individual
-    failures rather than raising.
+    failures rather than raising. Returns the count successfully removed.
     """
     if not file_ids:
-        return
+        return 0
     file_store = get_default_file_store()
+    deleted = 0
     for file_id in file_ids:
         try:
             file_store.delete_file(file_id, error_on_missing=False)
+            deleted += 1
         except Exception:
             logger.exception(
-                f"Failed to delete file_id={file_id} during document cleanup"
+                f"[{context}] Failed to delete file_id={file_id}; will be "
+                "retried on next sweep."
             )
+    if deleted:
+        logger.info(f"[{context}] reaped {deleted} file(s)")
+    return deleted
 
 
 def promote_staged_file(db_session: Session, file_id: str) -> None:
@@ -106,28 +115,6 @@ def promote_staged_file(db_session: Session, file_id: str) -> None:
 #   attempt starts; prior attempt crashed   reap_prior_attempt_staged_files
 
 
-def _delete_file_records_and_blobs(file_ids: list[str], context: str) -> int:
-    """Best-effort delete each file via the file store. Returns the count
-    successfully removed. Failures are logged but never raised — one bad
-    blob must not stall the rest of the sweep."""
-    if not file_ids:
-        return 0
-    file_store = get_default_file_store()
-    deleted = 0
-    for file_id in file_ids:
-        try:
-            file_store.delete_file(file_id, error_on_missing=False)
-            deleted += 1
-        except Exception:
-            logger.exception(
-                f"[{context}] Failed to reap file_id={file_id}; will be "
-                "retried on next sweep."
-            )
-    if deleted:
-        logger.info(f"[{context}] reaped {deleted} file(s)")
-    return deleted
-
-
 def cleanup_staged_files_for_attempt(
     index_attempt_id: int,
     db_session: Session,
@@ -149,7 +136,7 @@ def cleanup_staged_files_for_attempt(
             )
         ).all()
     )
-    return _delete_file_records_and_blobs(
+    return delete_files_best_effort(
         file_ids, context=f"attempt-end-cleanup attempt={index_attempt_id}"
     )
 
@@ -182,7 +169,7 @@ def reap_prior_attempt_staged_files(
             )
         ).all()
     )
-    return _delete_file_records_and_blobs(
+    return delete_files_best_effort(
         file_ids,
         context=f"attempt-start-sweep cc_pair={cc_pair_id} "
         f"attempt={current_attempt_id}",
