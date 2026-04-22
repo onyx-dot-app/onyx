@@ -48,7 +48,7 @@ interface MessageCardBaseProps {
   bottomChildren?: React.ReactNode;
 
   /** Vertically center the icon/title and right-side actions. @default false */
-  centered?: boolean;
+  center?: boolean;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -129,7 +129,7 @@ function MessageCard({
   description,
   padding = "sm",
   headerPadding = "fit",
-  centered,
+  center,
   bottomChildren,
   rightChildren,
   onClose,
@@ -167,7 +167,7 @@ function MessageCard({
           sizePreset="main-ui"
           variant="section"
           padding="md"
-          centered={centered}
+          center={center}
           rightChildren={right}
         />
       </div>

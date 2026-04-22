@@ -30,7 +30,7 @@ type ContentActionProps = ContentProps & {
    *
    * @default false
    */
-  centered?: boolean;
+  center?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -65,13 +65,13 @@ type ContentActionProps = ContentProps & {
 function ContentAction({
   rightChildren,
   padding = "lg",
-  centered = false,
+  center = false,
   ...contentProps
 }: ContentActionProps) {
   const { padding: paddingClass } = containerSizeVariants[padding];
 
   return (
-    <div className="opal-content-action" data-centered={centered || undefined}>
+    <div className="opal-content-action" data-centered={center || undefined}>
       <div className={cn("opal-content-action-content", paddingClass)}>
         <Content {...contentProps} />
       </div>

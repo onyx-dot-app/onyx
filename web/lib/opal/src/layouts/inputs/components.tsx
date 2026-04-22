@@ -1,7 +1,11 @@
 "use client";
 
 import "@opal/layouts/inputs/styles.css";
-import type { RichStr, WithoutStyles } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  WithoutStyles,
+} from "@opal/types";
 import type { TagProps } from "@opal/components/tag/components";
 import { Text, Divider } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
@@ -57,6 +61,8 @@ interface InputLayoutProps {
   /** Ref forwarded to the inner content `Section`. */
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
+  /** Optional icon rendered beside the title. */
+  icon?: IconFunctionComponent;
   title: string | RichStr;
   /** Tag rendered inline beside the title (passed through to Content). */
   tag?: TagProps;
@@ -78,6 +84,7 @@ function Vertical({
   ref,
   children,
   subDescription,
+  icon,
   title,
   tag,
   description,
@@ -89,6 +96,7 @@ function Vertical({
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
       <Content
+        icon={icon}
         title={title}
         description={description}
         suffix={suffix}
@@ -129,6 +137,7 @@ function Horizontal({
   ref,
   children,
   center,
+  icon,
   title,
   tag,
   description,
@@ -140,6 +149,7 @@ function Horizontal({
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
       <ContentAction
+        icon={icon}
         title={title}
         description={description}
         suffix={suffix}
@@ -148,7 +158,7 @@ function Horizontal({
         variant="section"
         width="full"
         padding="fit"
-        centered={center}
+        center={center}
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}
