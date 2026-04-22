@@ -62,13 +62,14 @@ ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 
 def ensure_query_history_is_enabled(
     disallowed: list[QueryHistoryType],
-) -> None:
-    query_history_type = load_settings().query_history_type
+) -> QueryHistoryType:
+    query_history_type = load_settings().query_history_type or QueryHistoryType.NORMAL
     if query_history_type in disallowed:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Query history has been disabled by the administrator.",
         )
+    return query_history_type
 
 
 def yield_snapshot_from_chat_session(
@@ -203,7 +204,9 @@ def get_chat_session_history(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
-    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    query_history_type = ensure_query_history_is_enabled(
+        disallowed=[QueryHistoryType.DISABLED]
+    )
 
     page_of_chat_sessions = get_page_of_chat_sessions(
         page_num=page_num,
@@ -225,7 +228,7 @@ def get_chat_session_history(
 
     for chat_session in page_of_chat_sessions:
         minimal_chat_session = ChatSessionMinimal.from_chat_session(chat_session)
-        if load_settings().query_history_type == QueryHistoryType.ANONYMIZED:
+        if query_history_type == QueryHistoryType.ANONYMIZED:
             minimal_chat_session.user_email = ONYX_ANONYMIZED_EMAIL
         minimal_chat_sessions.append(minimal_chat_session)
 
@@ -241,7 +244,9 @@ def get_chat_session_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
-    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    query_history_type = ensure_query_history_is_enabled(
+        disallowed=[QueryHistoryType.DISABLED]
+    )
 
     try:
         chat_session = get_chat_session_by_id(
@@ -265,7 +270,7 @@ def get_chat_session_admin(
             f"Could not create snapshot for chat session with id '{chat_session_id}'",
         )
 
-    if load_settings().query_history_type == QueryHistoryType.ANONYMIZED:
+    if query_history_type == QueryHistoryType.ANONYMIZED:
         snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
     return snapshot
