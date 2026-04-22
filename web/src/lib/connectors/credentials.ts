@@ -281,6 +281,11 @@ export interface TestRailCredentialJson {
   testrail_api_key: string;
 }
 
+export interface GoogleChatCredentialJson {
+  google_chat_service_account_key: string;
+  google_chat_delegated_user_email: string | null;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -488,6 +493,14 @@ export const credentialTemplates: Record<ValidSources, any> = {
     testrail_username: "",
     testrail_api_key: "",
   } as TestRailCredentialJson,
+  jira_service_management: {
+    jira_user_email: "",
+    jira_api_token: "",
+  } as JiraCredentialJson,
+  google_chat: {
+    google_chat_service_account_key: "",
+    google_chat_delegated_user_email: null,
+  } as GoogleChatCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -655,6 +668,10 @@ export const credentialDisplayNames: Record<string, string> = {
   // Bitbucket
   bitbucket_email: "Bitbucket Account Email",
   bitbucket_api_token: "Bitbucket API Token",
+
+  // Google Chat
+  google_chat_service_account_key: "Google Chat Service Account Key (JSON)",
+  google_chat_delegated_user_email: "Delegated User Email (Optional)",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

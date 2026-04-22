@@ -13,6 +13,7 @@ import {
   GmailIcon,
   GongIcon,
   GoogleDriveIcon,
+  GoogleIcon,
   GoogleSitesIcon,
   GuruIcon,
   HubSpotIcon,
@@ -242,6 +243,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
   },
+  jira_service_management: {
+    icon: JiraIcon,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
+    isPopular: true,
+  },
   zendesk: {
     icon: ZendeskIcon,
     displayName: "Zendesk",
@@ -333,6 +341,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Zulip",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/zulip`,
+  },
+  google_chat: {
+    icon: GoogleIcon,
+    displayName: "Google Chat",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/google_chat`,
+    isPopular: true,
   },
 
   // Sales

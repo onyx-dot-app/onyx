@@ -1,5 +1,6 @@
 export enum FileTypeCategory {
   SHAREPOINT_PFX_FILE = "sharepoint_pfx_file",
+  GOOGLE_SERVICE_ACCOUNT_KEY = "google_service_account_key",
 }
 
 export interface FileValidationRule {
@@ -26,6 +27,15 @@ export const FILE_TYPE_DEFINITIONS: Record<
     },
     description:
       "Please upload a .pfx file containing the private key for SharePoint. The file size must be under 10KB.",
+  },
+  [FileTypeCategory.GOOGLE_SERVICE_ACCOUNT_KEY]: {
+    category: FileTypeCategory.GOOGLE_SERVICE_ACCOUNT_KEY,
+    validation: {
+      maxSizeKB: 100,
+      allowedExtensions: [".json"],
+    },
+    description:
+      "Please upload the JSON key file for your Google Service Account.",
   },
 };
 
@@ -105,7 +115,11 @@ export function createTypedFile(
 
 export function isTypedFileField(fieldKey: string): boolean {
   // Define which fields should be typed files
-  const typedFileFields = new Set(["sp_private_key"]);
+  const typedFileFields = new Set([
+    "sp_private_key",
+    "google_chat_service_account_key",
+    "google_service_account_key",
+  ]);
   return typedFileFields.has(fieldKey);
 }
 
@@ -115,6 +129,8 @@ export function getFileTypeDefinitionForField(
 ): FileTypeCategory | null {
   const fieldToTypeMap: Record<string, FileTypeCategory> = {
     sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    google_chat_service_account_key: FileTypeCategory.GOOGLE_SERVICE_ACCOUNT_KEY,
+    google_service_account_key: FileTypeCategory.GOOGLE_SERVICE_ACCOUNT_KEY,
   };
 
   return fieldToTypeMap[fieldKey] || null;

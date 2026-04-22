@@ -544,6 +544,8 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  JiraServiceManagement = "jira_service_management",
+  GoogleChat = "google_chat",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -571,6 +573,8 @@ export const validAutoSyncSources = [
   ValidSources.GitHub,
   ValidSources.Sharepoint,
   ValidSources.Teams,
+  ValidSources.GoogleChat,
+  ValidSources.JiraServiceManagement,
 ] as const;
 
 // Create a type from the array elements
