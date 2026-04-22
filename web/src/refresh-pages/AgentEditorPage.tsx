@@ -279,16 +279,15 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg" padding="md">
-      <ContentAction
+    <Card border="solid" rounding="lg">
+      <InputHorizontal
         icon={SvgActions}
         title={tool.display_name || tool.name}
         description={tool.description}
-        sizePreset="main-ui"
-        variant="section"
-        padding="fit"
-        rightChildren={<SwitchField name={toolFieldName} />}
-      />
+        withLabel={toolFieldName}
+      >
+        <SwitchField name={toolFieldName} />
+      </InputHorizontal>
     </Card>
   );
 }

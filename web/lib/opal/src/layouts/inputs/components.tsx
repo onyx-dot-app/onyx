@@ -61,8 +61,6 @@ interface InputLayoutProps {
   /** Ref forwarded to the inner content `Section`. */
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
-  /** Optional icon rendered beside the title. */
-  icon?: IconFunctionComponent;
   title: string | RichStr;
   /** Tag rendered inline beside the title (passed through to Content). */
   tag?: TagProps;
@@ -84,7 +82,6 @@ function Vertical({
   ref,
   children,
   subDescription,
-  icon,
   title,
   tag,
   description,
@@ -96,7 +93,6 @@ function Vertical({
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
       <Content
-        icon={icon}
         title={title}
         description={description}
         suffix={suffix}
@@ -129,6 +125,8 @@ function Vertical({
 export interface HorizontalProps extends InputLayoutProps {
   /** Align input to the center (middle) of the label/description. */
   center?: boolean;
+  /** Optional icon rendered beside the title. */
+  icon?: IconFunctionComponent;
 }
 
 function Horizontal({
