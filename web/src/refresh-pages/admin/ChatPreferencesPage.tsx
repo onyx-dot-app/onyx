@@ -38,7 +38,7 @@ import {
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { EmptyMessageCard } from "@opal/components";
-import { Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -1031,6 +1031,45 @@ export default function ChatPreferencesPage() {
                       />
                     </InputHorizontal>
                   </Section>
+                </Card>
+
+                <Card border="solid" rounding="lg">
+                  <InputHorizontal
+                    title="Query History"
+                    description="Control whether admin query history reports include user emails, anonymized emails, or are fully disabled."
+                    withLabel
+                  >
+                    <InputSelect
+                      value={s.query_history_type ?? QueryHistoryType.NORMAL}
+                      onValueChange={(value) => {
+                        void saveSettings({
+                          query_history_type: value as QueryHistoryType,
+                        });
+                      }}
+                    >
+                      <InputSelect.Trigger />
+                      <InputSelect.Content>
+                        <InputSelect.Item
+                          value={QueryHistoryType.NORMAL}
+                          description="Query history with real user emails"
+                        >
+                          Normal
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value={QueryHistoryType.ANONYMIZED}
+                          description="Query history with anonymized user emails"
+                        >
+                          Anonymized
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value={QueryHistoryType.DISABLED}
+                          description="No query history collected"
+                        >
+                          Disabled
+                        </InputSelect.Item>
+                      </InputSelect.Content>
+                    </InputSelect>
+                  </InputHorizontal>
                 </Card>
               </Section>
             </SimpleCollapsible.Content>
