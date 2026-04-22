@@ -7,6 +7,7 @@ export { default as SvgClaude } from "@opal/logos/claude";
 export { default as SvgCohere } from "@opal/logos/cohere";
 export { default as SvgDeepseek } from "@opal/logos/deepseek";
 export { default as SvgDiscord } from "@opal/logos/discord";
+export { default as SvgElevenLabs } from "@opal/logos/eleven-labs";
 export { default as SvgExa } from "@opal/logos/exa";
 export { default as SvgFirecrawl } from "@opal/logos/firecrawl";
 export { default as SvgGemini } from "@opal/logos/gemini";
