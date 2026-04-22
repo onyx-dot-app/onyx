@@ -4,13 +4,7 @@ import { JSX } from "react";
 import Image from "next/image";
 import { StaticImageData } from "next/image";
 import { BrainIcon as Brain } from "@phosphor-icons/react";
-import {
-  FiChevronsDown,
-  FiChevronsUp,
-  FiDatabase,
-  FiFile,
-  FiMail,
-} from "react-icons/fi";
+import { FiChevronsDown, FiChevronsUp, FiMail } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import axeroImage from "@public/Axero.jpeg";
 import airtableIcon from "@public/Airtable.svg";
@@ -200,29 +194,7 @@ export const BrainIcon = ({
 }: IconProps) => {
   return <Brain size={size} className={className} />;
 };
-export const DatabaseIcon = createIcon(FiDatabase);
-export const Caret = ({
-  size = 24,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="currentColor"
-        d="m12.37 15.835l6.43-6.63C19.201 8.79 18.958 8 18.43 8H5.57c-.528 0-.771.79-.37 1.205l6.43 6.63c.213.22.527.22.74 0Z"
-      />
-    </svg>
-  );
-};
 export const EmailIcon = createIcon(FiMail);
-export const FileIcon = createIcon(FiFile);
 
 export const MacIcon = ({
   size = 16,
@@ -363,32 +335,6 @@ export const OnyxLogoTypeIcon = ({
         fill="currentColor"
         transform="translate(101,142)"
       />
-    </svg>
-  );
-};
-export const SwapIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <g
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      >
-        <path d="M3.53 11.47v2.118a4.235 4.235 0 0 0 4.235 4.236H20.47M3.53 6.176h12.705a4.235 4.235 0 0 1 4.236 4.236v2.117" />
-        <path d="m17.294 14.647l3.177 3.176L17.294 21M6.706 9.353L3.529 6.176L6.706 3" />
-      </g>
     </svg>
   );
 };

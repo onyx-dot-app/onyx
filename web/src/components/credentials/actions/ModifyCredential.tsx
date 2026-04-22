@@ -3,7 +3,7 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
-import { NewChatIcon, SwapIcon } from "@/components/icons/icons";
+import { NewChatIcon } from "@/components/icons/icons";
 import { SvgEdit } from "@opal/icons";
 import {
   ConfluenceCredentialJson,
