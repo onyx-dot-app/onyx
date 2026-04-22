@@ -449,6 +449,65 @@ class TestGetLMStudioAvailableModels:
             assert deepseek.supports_reasoning is True
             assert llama.supports_reasoning is False
 
+    def test_reasoning_capability_as_dict(self) -> None:
+        """Regression test for #10028: LM Studio ≥0.3.x returns reasoning as a dict.
+
+        Old format: {"reasoning": false} or {"reasoning": true}
+        New format: {"reasoning": {"allowed_options": ["off","on"], "default": "on"}}
+        Both shapes must parse without a Pydantic validation error.
+        """
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "lmstudio-community/QwQ-32B",
+                    "type": "llm",
+                    "display_name": "QwQ 32B",
+                    "max_context_length": 32768,
+                    # New dict-style capability — default "on" → supports_reasoning=True
+                    "capabilities": {
+                        "vision": False,
+                        "reasoning": {
+                            "allowed_options": ["off", "on"],
+                            "default": "on",
+                        },
+                    },
+                },
+                {
+                    "key": "lmstudio-community/Meta-Llama-3-8B",
+                    "type": "llm",
+                    "display_name": "Meta Llama 3 8B",
+                    "max_context_length": 8192,
+                    # New dict-style capability — default "off" → supports_reasoning=False
+                    "capabilities": {
+                        "vision": False,
+                        "reasoning": {
+                            "allowed_options": ["off", "on"],
+                            "default": "off",
+                        },
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            # Must not raise a Pydantic ValidationError
+            results = get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+        qwq = next(r for r in results if "QwQ" in r.display_name)
+        llama = next(r for r in results if "Llama" in r.display_name)
+
+        assert qwq.supports_reasoning is True
+        assert llama.supports_reasoning is False
+
     def test_uses_display_name_from_api(self, mock_lm_studio_response: dict) -> None:
         """Test that display_name from the API is used directly."""
         from onyx.server.manage.llm.api import get_lm_studio_available_models
