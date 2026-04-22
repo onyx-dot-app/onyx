@@ -466,9 +466,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 # Handle tabular files (xlsx, csv, tsv) — produce one
                 # TabularSection per sheet (or per file for csv/tsv)
-                # instead of a flat TextSection. When a raw_file_callback
-                # is wired, also stage the raw bytes so the code-interpreter
-                # staging path can pull them for pandas/analysis.
+                # instead of a flat TextSection.
                 if is_tabular_file(file_name):
                     try:
                         downloaded_file = self._download_object(key)
