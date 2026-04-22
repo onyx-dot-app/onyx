@@ -59,7 +59,6 @@ from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.file_store.staging import build_raw_file_callback
-from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.file_store.staging import RawFileCallback
 from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -299,31 +298,15 @@ def run_docfetching_entrypoint(
             db_session=reap_session,
         )
 
-    try:
-        connector_document_extraction(
-            app,
-            index_attempt_id,
-            attempt.connector_credential_pair_id,
-            attempt.search_settings_id,
-            tenant_id,
-            callback,
-            raw_file_callback=raw_file_callback,
-        )
-    finally:
-        # Reap any STAGING files this attempt created but never promoted.
-        # Runs on both the success path (docs filtered / ingestion-hook
-        # rejected) and the exception path.
-        try:
-            with get_session_with_current_tenant() as cleanup_session:
-                cleanup_staged_files_for_attempt(
-                    index_attempt_id=index_attempt_id,
-                    db_session=cleanup_session,
-                )
-        except Exception:
-            logger.exception(
-                "Failed to run attempt-end staging cleanup; orphans will be "
-                "caught by the next attempt's start-of-run sweep."
-            )
+    connector_document_extraction(
+        app,
+        index_attempt_id,
+        attempt.connector_credential_pair_id,
+        attempt.search_settings_id,
+        tenant_id,
+        callback,
+        raw_file_callback=raw_file_callback,
+    )
 
     logger.info(
         f"Docfetching finished{tenant_str}: "
