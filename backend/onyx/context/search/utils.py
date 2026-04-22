@@ -134,19 +134,14 @@ def _dedupe_filename(name: str, taken: set[str]) -> str:
 
 def resolve_sandbox_filenames(
     items: list[tuple[str, str]],
-    *,
-    existing_filenames: set[str] | None = None,
-    already_resolved_file_ids: set[str] | None = None,
 ) -> dict[str, str]:
     """Deterministic `file_id -> sandbox_filename` map. First occurrence of a
     file_id wins; later distinct file_ids with colliding titles get `_2`, `_3`
-    suffixes. Callers that need identical mappings (LLM-facing JSON and
-    sandbox staging) must drive this from the same ordered input."""
-    taken: set[str] = set(existing_filenames) if existing_filenames else set()
-    resolved_seed = already_resolved_file_ids or set()
+    suffixes."""
+    taken: set[str] = set()
     result: dict[str, str] = {}
     for file_id, title in items:
-        if not file_id or file_id in result or file_id in resolved_seed:
+        if not file_id or file_id in result:
             continue
         name = _dedupe_filename(sandbox_filename_for_document_title(title), taken)
         taken.add(name)
