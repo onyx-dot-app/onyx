@@ -21,6 +21,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/refresh-pages/admin/CodeInterpreterPage/svc";
 import { toast } from "@/hooks/useToast";
+import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
@@ -57,21 +58,24 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
 
   const label = healthy ? "Connected" : "Connection Lost";
   const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
-  const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
+  const iconColor = healthy
+    ? "!text-status-success-05"
+    : "!text-status-error-05";
 
   return (
-    <Section
-      flexDirection="row"
-      justifyContent="end"
-      alignItems="center"
-      gap={0.25}
-      padding={0.5}
-    >
-      <Text mainUiAction text03>
-        {label}
-      </Text>
-      <Icon size={16} className={iconColor} />
-    </Section>
+    <div className="p-2">
+      <Content
+        title={label}
+        icon={(props) => (
+          <Icon {...props} className={cn(props.className, iconColor)} />
+        )}
+        sizePreset="main-ui"
+        variant="body"
+        orientation="reverse"
+        prominence="muted"
+        nonInteractive
+      />
+    </div>
   );
 }
 
@@ -113,37 +117,7 @@ export default function CodeInterpreterPage() {
         {isEnabled || isLoading ? (
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
-              <Card.Header
-                bottomRightChildren={
-                  <Section
-                    flexDirection="row"
-                    justifyContent="end"
-                    alignItems="center"
-                    gap={0.25}
-                    padding={0.25}
-                  >
-                    <Disabled disabled={isLoading}>
-                      <Hoverable.Item group="code-interpreter/Card">
-                        <Button
-                          prominence="tertiary"
-                          size="sm"
-                          icon={SvgUnplug}
-                          onClick={() => setShowDisconnectModal(true)}
-                          tooltip="Disconnect"
-                        />
-                      </Hoverable.Item>
-                    </Disabled>
-                    <Button
-                      disabled={isLoading}
-                      prominence="tertiary"
-                      size="sm"
-                      icon={SvgRefreshCw}
-                      onClick={refetch}
-                      tooltip="Refresh"
-                    />
-                  </Section>
-                }
-              >
+              <Card.Header>
                 <ContentAction
                   sizePreset="main-ui"
                   variant="section"
@@ -152,10 +126,39 @@ export default function CodeInterpreterPage() {
                   description="Built-in Python runtime"
                   padding="lg"
                   rightChildren={
-                    <ConnectionStatus
-                      healthy={isHealthy}
-                      isLoading={isLoading}
-                    />
+                    <Section alignItems="end" gap={0}>
+                      <ConnectionStatus
+                        healthy={isHealthy}
+                        isLoading={isLoading}
+                      />
+                      <div className="px-1 pb-1">
+                        <Section
+                          flexDirection="row"
+                          justifyContent="end"
+                          gap={0.25}
+                        >
+                          <Disabled disabled={isLoading}>
+                            <Hoverable.Item group="code-interpreter/Card">
+                              <Button
+                                prominence="tertiary"
+                                size="md"
+                                icon={SvgUnplug}
+                                onClick={() => setShowDisconnectModal(true)}
+                                tooltip="Disconnect"
+                              />
+                            </Hoverable.Item>
+                          </Disabled>
+                          <Button
+                            disabled={isLoading}
+                            prominence="tertiary"
+                            size="md"
+                            icon={SvgRefreshCw}
+                            onClick={refetch}
+                            tooltip="Refresh"
+                          />
+                        </Section>
+                      </div>
+                    </Section>
                   }
                 />
               </Card.Header>
@@ -176,22 +179,20 @@ export default function CodeInterpreterPage() {
               description="Built-in Python runtime"
               padding="lg"
               rightChildren={
-                <Section flexDirection="row" alignItems="center" padding={0.5}>
-                  {isReconnecting ? (
-                    <CheckingStatus />
-                  ) : (
-                    <Button
-                      prominence="tertiary"
-                      rightIcon={SvgArrowExchange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggle(true);
-                      }}
-                    >
-                      Reconnect
-                    </Button>
-                  )}
-                </Section>
+                isReconnecting ? (
+                  <CheckingStatus />
+                ) : (
+                  <Button
+                    prominence="tertiary"
+                    rightIcon={SvgArrowExchange}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(true);
+                    }}
+                  >
+                    Reconnect
+                  </Button>
+                )
               }
             />
           </SelectCard>
