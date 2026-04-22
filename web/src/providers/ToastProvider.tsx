@@ -71,7 +71,6 @@ function ToastContainer() {
               title={text}
               description={buildDescription(t)}
               padding="xs"
-              center
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             />
           </div>
