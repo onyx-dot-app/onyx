@@ -4,6 +4,16 @@ from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponse
 
 from onyx.llm.litellm_singleton.monkey_patches import apply_monkey_patches
 
+
+def test_apply_monkey_patches_does_not_raise() -> None:
+    """Regression test: apply_monkey_patches must not raise ImportError or
+    AttributeError when targeting litellm internals. This catches cases where
+    a litellm upgrade moves or renames internal classes/methods."""
+    apply_monkey_patches()
+    # Call twice to also verify idempotency guards work
+    apply_monkey_patches()
+
+
 _UNSET = object()
 
 
