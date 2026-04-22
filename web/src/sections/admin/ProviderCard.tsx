@@ -128,7 +128,7 @@ export default function ProviderCard({
                 Connect
               </Button>
             ) : (
-              <Section alignItems="end" gap={0}>
+              <Section alignItems="end" justifyContent="start" gap={0}>
                 {isConnected && onSelect ? (
                   <Button
                     prominence="tertiary"
