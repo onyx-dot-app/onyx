@@ -93,7 +93,7 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
-  awaitingPreferredSelection: boolean;
+  awaitingPreferredSelection?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -119,7 +119,7 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
-    awaitingPreferredSelection,
+    awaitingPreferredSelection = false,
     ref,
     tabReadingEnabled,
     currentTabUrl,
@@ -316,11 +316,11 @@ const AppInputBar = React.memo(
       prevAwaitingRef.current = awaitingPreferredSelection;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
-        const nextMessage = queuedMessages[0]!;
-        removeCurrentQueuedMessage(0);
+        const nextMessage = queuedMessages[0]!.text;
         isAutoSending.current = true;
         onSubmit(nextMessage);
         isAutoSending.current = false;
+        removeCurrentQueuedMessage(0);
       }
     }, [
       chatState,
@@ -691,7 +691,6 @@ const AppInputBar = React.memo(
           <Button
             disabled={
               (chatState === "input" &&
-                !awaitingPreferredSelection &&
                 !isVoicePlaybackControllable &&
                 !message) ||
               hasUploadingFiles ||
@@ -702,7 +701,7 @@ const AppInputBar = React.memo(
               isClassifying
                 ? SimpleLoader
                 : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message
+                    message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
@@ -711,9 +710,9 @@ const AppInputBar = React.memo(
             onClick={() => {
               const canSubmitNormally =
                 chatState === "input" && !awaitingPreferredSelection;
-              if (!canSubmitNormally && message) {
+              if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < 5) {
-                  enqueueCurrentMessage(message);
+                  enqueueCurrentMessage(message.trim());
                   setMessage("");
                 }
               } else if (chatState == "streaming") {
@@ -823,6 +822,7 @@ const AppInputBar = React.memo(
                       role="textarea"
                       ref={textAreaRef}
                       onPaste={handlePaste}
+                      onBlur={() => setHighlightedQueueIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onChange={handleInputChange}
                       className={cn(
@@ -850,7 +850,8 @@ const AppInputBar = React.memo(
                         if (highlightedQueueIndex !== null) {
                           if (event.key === "Enter") {
                             event.preventDefault();
-                            const text = queuedMessages[highlightedQueueIndex]!;
+                            const text =
+                              queuedMessages[highlightedQueueIndex]!.text;
                             removeCurrentQueuedMessage(highlightedQueueIndex);
                             setMessage(text);
                             setHighlightedQueueIndex(null);
@@ -880,21 +881,20 @@ const AppInputBar = React.memo(
                           ) {
                             event.preventDefault();
                             removeCurrentQueuedMessage(highlightedQueueIndex);
-                            if (queuedMessages.length <= 1) {
-                              setHighlightedQueueIndex(null);
-                            } else {
-                              setHighlightedQueueIndex(
-                                Math.min(
-                                  highlightedQueueIndex,
-                                  queuedMessages.length - 2
-                                )
-                              );
-                            }
                             return;
                           }
                           if (event.key === "Escape") {
                             event.preventDefault();
                             setHighlightedQueueIndex(null);
+                            return;
+                          }
+                          if (
+                            event.key === "Shift" ||
+                            event.key === "Alt" ||
+                            event.key === "Control" ||
+                            event.key === "Meta" ||
+                            event.key === "Tab"
+                          ) {
                             return;
                           }
                           // Any other key: exit navigation mode, let keypress proceed
@@ -932,8 +932,14 @@ const AppInputBar = React.memo(
                             ) {
                               submitMessage(message);
                             }
-                          } else if (message && queuedMessages.length < 5) {
-                            enqueueCurrentMessage(message);
+                          } else if (
+                            message.trim() &&
+                            !disabled &&
+                            !isClassifying &&
+                            !hasUploadingFiles &&
+                            queuedMessages.length < 5
+                          ) {
+                            enqueueCurrentMessage(message.trim());
                             setMessage("");
                           }
                         }

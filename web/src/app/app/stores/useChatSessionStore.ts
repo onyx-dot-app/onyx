@@ -6,6 +6,7 @@ import {
   ChatSessionSharedStatus,
   BackendChatSession,
   FeedbackType,
+  QueuedMessage,
 } from "../interfaces";
 import {
   getLatestMessageChain,
@@ -45,7 +46,7 @@ interface ChatSessionData {
   streamingStartTime?: number;
 
   // Queued messages
-  queuedMessages: string[];
+  queuedMessages: QueuedMessage[];
 }
 
 interface ChatSessionStore {
@@ -184,6 +185,8 @@ const createInitialSessionData = (
   queuedMessages: [],
   ...initialData,
 });
+
+let nextQueuedMessageId = 0;
 
 export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   // Initial state
@@ -498,7 +501,10 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       }
       const updatedSession = {
         ...session,
-        queuedMessages: [...session.queuedMessages, message],
+        queuedMessages: [
+          ...session.queuedMessages,
+          { id: nextQueuedMessageId++, text: message },
+        ],
       };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
@@ -702,7 +708,7 @@ export const useStreamingStartTime = () =>
     return currentSession?.streamingStartTime;
   });
 
-const EMPTY_QUEUED_MESSAGES: string[] = [];
+const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 export const useCurrentQueuedMessages = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

@@ -51,6 +51,10 @@ test.describe("Queued Messages", () => {
     await page.waitForLoadState("networkidle");
   });
 
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
   test("queues a message during streaming and auto-sends on completion", async ({
     page,
   }) => {
@@ -141,16 +145,16 @@ test.describe("Queued Messages", () => {
 
     // Up arrow: highlights last bar
     await textarea.press("ArrowUp");
-    await expect(queueBars.nth(1)).toContainText("Press Enter to edit");
+    await expect(queueBars.nth(1)).toContainText("edit ·");
 
     // Up again: highlights first bar
     await textarea.press("ArrowUp");
-    await expect(queueBars.nth(0)).toContainText("Press Enter to edit");
-    await expect(queueBars.nth(1)).not.toContainText("Press Enter to edit");
+    await expect(queueBars.nth(0)).toContainText("edit ·");
+    await expect(queueBars.nth(1)).not.toContainText("edit ·");
 
     // Down: back to second bar
     await textarea.press("ArrowDown");
-    await expect(queueBars.nth(1)).toContainText("Press Enter to edit");
+    await expect(queueBars.nth(1)).toContainText("edit ·");
 
     // Enter: move highlighted message into textarea
     await textarea.press("Enter");
@@ -174,7 +178,7 @@ test.describe("Queued Messages", () => {
 
     // Highlight last bar and delete it
     await textarea.press("ArrowUp");
-    await expect(queueBars.nth(1)).toContainText("Press Enter to edit");
+    await expect(queueBars.nth(1)).toContainText("edit ·");
 
     await textarea.press("Backspace");
     await expect(queueBars).toHaveCount(1);
@@ -197,11 +201,11 @@ test.describe("Queued Messages", () => {
 
     // Enter navigation, then escape
     await textarea.press("ArrowUp");
-    await expect(queueBars.first()).toContainText("Press Enter to edit");
+    await expect(queueBars.first()).toContainText("edit ·");
 
     await textarea.press("Escape");
     await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).not.toContainText("Press Enter to edit");
+    await expect(queueBars.first()).not.toContainText("edit ·");
 
     release();
   });
