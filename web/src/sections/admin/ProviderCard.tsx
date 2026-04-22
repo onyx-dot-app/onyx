@@ -40,8 +40,7 @@ import {
  *   description="Exa.ai"
  *   status="connected"
  *   onConnect={() => openModal()}
- *   onSelect={() => setDefault(id)}
- *   onDeselect={() => removeDefault(id)}
+ *   onSelectChange={(selected) => selected ? setDefault(id) : removeDefault(id)}
  *   onEdit={() => openEditModal()}
  *   onDisconnect={() => confirmDisconnect(id)}
  * />
@@ -56,8 +55,8 @@ interface ProviderCardProps {
   description: string;
   status: ProviderStatus;
   onConnect?: () => void;
-  onSelect?: () => void;
-  onDeselect?: () => void;
+  /** Called with `true` when selecting (set as default), `false` when deselecting. */
+  onSelectChange?: (selected: boolean) => void;
   onEdit?: () => void;
   onDisconnect?: () => void;
   /** When true, keeps the disconnect button visible (as if hovered). */
@@ -78,8 +77,7 @@ export default function ProviderCard({
   description,
   status,
   onConnect,
-  onSelect,
-  onDeselect,
+  onSelectChange,
   onEdit,
   onDisconnect,
   disconnectModalOpen,
@@ -103,8 +101,8 @@ export default function ProviderCard({
         onClick={
           isDisconnected && onConnect
             ? onConnect
-            : isSelected && onDeselect
-              ? onDeselect
+            : isSelected && onSelectChange
+              ? () => onSelectChange(false)
               : undefined
         }
       >
@@ -129,13 +127,13 @@ export default function ProviderCard({
               </Button>
             ) : (
               <Section alignItems="end" justifyContent="start" gap={0}>
-                {isConnected && onSelect ? (
+                {isConnected && onSelectChange ? (
                   <Button
                     prominence="tertiary"
                     rightIcon={SvgArrowRightCircle}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelect();
+                      onSelectChange(true);
                     }}
                   >
                     Set as Default

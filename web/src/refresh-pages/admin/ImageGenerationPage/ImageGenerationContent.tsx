@@ -235,8 +235,9 @@ export default function ImageGenerationContent() {
                   status={status}
                   aria-label={`image-gen-provider-${provider.image_provider_id}`}
                   onConnect={() => handleConnect(provider)}
-                  onSelect={() => handleSelect(provider)}
-                  onDeselect={() => handleDeselect(provider)}
+                  onSelectChange={(selected) =>
+                    selected ? handleSelect(provider) : handleDeselect(provider)
+                  }
                   onEdit={() => handleEdit(provider)}
                   onDisconnect={() => setDisconnectProvider(provider)}
                   disconnectModalOpen={

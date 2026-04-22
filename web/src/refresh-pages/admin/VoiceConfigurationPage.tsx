@@ -495,11 +495,13 @@ export default function VoiceConfigurationPage() {
         description={model.subtitle}
         status={status}
         onConnect={() => handleConnect(model.providerType, mode, model.id)}
-        onSelect={() => {
-          if (provider?.id) handleSetDefault(provider.id, mode, model.id);
-        }}
-        onDeselect={() => {
-          if (provider?.id) handleDeactivate(provider.id, mode);
+        onSelectChange={(selected) => {
+          if (!provider?.id) return;
+          if (selected) {
+            handleSetDefault(provider.id, mode, model.id);
+          } else {
+            handleDeactivate(provider.id, mode);
+          }
         }}
         onEdit={() => {
           if (provider) handleEdit(provider, mode, model.id);
