@@ -865,10 +865,19 @@ class GoogleDriveConnector(
             raise
         except RefreshError as e:
             logger.warning(
-                f"User '{user_email}' could not refresh their token. Error: {e}"
+                f"User '{user_email}' token refresh failed, re-fetching user list "
+                f"to check if they were removed. Error: {e}"
             )
-            # mark this user as done so we don't try to retrieve anything for them
-            # again
+            fresh_emails = self._get_all_user_emails()
+            if user_email not in fresh_emails:
+                # User was removed from the workspace — update checkpoint and skip silently
+                logger.warning(
+                    f"User '{user_email}' confirmed removed from workspace, skipping."
+                )
+                checkpoint.user_emails = fresh_emails
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            # User still exists — this is a real token problem, surface as a failure
             yield RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.DONE,
                 drive_file={},
