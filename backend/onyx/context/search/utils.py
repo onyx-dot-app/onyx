@@ -38,6 +38,8 @@ TSection = TypeVar(
     SavedSearchDocWithContent,
 )
 
+_UNSAFE_CHARS_RE = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
+
 
 def inference_section_from_chunks(
     center_chunk: InferenceChunk,
@@ -109,10 +111,9 @@ def convert_inference_sections_to_search_docs(
 def sandbox_filename_for_document_title(title: str) -> str:
     """Sanitize a document title into a sandbox-safe filename; extensions on
     the title are preserved verbatim, extensionless titles get no suffix."""
-    unsafe_chars = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
     max_length = 200
 
-    name = unsafe_chars.sub("_", title).strip().strip(".")
+    name = _UNSAFE_CHARS_RE.sub("_", title).strip().strip(".")
     if not name:
         name = "document"
     return name[:max_length]
