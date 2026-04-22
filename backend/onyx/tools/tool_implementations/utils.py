@@ -89,7 +89,7 @@ def convert_inference_sections_to_llm_string(
             filename = sandbox_filename_for_document(
                 chunk.semantic_identifier, chunk.file_id
             )
-            result["code_interpreter_file"] = filename
+            result["file_name"] = filename
 
             result["content"] = CODE_INTERPRETER_GUIDANCE.format(
                 filename=filename, content=chunk.content
