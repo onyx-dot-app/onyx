@@ -533,3 +533,51 @@ class TestImpersonateUserRefreshError:
         assert len(results) == 1
         assert results[0].error is refresh_error
         assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+        assert checkpoint.user_emails == [user_email, "admin@example.com"]
+
+    def test_refresh_error_refetch_fails_yields_error_and_preserves_checkpoint(
+        self,
+    ) -> None:
+        """When the re-fetch of user emails itself fails, the original RefreshError
+        should be surfaced as a failure and checkpoint.user_emails must not be
+        overwritten with a partial/incorrect list."""
+        user_email = "wilbur.suero@savvywealth.com"
+        connector = _make_connector()
+        checkpoint = _make_checkpoint_with_user(user_email)
+        original_user_emails = list(checkpoint.user_emails or [])
+
+        refresh_error = RefreshError("invalid_grant: Invalid email or User ID")
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_root_folder_id",
+                side_effect=refresh_error,
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.retry_builder",
+                return_value=lambda f: f,
+            ),
+            patch.object(
+                connector,
+                "_get_all_user_emails",
+                side_effect=Exception("Admin SDK unavailable"),
+            ),
+        ):
+            results = list(
+                connector._impersonate_user_for_retrieval(
+                    user_email=user_email,
+                    field_type=DriveFileFieldType.SLIM,
+                    checkpoint=checkpoint,
+                    get_new_drive_id=lambda _: None,
+                    sorted_filtered_folder_ids=[],
+                )
+            )
+
+        assert len(results) == 1
+        assert results[0].error is refresh_error
+        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+        assert checkpoint.user_emails == original_user_emails
