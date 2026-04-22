@@ -1,5 +1,5 @@
 import type { Settings } from "@/interfaces/settings";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModel,
   EmbeddingPrecision,
@@ -68,7 +68,7 @@ export async function connectEmbeddingProvider({
     throw new Error(err.detail ?? "Embedding test failed");
   }
 
-  const saveResponse = await fetch(EMBEDDING_PROVIDERS_ADMIN_URL, {
+  const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -94,7 +94,7 @@ export async function disconnectEmbeddingProvider(
   providerType: string
 ): Promise<void> {
   const response = await fetch(
-    `${EMBEDDING_PROVIDERS_ADMIN_URL}/${providerType}`,
+    `${SWR_KEYS.embeddingProviders}/${providerType}`,
     { method: "DELETE" }
   );
 

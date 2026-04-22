@@ -10,7 +10,6 @@ import {
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 /**
@@ -62,7 +61,7 @@ export function useLLMContextualCosts() {
  */
 export function useConfiguredEmbeddingProviders() {
   return useSWR<Map<EmbeddingProviderName, ConfiguredEmbeddingProvider>>(
-    EMBEDDING_PROVIDERS_ADMIN_URL,
+    SWR_KEYS.embeddingProviders,
     async (url: string) => {
       const providers: ConfiguredEmbeddingProvider[] =
         await errorHandlingFetcher(url);

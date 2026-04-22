@@ -1,4 +1,3 @@
-import { OpenSourceIcon } from "@/components/icons/icons";
 import { SvgCpu } from "@opal/icons";
 import {
   SvgAzure,
@@ -15,19 +14,12 @@ import {
   EmbeddingModel,
   EmbeddingProvider,
   EmbeddingProviderName,
-  RerankerProvider,
-  RerankingModel,
 } from "@/lib/indexing/interfaces";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Embedding
 // ═══════════════════════════════════════════════════════════════════════════
-
-// ─── Backend URLs ────────────────────────────────────────────────────────────
-
-export const EMBEDDING_PROVIDERS_ADMIN_URL =
-  "/api/admin/embedding/embedding-provider";
 
 export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
   {
@@ -274,90 +266,3 @@ export function getCurrentModelCopy(
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Reranking
-// ═══════════════════════════════════════════════════════════════════════════
-
-export const rerankingModels: RerankingModel[] = [
-  {
-    rerank_provider_type: RerankerProvider.LITELLM,
-    cloud: true,
-    displayName: "LiteLLM",
-    description: "Host your own reranker or router with LiteLLM proxy",
-    link: "https://docs.litellm.ai/docs/simple_proxy",
-  },
-  {
-    rerank_provider_type: null,
-    cloud: false,
-    modelName: "mixedbread-ai/mxbai-rerank-xsmall-v1",
-    displayName: "MixedBread XSmall",
-    description: "Fastest, smallest model for basic reranking tasks.",
-    link: "https://huggingface.co/mixedbread-ai/mxbai-rerank-xsmall-v1",
-  },
-  {
-    rerank_provider_type: null,
-    cloud: false,
-    modelName: "mixedbread-ai/mxbai-rerank-base-v1",
-    displayName: "MixedBread Base",
-    description: "Balanced performance for general reranking needs.",
-    link: "https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1",
-  },
-  {
-    rerank_provider_type: null,
-    cloud: false,
-    modelName: "mixedbread-ai/mxbai-rerank-large-v1",
-    displayName: "MixedBread Large",
-    description: "Most powerful model for complex reranking tasks.",
-    link: "https://huggingface.co/mixedbread-ai/mxbai-rerank-large-v1",
-  },
-  {
-    cloud: true,
-    rerank_provider_type: RerankerProvider.COHERE,
-    modelName: "rerank-english-v3.0",
-    displayName: "Cohere English",
-    description: "High-performance English-focused reranking model.",
-    link: "https://docs.cohere.com/v2/reference/rerank",
-  },
-  {
-    cloud: true,
-    rerank_provider_type: RerankerProvider.COHERE,
-    modelName: "rerank-multilingual-v3.0",
-    displayName: "Cohere Multilingual",
-    description: "Powerful multilingual reranking model.",
-    link: "https://docs.cohere.com/v2/reference/rerank",
-  },
-  {
-    cloud: true,
-    rerank_provider_type: RerankerProvider.BEDROCK,
-    modelName: "cohere.rerank-v3-5:0",
-    displayName: "Cohere Rerank 3.5",
-    description:
-      "Powerful multilingual reranking model invoked through AWS Bedrock.",
-    link: "https://aws.amazon.com/blogs/machine-learning/cohere-rerank-3-5-is-now-available-in-amazon-bedrock-through-rerank-api",
-  },
-];
-
-// ─── Reranking helpers ───────────────────────────────────────────────────────
-
-export function getTitleForRerankType(type: string) {
-  switch (type) {
-    case "nomic-ai":
-      return "Nomic (recommended)";
-    case "intfloat":
-      return "Microsoft";
-    default:
-      return "Open Source";
-  }
-}
-
-export function getIconForRerankType(type: string) {
-  switch (type) {
-    case "nomic-ai":
-      return <SvgNomic size={40} />;
-    case "intfloat":
-      return <SvgMicrosoft size={40} />;
-    default:
-      return <OpenSourceIcon size={40} />;
-  }
-}

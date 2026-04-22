@@ -66,7 +66,6 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/indexing";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
@@ -179,7 +178,7 @@ function ProviderGroup({
     try {
       await disconnectEmbeddingProvider(provider.providerName);
       toast.success(`Disconnected ${provider.displayName}`);
-      await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+      await mutate(SWR_KEYS.embeddingProviders);
       disconnectModal.toggle(false);
     } catch {
       toast.error(`Failed to disconnect ${provider.displayName}`);
@@ -250,7 +249,7 @@ function ProviderGroup({
             <ProviderCredentialsModal
               provider={provider}
               onSubmit={async () => {
-                await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+                await mutate(SWR_KEYS.embeddingProviders);
                 connectModal.toggle(false);
                 if (pendingModel) {
                   onSelectModel(pendingModel.modelName);
@@ -269,7 +268,7 @@ function ProviderGroup({
               provider={provider}
               existingCredentials={existingCredentials}
               onSubmit={async () => {
-                await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+                await mutate(SWR_KEYS.embeddingProviders);
                 editCredentialsModal.toggle(false);
               }}
               onCancel={() => editCredentialsModal.toggle(false)}
@@ -282,7 +281,7 @@ function ProviderGroup({
         <ProviderCredentialsModal
           provider={provider}
           onSubmit={async () => {
-            await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+            await mutate(SWR_KEYS.embeddingProviders);
             providerCreationModal.toggle(false);
           }}
           onCancel={() => providerCreationModal.toggle(false)}
@@ -661,7 +660,7 @@ export default function IndexSettingsPage() {
               currentCloudProvider.providerName
             )}
             onSubmit={async () => {
-              await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+              await mutate(SWR_KEYS.embeddingProviders);
               editModal.toggle(false);
             }}
             onCancel={() => editModal.toggle(false)}
