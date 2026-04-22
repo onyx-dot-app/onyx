@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useReducer } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content, ContentAction, Card } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
@@ -275,85 +275,84 @@ function ProviderCard({
               : undefined
         }
       >
-        <Card.Header
-          bottomRightChildren={
-            !isDisconnected ? (
-              <div className="flex flex-row px-1 pb-1">
-                {onDisconnect && (
-                  <Hoverable.Item group="web-search/ProviderCard">
-                    <Button
-                      icon={SvgUnplug}
-                      tooltip="Disconnect"
-                      aria-label={`Disconnect ${title}`}
-                      prominence="tertiary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDisconnect();
-                      }}
-                      size="md"
-                    />
-                  </Hoverable.Item>
-                )}
-                {onEdit && (
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={icon}
+          title={title}
+          description={description}
+          padding="lg"
+          rightChildren={
+            isDisconnected && onConnect ? (
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowExchange}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect();
+                }}
+              >
+                Connect
+              </Button>
+            ) : (
+              <Section alignItems="end" gap={0}>
+                {isConnected && onSelect ? (
                   <Button
-                    icon={SvgSettings}
-                    tooltip="Edit"
-                    aria-label={`Edit ${title}`}
                     prominence="tertiary"
+                    rightIcon={SvgArrowRightCircle}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEdit();
+                      onSelect();
                     }}
-                    size="md"
-                  />
-                )}
-              </div>
-            ) : undefined
-          }
-        >
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={icon}
-            title={title}
-            description={description}
-            padding="lg"
-            rightChildren={
-              isDisconnected && onConnect ? (
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowExchange}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onConnect();
-                  }}
-                >
-                  Connect
-                </Button>
-              ) : isConnected && onSelect ? (
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect();
-                  }}
-                >
-                  Set as Default
-                </Button>
-              ) : isSelected ? (
-                <div className="p-2">
-                  <Content
-                    title={selectedLabel}
-                    sizePreset="main-ui"
-                    variant="section"
-                    icon={SvgCheckSquare}
-                  />
+                  >
+                    Set as Default
+                  </Button>
+                ) : isSelected ? (
+                  <div className="p-2">
+                    <Content
+                      title={selectedLabel}
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={SvgCheckSquare}
+                    />
+                  </div>
+                ) : undefined}
+                <div className="px-1 pb-1">
+                  <Section flexDirection="row" justifyContent="end" gap={0.25}>
+                    {onDisconnect && (
+                      <Hoverable.Item group="web-search/ProviderCard">
+                        <Button
+                          icon={SvgUnplug}
+                          tooltip="Disconnect"
+                          aria-label={`Disconnect ${title}`}
+                          prominence="tertiary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDisconnect();
+                          }}
+                          size="md"
+                        />
+                      </Hoverable.Item>
+                    )}
+                    {onEdit && (
+                      <Button
+                        icon={SvgSettings}
+                        tooltip="Edit"
+                        aria-label={`Edit ${title}`}
+                        prominence="tertiary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit();
+                        }}
+                        size="md"
+                      />
+                    )}
+                  </Section>
                 </div>
-              ) : undefined
-            }
-          />
-        </Card.Header>
+              </Section>
+            )
+          }
+        />
       </SelectCard>
     </Hoverable.Root>
   );
