@@ -361,6 +361,31 @@ class TestBuildOAuthAdminConfigDataForUpdate:
         assert client_info_dict["client_secret"] == "newly-typed-secret"
         assert client_info_dict["token_endpoint_auth_method"] == "none"
 
+    def test_stale_none_auth_method_is_healed_from_secret_presence(self) -> None:
+        # Before the helper enforced `token_endpoint_auth_method`, records
+        # could be persisted with it as None. The SDK silently omits the
+        # client secret on token exchange in that case, which manifests as
+        # `invalid_client` from the IdP. The merge path heals these records
+        # by deriving the method from the resolved client_secret.
+        existing = OAuthClientInformationFull(
+            client_id="legacy-id",
+            client_secret="legacy-secret",
+            redirect_uris=[AnyUrl("https://example.com/callback")],
+            grant_types=["authorization_code", "refresh_token"],
+            response_types=["code"],
+            token_endpoint_auth_method=None,
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="legacy-id",
+            client_secret="legacy-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        assert client_info_dict["token_endpoint_auth_method"] == "client_secret_post"
+
     def test_redirect_uris_and_scope_are_refreshed_from_defaults(self) -> None:
         # The admin-managed fields (redirect_uris, scope) should always be
         # rewritten from our deployment config, not preserved from the

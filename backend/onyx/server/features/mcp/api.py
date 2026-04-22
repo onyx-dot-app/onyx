@@ -205,6 +205,15 @@ def _build_oauth_admin_config_data_for_update(
     merged.client_secret = client_secret
     merged.redirect_uris = [AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")]
     merged.scope = REQUESTED_SCOPE  # TODO(evan): allow specifying scopes?
+    # Heal stale records that were seeded before `_upsert_mcp_server` always
+    # set `token_endpoint_auth_method`. The SDK silently omits the client
+    # secret on token exchange when this is None, which manifests as
+    # `invalid_client` from the IdP. Preserve any explicitly-negotiated
+    # method (e.g. DCR's `client_secret_basic`).
+    if merged.token_endpoint_auth_method is None:
+        merged.token_endpoint_auth_method = (
+            "client_secret_post" if client_secret else "none"
+        )
 
     config_data = MCPConnectionData(headers={})
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
@@ -1647,20 +1656,13 @@ def _upsert_mcp_server(
             # Create initial admin config. If client credentials were provided,
             # seed client_info so the OAuth provider can skip dynamic
             # registration; otherwise, the provider will attempt it.
-            cfg: MCPConnectionData = MCPConnectionData(headers={})
-            if request.oauth_client_id:
-                client_info = OAuthClientInformationFull(
-                    client_id=request.oauth_client_id,
-                    client_secret=request.oauth_client_secret,
-                    redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
-                    grant_types=["authorization_code", "refresh_token"],
-                    response_types=["code"],
-                    scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
-                    # default token_endpoint_auth_method is client_secret_post
-                )
-                cfg[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
-                    mode="json"
-                )
+            # NOTE: must go through the shared helper so
+            # `token_endpoint_auth_method` matches what `_connect_oauth`'s
+            # update path expects to preserve later.
+            cfg: MCPConnectionData = _build_oauth_admin_config_data(
+                client_id=request.oauth_client_id,
+                client_secret=request.oauth_client_secret,
+            )
 
             admin_config = create_connection_config(
                 config_data=cfg,
