@@ -21,10 +21,9 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
         model_name=model_name,
     )
 
-    model_supports = (
-        model_obj.get("supports_function_calling", False) if model_obj else False
-    )
-    return model_supports
+    if not model_obj:
+        return False
+    return bool(model_obj.get("supports_function_calling"))
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:
