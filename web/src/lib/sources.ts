@@ -7,7 +7,6 @@ import {
   DiscourseIcon,
   Document360Icon,
   DropboxIcon,
-  GithubIcon,
   GitlabIcon,
   BitbucketIcon,
   GmailIcon,
@@ -52,7 +51,7 @@ import { Persona } from "@/app/admin/agents/interfaces";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "./constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud } from "@opal/icons";
-import { SvgSlack, SvgDiscord } from "@opal/logos";
+import { SvgSlack, SvgDiscord, SvgGithub } from "@opal/logos";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -376,7 +375,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Code Repository
   github: {
-    icon: GithubIcon,
+    icon: SvgGithub,
     displayName: "Github",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/github`,

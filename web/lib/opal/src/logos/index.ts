@@ -11,6 +11,7 @@ export { default as SvgElevenLabs } from "@opal/logos/eleven-labs";
 export { default as SvgExa } from "@opal/logos/exa";
 export { default as SvgFirecrawl } from "@opal/logos/firecrawl";
 export { default as SvgGemini } from "@opal/logos/gemini";
+export { default as SvgGithub } from "@opal/logos/github";
 export { default as SvgGoogle } from "@opal/logos/google";
 export { default as SvgLitellm } from "@opal/logos/litellm";
 export { default as SvgLmStudio } from "@opal/logos/lm-studio";

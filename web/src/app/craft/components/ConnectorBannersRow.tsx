@@ -5,11 +5,10 @@ import Text from "@/refresh-components/texts/Text";
 import {
   ConfluenceIcon,
   GoogleDriveIcon,
-  GithubIcon,
   NotionIcon,
   HubSpotIcon,
 } from "@/components/icons/icons";
-import { SvgSlack } from "@opal/logos";
+import { SvgGithub, SvgSlack } from "@opal/logos";
 import { SvgChevronRight, SvgCalendar } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import {
@@ -119,7 +118,7 @@ export default function ConnectorBannersRow({
           {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:-translate-x-4">
             <IconWrapper>
-              <GithubIcon size={16} />
+              <SvgGithub size={16} />
             </IconWrapper>
           </div>
           {/* Middle - slight movement */}

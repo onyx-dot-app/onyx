@@ -364,9 +364,7 @@ export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
 export const GitbookIcon = createLogoIcon(gitbookDarkIcon, {
   darkSrc: gitbookLightIcon,
 });
-export const GithubIcon = createLogoIcon(githubLightIcon, {
-  darkSrc: githubDarkIcon,
-});
+
 export const GitlabIcon = createLogoIcon(gitlabIcon);
 export const GmailIcon = createLogoIcon(gmailIcon);
 export const GongIcon = createLogoIcon(gongIcon);
