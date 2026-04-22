@@ -14,7 +14,8 @@ import type { IconFunctionComponent } from "@opal/types";
 import {
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
-  EmbeddingProvider,
+  CloudEmbeddingProviderType,
+  EmbeddingProviderName,
   SelfHostedEmbeddingModel,
   SelfHostedEmbeddingProvider,
   RerankerProvider,
@@ -129,18 +130,18 @@ export const SELF_HOSTED_MODELS: SelfHostedEmbeddingModel[] =
 // ─── Cloud embedding providers ───────────────────────────────────────────────
 
 /**
- * Registry of cloud embedding providers, keyed by {@link EmbeddingProvider}.
+ * Registry of cloud embedding providers, keyed by {@link EmbeddingProviderName}.
  *
  * This is the single source of truth for cloud embedding providers. Add new
  * entries here when introducing a new provider — the `Record` typing forces
  * exhaustiveness, so a missing entry is a compile-time error.
  */
 export const CLOUD_EMBEDDING_PROVIDERS: Record<
-  EmbeddingProvider,
+  CloudEmbeddingProviderType,
   CloudEmbeddingProvider
 > = {
-  [EmbeddingProvider.COHERE]: {
-    provider_type: EmbeddingProvider.COHERE,
+  [EmbeddingProviderName.COHERE]: {
+    provider_type: EmbeddingProviderName.COHERE,
     website: "https://cohere.ai",
     icon: SvgCohere,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -150,7 +151,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
     costslink: "https://cohere.com/pricing",
     embedding_models: [
       {
-        provider_type: EmbeddingProvider.COHERE,
+        provider_type: EmbeddingProviderName.COHERE,
         model_name: "embed-english-v3.0",
         description:
           "Cohere's English embedding model. Good performance for English-language tasks.",
@@ -165,7 +166,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
       },
       {
         model_name: "embed-english-light-v3.0",
-        provider_type: EmbeddingProvider.COHERE,
+        provider_type: EmbeddingProviderName.COHERE,
         description:
           "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
         pricePerMillion: 0.1,
@@ -179,8 +180,8 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
       },
     ],
   },
-  [EmbeddingProvider.OPENAI]: {
-    provider_type: EmbeddingProvider.OPENAI,
+  [EmbeddingProviderName.OPENAI]: {
+    provider_type: EmbeddingProviderName.OPENAI,
     website: "https://openai.com",
     icon: SvgOpenai,
     description: "AI industry leader known for ChatGPT and DALL-E",
@@ -189,7 +190,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
     costslink: "https://openai.com/pricing",
     embedding_models: [
       {
-        provider_type: EmbeddingProvider.OPENAI,
+        provider_type: EmbeddingProviderName.OPENAI,
         model_name: "text-embedding-3-large",
         description:
           "OpenAI's large embedding model. Best performance, but more expensive.",
@@ -203,7 +204,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
         api_url: null,
       },
       {
-        provider_type: EmbeddingProvider.OPENAI,
+        provider_type: EmbeddingProviderName.OPENAI,
         model_name: "text-embedding-3-small",
         model_dim: 1536,
         normalize: false,
@@ -218,8 +219,8 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
       },
     ],
   },
-  [EmbeddingProvider.GOOGLE]: {
-    provider_type: EmbeddingProvider.GOOGLE,
+  [EmbeddingProviderName.GOOGLE]: {
+    provider_type: EmbeddingProviderName.GOOGLE,
     website: "https://ai.google",
     icon: SvgGoogle,
     docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
@@ -229,7 +230,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
     costslink: "https://cloud.google.com/vertex-ai/pricing",
     embedding_models: [
       {
-        provider_type: EmbeddingProvider.GOOGLE,
+        provider_type: EmbeddingProviderName.GOOGLE,
         model_name: "gemini-embedding-001",
         description: "Google's Gemini embedding model. Powerful and efficient.",
         pricePerMillion: 0.025,
@@ -242,7 +243,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
         api_url: null,
       },
       {
-        provider_type: EmbeddingProvider.GOOGLE,
+        provider_type: EmbeddingProviderName.GOOGLE,
         model_name: "text-embedding-005",
         description: "Smaller, lighter-weight embedding model from Google.",
         pricePerMillion: 0.025,
@@ -256,8 +257,8 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
       },
     ],
   },
-  [EmbeddingProvider.VOYAGE]: {
-    provider_type: EmbeddingProvider.VOYAGE,
+  [EmbeddingProviderName.VOYAGE]: {
+    provider_type: EmbeddingProviderName.VOYAGE,
     website: "https://www.voyageai.com",
     icon: SvgVoyage,
     description: "Advanced NLP research startup born from Stanford AI Labs",
@@ -267,7 +268,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
     costslink: "https://www.voyageai.com/pricing",
     embedding_models: [
       {
-        provider_type: EmbeddingProvider.VOYAGE,
+        provider_type: EmbeddingProviderName.VOYAGE,
         model_name: "voyage-large-2-instruct",
         description:
           "Voyage's large embedding model. High performance with instruction fine-tuning.",
@@ -281,7 +282,7 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
         api_url: null,
       },
       {
-        provider_type: EmbeddingProvider.VOYAGE,
+        provider_type: EmbeddingProviderName.VOYAGE,
         model_name: "voyage-light-2-instruct",
         description:
           "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
@@ -296,16 +297,16 @@ export const CLOUD_EMBEDDING_PROVIDERS: Record<
       },
     ],
   },
-  [EmbeddingProvider.LITELLM]: {
-    provider_type: EmbeddingProvider.LITELLM,
+  [EmbeddingProviderName.LITELLM]: {
+    provider_type: EmbeddingProviderName.LITELLM,
     website: "https://github.com/BerriAI/litellm",
     icon: SvgLitellm,
     description: "Open-source library to call LLM APIs using OpenAI format",
     apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
     embedding_models: [], // No default embedding models
   },
-  [EmbeddingProvider.AZURE]: {
-    provider_type: EmbeddingProvider.AZURE,
+  [EmbeddingProviderName.AZURE]: {
+    provider_type: EmbeddingProviderName.AZURE,
     website:
       "https://azure.microsoft.com/en-us/products/cognitive-services/openai/",
     icon: SvgAzure,
@@ -350,7 +351,10 @@ export function findCloudProvider(
   providerType: string | null
 ): CloudEmbeddingProvider | null {
   if (!providerType) return null;
-  return CLOUD_EMBEDDING_PROVIDERS[providerType as EmbeddingProvider] ?? null;
+  return (
+    CLOUD_EMBEDDING_PROVIDERS[providerType as CloudEmbeddingProviderType] ??
+    null
+  );
 }
 
 export function getEmbeddingProvider(providerType: string | null): {

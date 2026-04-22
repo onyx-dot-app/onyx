@@ -4,7 +4,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   ConfiguredEmbeddingProvider,
   EmbeddingModelDescriptor,
-  EmbeddingProvider,
+  EmbeddingProviderName,
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
@@ -74,7 +74,7 @@ export function useSecondarySearchSettings() {
  * existence and access stored credentials (api_key is masked by the backend).
  */
 export function useConfiguredEmbeddingProviders() {
-  return useSWR<Map<EmbeddingProvider, ConfiguredEmbeddingProvider>>(
+  return useSWR<Map<EmbeddingProviderName, ConfiguredEmbeddingProvider>>(
     EMBEDDING_PROVIDERS_ADMIN_URL,
     async (url: string) => {
       const providers: ConfiguredEmbeddingProvider[] =

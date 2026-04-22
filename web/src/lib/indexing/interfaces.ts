@@ -2,17 +2,28 @@ import type { IconFunctionComponent } from "@opal/types";
 
 // ─── Embedding providers ─────────────────────────────────────────────────────
 
-export enum EmbeddingProvider {
+export enum EmbeddingProviderName {
+  // Cloud-based
   OPENAI = "openai",
   COHERE = "cohere",
   VOYAGE = "voyage",
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+
+  // Self-hosted
+  NOMIC = "nomic",
+  MICROSOFT = "microsoft",
 }
 
+/** Cloud-only subset of EmbeddingProviderName. */
+export type CloudEmbeddingProviderType = Exclude<
+  EmbeddingProviderName,
+  EmbeddingProviderName.NOMIC | EmbeddingProviderName.MICROSOFT
+>;
+
 export interface CloudEmbeddingProvider {
-  provider_type: EmbeddingProvider;
+  provider_type: EmbeddingProviderName;
   api_key?: string;
   api_url?: string;
   custom_config?: Record<string, string>;
@@ -37,10 +48,6 @@ export interface CloudEmbeddingProvider {
   default_model?: CloudEmbeddingModel;
 }
 
-export interface CloudEmbeddingProviderFull extends CloudEmbeddingProvider {
-  configured?: boolean;
-}
-
 // ─── Embedding models ────────────────────────────────────────────────────────
 
 /**
@@ -56,7 +63,7 @@ export interface EmbeddingModelDescriptor {
   normalize: boolean;
   query_prefix: string;
   passage_prefix: string;
-  provider_type: EmbeddingProvider | null;
+  provider_type: EmbeddingProviderName | null;
   api_key: string | null;
   api_url: string | null;
   api_version?: string | null;
@@ -139,7 +146,7 @@ export interface AdvancedSearchConfiguration {
 export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
-  provider_type: EmbeddingProvider | null;
+  provider_type: EmbeddingProviderName | null;
   switchover_type?: SwitchoverType;
 }
 
@@ -159,7 +166,7 @@ export type EmbeddingModelState =
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
 export interface ConfiguredEmbeddingProvider {
-  provider_type: EmbeddingProvider;
+  provider_type: EmbeddingProviderName;
   api_key: string | null;
   api_url: string | null;
   api_version: string | null;

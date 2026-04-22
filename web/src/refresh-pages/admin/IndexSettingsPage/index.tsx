@@ -45,7 +45,7 @@ import {
   SavedSearchSettings,
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
-  EmbeddingProvider,
+  EmbeddingProviderName,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
 import type {
@@ -151,11 +151,11 @@ import {
 
 function ProviderCredentialsModal(props: ProviderModalProps) {
   switch (props.provider.provider_type) {
-    case EmbeddingProvider.GOOGLE:
+    case EmbeddingProviderName.GOOGLE:
       return <GoogleProviderModal {...props} />;
-    case EmbeddingProvider.AZURE:
+    case EmbeddingProviderName.AZURE:
       return <AzureProviderModal {...props} />;
-    case EmbeddingProvider.LITELLM:
+    case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
     default:
       return <StandardProviderModal {...props} />;

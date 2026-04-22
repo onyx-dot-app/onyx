@@ -47,7 +47,7 @@ import {
   SavedSearchSettings,
   CloudEmbeddingModel,
   CloudEmbeddingProvider,
-  EmbeddingProvider,
+  EmbeddingProviderName,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
 import type {
@@ -160,9 +160,9 @@ function ProviderCredentialsModal({
 }: ProviderCredentialsModalProps) {
   const isEditing = !!existingCredentials;
   const providerName = getFormattedProviderName(provider.provider_type);
-  const isProxy = provider.provider_type === EmbeddingProvider.LITELLM;
-  const isAzure = provider.provider_type === EmbeddingProvider.AZURE;
-  const isGoogle = provider.provider_type === EmbeddingProvider.GOOGLE;
+  const isProxy = provider.provider_type === EmbeddingProviderName.LITELLM;
+  const isAzure = provider.provider_type === EmbeddingProviderName.AZURE;
+  const isGoogle = provider.provider_type === EmbeddingProviderName.GOOGLE;
 
   const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
   const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");

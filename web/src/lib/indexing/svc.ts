@@ -4,7 +4,7 @@ import {
   AdvancedSearchConfiguration,
   EmbeddingModelDescriptor,
   EmbeddingPrecision,
-  EmbeddingProvider,
+  EmbeddingProviderName,
   RerankingDetails,
   SavedSearchSettings,
   SwitchoverType,
@@ -183,7 +183,7 @@ export function combineSearchSettings(
   selectedProvider: EmbeddingModelDescriptor,
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
-  provider_type: EmbeddingProvider | null,
+  provider_type: EmbeddingProviderName | null,
   switchover_type?: SwitchoverType
 ): SavedSearchSettings {
   return {
