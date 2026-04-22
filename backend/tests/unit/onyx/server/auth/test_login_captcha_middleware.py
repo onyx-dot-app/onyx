@@ -173,7 +173,11 @@ def test_health_check_bypass_wrong_secret_falls_through_to_captcha() -> None:
 
 
 def test_health_check_bypass_disabled_when_env_empty_is_fail_closed() -> None:
-    """Empty HEALTH_CHECK_BYPASS_TOKEN env var must never match any header value."""
+    """Empty HEALTH_CHECK_BYPASS_TOKEN env var must never match any header value,
+    regardless of whether the client header is empty or non-empty. Exercises
+    both ``if not expected`` (server side) and ``if not provided`` (client side)
+    early-return guards.
+    """
     app = build_app()
     client = TestClient(app)
     with (
@@ -189,12 +193,23 @@ def test_health_check_bypass_disabled_when_env_empty_is_fail_closed() -> None:
             ),
         ) as verify_mock,
     ):
-        res = client.post(
+        # Empty client header: hits `if not provided` guard.
+        res_empty = client.post(
             "/auth/login",
             headers={"X-Healthcheck-Token": ""},
         )
-    assert res.status_code == 403
-    verify_mock.assert_awaited_once_with("", CaptchaAction.LOGIN)
+        # Non-empty client header: exercises the `if not expected` guard
+        # specifically — confirms an unset server secret never accidentally
+        # matches an arbitrary client-supplied token.
+        res_nonempty = client.post(
+            "/auth/login",
+            headers={"X-Healthcheck-Token": "attacker-guess-12345"},
+        )
+    assert res_empty.status_code == 403
+    assert res_nonempty.status_code == 403
+    assert verify_mock.await_count == 2
+    assert verify_mock.await_args_list[0].args == ("", CaptchaAction.LOGIN)
+    assert verify_mock.await_args_list[1].args == ("", CaptchaAction.LOGIN)
 
 
 def test_health_check_bypass_uses_constant_time_compare() -> None:

@@ -141,6 +141,18 @@ def _health_check_bypass_ok(request: Request) -> bool:
     return hmac.compare_digest(expected, provided)
 
 
+def _client_ip_for_log(request: Request) -> str:
+    """Return the external client IP for log attribution. Prefers the first
+    hop in ``X-Forwarded-For`` (set by nginx-ingress) so logs identify the
+    real source rather than the in-cluster proxy address.
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    first_hop = forwarded.split(",")[0].strip() if forwarded else ""
+    if first_hop:
+        return first_hop
+    return request.client.host if request.client else "unknown"
+
+
 class LoginCaptchaMiddleware(BaseHTTPMiddleware):
     """Reject ``/auth/login`` requests without a valid captcha token.
 
@@ -164,7 +176,7 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
         ):
             if _health_check_bypass_ok(request):
                 logger.info(
-                    f"Login captcha bypassed via health-check token client={request.client.host if request.client else 'unknown'}"
+                    f"Login captcha bypassed via health-check token client={_client_ip_for_log(request)}"
                 )
             else:
                 token = request.headers.get(LOGIN_CAPTCHA_HEADER, "")
