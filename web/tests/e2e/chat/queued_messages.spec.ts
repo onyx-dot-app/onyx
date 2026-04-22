@@ -14,10 +14,14 @@ async function sendAndHoldResponse(
   });
 
   const routePattern = "**/api/chat/send-chat-message";
+  let intercepted = false;
 
   const handler = async (route: Route) => {
-    // Unroute immediately so subsequent requests (auto-sends) pass through
-    await page.unroute(routePattern, handler);
+    if (intercepted) {
+      await route.continue();
+      return;
+    }
+    intercepted = true;
     await held;
     await route.continue();
   };
@@ -33,6 +37,7 @@ async function sendAndHoldResponse(
 
   return () => {
     release();
+    page.unroute(routePattern, handler);
   };
 }
 
@@ -220,7 +225,7 @@ test.describe("Queued Messages", () => {
     const textarea = page.locator("#onyx-chat-input-textarea");
     await expect(textarea).toHaveAttribute(
       "placeholder",
-      "Press up to edit queued message"
+      "Press up to edit queued messages"
     );
 
     release();

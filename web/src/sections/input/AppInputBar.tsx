@@ -837,7 +837,7 @@ const AppInputBar = React.memo(
                       aria-multiline={true}
                       placeholder={
                         queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued message"
+                          ? "Press up to edit queued messages"
                           : isRecording
                             ? "Listening..."
                             : isVoicePlaybackActive
