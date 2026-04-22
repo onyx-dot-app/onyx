@@ -30,7 +30,7 @@ interface OptionsListProps {
 
 /**
  * Renders the list of options with matched/unmatched sections
- * Includes separator between sections when filtering
+ * Includes divider between sections when filtering
  */
 export const OptionsList: React.FC<OptionsListProps> = ({
   matchedOptions,

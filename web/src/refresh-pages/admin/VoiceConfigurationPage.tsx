@@ -531,7 +531,7 @@ export default function VoiceConfigurationPage() {
           icon={route.icon}
           title={route.title}
           description={pageDescription}
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <Callout type="danger" title="Failed to load voice settings">
@@ -554,7 +554,7 @@ export default function VoiceConfigurationPage() {
           icon={route.icon}
           title={route.title}
           description={pageDescription}
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <ThreeDotsLoader />
@@ -569,7 +569,7 @@ export default function VoiceConfigurationPage() {
         icon={route.icon}
         title={route.title}
         description={pageDescription}
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <div className="flex flex-col gap-6">

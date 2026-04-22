@@ -669,7 +669,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <Callout type="danger" title="Failed to load web search settings">
@@ -692,7 +692,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <ThreeDotsLoader />
@@ -978,7 +978,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>

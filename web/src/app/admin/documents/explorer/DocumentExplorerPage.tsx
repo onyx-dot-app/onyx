@@ -21,7 +21,7 @@ export default function DocumentExplorerPage({
 }: DocumentExplorerPageProps) {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
 
       <SettingsLayouts.Body>
         <Explorer

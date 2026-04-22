@@ -546,7 +546,7 @@ export default function ChatPreferencesPage() {
           icon={route.icon}
           title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>
