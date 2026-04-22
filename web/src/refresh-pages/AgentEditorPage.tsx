@@ -286,7 +286,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
         description={tool.description}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding="fit"
         rightChildren={<SwitchField name={toolFieldName} />}
       />
     </Card>
@@ -347,7 +347,7 @@ function MCPServerCard({
                   description={tool.description}
                   sizePreset="main-ui"
                   variant="section"
-                  padding="lg"
+                  padding="fit"
                   rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
@@ -394,39 +394,41 @@ function MCPServerCard({
           </GeneralLayouts.Section>
         }
       >
-        <ContentAction
-          icon={getActionIcon(server.server_url, server.name)}
-          title={server.name}
-          description={server.description}
-          sizePreset="main-ui"
-          variant="section"
-          padding="lg"
-          rightChildren={
-            <GeneralLayouts.Section
-              flexDirection="row"
-              gap={0.5}
-              alignItems="start"
-            >
-              <EnabledCount
-                enabledCount={enabledCount}
-                totalCount={enabledTools.length}
-              />
-              <SwitchField
-                name={`${serverFieldName}.enabled`}
-                onCheckedChange={(checked) => {
-                  enabledTools.forEach((tool) => {
-                    setFieldValue(
-                      `${serverFieldName}.tool_${tool.id}`,
-                      checked
-                    );
-                  });
-                  if (!checked) return;
-                  setIsFolded(false);
-                }}
-              />
-            </GeneralLayouts.Section>
-          }
-        />
+        <div className="p-2">
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <GeneralLayouts.Section
+                flexDirection="row"
+                gap={0.5}
+                alignItems="start"
+              >
+                <EnabledCount
+                  enabledCount={enabledCount}
+                  totalCount={enabledTools.length}
+                />
+                <SwitchField
+                  name={`${serverFieldName}.enabled`}
+                  onCheckedChange={(checked) => {
+                    enabledTools.forEach((tool) => {
+                      setFieldValue(
+                        `${serverFieldName}.tool_${tool.id}`,
+                        checked
+                      );
+                    });
+                    if (!checked) return;
+                    setIsFolded(false);
+                  }}
+                />
+              </GeneralLayouts.Section>
+            }
+          />
+        </div>
       </CardLayout.Header>
     </Card>
   );

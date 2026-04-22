@@ -102,7 +102,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding="sm">
+    <Card border="solid" rounding="lg" padding="md">
       <Content
         icon={SvgActions}
         title={tool.display_name}
