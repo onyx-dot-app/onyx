@@ -40,6 +40,7 @@ TSection = TypeVar(
 )
 
 _UNSAFE_CHARS_RE = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
+_SANDBOX_FILENAME_MAX_LENGTH = 200
 
 
 def inference_section_from_chunks(
@@ -112,14 +113,12 @@ def convert_inference_sections_to_search_docs(
 def sandbox_filename_for_document(title: str, file_id: str) -> str:
     """Sanitize a document title and append its file_id to produce a globally
     unique sandbox filename. Extensions on the title are preserved verbatim."""
-    max_length = 200
-
     sanitized = _UNSAFE_CHARS_RE.sub("_", title).strip().strip(".")
     base, ext = os.path.splitext(sanitized)
     if not base:
         base = "document"
     suffix = f"_{file_id}{ext}"
-    max_base_len = max(1, max_length - len(suffix))
+    max_base_len = max(1, _SANDBOX_FILENAME_MAX_LENGTH - len(suffix))
     return f"{base[:max_base_len]}{suffix}"
 
 

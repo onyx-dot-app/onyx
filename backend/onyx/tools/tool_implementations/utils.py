@@ -4,11 +4,10 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
 
 
-CODE_INTERPRETER_GUIDANCE = (
+FILE_ASSOCIATED_GUIDANCE = (
     "Only a short excerpt from this document is shown below. The complete "
     'file is available in the sandbox as "{filename}" — prefer the Python '
-    "code interpreter to read, parse, or analyze it (use the file reader "
-    "tool if you only need plain text).\n\n"
+    "code interpreter to read, parse, or analyze it\n\n"
     "Excerpt: {content}"
 )
 
@@ -91,7 +90,7 @@ def convert_inference_sections_to_llm_string(
             )
             result["file_name"] = filename
 
-            result["content"] = CODE_INTERPRETER_GUIDANCE.format(
+            result["content"] = FILE_ASSOCIATED_GUIDANCE.format(
                 filename=filename, content=chunk.content
             )
         else:
