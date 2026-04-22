@@ -239,6 +239,10 @@ export default function ImageGenerationContent() {
                   onDeselect={() => handleDeselect(provider)}
                   onEdit={() => handleEdit(provider)}
                   onDisconnect={() => setDisconnectProvider(provider)}
+                  disconnectModalOpen={
+                    disconnectProvider?.image_provider_id ===
+                    provider.image_provider_id
+                  }
                 />
               );
             })}

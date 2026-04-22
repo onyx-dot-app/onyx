@@ -514,6 +514,7 @@ export default function VoiceConfigurationPage() {
                 })
             : undefined
         }
+        disconnectModalOpen={disconnectTarget?.providerId === provider?.id}
       />
     );
   };

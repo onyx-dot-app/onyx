@@ -941,6 +941,10 @@ export default function WebSearchPage() {
                               })
                           : undefined
                       }
+                      disconnectModalOpen={
+                        disconnectTarget?.id === providerId &&
+                        disconnectTarget?.category === "search"
+                      }
                     />
                   );
                 }
@@ -1054,6 +1058,10 @@ export default function WebSearchPage() {
                               providerType: provider.provider_type,
                             })
                         : undefined
+                    }
+                    disconnectModalOpen={
+                      disconnectTarget?.id === providerId &&
+                      disconnectTarget?.category === "content"
                     }
                   />
                 );

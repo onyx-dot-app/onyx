@@ -60,6 +60,8 @@ interface ProviderCardProps {
   onDeselect?: () => void;
   onEdit?: () => void;
   onDisconnect?: () => void;
+  /** When true, keeps the disconnect button visible (as if hovered). */
+  disconnectModalOpen?: boolean;
   selectedLabel?: string;
   "aria-label"?: string;
 }
@@ -80,6 +82,7 @@ export default function ProviderCard({
   onDeselect,
   onEdit,
   onDisconnect,
+  disconnectModalOpen,
   selectedLabel = "Current Default",
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
@@ -88,7 +91,10 @@ export default function ProviderCard({
   const isSelected = status === "selected";
 
   return (
-    <Hoverable.Root group="ProviderCard">
+    <Hoverable.Root
+      group="ProviderCard"
+      interaction={disconnectModalOpen ? "hover" : "rest"}
+    >
       <SelectCard
         state={STATUS_TO_STATE[status]}
         padding="sm"
@@ -144,41 +150,47 @@ export default function ProviderCard({
                     />
                   </div>
                 ) : undefined}
-                <div className="px-1 pb-1">
-                  <Section flexDirection="row" justifyContent="end" gap={0.25}>
-                    {onDisconnect && (
-                      <Hoverable.Item
-                        group="ProviderCard"
-                        variant="opacity-on-hover"
-                      >
+                {(onDisconnect || onEdit) && (
+                  <div className="px-1 pb-1">
+                    <Section
+                      flexDirection="row"
+                      justifyContent="end"
+                      gap={0.25}
+                    >
+                      {onDisconnect && (
+                        <Hoverable.Item
+                          group="ProviderCard"
+                          variant="opacity-on-hover"
+                        >
+                          <Button
+                            icon={SvgUnplug}
+                            tooltip="Disconnect"
+                            aria-label={`Disconnect ${title}`}
+                            prominence="tertiary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDisconnect();
+                            }}
+                            size="md"
+                          />
+                        </Hoverable.Item>
+                      )}
+                      {onEdit && (
                         <Button
-                          icon={SvgUnplug}
-                          tooltip="Disconnect"
-                          aria-label={`Disconnect ${title}`}
+                          icon={SvgSettings}
+                          tooltip="Edit"
+                          aria-label={`Edit ${title}`}
                           prominence="tertiary"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onDisconnect();
+                            onEdit();
                           }}
                           size="md"
                         />
-                      </Hoverable.Item>
-                    )}
-                    {onEdit && (
-                      <Button
-                        icon={SvgSettings}
-                        tooltip="Edit"
-                        aria-label={`Edit ${title}`}
-                        prominence="tertiary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit();
-                        }}
-                        size="md"
-                      />
-                    )}
-                  </Section>
-                </div>
+                      )}
+                    </Section>
+                  </div>
+                )}
               </Section>
             )
           }
