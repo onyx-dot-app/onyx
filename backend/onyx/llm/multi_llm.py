@@ -50,6 +50,11 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.tracing.framework.create import get_current_span
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
@@ -242,6 +247,16 @@ def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
         adaptive_model in normalized_model_name
         for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
     )
+
+
+def _outer_generation_span_active() -> bool:
+    """Return True if we're already inside a `generation_span` created by an outer caller.
+
+    Used as a guard so the fallback tracing around `invoke`/`stream` doesn't double-count
+    LLM cost for code paths that already wrap their calls with `llm_generation_span`.
+    """
+    current = get_current_span()
+    return current is not None and isinstance(current.span_data, GenerationSpanData)
 
 
 class LitellmLLM(LLM):
@@ -744,6 +759,14 @@ class LitellmLLM(LLM):
         if is_true_openai_model(self.config.model_provider, self.config.model_name):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
+        # Fallback generation_span wrap. Skipped when an outer caller already
+        # wrapped this invocation so braintrust doesn't double-count cost.
+        span_ctx = (
+            nullcontext()
+            if _outer_generation_span_active()
+            else llm_generation_span(self, flow="llm_invoke_fallback")
+        )
+
         try:
             # When custom_config is set, env vars are temporarily injected
             # under a global lock. Using stream=True here means the lock is
@@ -753,35 +776,39 @@ class LitellmLLM(LLM):
             from litellm import stream_chunk_builder
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
 
-            stream_response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
-            chunks = list(stream_response)
-            response = cast(
-                LiteLLMModelResponse,
-                stream_chunk_builder(chunks),
-            )
+            with span_ctx as span:
+                stream_response = cast(
+                    LiteLLMCustomStreamWrapper,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=True,
+                        structured_response_format=structured_response_format,
+                        timeout_override=timeout_override,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
+                chunks = list(stream_response)
+                response = cast(
+                    LiteLLMModelResponse,
+                    stream_chunk_builder(chunks),
+                )
 
-            model_response = from_litellm_model_response(response)
+                model_response = from_litellm_model_response(response)
 
-            # Track LLM cost for Onyx-managed API keys
-            if model_response.usage:
-                self._track_llm_cost(model_response.usage)
+                # Track LLM cost for Onyx-managed API keys
+                if model_response.usage:
+                    self._track_llm_cost(model_response.usage)
 
-            return model_response
+                if span is not None:
+                    record_llm_response(span, model_response)
+
+                return model_response
         finally:
             if client is not None:
                 client.close()
@@ -835,32 +862,63 @@ class LitellmLLM(LLM):
         if is_true_openai_model(self.config.model_provider, self.config.model_name):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
+        # Fallback generation_span wrap. Skipped when an outer caller already
+        # wrapped this invocation so braintrust doesn't double-count cost.
+        span_ctx = (
+            nullcontext()
+            if _outer_generation_span_active()
+            else llm_generation_span(self, flow="llm_stream_fallback")
+        )
+
         try:
-            response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
+            with span_ctx as span:
+                response = cast(
+                    LiteLLMCustomStreamWrapper,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=True,
+                        structured_response_format=structured_response_format,
+                        timeout_override=timeout_override,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
 
-            for chunk in response:
-                model_response = from_litellm_model_response_stream(chunk)
+                accumulated_content: list[str] = []
+                final_usage: Any = None
+                accumulated_tool_calls: list[Any] = []
+                for chunk in response:
+                    model_response = from_litellm_model_response_stream(chunk)
 
-                # Track LLM cost when usage info is available (typically in the last chunk)
-                if model_response.usage:
-                    self._track_llm_cost(model_response.usage)
+                    # Track LLM cost when usage info is available (typically in the last chunk)
+                    if model_response.usage:
+                        self._track_llm_cost(model_response.usage)
+                        final_usage = model_response.usage
 
-                yield model_response
+                    if span is not None:
+                        if model_response.choice.delta.content:
+                            accumulated_content.append(
+                                model_response.choice.delta.content
+                            )
+                        if model_response.choice.delta.tool_calls:
+                            accumulated_tool_calls.extend(
+                                model_response.choice.delta.tool_calls
+                            )
+
+                    yield model_response
+
+                if span is not None:
+                    record_llm_span_output(
+                        span,
+                        output="".join(accumulated_content) or None,
+                        usage=final_usage,
+                        tool_calls=accumulated_tool_calls or None,
+                    )
         finally:
             if client is not None:
                 client.close()
