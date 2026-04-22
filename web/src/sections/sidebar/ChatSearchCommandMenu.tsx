@@ -354,7 +354,7 @@ export default function ChatSearchCommandMenu({
                 </CommandMenu.Action>
               )}
 
-            {/* No more results separator - shown when no results for the active filter */}
+            {/* No more results divider - shown when no results for the active filter */}
             {((activeFilter === "chats" && displayedChats.length === 0) ||
               (activeFilter === "projects" && displayedProjects.length === 0) ||
               (activeFilter === "all" &&

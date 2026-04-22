@@ -944,6 +944,22 @@ def get_file_ids_for_document_ids(
     return [row.file_id for row in rows if row.file_id is not None]
 
 
+def get_document_id_to_file_id_map(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, str]:
+    """Return a `{document_id: file_id}` map for docs that have a file_id."""
+    if not document_ids:
+        return {}
+    rows = (
+        db_session.query(DbDocument.id, DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return {doc_id: file_id for doc_id, file_id in rows}
+
+
 def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:

@@ -113,16 +113,25 @@ def _resolve_oauth_credentials(
     frontend flags a field as changed, take the request value as-is, but
     defensively reject masked placeholders so a buggy client can't write
     a mask to the database.
+
+    When there is no stored client yet (`existing_client is None`), an
+    unchanged flag means the user did not edit since load — still use the
+    request body (`_connect_oauth` runs after upsert with the same payload).
+    Treating unchanged plus no storage as None would rebuild empty OAuth config.
     """
     resolved_id = request_client_id
     if not request_client_id_changed:
-        resolved_id = existing_client.client_id if existing_client else None
+        resolved_id = (
+            existing_client.client_id if existing_client else request_client_id
+        )
     elif resolved_id:
         reject_masked_credentials({"oauth_client_id": resolved_id})
 
     resolved_secret = request_client_secret
     if not request_client_secret_changed:
-        resolved_secret = existing_client.client_secret if existing_client else None
+        resolved_secret = (
+            existing_client.client_secret if existing_client else request_client_secret
+        )
     elif resolved_secret:
         reject_masked_credentials({"oauth_client_secret": resolved_secret})
 
@@ -155,6 +164,59 @@ def _build_oauth_admin_config_data(
         token_endpoint_auth_method=token_endpoint_auth_method,
     )
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
+    return config_data
+
+
+def _build_oauth_admin_config_data_for_update(
+    *,
+    client_id: str | None,
+    client_secret: str | None,
+    existing_client: OAuthClientInformationFull,
+) -> MCPConnectionData:
+    """Construct the admin connection config payload for an OAuth client
+    that already has a stored `client_info`, preserving provider-managed
+    fields (DCR registration token, expiry timestamps, negotiated auth
+    method, etc.) wherever possible.
+
+    When `client_id` matches the stored client_id, the merged payload
+    starts from `existing_client` and only overwrites the admin-managed
+    fields (`client_secret`, `redirect_uris`, `scope`). When `client_id`
+    differs, the admin is pointing at a brand-new OAuth registration so
+    the old DCR metadata is stale; we fall back to the template path.
+    """
+    if not client_id:
+        # No id means we have nothing to seed client_info with; matches
+        # the template-path behavior of returning an empty config so the
+        # OAuth provider can attempt DCR.
+        return _build_oauth_admin_config_data(
+            client_id=client_id, client_secret=client_secret
+        )
+
+    if existing_client.client_id != client_id:
+        logger.info(
+            "OAuth client_id changed for existing MCP server; discarding "
+            "stored DCR registration metadata and starting fresh."
+        )
+        return _build_oauth_admin_config_data(
+            client_id=client_id, client_secret=client_secret
+        )
+
+    merged = existing_client.model_copy(deep=True)
+    merged.client_secret = client_secret
+    merged.redirect_uris = [AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")]
+    merged.scope = REQUESTED_SCOPE  # TODO(evan): allow specifying scopes?
+    # Heal stale records that were seeded before `_upsert_mcp_server` always
+    # set `token_endpoint_auth_method`. The SDK silently omits the client
+    # secret on token exchange when this is None, which manifests as
+    # `invalid_client` from the IdP. Preserve any explicitly-negotiated
+    # method (e.g. DCR's `client_secret_basic`).
+    if merged.token_endpoint_auth_method is None:
+        merged.token_endpoint_auth_method = (
+            "client_secret_post" if client_secret else "none"
+        )
+
+    config_data = MCPConnectionData(headers={})
+    config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
     return config_data
 
 
@@ -478,9 +540,21 @@ async def _connect_oauth(
         existing_client=existing_client,
     )
 
-    config_data = _build_oauth_admin_config_data(
-        client_id=request.oauth_client_id,
-        client_secret=request.oauth_client_secret,
+    # When we already have a stored `client_info`, merge into it so we
+    # preserve any provider-managed fields (DCR registration token,
+    # `client_secret_expires_at`, negotiated `token_endpoint_auth_method`,
+    # etc.) that the hardcoded template would otherwise drop.
+    config_data = (
+        _build_oauth_admin_config_data_for_update(
+            client_id=request.oauth_client_id,
+            client_secret=request.oauth_client_secret,
+            existing_client=existing_client,
+        )
+        if existing_client is not None
+        else _build_oauth_admin_config_data(
+            client_id=request.oauth_client_id,
+            client_secret=request.oauth_client_secret,
+        )
     )
 
     if mcp_server.admin_connection_config_id is None:
@@ -1582,20 +1656,13 @@ def _upsert_mcp_server(
             # Create initial admin config. If client credentials were provided,
             # seed client_info so the OAuth provider can skip dynamic
             # registration; otherwise, the provider will attempt it.
-            cfg: MCPConnectionData = MCPConnectionData(headers={})
-            if request.oauth_client_id:
-                client_info = OAuthClientInformationFull(
-                    client_id=request.oauth_client_id,
-                    client_secret=request.oauth_client_secret,
-                    redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
-                    grant_types=["authorization_code", "refresh_token"],
-                    response_types=["code"],
-                    scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
-                    # default token_endpoint_auth_method is client_secret_post
-                )
-                cfg[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
-                    mode="json"
-                )
+            # NOTE: must go through the shared helper so
+            # `token_endpoint_auth_method` matches what `_connect_oauth`'s
+            # update path expects to preserve later.
+            cfg: MCPConnectionData = _build_oauth_admin_config_data(
+                client_id=request.oauth_client_id,
+                client_secret=request.oauth_client_secret,
+            )
 
             admin_config = create_connection_config(
                 config_data=cfg,

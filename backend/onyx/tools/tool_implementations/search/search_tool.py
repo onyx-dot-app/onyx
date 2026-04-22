@@ -59,6 +59,7 @@ from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
+from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -813,6 +814,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
                 llm_facing_response="",
             )
+
+        # Enrich chunks with `Document.file_id` (Postgres-only metadata not
+        # stored in Vespa).
+        with get_session_with_current_tenant() as enrichment_session:
+            populate_file_ids_on_sections(top_sections, enrichment_session)
 
         # Convert InferenceSections to SearchDocs for emission
         search_docs = convert_inference_sections_to_search_docs(

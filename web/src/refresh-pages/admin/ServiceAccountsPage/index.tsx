@@ -251,7 +251,7 @@ export default function ServiceAccountsPage() {
           title={route.title}
           icon={route.icon}
           description="Use service accounts to programmatically access Onyx API."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
@@ -271,7 +271,7 @@ export default function ServiceAccountsPage() {
           title={route.title}
           icon={route.icon}
           description="Use service accounts to programmatically access Onyx API."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <SimpleLoader />
@@ -288,7 +288,7 @@ export default function ServiceAccountsPage() {
         title={route.title}
         icon={route.icon}
         description="Use service accounts to programmatically access Onyx API."
-        separator
+        divider
       />
 
       <SettingsLayouts.Body>

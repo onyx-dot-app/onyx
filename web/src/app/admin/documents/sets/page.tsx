@@ -415,7 +415,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

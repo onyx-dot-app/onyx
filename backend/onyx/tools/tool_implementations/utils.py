@@ -1,6 +1,15 @@
 import json
 
 from onyx.context.search.models import InferenceSection
+from onyx.context.search.utils import sandbox_filename_for_document
+
+
+FILE_ASSOCIATED_GUIDANCE = (
+    "Only a short excerpt from this document is shown below. The complete "
+    'file is available in the sandbox as "{filename}" — prefer the Python '
+    "code interpreter to read, parse, or analyze it\n\n"
+    "Excerpt: {content}"
+)
 
 
 def convert_inference_sections_to_llm_string(
@@ -75,9 +84,19 @@ def convert_inference_sections_to_llm_string(
                 result["url"] = link
         if include_document_id:
             result["document_identifier"] = chunk.document_id
+        if chunk.file_id is not None:
+            filename = sandbox_filename_for_document(
+                chunk.semantic_identifier, chunk.file_id
+            )
+            result["file_name"] = filename
+
+            result["content"] = FILE_ASSOCIATED_GUIDANCE.format(
+                filename=filename, content=chunk.content
+            )
+        else:
+            result["content"] = section.combined_content
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
-        result["content"] = section.combined_content
         results.append(result)
 
     return (

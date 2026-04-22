@@ -578,7 +578,7 @@ export default function HooksPage() {
           icon={route.icon}
           title={route.title}
           description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (

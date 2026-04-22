@@ -5,6 +5,8 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.file_record import get_staged_file_ids_by_index_attempt_id
+from onyx.db.file_record import get_staged_file_ids_for_cc_pair_excluding_attempt
 from onyx.db.file_record import update_filerecord_origin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
@@ -66,20 +68,29 @@ def build_raw_file_callback(
     return _callback
 
 
-def delete_files_best_effort(file_ids: list[str]) -> None:
+def delete_files_best_effort(
+    file_ids: list[str],
+    context: str = "document cleanup",
+) -> int:
     """Delete a list of files from the file store, logging individual
-    failures rather than raising.
+    failures rather than raising. Returns the count successfully removed.
     """
     if not file_ids:
-        return
+        return 0
     file_store = get_default_file_store()
+    deleted = 0
     for file_id in file_ids:
         try:
             file_store.delete_file(file_id, error_on_missing=False)
+            deleted += 1
         except Exception:
             logger.exception(
-                f"Failed to delete file_id={file_id} during document cleanup"
+                f"[{context}] Failed to delete file_id={file_id}; will be "
+                "retried on next sweep."
             )
+    if deleted:
+        logger.info(f"[{context}] reaped {deleted} file(s)")
+    return deleted
 
 
 def promote_staged_file(db_session: Session, file_id: str) -> None:
@@ -89,4 +100,62 @@ def promote_staged_file(db_session: Session, file_id: str) -> None:
         from_origin=FileOrigin.INDEXING_STAGING,
         to_origin=FileOrigin.CONNECTOR,
         db_session=db_session,
+    )
+
+
+# ---------------------------------------------------------------------------
+# STAGING orphan reaping
+# ---------------------------------------------------------------------------
+# Two lifecycle seams in the docfetching flow cover every non-catastrophic
+# orphan case for STAGING files:
+#
+#   Boundary                                Helper
+#   --------------------------------------  ---------------------------------
+#   attempt ends (success or failure)       cleanup_staged_files_for_attempt
+#   attempt starts; prior attempt crashed   reap_prior_attempt_staged_files
+
+
+def cleanup_staged_files_for_attempt(
+    index_attempt_id: int,
+    db_session: Session,
+) -> int:
+    """Reap every STAGING file tagged with this attempt's id.
+
+    Runs at attempt end (success or failure) in a `try/finally`. Any file
+    still STAGING at this point was never promoted — the Document either
+    wasn't produced (filtered, connector skipped it) or the upsert never
+    reached `_promote_new_staged_files`. In either case it's an orphan.
+    """
+    file_ids = get_staged_file_ids_by_index_attempt_id(
+        index_attempt_id=index_attempt_id, db_session=db_session
+    )
+    return delete_files_best_effort(
+        file_ids, context=f"attempt-end-cleanup attempt={index_attempt_id}"
+    )
+
+
+def reap_prior_attempt_staged_files(
+    current_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    db_session: Session,
+) -> int:
+    """Reap STAGING files left by earlier attempts on this cc_pair.
+
+    Runs at the start of a new docfetching attempt, before any fetching
+    work begins. Anything STAGING tagged with a different attempt_id for
+    this same cc_pair is by definition an orphan — the owning attempt
+    either crashed hard (its `finally` couldn't run) or finished without
+    promoting the file. Scoped to the cc_pair + tenant to stay bounded.
+    """
+    file_ids = get_staged_file_ids_for_cc_pair_excluding_attempt(
+        cc_pair_id=cc_pair_id,
+        tenant_id=tenant_id,
+        excluding_attempt_id=current_attempt_id,
+        db_session=db_session,
+    )
+    return delete_files_best_effort(
+        file_ids,
+        context=f"attempt-start-sweep cc_pair={cc_pair_id} "
+        f"attempt={current_attempt_id}",
     )

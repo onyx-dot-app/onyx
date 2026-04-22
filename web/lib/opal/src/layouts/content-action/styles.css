@@ -1,0 +1,23 @@
+.opal-content-action {
+  @apply flex flex-row w-full gap-4 items-stretch;
+}
+
+.opal-content-action[data-centered="true"] {
+  @apply items-center;
+}
+
+.opal-content-action-content {
+  @apply flex-1 min-w-0 self-start;
+}
+
+.opal-content-action[data-centered="true"] .opal-content-action-content {
+  @apply self-center;
+}
+
+.opal-content-action-right {
+  @apply flex shrink-0 items-stretch;
+}
+
+.opal-content-action[data-centered="true"] .opal-content-action-right {
+  @apply items-center;
+}

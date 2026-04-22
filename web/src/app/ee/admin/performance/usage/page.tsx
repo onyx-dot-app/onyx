@@ -20,7 +20,7 @@ export default function AnalyticsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
       <SettingsLayouts.Body>
         <AdminDateRangeSelector
           value={timeRange}

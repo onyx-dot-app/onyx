@@ -21,10 +21,10 @@ export interface SeparatorProps
  *
  * @example
  * ```tsx
- * // Horizontal separator (default)
+ * // Horizontal divider (default)
  * <Separator />
  *
- * // Vertical separator
+ * // Vertical divider
  * <Separator orientation="vertical" />
  *
  * // With custom className
