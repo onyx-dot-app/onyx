@@ -259,6 +259,20 @@ def _outer_generation_span_active() -> bool:
     return current is not None and isinstance(current.span_data, GenerationSpanData)
 
 
+@contextmanager
+def _fallback_generation_span(llm: LLM, flow: str) -> Iterator[Any]:
+    """Open an `llm_generation_span` only if no outer caller has already wrapped the call.
+
+    Yields the created span (to be used for recording output/usage) or ``None`` when an
+    outer wrapper is active — callers must guard recording logic with `if span is not None`.
+    """
+    if _outer_generation_span_active():
+        yield None
+        return
+    with llm_generation_span(llm, flow=flow) as span:
+        yield span
+
+
 class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
@@ -759,14 +773,6 @@ class LitellmLLM(LLM):
         if is_true_openai_model(self.config.model_provider, self.config.model_name):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        # Fallback generation_span wrap. Skipped when an outer caller already
-        # wrapped this invocation so braintrust doesn't double-count cost.
-        span_ctx = (
-            nullcontext()
-            if _outer_generation_span_active()
-            else llm_generation_span(self, flow="llm_invoke_fallback")
-        )
-
         try:
             # When custom_config is set, env vars are temporarily injected
             # under a global lock. Using stream=True here means the lock is
@@ -776,7 +782,7 @@ class LitellmLLM(LLM):
             from litellm import stream_chunk_builder
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
 
-            with span_ctx as span:
+            with _fallback_generation_span(self, flow="llm_invoke_fallback") as span:
                 stream_response = cast(
                     LiteLLMCustomStreamWrapper,
                     self._completion(
@@ -862,16 +868,8 @@ class LitellmLLM(LLM):
         if is_true_openai_model(self.config.model_provider, self.config.model_name):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        # Fallback generation_span wrap. Skipped when an outer caller already
-        # wrapped this invocation so braintrust doesn't double-count cost.
-        span_ctx = (
-            nullcontext()
-            if _outer_generation_span_active()
-            else llm_generation_span(self, flow="llm_stream_fallback")
-        )
-
         try:
-            with span_ctx as span:
+            with _fallback_generation_span(self, flow="llm_stream_fallback") as span:
                 response = cast(
                     LiteLLMCustomStreamWrapper,
                     self._completion(
@@ -890,8 +888,7 @@ class LitellmLLM(LLM):
                 )
 
                 accumulated_content: list[str] = []
-                final_usage: Any = None
-                accumulated_tool_calls: list[Any] = []
+                final_usage: Usage | None = None
                 for chunk in response:
                     model_response = from_litellm_model_response_stream(chunk)
 
@@ -900,24 +897,25 @@ class LitellmLLM(LLM):
                         self._track_llm_cost(model_response.usage)
                         final_usage = model_response.usage
 
-                    if span is not None:
-                        if model_response.choice.delta.content:
-                            accumulated_content.append(
-                                model_response.choice.delta.content
-                            )
-                        if model_response.choice.delta.tool_calls:
-                            accumulated_tool_calls.extend(
-                                model_response.choice.delta.tool_calls
-                            )
+                    if span is not None and model_response.choice.delta.content:
+                        accumulated_content.append(model_response.choice.delta.content)
 
                     yield model_response
 
+                # Only reached if the stream is fully consumed without error.
+                # If the consumer abandons the generator or an exception
+                # propagates out, we skip the final record and the span will
+                # exit via the context-manager __exit__ without output set.
+                # We intentionally do NOT record per-chunk delta tool_calls —
+                # they arrive as partial fragments (arguments streamed char
+                # by char keyed on `index`) and would need stream_chunk_builder
+                # to reassemble before being safe to log.
                 if span is not None:
                     record_llm_span_output(
                         span,
                         output="".join(accumulated_content) or None,
                         usage=final_usage,
-                        tool_calls=accumulated_tool_calls or None,
+                        tool_calls=None,
                     )
         finally:
             if client is not None:
