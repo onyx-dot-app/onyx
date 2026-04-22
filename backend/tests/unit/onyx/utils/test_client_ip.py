@@ -24,8 +24,22 @@ def _fake_request(
     return req
 
 
-def test_prefers_xff_first_hop() -> None:
+def test_walks_xff_right_to_left_skipping_private_hops() -> None:
+    """Proxies append their immediate peer on the right. The real client
+    sits one-past the rightmost private hop — not the leftmost entry.
+    """
     req = _fake_request(xff="8.8.8.8, 10.0.0.1, 192.168.0.1", client_host="10.0.0.2")
+    assert get_client_ip(req) == "8.8.8.8"
+
+
+def test_ignores_client_supplied_public_spoof_at_the_left() -> None:
+    """If a client prepends a fake public IP at the leftmost position, it
+    must not be returned. The rightmost public IP (added by our outermost
+    trusted proxy) is the real client.
+    """
+    # Client tried to spoof `1.2.3.4`; ALB appended the true client `8.8.8.8`;
+    # ingress-nginx appended its own peer `10.0.0.1`.
+    req = _fake_request(xff="1.2.3.4, 8.8.8.8, 10.0.0.1", client_host=None)
     assert get_client_ip(req) == "8.8.8.8"
 
 
@@ -34,8 +48,7 @@ def test_falls_back_to_client_host_when_no_xff() -> None:
     assert get_client_ip(req) == "9.9.9.9"
 
 
-def test_skips_private_xff_first_hop_falls_back_to_client() -> None:
-    """Private first-hop (e.g. kube internal) must not leak as the client IP."""
+def test_all_private_xff_falls_back_to_client() -> None:
     req = _fake_request(xff="10.0.0.5", client_host="9.9.9.9")
     assert get_client_ip(req) == "9.9.9.9"
 

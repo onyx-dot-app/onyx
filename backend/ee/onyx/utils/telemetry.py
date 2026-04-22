@@ -38,7 +38,10 @@ def event_telemetry(
         return
 
     enriched = _with_client_ip(properties, client_ip)
-    logger.info(f"Capturing PostHog event: {distinct_id} {event} {enriched}")
+    # Log the pre-enrichment properties so the real client IP (PII) never
+    # reaches the application log aggregator. PostHog itself still receives
+    # the enriched payload via the capture call below.
+    logger.info(f"Capturing PostHog event: {distinct_id} {event} {properties}")
     try:
         posthog.capture(distinct_id, event, enriched)
         posthog.flush()
