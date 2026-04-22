@@ -642,7 +642,7 @@ def upload_files_api(
     unzip: bool = True,
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files, FileOrigin.OTHER, unzip=unzip)
+    return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)

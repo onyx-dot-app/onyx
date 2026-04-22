@@ -892,7 +892,10 @@ def build_python_chat_files_from_search_docs(
             )
             continue
 
-        if record.file_origin != FileOrigin.CONNECTOR:
+        if record.file_origin not in (
+            FileOrigin.CONNECTOR,
+            FileOrigin.CONNECTOR_FILE_UPLOAD,
+        ):
             logger.warning(
                 f"file_id={doc.file_id!r} has origin={record.file_origin!r}, "
                 "not eligible for code-interpreter staging; skipping."

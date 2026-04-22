@@ -13,9 +13,6 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    extract_and_stage_tabular_file,
-)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
@@ -32,7 +29,6 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 
 
@@ -89,7 +85,6 @@ def _process_file(
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
     file_type: str | None,
-    raw_file_callback: RawFileCallback | None = None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -191,7 +186,6 @@ def _process_file(
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
-    staged_file_id: str | None = None
     if is_tabular_file(file_name):
         # Produce TabularSections
         lowered_name = file_name.lower()
@@ -203,24 +197,13 @@ def _process_file(
                 extraction_result.text_content.encode("utf-8", errors="replace")
             )
         try:
-            if raw_file_callback is not None:
-                result = extract_and_stage_tabular_file(
+            sections.extend(
+                tabular_file_to_sections(
                     file=tabular_source,
                     file_name=file_name,
-                    content_type=file_type or "application/octet-stream",
-                    raw_file_callback=raw_file_callback,
                     link=link or "",
                 )
-                sections.extend(result.sections)
-                staged_file_id = result.staged_file_id
-            else:
-                sections.extend(
-                    tabular_file_to_sections(
-                        file=tabular_source,
-                        file_name=file_name,
-                        link=link or "",
-                    )
-                )
+            )
         except Exception as e:
             logger.error(f"Failed to process tabular file {file_name}: {e}")
             return []
@@ -267,7 +250,7 @@ def _process_file(
             primary_owners=primary_owners,
             secondary_owners=secondary_owners,
             metadata=custom_tags,
-            file_id=staged_file_id,
+            file_id=file_id,
         )
     ]
 
@@ -351,7 +334,6 @@ class LocalFileConnector(LoadConnector):
                 metadata=metadata,
                 pdf_pass=self.pdf_pass,
                 file_type=file_record.file_type,
-                raw_file_callback=self.raw_file_callback,
             )
             documents.extend(new_docs)
 
