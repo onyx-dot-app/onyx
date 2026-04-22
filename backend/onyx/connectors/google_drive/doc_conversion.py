@@ -327,6 +327,7 @@ def _download_and_extract_sections_basic(
     def _extract_tabular(
         raw_bytes: bytes, name: str, content_type: str
     ) -> BasicExtractionResult:
+        staged_file_id: str | None = None
         if raw_file_callback is not None:
             result = extract_and_stage_tabular_file(
                 file=io.BytesIO(raw_bytes),
@@ -335,21 +336,18 @@ def _download_and_extract_sections_basic(
                 raw_file_callback=raw_file_callback,
                 link=link,
             )
-            staged_sections: list[TextSection | ImageSection | TabularSection] = list(
-                result.sections
-            )
-            return BasicExtractionResult(
-                sections=staged_sections,
-                staged_file_id=result.staged_file_id,
-            )
-        tabular_sections: list[TextSection | ImageSection | TabularSection] = list(
-            tabular_file_to_sections(
+            tabular_sections = result.sections
+            staged_file_id = result.staged_file_id
+        else:
+            tabular_sections = tabular_file_to_sections(
                 io.BytesIO(raw_bytes),
                 file_name=name,
                 link=link,
             )
+        sections: list[TextSection | ImageSection | TabularSection] = list(
+            tabular_sections
         )
-        return BasicExtractionResult(sections=tabular_sections)
+        return BasicExtractionResult(sections=sections, staged_file_id=staged_file_id)
 
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
