@@ -1,9 +1,9 @@
 "use client";
 
 import { markdown } from "@opal/utils";
-import Image from "next/image";
-import { FunctionComponent, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { SvgOnyxLogo, SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
+import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -13,9 +13,14 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputVertical, InputHorizontal } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange } from "@opal/icons";
+import {
+  SvgArrowExchange,
+  SvgMicrophone,
+  SvgSlash,
+  SvgUnplug,
+} from "@opal/icons";
+import { Button as OpalButton, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
-import type { IconProps } from "@opal/types";
 import { VoiceProviderView } from "@/hooks/useVoiceProviders";
 import {
   testVoiceProvider,
@@ -23,6 +28,44 @@ import {
   fetchVoicesByType,
   fetchLLMProviders,
 } from "@/lib/admin/voice/svc";
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+export type ProviderMode = "stt" | "tts";
+
+export function getProviderIcon(
+  providerType: string
+): React.FunctionComponent<IconProps> {
+  switch (providerType) {
+    case "openai":
+      return SvgOpenai;
+    case "azure":
+      return SvgAzure;
+    case "elevenlabs":
+      return SvgElevenLabs;
+    default:
+      return SvgMicrophone;
+  }
+}
+
+export function getProviderLabel(providerType: string): string {
+  switch (providerType) {
+    case "openai":
+      return "OpenAI";
+    case "azure":
+      return "Azure";
+    case "elevenlabs":
+      return "ElevenLabs";
+    default:
+      return providerType;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// VoiceProviderSetupModal
+// ---------------------------------------------------------------------------
 
 interface VoiceOption {
   value: string;
@@ -62,12 +105,6 @@ const PROVIDER_API_KEY_URLS: Record<string, string> = {
   openai: "https://platform.openai.com/api-keys",
   azure: "https://portal.azure.com/",
   elevenlabs: "https://elevenlabs.io/app/settings/api-keys",
-};
-
-const PROVIDER_LOGO_URLS: Record<string, string> = {
-  openai: "/Openai.svg",
-  azure: "/Azure.png",
-  elevenlabs: "/ElevenLabs.svg",
 };
 
 const PROVIDER_DOCS_URLS: Record<string, string> = {
@@ -112,7 +149,7 @@ type MessageState = {
   text: string;
 } | null;
 
-export default function VoiceProviderSetupModal({
+export function VoiceProviderSetupModal({
   providerType,
   existingProvider,
   mode,
@@ -232,35 +269,7 @@ export default function VoiceProviderSetupModal({
     return true;
   })();
 
-  // Logo arrangement component for the modal header
-  // No useMemo needed - providerType and label are stable props
-  const LogoArrangement: FunctionComponent<IconProps> = () => (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center justify-center size-7 shrink-0 overflow-clip">
-        {providerType === "openai" ? (
-          <SvgOpenai size={24} />
-        ) : providerType === "azure" ? (
-          <SvgAzure size={24} />
-        ) : providerType === "elevenlabs" ? (
-          <SvgElevenLabs size={24} />
-        ) : (
-          <Image
-            src={PROVIDER_LOGO_URLS[providerType] ?? "/Openai.svg"}
-            alt={`${label} logo`}
-            width={24}
-            height={24}
-            className="object-contain"
-          />
-        )}
-      </div>
-      <div className="flex items-center justify-center size-4 shrink-0">
-        <SvgArrowExchange className="size-3 text-text-04" />
-      </div>
-      <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-        <SvgOnyxLogo size={24} className="shrink-0" />
-      </div>
-    </div>
-  );
+  const ProviderIcon = getProviderIcon(providerType);
 
   const formFieldState: "idle" | "error" | "success" =
     message?.kind === "error"
@@ -340,9 +349,11 @@ export default function VoiceProviderSetupModal({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <Modal.Content width="sm">
+      <Modal.Content width="md">
         <Modal.Header
-          icon={LogoArrangement}
+          icon={ProviderIcon}
+          moreIcon1={SvgArrowExchange}
+          moreIcon2={SvgOnyxLogo}
           title={isEditing ? `Edit ${label}` : `Set up ${label}`}
           description={`Connect to ${label} and set up your voice models.`}
           onClose={onClose}
@@ -525,6 +536,151 @@ export default function VoiceProviderSetupModal({
               {isProcessing ? "Connecting..." : isEditing ? "Save" : "Connect"}
             </Button>
           </Disabled>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VoiceDisconnectModal
+// ---------------------------------------------------------------------------
+
+export const NO_DEFAULT_VALUE = "__none__";
+
+interface VoiceDisconnectModalProps {
+  disconnectTarget: {
+    providerId: number;
+    providerLabel: string;
+    providerType: string;
+  };
+  providers: VoiceProviderView[];
+  replacementProviderId: string | null;
+  onReplacementChange: (id: string | null) => void;
+  onClose: () => void;
+  onDisconnect: () => void;
+}
+
+export function VoiceDisconnectModal({
+  disconnectTarget,
+  providers,
+  replacementProviderId,
+  onReplacementChange,
+  onClose,
+  onDisconnect,
+}: VoiceDisconnectModalProps) {
+  const targetProvider = providers.find(
+    (p) => p.id === disconnectTarget.providerId
+  );
+  const isActive =
+    (targetProvider?.is_default_stt ?? false) ||
+    (targetProvider?.is_default_tts ?? false);
+
+  // Find other configured providers that could serve as replacements
+  const replacementOptions = providers.filter(
+    (p) => p.id !== disconnectTarget.providerId && p.has_api_key
+  );
+
+  const needsReplacement = isActive;
+  const hasReplacements = replacementOptions.length > 0;
+
+  // Auto-select first replacement when modal opens
+  useEffect(() => {
+    if (needsReplacement && hasReplacements && !replacementProviderId) {
+      const first = replacementOptions[0];
+      if (first) onReplacementChange(String(first.id));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Modal.Content width="md">
+        <Modal.Header
+          icon={SvgUnplug}
+          title={markdown(`Disconnect *${disconnectTarget.providerLabel}*`)}
+          description="Voice models"
+          onClose={onClose}
+        />
+        <Modal.Body twoTone>
+          {needsReplacement ? (
+            hasReplacements ? (
+              <Section alignItems="start">
+                <Text as="p" color="text-03">
+                  {markdown(
+                    `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+                  )}
+                </Text>
+                <Section alignItems="start" gap={0.25}>
+                  <Text as="p" color="text-04">
+                    Set New Default
+                  </Text>
+                  <InputSelect
+                    value={replacementProviderId ?? undefined}
+                    onValueChange={(v) => onReplacementChange(v)}
+                  >
+                    <InputSelect.Trigger placeholder="Select a replacement provider" />
+                    <InputSelect.Content>
+                      {replacementOptions.map((p) => (
+                        <InputSelect.Item
+                          key={p.id}
+                          value={String(p.id)}
+                          icon={getProviderIcon(p.provider_type)}
+                        >
+                          {getProviderLabel(p.provider_type)}
+                        </InputSelect.Item>
+                      ))}
+                      <InputSelect.Separator />
+                      <InputSelect.Item
+                        value={NO_DEFAULT_VALUE}
+                        icon={SvgSlash}
+                      >
+                        <span>
+                          <b>No Default</b>
+                          <span className="text-text-03"> (Disable Voice)</span>
+                        </span>
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </Section>
+              </Section>
+            ) : (
+              <>
+                <Text as="p" color="text-03">
+                  {markdown(
+                    `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default.`
+                  )}
+                </Text>
+                <Text as="p" color="text-03">
+                  Connect another provider to continue using voice.
+                </Text>
+              </>
+            )
+          ) : (
+            <>
+              <Text as="p" color="text-03">
+                {markdown(
+                  `**${disconnectTarget.providerLabel}** models will no longer be available for voice.`
+                )}
+              </Text>
+              <Text as="p" color="text-03">
+                Session history will be preserved.
+              </Text>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <OpalButton prominence="secondary" onClick={onClose}>
+            Cancel
+          </OpalButton>
+          <OpalButton
+            variant="danger"
+            onClick={onDisconnect}
+            disabled={
+              needsReplacement && hasReplacements && !replacementProviderId
+            }
+          >
+            Disconnect
+          </OpalButton>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

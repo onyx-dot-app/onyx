@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
-import type { IconProps } from "@opal/types";
+import { useMemo, useState } from "react";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { FetchError } from "@/lib/fetcher";
 import {
   useVoiceProviders,
   VoiceProviderView,
@@ -17,16 +14,18 @@ import {
 } from "@/lib/admin/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { toast } from "@/hooks/useToast";
-import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
-import { SvgMicrophone, SvgSlash, SvgUnplug } from "@opal/icons";
-import { Button, MessageCard, Text } from "@opal/components";
-import { markdown } from "@opal/utils";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import VoiceProviderSetupModal from "@/app/admin/configuration/voice/VoiceProviderSetupModal";
+import {
+  getProviderIcon,
+  getProviderLabel,
+  VoiceProviderSetupModal,
+  VoiceDisconnectModal,
+  NO_DEFAULT_VALUE,
+  type ProviderMode,
+} from "@/refresh-pages/admin/VoiceConfigurationPage/shared";
 
 interface ModelDetails {
   id: string;
@@ -109,169 +108,9 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
   },
 ];
 
-function getProviderIcon(
-  providerType: string
-): React.FunctionComponent<IconProps> {
-  switch (providerType) {
-    case "openai":
-      return SvgOpenai;
-    case "azure":
-      return SvgAzure;
-    case "elevenlabs":
-      return SvgElevenLabs;
-    default:
-      return SvgMicrophone;
-  }
-}
-
-type ProviderMode = "stt" | "tts";
-
-function getProviderLabel(providerType: string): string {
-  switch (providerType) {
-    case "openai":
-      return "OpenAI";
-    case "azure":
-      return "Azure";
-    case "elevenlabs":
-      return "ElevenLabs";
-    default:
-      return providerType;
-  }
-}
-
-const NO_DEFAULT_VALUE = "__none__";
-
 const route = ADMIN_ROUTES.VOICE;
 const pageDescription =
   "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
-
-interface VoiceDisconnectModalProps {
-  disconnectTarget: {
-    providerId: number;
-    providerLabel: string;
-    providerType: string;
-  };
-  providers: VoiceProviderView[];
-  replacementProviderId: string | null;
-  onReplacementChange: (id: string | null) => void;
-  onClose: () => void;
-  onDisconnect: () => void;
-}
-
-function VoiceDisconnectModal({
-  disconnectTarget,
-  providers,
-  replacementProviderId,
-  onReplacementChange,
-  onClose,
-  onDisconnect,
-}: VoiceDisconnectModalProps) {
-  const targetProvider = providers.find(
-    (p) => p.id === disconnectTarget.providerId
-  );
-  const isActive =
-    (targetProvider?.is_default_stt ?? false) ||
-    (targetProvider?.is_default_tts ?? false);
-
-  // Find other configured providers that could serve as replacements
-  const replacementOptions = providers.filter(
-    (p) => p.id !== disconnectTarget.providerId && p.has_api_key
-  );
-
-  const needsReplacement = isActive;
-  const hasReplacements = replacementOptions.length > 0;
-
-  // Auto-select first replacement when modal opens
-  useEffect(() => {
-    if (needsReplacement && hasReplacements && !replacementProviderId) {
-      const first = replacementOptions[0];
-      if (first) onReplacementChange(String(first.id));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <ConfirmationModalLayout
-      icon={SvgUnplug}
-      title={markdown(`Disconnect *${disconnectTarget.providerLabel}*`)}
-      description="Voice models"
-      onClose={onClose}
-      submit={
-        <Button
-          variant="danger"
-          onClick={onDisconnect}
-          disabled={
-            needsReplacement && hasReplacements && !replacementProviderId
-          }
-        >
-          Disconnect
-        </Button>
-      }
-    >
-      {needsReplacement ? (
-        hasReplacements ? (
-          <Section alignItems="start">
-            <Text as="p" color="text-03">
-              {markdown(
-                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
-              )}
-            </Text>
-            <Section alignItems="start" gap={0.25}>
-              <Text as="p" color="text-04">
-                Set New Default
-              </Text>
-              <InputSelect
-                value={replacementProviderId ?? undefined}
-                onValueChange={(v) => onReplacementChange(v)}
-              >
-                <InputSelect.Trigger placeholder="Select a replacement provider" />
-                <InputSelect.Content>
-                  {replacementOptions.map((p) => (
-                    <InputSelect.Item
-                      key={p.id}
-                      value={String(p.id)}
-                      icon={getProviderIcon(p.provider_type)}
-                    >
-                      {getProviderLabel(p.provider_type)}
-                    </InputSelect.Item>
-                  ))}
-                  <InputSelect.Separator />
-                  <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
-                    <span>
-                      <b>No Default</b>
-                      <span className="text-text-03"> (Disable Voice)</span>
-                    </span>
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </Section>
-          </Section>
-        ) : (
-          <>
-            <Text as="p" color="text-03">
-              {markdown(
-                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default.`
-              )}
-            </Text>
-            <Text as="p" color="text-03">
-              Connect another provider to continue using voice.
-            </Text>
-          </>
-        )
-      ) : (
-        <>
-          <Text as="p" color="text-03">
-            {markdown(
-              `**${disconnectTarget.providerLabel}** models will no longer be available for voice.`
-            )}
-          </Text>
-          <Text as="p" color="text-03">
-            Session history will be preserved.
-          </Text>
-        </>
-      )}
-    </ConfirmationModalLayout>
-  );
-}
 
 export default function VoiceConfigurationPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -280,12 +119,6 @@ export default function VoiceConfigurationPage() {
     useState<VoiceProviderView | null>(null);
   const [modalMode, setModalMode] = useState<ProviderMode>("stt");
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [sttActivationError, setSTTActivationError] = useState<string | null>(
-    null
-  );
-  const [ttsActivationError, setTTSActivationError] = useState<string | null>(
-    null
-  );
   const [disconnectTarget, setDisconnectTarget] = useState<{
     providerId: number;
     providerLabel: string;
@@ -295,7 +128,7 @@ export default function VoiceConfigurationPage() {
     string | null
   >(null);
 
-  const { providers, error, isLoading, refresh: mutate } = useVoiceProviders();
+  const { providers, isLoading, refresh: mutate } = useVoiceProviders();
 
   const handleConnect = (
     providerType: string,
@@ -307,8 +140,6 @@ export default function VoiceConfigurationPage() {
     setModalMode(mode);
     setSelectedModelId(modelId ?? null);
     setModalOpen(true);
-    setSTTActivationError(null);
-    setTTSActivationError(null);
   };
 
   const handleEdit = (
@@ -321,8 +152,6 @@ export default function VoiceConfigurationPage() {
     setModalMode(mode);
     setSelectedModelId(modelId ?? null);
     setModalOpen(true);
-    setSTTActivationError(null);
-    setTTSActivationError(null);
   };
 
   const handleSetDefault = async (
@@ -330,9 +159,6 @@ export default function VoiceConfigurationPage() {
     mode: ProviderMode,
     modelId?: string
   ) => {
-    const setError =
-      mode === "stt" ? setSTTActivationError : setTTSActivationError;
-    setError(null);
     try {
       const response = await activateVoiceProvider(providerId, mode, modelId);
       if (!response.ok) {
@@ -345,16 +171,13 @@ export default function VoiceConfigurationPage() {
       }
       await mutate();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unexpected error occurred.";
-      setError(message);
+      toast.error(
+        err instanceof Error ? err.message : "Unexpected error occurred."
+      );
     }
   };
 
   const handleDeactivate = async (providerId: number, mode: ProviderMode) => {
-    const setError =
-      mode === "stt" ? setSTTActivationError : setTTSActivationError;
-    setError(null);
     try {
       const response = await deactivateVoiceProvider(providerId, mode);
       if (!response.ok) {
@@ -367,9 +190,9 @@ export default function VoiceConfigurationPage() {
       }
       await mutate();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unexpected error occurred.";
-      setError(message);
+      toast.error(
+        err instanceof Error ? err.message : "Unexpected error occurred."
+      );
     }
   };
 
@@ -511,35 +334,6 @@ export default function VoiceConfigurationPage() {
     );
   };
 
-  if (error) {
-    const message = error?.message || "Unable to load voice configuration.";
-    const detail =
-      error instanceof FetchError && typeof error.info?.detail === "string"
-        ? error.info.detail
-        : undefined;
-
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={route.title}
-          description={pageDescription}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <Callout type="danger" title="Failed to load voice settings">
-            {message}
-            {detail && (
-              <Text as="p" font="main-content-body" color="text-03">
-                {detail}
-              </Text>
-            )}
-          </Callout>
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   if (isLoading) {
     return (
       <SettingsLayouts.Root>
@@ -557,74 +351,7 @@ export default function VoiceConfigurationPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={route.title}
-        description={pageDescription}
-        divider
-      />
-      <SettingsLayouts.Body>
-        <div className="flex flex-col gap-6">
-          <Content
-            title="Speech to Text"
-            description="Select a model to transcribe speech to text in chats."
-            sizePreset="main-content"
-            variant="section"
-          />
-
-          {sttActivationError && (
-            <Callout type="danger" title="Unable to update STT provider">
-              {sttActivationError}
-            </Callout>
-          )}
-
-          {!hasActiveSTTProvider && (
-            <MessageCard
-              variant="info"
-              title="Connect a speech to text provider to use in chat."
-            />
-          )}
-
-          <div className="flex flex-col gap-2">
-            {STT_MODELS.map((model) => renderModelSelect(model, "stt"))}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <Content
-            title="Text to Speech"
-            description="Select a model to speak out chat responses."
-            sizePreset="main-content"
-            variant="section"
-          />
-
-          {ttsActivationError && (
-            <Callout type="danger" title="Unable to update TTS provider">
-              {ttsActivationError}
-            </Callout>
-          )}
-
-          {!hasActiveTTSProvider && (
-            <MessageCard
-              variant="info"
-              title="Connect a text to speech provider to use in chat."
-            />
-          )}
-
-          {TTS_PROVIDER_GROUPS.map((group) => (
-            <div key={group.providerType} className="flex flex-col gap-2">
-              <Text font="secondary-body" color="text-03">
-                {group.providerLabel}
-              </Text>
-              <div className="flex flex-col gap-2">
-                {group.models.map((model) => renderModelSelect(model, "tts"))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </SettingsLayouts.Body>
-
+    <>
       {disconnectTarget && (
         <VoiceDisconnectModal
           disconnectTarget={disconnectTarget}
@@ -649,6 +376,70 @@ export default function VoiceConfigurationPage() {
           onSuccess={handleModalSuccess}
         />
       )}
-    </SettingsLayouts.Root>
+
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={route.title}
+          description={pageDescription}
+          divider
+        />
+        <SettingsLayouts.Body>
+          <Section gap={2}>
+            <Section gap={0.75}>
+              <Content
+                title="Speech to Text"
+                description="Select a model to transcribe speech to text in chats."
+                sizePreset="main-content"
+                variant="section"
+              />
+
+              {!hasActiveSTTProvider && (
+                <MessageCard
+                  variant="info"
+                  title="Connect a speech to text provider to use in chat."
+                />
+              )}
+
+              <Section gap={0.5}>
+                {STT_MODELS.map((model) => renderModelSelect(model, "stt"))}
+              </Section>
+            </Section>
+
+            <Section gap={0.75}>
+              <Content
+                title="Text to Speech"
+                description="Select a model to speak out chat responses."
+                sizePreset="main-content"
+                variant="section"
+              />
+
+              {!hasActiveTTSProvider && (
+                <MessageCard
+                  variant="info"
+                  title="Connect a text to speech provider to use in chat."
+                />
+              )}
+
+              <Section gap={1}>
+                {TTS_PROVIDER_GROUPS.map((group) => (
+                  <div
+                    key={group.providerType}
+                    className="flex w-full flex-col gap-2"
+                  >
+                    <Text font="secondary-body" color="text-03">
+                      {group.providerLabel}
+                    </Text>
+                    {group.models.map((model) =>
+                      renderModelSelect(model, "tts")
+                    )}
+                  </div>
+                ))}
+              </Section>
+            </Section>
+          </Section>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    </>
   );
 }
