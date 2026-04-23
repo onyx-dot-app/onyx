@@ -1,65 +1,17 @@
 "use client";
 
-import { JSX } from "react";
 import Image from "next/image";
 import { StaticImageData } from "next/image";
-import { BrainIcon as Brain } from "@phosphor-icons/react";
-import { FiChevronsDown, FiChevronsUp, FiMail } from "react-icons/fi";
-import { SiBookstack } from "react-icons/si";
-import axeroImage from "@public/Axero.jpeg";
-import airtableIcon from "@public/Airtable.svg";
-import asanaIcon from "@public/Asana.png";
-import bitbucketIcon from "@public/Bitbucket.svg";
-import clickupIcon from "@public/Clickup.svg";
-import codaIcon from "@public/Coda.png";
-import confluenceSVG from "@public/Confluence.svg";
-import discourseIcon from "@public/Discourse.png";
-import document360Icon from "@public/Document360.png";
-import dropboxIcon from "@public/Dropbox.png";
-import drupalwikiIcon from "@public/DrupalWiki.png";
-import egnyteIcon from "@public/Egnyte.png";
-import elevenLabsDarkSVG from "@public/ElevenLabsDark.svg";
-import elevenLabsSVG from "@public/ElevenLabs.svg";
-import firefliesIcon from "@public/Fireflies.png";
-import freshdeskIcon from "@public/Freshdesk.png";
-import gitbookDarkIcon from "@public/GitBookDark.png";
-import gitbookLightIcon from "@public/GitBookLight.png";
-import gongIcon from "@public/Gong.png";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
-import googleSitesIcon from "@public/GoogleSites.png";
-import guruIcon from "@public/Guru.svg";
 import highspotIcon from "@public/Highspot.png";
-import hubSpotIcon from "@public/HubSpot.png";
-import jiraSVG from "@public/Jira.svg";
-import linearIcon from "@public/Linear.png";
-import mediawikiIcon from "@public/MediaWiki.svg";
-import mixedBreadSVG from "@public/Mixedbread.png";
-import OCIStorageSVG from "@public/OCI.svg";
 import openSourceIcon from "@public/OpenSource.png";
-import outlinePNG from "@public/Outline.png";
 import r2Icon from "@public/r2.png";
 import s3Icon from "@public/S3.png";
-import salesforceIcon from "@public/Salesforce.png";
-import sharepointIcon from "@public/Sharepoint.png";
-import teamsIcon from "@public/Teams.png";
-import outlookIcon from "@public/Outlook.png";
-import oneDriveIcon from "@public/OneDrive.png";
 import boxIcon from "@public/Box.png";
 import trelloIcon from "@public/Trello.png";
 import serviceNowIcon from "@public/Servicenow.png";
-import wikipediaIcon from "@public/Wikipedia.png";
-import xenforoIcon from "@public/Xenforo.svg";
 import zAIIcon from "@public/Z_AI.png";
-import zendeskIcon from "@public/Zendesk.svg";
-import zulipIcon from "@public/Zulip.png";
-import testrailSVG from "@public/Testrail.svg";
-import gitlabIcon from "@public/Gitlab.png";
-import gmailIcon from "@public/Gmail.png";
-import googleDriveIcon from "@public/GoogleDrive.png";
 import loopioIcon from "@public/Loopio.png";
-import notionIcon from "@public/Notion.png";
-import productboardIcon from "@public/Productboard.png";
-import slabLogoIcon from "@public/SlabLogo.png";
 
 export interface IconProps {
   size?: number;
@@ -68,7 +20,6 @@ export interface IconProps {
 export interface LogoIconProps extends IconProps {
   src: string | StaticImageData;
 }
-export type OnyxIconType = (props: IconProps) => JSX.Element;
 
 export const defaultTailwindCSS = "my-auto flex flex-shrink-0 text-default";
 export const defaultTailwindCSSBlue = "my-auto flex flex-shrink-0 text-link";
@@ -184,16 +135,6 @@ const createLogoIcon = (
 // ============================================================================
 // GENERIC SVG COMPONENTS (sorted alphabetically)
 // ============================================================================
-export const ChevronsDownIcon = createIcon(FiChevronsDown);
-export const ChevronsUpIcon = createIcon(FiChevronsUp);
-export const BrainIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <Brain size={size} className={className} />;
-};
-export const EmailIcon = createIcon(FiMail);
-
 export const MacIcon = ({
   size = 16,
   className = "my-auto flex flex-shrink-0 ",
@@ -292,86 +233,18 @@ export const WindowsIcon = ({
 
 // ============================================================================
 // THIRD-PARTY / COMPANY ICONS (Alphabetically)
+// Only icons that don't yet have opal logo equivalents remain here.
 // ============================================================================
-export const AirtableIcon = createLogoIcon(airtableIcon);
-export const AsanaIcon = createLogoIcon(asanaIcon);
-export const AxeroIcon = createLogoIcon(axeroImage);
-export const BitbucketIcon = createLogoIcon(bitbucketIcon);
-export const BookstackIcon = createIcon(SiBookstack);
-export const ClickupIcon = createLogoIcon(clickupIcon);
-export const ConfluenceIcon = createLogoIcon(confluenceSVG, {
-  sizeAdjustment: 4,
-  classNameAddition: "-m-0.5",
-});
-export const DiscourseIcon = createLogoIcon(discourseIcon);
-export const Document360Icon = createLogoIcon(document360Icon);
-export const DropboxIcon = createLogoIcon(dropboxIcon);
-export const DrupalWikiIcon = createLogoIcon(drupalwikiIcon);
-export const EgnyteIcon = createLogoIcon(egnyteIcon);
-export const FirefliesIcon = createLogoIcon(firefliesIcon);
-export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
-export const GitbookIcon = createLogoIcon(gitbookDarkIcon, {
-  darkSrc: gitbookLightIcon,
-});
-export const GitlabIcon = createLogoIcon(gitlabIcon);
-export const GmailIcon = createLogoIcon(gmailIcon);
-export const GongIcon = createLogoIcon(gongIcon);
-export const GoogleDriveIcon = createLogoIcon(googleDriveIcon);
-export const GoogleSitesIcon = createLogoIcon(googleSitesIcon);
+export const BoxIcon = createLogoIcon(boxIcon);
 export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",
 });
-export const GuruIcon = createLogoIcon(guruIcon, { monochromatic: true });
 export const HighspotIcon = createLogoIcon(highspotIcon);
-export const HubSpotIcon = createLogoIcon(hubSpotIcon);
-export const JiraIcon = createLogoIcon(jiraSVG);
-export const LinearIcon = createLogoIcon(linearIcon);
 export const LoopioIcon = createLogoIcon(loopioIcon, { monochromatic: true });
-export const MediaWikiIcon = createLogoIcon(mediawikiIcon);
-export const MixedBreadIcon = createLogoIcon(mixedBreadSVG);
-export const CodaIcon = createLogoIcon(codaIcon);
-export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
-export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
-export const TestRailIcon = createLogoIcon(testrailSVG);
 export const OpenSourceIcon = createLogoIcon(openSourceIcon);
-export const OutlineIcon = createLogoIcon(outlinePNG, {
-  sizeAdjustment: 4,
-  classNameAddition: "-m-0.5",
-});
-export const ProductboardIcon = createLogoIcon(productboardIcon);
 export const R2Icon = createLogoIcon(r2Icon);
 export const S3Icon = createLogoIcon(s3Icon);
-export const SalesforceIcon = createLogoIcon(salesforceIcon);
-export const SharepointIcon = createLogoIcon(sharepointIcon);
-export const SlabIcon = createLogoIcon(slabLogoIcon);
-export const OutlookIcon = createLogoIcon(outlookIcon);
-export const OneDriveIcon = createLogoIcon(oneDriveIcon);
-export const BoxIcon = createLogoIcon(boxIcon);
-export const TrelloIcon = createLogoIcon(trelloIcon);
 export const ServiceNowIcon = createLogoIcon(serviceNowIcon);
-export const TeamsIcon = createLogoIcon(teamsIcon);
-export const WikipediaIcon = createLogoIcon(wikipediaIcon);
-export const XenforoIcon = createLogoIcon(xenforoIcon);
+export const TrelloIcon = createLogoIcon(trelloIcon);
 export const ZAIIcon = createLogoIcon(zAIIcon);
-export const ZendeskIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => (
-  <div
-    className="rounded-full overflow-visible dark:overflow-hidden flex items-center justify-center dark:bg-[#fff]/90"
-    style={{ width: size, height: size }}
-  >
-    <LogoIcon
-      size={
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? size * 0.8
-          : size
-      }
-      className={`${className}`}
-      src={zendeskIcon}
-    />
-  </div>
-);
-export const ZulipIcon = createLogoIcon(zulipIcon);

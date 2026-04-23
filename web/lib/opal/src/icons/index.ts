@@ -104,6 +104,7 @@ export { default as SvgLinkedDots } from "@opal/icons/linked-dots";
 export { default as SvgLoader } from "@opal/icons/loader";
 export { default as SvgLock } from "@opal/icons/lock";
 export { default as SvgLogOut } from "@opal/icons/log-out";
+export { default as SvgMail } from "@opal/icons/mail";
 export { default as SvgMaximize2 } from "@opal/icons/maximize-2";
 export { default as SvgMcp } from "@opal/icons/mcp";
 export { default as SvgMenu } from "@opal/icons/menu";
