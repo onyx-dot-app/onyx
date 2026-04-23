@@ -18,7 +18,7 @@ import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Persona } from "@/app/admin/agents/interfaces";
 import { SvgActions, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { LineItemButton } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import {
   OPEN_URL_TOOL_ID,
@@ -464,11 +464,13 @@ export default function AgentsTable() {
                   const isCurrentUser = user && creator.id === user.id;
 
                   return [
-                    <LineItem
+                    <LineItemButton
                       key={creator.id}
-                      icon={isCurrentUser ? SvgUser : () => null}
-                      selected={isSelected}
-                      emphasized
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={isCurrentUser ? SvgUser : undefined}
+                      title={creator.email}
+                      state={isSelected ? "selected" : "empty"}
                       onClick={() => {
                         setSelectedCreatorIds((prev) => {
                           const newSet = new Set(prev);
@@ -480,9 +482,7 @@ export default function AgentsTable() {
                           return newSet;
                         });
                       }}
-                    >
-                      {creator.email}
-                    </LineItem>,
+                    />,
                   ];
                 }),
               ]}
@@ -527,11 +527,13 @@ export default function AgentsTable() {
                     !isSystemTool(nextAction);
 
                   const lineItem = (
-                    <LineItem
+                    <LineItemButton
                       key={key}
+                      sizePreset="main-ui"
+                      variant="section"
                       icon={icon}
-                      selected={isSelected}
-                      emphasized
+                      title={action.name}
+                      state={isSelected ? "selected" : "empty"}
                       onClick={() => {
                         setSelectedActionKeys((prev) => {
                           const newSet = new Set(prev);
@@ -543,9 +545,7 @@ export default function AgentsTable() {
                           return newSet;
                         });
                       }}
-                    >
-                      {action.name}
-                    </LineItem>
+                    />
                   );
 
                   return needsSeparator ? [lineItem, null] : [lineItem];
