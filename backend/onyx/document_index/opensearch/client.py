@@ -342,7 +342,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "mappings": mappings,
             "settings": settings,
         }
-        logger.debug(f"Creating index {self._index_name} with body {body}.")
+        logger.debug(f"Creating index {self._index_name}.")
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -369,10 +369,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
             return False
 
-        logger.debug(f"Deleting index {self._index_name}.")
+        logger.info(f"Deleting index {self._index_name}.")
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
+        logger.info(f"Index {self._index_name} deleted successfully.")
         return True
 
     @log_function_time(print_only=True, debug_only=True)
@@ -407,9 +408,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             Exception: There was an error updating the mappings, such as
                 attempting to change the type of an existing field.
         """
-        logger.debug(
-            f"Putting mappings for index {self._index_name} with mappings {mappings}."
-        )
+        logger.debug(f"Putting mappings for index {self._index_name}.")
         response = self._client.indices.put_mapping(
             index=self._index_name, body=mappings
         )
@@ -448,9 +447,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 f"Tried to validate index {self._index_name} but it does not exist."
             )
             return False
-        logger.debug(
-            f"Validating index {self._index_name} with expected mappings {expected_mappings}."
-        )
+        logger.debug(f"Validating index {self._index_name}.")
 
         get_result = self._client.indices.get(index=self._index_name)
         index_info: dict[str, Any] = get_result.get(self._index_name, {})
@@ -512,7 +509,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         Raises:
             Exception: There was an error updating the settings of the index.
         """
-        logger.debug(f"Updating settings of index {self._index_name} with {settings}.")
+        logger.debug(f"Updating settings of index {self._index_name}.")
         params = {
             "timeout": timeout,
         }
