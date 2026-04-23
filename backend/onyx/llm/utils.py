@@ -126,7 +126,7 @@ def build_litellm_passthrough_kwargs(
     if existing_extra_body is None:
         extra_body = {}
     elif isinstance(existing_extra_body, dict):
-        extra_body = copy.deepcopy(existing_extra_body)
+        extra_body = existing_extra_body
     else:
         extra_body = None
 
