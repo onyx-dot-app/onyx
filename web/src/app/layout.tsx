@@ -26,8 +26,8 @@ const hankenGrotesk = Hanken_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
+  title: "InsightAI",
+  description: "AI-powered insight and question answering for your documents",
 };
 
 // force-dynamic prevents Next.js from statically prerendering pages at build

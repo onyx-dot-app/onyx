@@ -18,11 +18,36 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY lib/opal/package.json ./lib/opal/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies.
+# - BuildKit cache mount on /root/.npm keeps previously downloaded tarballs
+#   across builds so a transient registry blip doesn't restart from zero.
+# - Increased fetch retries + timeouts make `npm ci` resilient to flaky
+#   networks (ECONNRESET / aborted socket) instead of failing the whole build.
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm config set fetch-timeout 600000 \
+ && npm ci --prefer-offline --no-audit --no-fund
 
 # pull in source code / package.json / package-lock.json
 COPY . .
+
+# Normalize a macOS->Linux case-collision in the vendored `lib/opal` tree.
+# Upstream tracks two directories that differ only in case:
+#   lib/opal/src/components/buttons/Button/   (holds Button.stories.tsx only)
+#   lib/opal/src/components/buttons/button/   (holds components.tsx + README.md)
+# On a case-insensitive macOS host they collapse into a single on-disk
+# directory (whichever case Git checked out first wins). Docker's COPY
+# preserves that single case into the case-sensitive Alpine layer, so
+# `@opal/components/buttons/button/components` imports fail to resolve.
+# If only the capital variant was shipped, rename it to lowercase so all
+# imports (none of which reference the capital path) resolve correctly.
+RUN if [ -d lib/opal/src/components/buttons/Button ] \
+    && [ ! -d lib/opal/src/components/buttons/button ]; then \
+      mv lib/opal/src/components/buttons/Button \
+         lib/opal/src/components/buttons/button ; \
+    fi
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true

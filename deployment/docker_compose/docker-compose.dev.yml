@@ -48,6 +48,10 @@ services:
     ulimits: !reset null
     environment:
       - bootstrap.memory_lock=false
+      # Override the production 2g heap to fit within typical Docker Desktop
+      # memory budgets (~6-8 GiB shared across all containers).
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=true
 
   inference_model_server:
     ports:
