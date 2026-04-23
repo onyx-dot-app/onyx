@@ -19,14 +19,6 @@ import type { Persona } from "@/app/admin/agents/interfaces";
 import { SvgActions, SvgCheck, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import {
-  SEARCH_TOOL_ID,
-  IMAGE_GENERATION_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
-  OPEN_URL_TOOL_ID,
-  OPEN_URL_TOOL_NAME,
-  SYSTEM_TOOL_ICONS,
-} from "@/app/app/components/tools/constants";
 import { useUser } from "@/providers/UserProvider";
 
 // ---------------------------------------------------------------------------
@@ -223,13 +215,9 @@ export default function AgentsTable() {
 
     allAgentRows.forEach((agent) => {
       agent.tools.forEach((tool) => {
-        if (
-          tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
-          tool.name === OPEN_URL_TOOL_ID ||
-          tool.name === OPEN_URL_TOOL_NAME
-        ) {
-          return;
-        }
+        // Only include MCP server actions and OpenAPI/custom actions,
+        // not built-in system tools (Search, Web Search, etc.)
+        if (tool.in_code_tool_id) return;
         actionsMap.set(tool.id, {
           id: tool.id,
           name: tool.name,
@@ -238,21 +226,9 @@ export default function AgentsTable() {
       });
     });
 
-    const systemToolIds = [
-      SEARCH_TOOL_ID,
-      IMAGE_GENERATION_TOOL_ID,
-      WEB_SEARCH_TOOL_ID,
-    ];
-
-    const allActions = Array.from(actionsMap.values());
-    const systemTools = allActions
-      .filter((a) => systemToolIds.includes(a.name))
-      .sort((a, b) => a.display_name.localeCompare(b.display_name));
-    const otherTools = allActions
-      .filter((a) => !systemToolIds.includes(a.name))
-      .sort((a, b) => a.display_name.localeCompare(b.display_name));
-
-    return [...systemTools, ...otherTools];
+    return Array.from(actionsMap.values()).sort((a, b) =>
+      a.display_name.localeCompare(b.display_name)
+    );
   }, [allAgentRows]);
 
   const filteredActions = useMemo(() => {
@@ -429,24 +405,13 @@ export default function AgentsTable() {
                   value={actionsSearchQuery}
                   onChange={(e) => setActionsSearchQuery(e.target.value)}
                 />,
-                ...filteredActions.flatMap((action, index) => {
+                ...filteredActions.map((action) => {
                   const isSelected = selectedActionIds.has(action.id);
-                  const systemIcon = SYSTEM_TOOL_ICONS[action.name];
-                  const isSystemTool = !!systemIcon;
 
-                  const nextAction = filteredActions[index + 1];
-                  const nextIsSystemTool = nextAction
-                    ? !!SYSTEM_TOOL_ICONS[nextAction.name]
-                    : false;
-                  const needsSeparator =
-                    isSystemTool && nextAction && !nextIsSystemTool;
-
-                  const icon = systemIcon ?? SvgActions;
-
-                  const lineItem = (
+                  return (
                     <LineItem
                       key={action.id}
-                      icon={icon}
+                      icon={SvgActions}
                       selected={isSelected}
                       emphasized
                       onClick={() => {
@@ -464,8 +429,6 @@ export default function AgentsTable() {
                       {action.display_name}
                     </LineItem>
                   );
-
-                  return needsSeparator ? [lineItem, null] : [lineItem];
                 }),
               ]}
             </PopoverMenu>
