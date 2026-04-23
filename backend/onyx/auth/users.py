@@ -46,8 +46,8 @@ from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import (
-    RedisStrategy,
-)  # ty: ignore[possibly-missing-import]
+    RedisStrategy,  # ty: ignore[possibly-missing-import]
+)
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
