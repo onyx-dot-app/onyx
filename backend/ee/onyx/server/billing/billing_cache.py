@@ -4,8 +4,7 @@ Without this cache, every document batch processed by a large indexing run
 fires a `/billing-information` request at the control plane (via
 `_check_chunk_usage_limit` → `check_usage_and_raise` → `is_tenant_on_trial`
 → `fetch_billing_information`). One legitimately-indexing tenant can thus
-single-handedly dominate control-plane load. See the L3-A plan at
-``~/onyx-claude-plans/l3-a-onyx-billing-cache.md``.
+single-handedly dominate control-plane load.
 
 Granularity is per-tenant `BillingInformation | SubscriptionStatusResponse`;
 ``cached_is_tenant_on_trial`` derives the trial flag from the same cached
@@ -21,6 +20,7 @@ Fallback order on every call:
 import json
 from typing import Any
 
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from ee.onyx.server.tenants.billing import fetch_billing_information
@@ -47,16 +47,11 @@ def _cache_key(tenant_id: str) -> str:
 
 
 def _serialize(info: BillingInformation | SubscriptionStatusResponse) -> str:
-    if isinstance(info, BillingInformation):
-        envelope: dict[str, Any] = {
-            "type": _TYPE_BILLING,
-            "payload": json.loads(info.model_dump_json()),
-        }
-    else:
-        envelope = {
-            "type": _TYPE_STATUS,
-            "payload": json.loads(info.model_dump_json()),
-        }
+    kind = _TYPE_BILLING if isinstance(info, BillingInformation) else _TYPE_STATUS
+    envelope: dict[str, Any] = {
+        "type": kind,
+        "payload": info.model_dump(mode="json"),
+    }
     return json.dumps(envelope)
 
 
@@ -92,8 +87,12 @@ def cached_fetch_billing_information(
     if raw and isinstance(raw, (bytes, str)):
         try:
             return _deserialize(raw)
-        except (json.JSONDecodeError, ValueError) as e:
-            # Corrupt entry (stale schema, partial write) — discard and refetch.
+        except (json.JSONDecodeError, ValueError, ValidationError) as e:
+            # Corrupt or schema-drifted entry — discard and refetch. Pydantic
+            # ``ValidationError`` is NOT a subclass of ``ValueError`` in v2,
+            # so it must be caught explicitly; otherwise a schema change to
+            # ``BillingInformation`` leaves every subsequent read failing for
+            # the full TTL without ever reaching the refetch/overwrite below.
             logger.warning(
                 f"billing cache entry for tenant {tenant_id} unparseable, refetching: {e}"
             )
