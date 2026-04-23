@@ -18,9 +18,7 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.index_attempt_utils import (
-    get_old_index_attempt_ids,
-)
+from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.background.indexing.index_attempt_utils import (
     NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP,
 )
