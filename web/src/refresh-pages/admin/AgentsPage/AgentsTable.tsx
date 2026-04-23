@@ -467,10 +467,10 @@ export default function AgentsTable() {
                     <LineItem
                       key={creator.id}
                       icon={
-                        isCurrentUser
-                          ? SvgUser
-                          : isSelected
-                            ? SvgCheck
+                        isSelected
+                          ? SvgCheck
+                          : isCurrentUser
+                            ? SvgUser
                             : () => null
                       }
                       selected={isSelected}
