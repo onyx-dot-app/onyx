@@ -25,25 +25,23 @@ import AgentCard from "@/sections/agents/AgentCard";
 
 ---
 
-### `AgentFilters` (`useAgentFilters`)
+### `AgentsFilters` (`useAgentsFilters`)
 
-A hook that provides a shared filter bar for agent lists. Returns a
-`matchesFilters` predicate and a renderable `filterBar` node containing
-"Created By" and "Actions" filter popovers.
+A hook that provides a shared filter bar for agent lists. Returns the
+filtered agents and a renderable `filterBar` node containing "Created By"
+and "Actions" filter popovers.
 
 ```tsx
-import { useAgentFilters } from "@/sections/agents/AgentFilters";
+import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
 function MyAgentsPage() {
   const { agents } = useAgents();
-  const { matchesFilters, filterBar } = useAgentFilters(agents);
-
-  const visible = agents.filter(matchesFilters);
+  const { filtered, filterBar } = useAgentsFilters(agents);
 
   return (
     <>
       <div className="flex flex-row gap-2">{filterBar}</div>
-      {visible.map((agent) => (
+      {filtered.map((agent) => (
         <AgentCard key={agent.id} agent={agent} />
       ))}
     </>
@@ -53,15 +51,15 @@ function MyAgentsPage() {
 
 **Parameters:**
 
-- `agents` — any array of objects with `{ owner, tools }`. Works with
-  `MinimalPersonaSnapshot`, `Persona`, `AgentRow`, or any type satisfying
-  the `AgentLike` interface.
+- `agents: T[]` — an array of `MinimalPersonaSnapshot` (or any subtype like
+  `Persona`). The generic preserves the input type in the returned `filtered`
+  array.
 
 **Returns:**
 
-- `matchesFilters(agent)` — a memoized predicate. Returns `true` when the
-  agent matches all active filters. Safe for `useMemo` dependency arrays.
-- `filterBar` — a React node containing the two filter popovers.
+- `filtered: T[]` — the input agents with creator and action filters applied.
+  When no filters are active, returns the original array.
+- `filterBar: ReactNode` — the two filter popovers, ready to render.
 
 **Filters included:**
 

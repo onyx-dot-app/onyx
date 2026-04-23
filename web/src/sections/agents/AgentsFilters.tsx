@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AgentFilters — shared filter bar for agent lists.
+ * AgentsFilters — shared filter bar for agent lists.
  *
  * Renders "Created By" and "Actions" filter popovers that let users narrow
  * an agent list by creator and by attached tools/MCP servers.
@@ -9,22 +9,19 @@
  * Usage:
  *
  * ```tsx
- * const { matchesFilters, filterBar } = useAgentFilters(agents);
- *
- * const visible = agents.filter(matchesFilters);
+ * const { filtered, filterBar } = useAgentsFilters(agents);
  *
  * return (
  *   <>
  *     <div className="flex flex-row gap-2">{filterBar}</div>
- *     {visible.map(agent => <AgentCard agent={agent} />)}
+ *     {filtered.map(agent => <AgentCard agent={agent} />)}
  *   </>
  * );
  * ```
  *
- * `useAgentFilters` returns:
- * - `matchesFilters(agent)` — a stable predicate that returns `true` when the
- *   agent matches all currently active filters. Memoized so it's safe to use
- *   in dependency arrays.
+ * `useAgentsFilters` returns:
+ * - `filtered` — the input agents array with creator and action filters
+ *   applied. When no filters are active, this is the original array.
  * - `filterBar` — a React node containing the two filter popovers, ready to
  *   render inline.
  */
@@ -37,7 +34,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import useMcpServers from "@/hooks/useMcpServers";
 import { useUser } from "@/providers/UserProvider";
-import type { ToolSnapshot } from "@/lib/tools/interfaces";
+import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
@@ -47,12 +44,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Minimal shape required from each agent for the filters to work. */
-interface AgentLike {
-  owner: { id: string; email: string } | null;
-  tools: ToolSnapshot[];
-}
 
 /**
  * Discriminated union for action filter items.
@@ -80,18 +71,12 @@ function isSystemTool(item: ActionFilterItem): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// useAgentFilters
+// useAgentsFilters
 // ---------------------------------------------------------------------------
 
-interface UseAgentFiltersReturn {
-  /**
-   * A stable filter predicate. Returns `true` when the agent matches all
-   * currently active creator and action filters.
-   *
-   * Safe to include in `useMemo` / `useCallback` dependency arrays — it only
-   * changes when the user toggles a filter.
-   */
-  matchesFilters: (agent: AgentLike) => boolean;
+interface UseAgentsFiltersReturn<T extends MinimalPersonaSnapshot> {
+  /** The input agents with all active filters applied. */
+  filtered: T[];
 
   /** A React node containing the two filter popovers, ready to render. */
   filterBar: React.ReactNode;
@@ -100,11 +85,12 @@ interface UseAgentFiltersReturn {
 /**
  * Hook that drives the agent filter bar.
  *
- * Accepts any array of agent-like objects (must have `owner` and `tools`),
- * derives the available creators and actions, and returns a `matchesFilters`
- * predicate plus a renderable `filterBar`.
+ * Accepts an array of agents, derives the available creators and actions,
+ * and returns the filtered agents plus a renderable `filterBar`.
  */
-export function useAgentFilters(agents: AgentLike[]): UseAgentFiltersReturn {
+export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
+  agents: T[]
+): UseAgentsFiltersReturn<T> {
   const { user } = useUser();
   const { mcpData } = useMcpServers();
 
@@ -261,10 +247,15 @@ export function useAgentFilters(agents: AgentLike[]): UseAgentFiltersReturn {
     return `${selectedActionKeys.size} selected`;
   }, [selectedActionKeys, uniqueActions]);
 
-  // -- matchesFilters predicate ----------------------------------------------
+  // -- Filtered agents -------------------------------------------------------
 
-  const matchesFilters = useMemo(() => {
-    return (agent: AgentLike): boolean => {
+  const filtered = useMemo(() => {
+    // No filters active — return the original array (preserves identity)
+    if (selectedCreatorIds.size === 0 && selectedActionKeys.size === 0) {
+      return agents;
+    }
+
+    return agents.filter((agent) => {
       const creatorMatch =
         selectedCreatorIds.size === 0 ||
         (agent.owner != null && selectedCreatorIds.has(agent.owner.id));
@@ -279,8 +270,9 @@ export function useAgentFilters(agents: AgentLike[]): UseAgentFiltersReturn {
         );
 
       return creatorMatch && actionsMatch;
-    };
+    });
   }, [
+    agents,
     selectedCreatorIds,
     selectedActionKeys,
     selectedToolIds,
@@ -415,5 +407,5 @@ export function useAgentFilters(agents: AgentLike[]): UseAgentFiltersReturn {
     </>
   );
 
-  return { matchesFilters, filterBar };
+  return { filtered, filterBar };
 }

@@ -19,7 +19,7 @@ import type { Persona } from "@/app/admin/agents/interfaces";
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
-import { useAgentFilters } from "@/sections/agents/AgentFilters";
+import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,16 +144,17 @@ export default function AgentsTable() {
 
   const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
-  const allAgentRows: AgentRow[] = useMemo(
-    () => personas.filter((p) => !p.builtin_persona).map(toAgentRow),
+  const nonBuiltinPersonas = useMemo(
+    () => personas.filter((p) => !p.builtin_persona),
     [personas]
   );
 
-  const filters = useAgentFilters(allAgentRows);
+  const { filtered: filteredPersonas, filterBar } =
+    useAgentsFilters(nonBuiltinPersonas);
 
-  const agentRows = useMemo(
-    () => allAgentRows.filter(filters.matchesFilters),
-    [allAgentRows, filters.matchesFilters]
+  const agentRows: AgentRow[] = useMemo(
+    () => filteredPersonas.map(toAgentRow),
+    [filteredPersonas]
   );
 
   async function handleReorder(
@@ -189,7 +190,7 @@ export default function AgentsTable() {
           leftSearchIcon
         />
         <Section gap={0.25} flexDirection="row" justifyContent="start">
-          {filters.filterBar}
+          {filterBar}
         </Section>
       </Section>
       <Table

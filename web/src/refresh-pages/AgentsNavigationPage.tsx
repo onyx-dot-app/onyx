@@ -14,7 +14,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { Button } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
-import { useAgentFilters } from "@/sections/agents/AgentFilters";
+import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
 interface AgentsSectionProps {
   title: string;
@@ -57,10 +57,11 @@ export default function AgentsNavigationPage() {
     searchInputRef.current?.focus();
   });
 
-  const filters = useAgentFilters(agents);
+  const { filtered: agentsFilteredByFilters, filterBar } =
+    useAgentsFilters(agents);
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
-    return agents.filter((agent) => {
+    return agentsFilteredByFilters.filter((agent) => {
       const nameMatches = agent.name
         .toLowerCase()
         .includes(searchQuery.toLowerCase());
@@ -78,11 +79,10 @@ export default function AgentsNavigationPage() {
         (nameMatches || labelMatches) &&
         mineFilter &&
         isNotUnifiedAgent &&
-        listedFilter &&
-        filters.matchesFilters(agent)
+        listedFilter
       );
     });
-  }, [agents, searchQuery, activeTab, user, filters.matchesFilters]);
+  }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
   const featuredAgents = [
     ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.is_featured),
@@ -135,7 +135,7 @@ export default function AgentsNavigationPage() {
               </Tabs>
             </div>
           </div>
-          <div className="flex flex-row gap-2">{filters.filterBar}</div>
+          <div className="flex flex-row gap-2">{filterBar}</div>
         </div>
       </SettingsLayouts.Header>
 
