@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Table, createTableColumns, FilterButton } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -21,6 +21,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LineItemButton } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import useFilter from "@/hooks/useFilter";
+import useMcpServers from "@/hooks/useMcpServers";
 import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
@@ -177,12 +178,8 @@ export default function AgentsTable() {
     new Set()
   );
 
-  // MCP server names — fetched once for the filter dropdown
-  const [mcpServerNames, setMcpServerNames] = useState<Map<number, string>>(
-    new Map()
-  );
-
   const { personas, isLoading, error, refresh } = useAdminPersonas();
+  const { mcpData } = useMcpServers();
 
   const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
@@ -191,37 +188,13 @@ export default function AgentsTable() {
     [personas]
   );
 
-  // Collect all MCP server IDs referenced by agents, then fetch names
-  const mcpServerIds = useMemo(() => {
-    const ids = new Set<number>();
-    allAgentRows.forEach((agent) => {
-      agent.tools.forEach((tool) => {
-        if (tool.mcp_server_id != null) ids.add(tool.mcp_server_id);
-      });
-    });
-    return ids;
-  }, [allAgentRows]);
-
-  useEffect(() => {
-    if (mcpServerIds.size === 0) return;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/mcp/servers");
-        if (!res.ok) return;
-        const data = await res.json();
-        const names = new Map<number, string>();
-        for (const server of data.mcp_servers ?? []) {
-          if (mcpServerIds.has(server.id)) {
-            names.set(server.id, server.name);
-          }
-        }
-        setMcpServerNames(names);
-      } catch {
-        // Silently fall back to "MCP Server {id}" labels
-      }
-    })();
-  }, [mcpServerIds]);
+  const mcpServerNames = useMemo(() => {
+    const names = new Map<number, string>();
+    for (const server of mcpData?.mcp_servers ?? []) {
+      names.set(server.id, server.name);
+    }
+    return names;
+  }, [mcpData]);
 
   // ---------------------------------------------------------------------------
   // Creator filter data
