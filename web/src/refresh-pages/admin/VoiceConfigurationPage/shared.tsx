@@ -36,7 +36,7 @@ import {
   PROVIDER_VOICE_DOCS_URLS,
   OPENAI_STT_MODELS,
   OPENAI_TTS_MODELS,
-  MODEL_ID_MAP,
+  resolveModelId,
   type ProviderMode,
 } from "@/lib/voice/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -67,7 +67,7 @@ export function VoiceProviderSetupModal({
 }: VoiceProviderSetupModalProps) {
   const onClose = useModalClose();
   const initialTtsModel = defaultModelId
-    ? MODEL_ID_MAP[defaultModelId] ?? "tts-1"
+    ? resolveModelId(defaultModelId)
     : existingProvider?.tts_model ?? "tts-1";
 
   const isEditing = !!existingProvider;
@@ -163,8 +163,12 @@ export function VoiceProviderSetupModal({
         stt_model: values.stt_model,
         tts_model: values.tts_model,
         default_voice: values.default_voice,
-        activate_stt: mode === "stt",
-        activate_tts: mode === "tts",
+        activate_stt: isEditing
+          ? existingProvider?.is_default_stt ?? false
+          : mode === "stt",
+        activate_tts: isEditing
+          ? existingProvider?.is_default_tts ?? false
+          : mode === "tts",
       });
 
       if (response.ok) {

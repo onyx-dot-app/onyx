@@ -75,9 +75,13 @@ export const OPENAI_TTS_MODELS = [
   { id: "tts-1-hd", name: "TTS-1 HD" },
 ];
 
-/** Map card-level model IDs to actual API model IDs. */
+/** Map card-level model IDs to actual API model IDs.
+ *  IDs not in this map are used as-is (card ID = API ID). */
 export const MODEL_ID_MAP: Record<string, string> = {
-  "tts-1": "tts-1",
-  "tts-1-hd": "tts-1-hd",
   whisper: "whisper-1",
 };
+
+/** Resolve a card-level model ID to the actual API model ID. */
+export function resolveModelId(cardId: string): string {
+  return MODEL_ID_MAP[cardId] ?? cardId;
+}
