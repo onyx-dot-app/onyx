@@ -355,13 +355,19 @@ def _seed_connector_file(
     return storage_id
 
 
-# Both `FileOrigin.CONNECTOR` (pipeline-promoted) and
-# `FileOrigin.CONNECTOR_FILE_UPLOAD` (admin-uploaded via the connector upload
-# API) flow through the same indexing path and land on `Document.file_id`.
-# `_user_can_access_connector_file` must treat them identically.
+# Connector-ingested files have carried several origin stamps over time:
+#   * `FileOrigin.CONNECTOR` — pipeline-promoted during indexing.
+#   * `FileOrigin.CONNECTOR_FILE_UPLOAD` — admin uploads via the connector
+#     upload API (added in #10484).
+#   * `FileOrigin.OTHER` — the pre-#10484 stamp for admin connector uploads.
+#     Files from that era still live in production file stores, so the
+#     preview path must stay backwards-compatible with them.
+# All that matters for access is that a `Document` references the `file_id`;
+# the `FileOrigin` stamp is not consulted by `_user_can_access_connector_file`.
 _CONNECTOR_FILE_ORIGINS = [
     FileOrigin.CONNECTOR,
     FileOrigin.CONNECTOR_FILE_UPLOAD,
+    FileOrigin.OTHER,
 ]
 
 
@@ -372,12 +378,11 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
 ) -> None:
     """Regression test for issue #10472.
 
-    A file ingested by a connector (e.g. the File connector) is served from
-    the file store with `FileOrigin.CONNECTOR`. Admin-uploaded connector
-    files are stored as `FileOrigin.CONNECTOR_FILE_UPLOAD` but flow through
-    the same indexing path. When the owning cc_pair is PUBLIC, any
-    authenticated user must be able to fetch it via
-    `GET /chat/file/{file_id}` — previously this returned 404, breaking
+    Connector-ingested files have carried several `FileOrigin` stamps over
+    time (`CONNECTOR`, `CONNECTOR_FILE_UPLOAD`, or `OTHER` for pre-#10484
+    admin uploads). When the owning cc_pair is PUBLIC, any authenticated
+    user must be able to fetch the file via `GET /chat/file/{file_id}`
+    regardless of origin — previously this returned 404, breaking
     `PreviewModal` with "Failed to load document."."""
     admin_user: DATestUser = UserManager.create(name="connector_admin")
     basic_user: DATestUser = UserManager.create(name="connector_basic")
@@ -417,8 +422,8 @@ def test_connector_file_denied_for_users_without_access(
 ) -> None:
     """Flip side of the regression fix: a connector file backed by a PRIVATE
     cc_pair must NOT be readable by users who have no ACL overlap with the
-    cc_pair, even after the fix. Covers both `CONNECTOR` and
-    `CONNECTOR_FILE_UPLOAD` origins."""
+    cc_pair, even after the fix. Covers every `FileOrigin` stamp the
+    connector file path has used historically."""
     admin_user: DATestUser = UserManager.create(name="priv_connector_admin")
     basic_user: DATestUser = UserManager.create(name="priv_connector_basic")
 

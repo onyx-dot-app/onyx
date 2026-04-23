@@ -213,12 +213,13 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
       session the user owns or a session publicly shared via
       `ChatSessionSharedStatus.PUBLIC`.
-    - The `file_id` is the storage id of a connector-ingested document
-      (`FileOrigin.CONNECTOR` or `FileOrigin.CONNECTOR_FILE_UPLOAD`) whose
-      associated `Document` grants access to this user via the standard
-      ACL. This allows users to preview cited files returned from indexed
-      connector sources (e.g. the `File` connector, or admin-uploaded
-      files via the connector upload API) through `PreviewModal`.
+    - The `file_id` is referenced by a `Document` (via `Document.file_id`)
+      whose ACL grants access to this user. `Document.file_id` is only
+      populated by connector ingestion, so this covers any connector-ingested
+      file regardless of its `FileOrigin` stamp (which has varied over time:
+      `OTHER` pre-#10484, `CONNECTOR_FILE_UPLOAD` post-#10484, and
+      `CONNECTOR` for pipeline-promoted files). Lets users preview cited
+      files from indexed connectors through `PreviewModal`.
     - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
       tool call database entry is added. This the file is there and the FE can
       request it despite us not having the linking tool call. We currently
@@ -288,24 +289,18 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
 def _user_can_access_connector_file(
     file_id: str, user: User, db_session: Session
 ) -> bool:
-    """Grant access when `file_id` corresponds to a connector-ingested file
-    (`FileOrigin.CONNECTOR` or `FileOrigin.CONNECTOR_FILE_UPLOAD`) and the
-    user's ACL overlaps the ACL of at least one `Document` that references
-    that `file_id`. Mirrors the access-control layer applied during retrieval
-    so preview access stays consistent with search result access."""
-    is_connector_file = db_session.query(
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_id == file_id,
-            FileRecord.file_origin.in_(
-                [FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD]
-            ),
-        )
-        .exists()
-    ).scalar()
-    if not is_connector_file:
-        return False
+    """Grant access when `file_id` is referenced by at least one `Document`
+    (via `Document.file_id`) whose ACL overlaps the user's ACL. Mirrors the
+    access-control layer applied during retrieval so preview access stays
+    consistent with search result access.
 
+    Gated on `Document.file_id` rather than `FileRecord.file_origin` because
+    (a) only connector ingestion writes `Document.file_id`, so its presence
+    is itself the signal that the file is connector-ingested, and (b) the
+    origin has varied historically (`OTHER` pre-#10484,
+    `CONNECTOR_FILE_UPLOAD` post-#10484, and `CONNECTOR` for pipeline-
+    promoted files) — any origin filter would either miss legacy files or
+    need to be widened to a grab-bag."""
     document_ids = (
         db_session.execute(select(Document.id).where(Document.file_id == file_id))
         .scalars()
