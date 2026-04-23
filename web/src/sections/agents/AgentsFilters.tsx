@@ -34,6 +34,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import useMcpServers from "@/hooks/useMcpServers";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
+import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
@@ -95,6 +96,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
   const { user } = useUser();
   const { mcpData } = useMcpServers();
   const { tools: allTools } = useAvailableTools();
+  const { data: usersData } = useUsers({ includeApiKeys: false });
 
   // -- Selection state -------------------------------------------------------
 
@@ -117,19 +119,13 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
 
   // -- Creator filter data ---------------------------------------------------
 
-  /** Unique creators derived from the agent list, with the current user first. */
+  /** All users in the organization, with the current user first. */
   const uniqueCreators = useMemo(() => {
-    const creatorsMap = new Map<string, { id: string; email: string }>();
-    agents.forEach((agent) => {
-      if (agent.owner) {
-        creatorsMap.set(agent.owner.id, agent.owner);
-      }
-    });
+    let creators = (usersData?.accepted ?? [])
+      .map((u) => ({ id: u.id, email: u.email }))
+      .sort((a, b) => a.email.localeCompare(b.email));
 
-    let creators = Array.from(creatorsMap.values()).sort((a, b) =>
-      a.email.localeCompare(b.email)
-    );
-
+    // Pin current user to top
     if (user) {
       const hasCurrentUser = creators.some((c) => c.id === user.id);
       if (!hasCurrentUser) {
@@ -144,7 +140,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
     }
 
     return creators;
-  }, [agents, user]);
+  }, [usersData, user]);
 
   const creatorFilter = useFilter(uniqueCreators, (c) => c.email);
 
