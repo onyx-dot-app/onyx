@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests as _requests
+from office365.directory.object_collection import DirectoryObjectCollection
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
@@ -357,10 +358,14 @@ def _get_azuread_groups(
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
 
-    def process_members(members: list[Any]) -> None:
+    def process_members(members: DirectoryObjectCollection) -> None:
         nonlocal groups, user_emails
 
-        for member in members:
+        # iterate `current_page` (the items just loaded by this page) instead of
+        # `members` directly: iterating the collection itself walks pages via
+        # `_get_next().execute_query()`, which re-fires this `page_loaded` callback
+        # and recurses until Python hits its max recursion depth.
+        for member in members.current_page:
             member_data = member.to_json()
             logger.debug(f"Member: {member_data}")
             # Check for user-specific attributes
