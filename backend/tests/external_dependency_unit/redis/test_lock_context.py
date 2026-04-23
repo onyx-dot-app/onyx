@@ -14,7 +14,6 @@ from onyx.redis.lock_context import RedisSharedLockAcquisitionError
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 TEST_LOCK_NAME = "test_shared_lock"
@@ -223,10 +222,12 @@ def test_lock_auto_releases_after_max_time() -> None:
     def second_acquirer() -> None:
         try:
             # Wait longer than max_time_lock_held_s so we definitely get in.
+            # Wait less than the time overrunning_holder sleeps to ensure we get
+            # in due to autoexpiry.
             with redis_shared_lock(
                 lock_name=TEST_LOCK_NAME,
                 max_time_lock_held_s=30.0,
-                wait_for_lock_s=max_time_lock_held_s * 20,
+                wait_for_lock_s=max_time_lock_held_s * 5,
                 logger=logger,
             ):
                 second_acquired.set()

@@ -5,7 +5,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
-
 SEARCH_SETTINGS_URL = f"{API_SERVER_URL}/search-settings"
 
 

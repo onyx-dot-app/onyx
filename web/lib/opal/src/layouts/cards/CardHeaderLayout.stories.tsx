@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Card, Content } from "@opal/layouts";
+import { Card, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -39,42 +39,50 @@ export const Default: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        headerChildren={
-          <Content
+        headerPadding="sm"
+        children={
+          <ContentAction
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
             title="Google Search"
             description="Web search provider"
+            padding="fit"
+            rightChildren={
+              <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
+                Connect
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
-            Connect
-          </Button>
         }
       />
     </div>
   ),
 };
 
-export const WithBothSlots: Story = {
+export const WithBottomRightSlot: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        headerChildren={
-          <Content
+        headerPadding="sm"
+        children={
+          <ContentAction
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
             title="Google Search"
             description="Currently the default provider."
+            padding="fit"
+            rightChildren={
+              <Button
+                variant="action"
+                prominence="tertiary"
+                icon={SvgCheckSquare}
+              >
+                Current Default
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
-            Current Default
-          </Button>
         }
         bottomRightChildren={
           <>
@@ -97,40 +105,19 @@ export const WithBothSlots: Story = {
   ),
 };
 
-export const RightChildrenOnly: Story = {
+export const NoRightAction: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="OpenAI"
-            description="Not configured"
-          />
-        }
-        topRightChildren={
-          <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
-            Connect
-          </Button>
-        }
-      />
-    </div>
-  ),
-};
-
-export const NoRightChildren: Story = {
-  render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
+        headerPadding="sm"
+        children={
+          <ContentAction
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
             title="Section Header"
             description="No actions on the right."
+            padding="fit"
           />
         }
       />
@@ -142,19 +129,25 @@ export const LongContent: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
       <Card.Header
-        headerChildren={
-          <Content
+        headerPadding="sm"
+        children={
+          <ContentAction
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
             title="Very Long Provider Name That Should Truncate"
             description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
+            padding="fit"
+            rightChildren={
+              <Button
+                variant="action"
+                prominence="tertiary"
+                icon={SvgCheckSquare}
+              >
+                Current Default
+              </Button>
+            }
           />
-        }
-        topRightChildren={
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
-            Current Default
-          </Button>
         }
         bottomRightChildren={
           <>

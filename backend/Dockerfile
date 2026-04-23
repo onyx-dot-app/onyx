@@ -12,7 +12,7 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 ARG ENABLE_CRAFT=false
 
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV DANSWER_RUNNING_IN_DOCKER="true" \
+ENV ONYX_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 

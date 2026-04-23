@@ -29,7 +29,7 @@ async function Page() {
         icon={route.icon}
         title="New Standard Answer"
         backButton
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <StandardAnswerCreationForm

@@ -14,8 +14,11 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -42,11 +45,11 @@ from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
-
 
 logger = setup_logger()
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
@@ -859,3 +862,54 @@ def create_tool_call_failure_messages(
         messages.append(failure_response_msg)
 
     return messages
+
+
+def build_python_chat_files_from_search_docs(
+    search_docs: list[SearchDoc],
+) -> list[ChatFile]:
+    """Turn each eligible search hit into a ready-to-upload `ChatFile`.
+    The associated file needs to have been uploaded to the file store
+    by a Connector.
+    """
+    if not search_docs:
+        return []
+
+    file_store = get_default_file_store()
+
+    chat_files: list[ChatFile] = []
+    seen_file_ids: set[str] = set()
+    for doc in search_docs:
+        if not doc.file_id or doc.file_id in seen_file_ids:
+            continue
+        seen_file_ids.add(doc.file_id)
+
+        try:
+            record = file_store.read_file_record(doc.file_id)
+        except Exception as e:
+            logger.warning(
+                f"file_id={doc.file_id!r} not found in file store ({e}); skipping."
+            )
+            continue
+
+        if record.file_origin not in (
+            FileOrigin.CONNECTOR,
+            FileOrigin.CONNECTOR_FILE_UPLOAD,
+        ):
+            logger.warning(
+                f"file_id={doc.file_id!r} has origin={record.file_origin!r}, "
+                "not eligible for code-interpreter staging; skipping."
+            )
+            continue
+
+        try:
+            content = file_store.read_file(doc.file_id, mode="b").read()
+        except Exception as e:
+            logger.warning(
+                f"Failed to read bytes for file_id={doc.file_id!r}: {e}; skipping."
+            )
+            continue
+
+        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
+        chat_files.append(ChatFile(filename=filename, content=content))
+
+    return chat_files

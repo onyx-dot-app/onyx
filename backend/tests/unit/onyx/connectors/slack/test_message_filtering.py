@@ -6,7 +6,6 @@ from onyx.connectors.slack.connector import SlackConnector
 from onyx.connectors.slack.connector import SlackMessageFilterReason
 from onyx.connectors.slack.models import MessageType
 
-
 # -- default_msg_filter tests --
 
 

@@ -20,7 +20,6 @@ from onyx.connectors.models import OnyxMetadata
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 
-
 T = TypeVar("T")
 U = TypeVar("U")
 logger = setup_logger()

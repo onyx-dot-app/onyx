@@ -6,9 +6,7 @@ from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rl_requests,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

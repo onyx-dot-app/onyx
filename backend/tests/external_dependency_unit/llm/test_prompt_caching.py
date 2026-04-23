@@ -23,7 +23,6 @@ from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
-
 VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
 VERTEX_LOCATION_ENV = "VERTEX_LOCATION"
 VERTEX_MODEL_ENV = "VERTEX_MODEL_NAME"
@@ -443,6 +442,7 @@ def test_google_genai_prompt_caching_reduces_costs(
     """
     import random
     import string
+
     from litellm import exceptions as litellm_exceptions
 
     try:

@@ -17,6 +17,7 @@
     "types:check": "tsgo --noEmit --project tsconfig.types.json",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "playwright": "playwright test",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -1,7 +1,6 @@
 import json
 import os
 
-
 #####
 # Auto Permission Sync
 #####

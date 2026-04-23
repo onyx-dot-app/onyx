@@ -4,13 +4,13 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
-  ConfluenceIcon,
-  GoogleDriveIcon,
-  GithubIcon,
-  NotionIcon,
-  ColorSlackIcon,
-  HubSpotIcon,
-} from "@/components/icons/icons";
+  SvgConfluence,
+  SvgGithub,
+  SvgGoogleDrive,
+  SvgHubspot,
+  SvgNotion,
+  SvgSlack,
+} from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
@@ -71,19 +71,19 @@ export default function ConnectDataBanner({
           {/* Outermost - no movement */}
           <div>
             <IconWrapper>
-              <ColorSlackIcon size={16} />
+              <SvgSlack size={16} />
             </IconWrapper>
           </div>
           {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:translate-x-2">
             <IconWrapper>
-              <GoogleDriveIcon size={16} />
+              <SvgGoogleDrive size={16} />
             </IconWrapper>
           </div>
           {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:translate-x-4">
             <IconWrapper>
-              <ConfluenceIcon size={16} />
+              <SvgConfluence size={16} />
             </IconWrapper>
           </div>
         </div>
@@ -101,19 +101,19 @@ export default function ConnectDataBanner({
           {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:-translate-x-4">
             <IconWrapper>
-              <GithubIcon size={16} />
+              <SvgGithub size={16} />
             </IconWrapper>
           </div>
           {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:-translate-x-2">
             <IconWrapper>
-              <NotionIcon size={16} />
+              <SvgNotion size={16} />
             </IconWrapper>
           </div>
           {/* Outermost - no movement */}
           <div>
             <IconWrapper>
-              <HubSpotIcon size={16} />
+              <SvgHubspot size={16} />
             </IconWrapper>
           </div>
         </div>

@@ -1,7 +1,7 @@
-import React, { useState, ReactNode, forwardRef } from "react";
-import { Folder } from "./interfaces";
+import { useState, ReactNode, forwardRef } from "react";
+import { Folder } from "@/app/app/components/folders/interfaces";
 import { ChatSession } from "@/app/app/interfaces";
-import { Caret } from "@/components/icons/icons";
+import { SvgChevronRight } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
 interface FolderDropdownProps {
@@ -44,11 +44,10 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
               className="flex overflow-hidden bg-background-sidebar dark:bg-[#000] items-center flex-grow"
               onClick={() => setIsOpen(!isOpen)}
             >
-              {isOpen ? (
-                <Caret size={16} className="mr-1" />
-              ) : (
-                <Caret size={16} className="-rotate-90 mr-1" />
-              )}
+              <SvgChevronRight
+                size={16}
+                className={cn("mr-1 transition-all", isOpen && "rotate-90")}
+              />
               <div className="flex items-center">
                 <span className="text-sm font-[500]">{folder.folder_name}</span>
               </div>

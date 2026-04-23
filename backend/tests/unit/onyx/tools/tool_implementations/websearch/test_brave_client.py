@@ -8,9 +8,7 @@ import requests
 from fastapi import HTTPException
 
 import onyx.tools.tool_implementations.web_search.clients.brave_client as brave_module
-from onyx.tools.tool_implementations.web_search.clients.brave_client import (
-    BraveClient,
-)
+from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 
 
 class DummyResponse:

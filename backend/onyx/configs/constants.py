@@ -4,7 +4,6 @@ import socket
 from enum import auto
 from enum import Enum
 
-
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
 ONYX_UTM_SOURCE = "onyx_app"
@@ -374,6 +373,7 @@ class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
+    CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"

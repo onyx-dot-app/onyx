@@ -28,8 +28,8 @@ def redis_shared_lock(
             Will automatically be released after this time. Application code
             running within the context manager must keep this in mind.
         wait_for_lock_s: Time in seconds to wait to acquire the lock. If the
-            lock is not acquired within this time, a RuntimeError will be
-            raised.
+            lock is not acquired within this time, a
+            RedisSharedLockAcquisitionError will be raised.
         logger: Logger to use for logging.
 
     Raises:
@@ -41,6 +41,7 @@ def redis_shared_lock(
     """
     redis_client = get_shared_redis_client()
     lock: Lock | None = None
+    acquired = False
     start_time = time.monotonic()
     try:
         lock = redis_client.lock(
@@ -58,14 +59,19 @@ def redis_shared_lock(
                 f"Timed out waiting to acquire Redis lock {lock_name} after {time.monotonic() - start_time:.3f} seconds."
             )
         else:
+            acquired = True
             yield lock.local.token
     finally:
-        if lock and lock.owned():
-            lock.release()
-            logger.debug(
-                f"Redis lock {lock_name} released after {time.monotonic() - start_time:.3f} seconds."
-            )
-        else:
-            logger.warning(
-                f"Redis lock {lock_name} was not owned on exit. The lock context manager took {time.monotonic() - start_time:.3f} seconds."
-            )
+        if acquired:
+            assert (
+                lock is not None
+            ), "[BUG] Redis lock should have been initialized by now."
+            if lock.owned():
+                lock.release()
+                logger.debug(
+                    f"Redis lock {lock_name} released after {time.monotonic() - start_time:.3f} seconds."
+                )
+            else:
+                logger.warning(
+                    f"Redis lock {lock_name} was not owned on exit. The lock context manager took {time.monotonic() - start_time:.3f} seconds."
+                )
