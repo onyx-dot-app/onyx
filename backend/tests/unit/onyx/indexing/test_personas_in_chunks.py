@@ -118,7 +118,9 @@ def _run_adapter_build(
 ) -> list[DocMetadataAwareIndexChunk]:
     """Helper that runs UserFileIndexingAdapter.prepare_enrichment + enrich_chunk
     with all external dependencies mocked."""
-    from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
+    from onyx.indexing.adapters.user_file_indexing_adapter import (
+        UserFileIndexingAdapter,
+    )
     from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 
     chunk = _make_index_chunk(doc_id=file_id)

@@ -8,8 +8,12 @@ from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
-from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import build_sheet_descriptor_chunks
-from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import build_total_descriptor_chunks
+from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
+    build_sheet_descriptor_chunks,
+)
+from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
+    build_total_descriptor_chunks,
+)
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens

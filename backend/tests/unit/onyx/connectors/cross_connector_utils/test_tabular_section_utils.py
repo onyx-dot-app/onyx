@@ -6,7 +6,9 @@ import pytest
 from openpyxl.worksheet.worksheet import Worksheet
 
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import tabular_file_to_sections
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 
 
 def _make_xlsx_bytes(sheets: dict[str, list[list[str]]]) -> io.BytesIO:

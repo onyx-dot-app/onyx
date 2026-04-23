@@ -29,10 +29,14 @@ from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_method_specs
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
 from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
-from onyx.tools.tool_implementations.custom.openapi_parsing import validate_openapi_schema
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    validate_openapi_schema,
+)
 from onyx.utils.headers import header_list_to_header_dict
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
@@ -311,7 +315,9 @@ def build_custom_tools_from_openapi_schema_and_headers(
 
 if __name__ == "__main__":
     import openai
-    from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall
+    from openai.types.chat.chat_completion_message_function_tool_call import (
+        ChatCompletionMessageFunctionToolCall,
+    )
 
     openapi_schema = {
         "openapi": "3.0.0",

@@ -23,7 +23,9 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.db.external_perm import mark_old_external_groups_as_stale
 from ee.onyx.db.external_perm import remove_stale_external_groups
 from ee.onyx.db.external_perm import upsert_external_groups
-from ee.onyx.external_permissions.sync_params import get_all_cc_pair_agnostic_group_sync_sources
+from ee.onyx.external_permissions.sync_params import (
+    get_all_cc_pair_agnostic_group_sync_sources,
+)
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
@@ -56,7 +58,9 @@ from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSyncPayload
+from onyx.redis.redis_connector_ext_group_sync import (
+    RedisConnectorExternalGroupSyncPayload,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active

@@ -63,7 +63,9 @@ def test_file_reader_tool_available(vector_db_disabled: bool) -> None:
         "onyx.tools.tool_implementations.file_reader.file_reader_tool.DISABLE_VECTOR_DB",
         vector_db_disabled,
     ):
-        from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
+        from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+            FileReaderTool,
+        )
 
         db_session = MagicMock(spec=Session)
         assert FileReaderTool.is_available(db_session) is vector_db_disabled

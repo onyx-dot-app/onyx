@@ -10,7 +10,9 @@ from unittest.mock import patch
 
 from onyx.tools.models import ChatFile
 from onyx.tools.models import PythonToolOverrideKwargs
-from onyx.tools.tool_implementations.python.code_interpreter_client import StreamResultEvent
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamResultEvent,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 
 TOOL_MODULE = "onyx.tools.tool_implementations.python.python_tool"

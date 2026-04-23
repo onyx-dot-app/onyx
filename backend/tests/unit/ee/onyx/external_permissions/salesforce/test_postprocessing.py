@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from ee.onyx.external_permissions.salesforce.postprocessing import censor_salesforce_chunks
+from ee.onyx.external_permissions.salesforce.postprocessing import (
+    censor_salesforce_chunks,
+)
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH

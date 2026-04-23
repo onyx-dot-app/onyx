@@ -3,7 +3,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import oneoff_standard_answers
+from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
+    oneoff_standard_answers,
+)
 from ee.onyx.server.query_and_chat.models import StandardAnswerRequest
 from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
 from onyx.auth.permissions import require_permission

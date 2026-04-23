@@ -51,7 +51,9 @@ from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
 from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import GoogleOAuthAuthenticationMethod
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleOAuthAuthenticationMethod,
+)
 from onyx.db.connector import create_connector
 from onyx.db.connector import delete_connector
 from onyx.db.connector import fetch_connector_by_id
@@ -61,11 +63,15 @@ from onyx.db.connector import get_connector_credential_ids
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import fetch_connector_credential_pair_for_connector
+from onyx.db.connector_credential_pair import (
+    fetch_connector_credential_pair_for_connector,
+)
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user_parallel
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pairs_for_user_parallel,
+)
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials

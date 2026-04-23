@@ -30,7 +30,9 @@ from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from ee.onyx.external_permissions.perm_sync_types import GroupSyncFuncType
-from ee.onyx.external_permissions.salesforce.postprocessing import censor_salesforce_chunks
+from ee.onyx.external_permissions.salesforce.postprocessing import (
+    censor_salesforce_chunks,
+)
 from ee.onyx.external_permissions.sharepoint.doc_sync import sharepoint_doc_sync
 from ee.onyx.external_permissions.sharepoint.group_sync import sharepoint_group_sync
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync

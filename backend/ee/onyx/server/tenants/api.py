@@ -5,8 +5,12 @@ from ee.onyx.server.tenants.anonymous_users_api import router as anonymous_users
 from ee.onyx.server.tenants.billing_api import router as billing_router
 from ee.onyx.server.tenants.proxy import router as proxy_router
 from ee.onyx.server.tenants.team_membership_api import router as team_membership_router
-from ee.onyx.server.tenants.tenant_management_api import router as tenant_management_router
-from ee.onyx.server.tenants.user_invitations_api import router as user_invitations_router
+from ee.onyx.server.tenants.tenant_management_api import (
+    router as tenant_management_router,
+)
+from ee.onyx.server.tenants.user_invitations_api import (
+    router as user_invitations_router,
+)
 
 # Create a main router to include all sub-routers
 # Note: We don't add a prefix here as each router already has the /tenants prefix

@@ -10,7 +10,9 @@ from onyx.chat.emitter import Emitter
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDocsResponse
-from onyx.context.search.preprocessing.access_filters import build_access_filters_for_user
+from onyx.context.search.preprocessing.access_filters import (
+    build_access_filters_for_user,
+)
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.document import fetch_document_ids_by_links
@@ -29,11 +31,19 @@ from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
-from onyx.tools.tool_implementations.open_url.url_normalization import _default_url_normalizer
+from onyx.tools.tool_implementations.open_url.url_normalization import (
+    _default_url_normalizer,
+)
 from onyx.tools.tool_implementations.open_url.url_normalization import normalize_url
-from onyx.tools.tool_implementations.open_url.utils import filter_web_contents_with_no_title_or_content
-from onyx.tools.tool_implementations.web_search.providers import get_default_content_provider
-from onyx.tools.tool_implementations.web_search.utils import inference_section_from_internet_page_scrape
+from onyx.tools.tool_implementations.open_url.utils import (
+    filter_web_contents_with_no_title_or_content,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    get_default_content_provider,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
+    inference_section_from_internet_page_scrape,
+)
 from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel

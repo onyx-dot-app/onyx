@@ -8,7 +8,9 @@ from onyx.db.models import SearchSettings
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
 from onyx.document_index.disabled import DisabledDocumentIndex
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.opensearch.opensearch_document_index import OpenSearchOldDocumentIndex
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchOldDocumentIndex,
+)
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from shared_configs.configs import MULTI_TENANT

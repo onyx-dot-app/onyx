@@ -28,7 +28,9 @@ from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.docfetching.task_creation_utils import try_creating_docfetching_task
+from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    try_creating_docfetching_task,
+)
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
@@ -36,7 +38,9 @@ from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_erro
 from onyx.background.celery.tasks.docprocessing.utils import should_index
 from onyx.background.celery.tasks.models import DocProcessingContext
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
-from onyx.background.indexing.checkpointing_utils import get_index_attempts_with_old_checkpoints
+from onyx.background.indexing.checkpointing_utils import (
+    get_index_attempts_with_old_checkpoints,
+)
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
 from onyx.configs.app_configs import AUTH_TYPE
@@ -58,7 +62,9 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector_credential_pair import fetch_indexable_standard_connector_credential_pair_ids
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_standard_connector_credential_pair_ids,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
@@ -91,7 +97,9 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.indexing.adapters.document_indexing_adapter import DocumentIndexingBatchAdapter
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel

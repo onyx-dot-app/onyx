@@ -18,14 +18,18 @@ from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.models import RetrievedDriveFile
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval_with_max_pages
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval_with_max_pages,
+)
 from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
 from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()

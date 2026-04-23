@@ -31,8 +31,12 @@ from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentSet__ConnectorCredentialPair
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.permission_sync_attempt import delete_doc_permission_sync_attempts__no_commit
-from onyx.db.permission_sync_attempt import delete_external_group_permission_sync_attempts__no_commit
+from onyx.db.permission_sync_attempt import (
+    delete_doc_permission_sync_attempts__no_commit,
+)
+from onyx.db.permission_sync_attempt import (
+    delete_external_group_permission_sync_attempts__no_commit,
+)
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.file_store.file_store import get_default_file_store

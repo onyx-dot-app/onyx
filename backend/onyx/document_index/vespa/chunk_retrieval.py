@@ -11,8 +11,12 @@ from typing import cast
 import httpx
 from retry import retry
 
-from onyx.background.celery.tasks.opensearch_migration.constants import FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
-from onyx.background.celery.tasks.opensearch_migration.transformer import FIELDS_NEEDED_FOR_TRANSFORMATION
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
+)
+from onyx.background.celery.tasks.opensearch_migration.transformer import (
+    FIELDS_NEEDED_FOR_TRANSFORMATION,
+)
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
@@ -22,8 +26,12 @@ from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_vespa_filters
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_vespa_id_based_retrieval_yql
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_vespa_filters,
+)
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_vespa_id_based_retrieval_yql,
+)
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST

@@ -10,7 +10,9 @@ from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.document_acl import get_all_connector_documents
 from tests.integration.common_utils.document_acl import get_user_document_access_via_acl
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.connector_job_tests.github.conftest import GitHubTestEnvSetupTuple
+from tests.integration.connector_job_tests.github.conftest import (
+    GitHubTestEnvSetupTuple,
+)
 from tests.integration.connector_job_tests.github.utils import GitHubManager
 
 logger = setup_logger()

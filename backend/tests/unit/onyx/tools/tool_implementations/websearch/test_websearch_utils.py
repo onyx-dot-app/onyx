@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from onyx.tools.tool_implementations.open_url.models import WebContent
-from onyx.tools.tool_implementations.web_search.utils import inference_section_from_internet_page_scrape
+from onyx.tools.tool_implementations.web_search.utils import (
+    inference_section_from_internet_page_scrape,
+)
 
 CONTENT_FILE = Path(__file__).parent / "data" / "tartan.txt"
 

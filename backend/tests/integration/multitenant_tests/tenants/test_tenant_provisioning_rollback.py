@@ -44,7 +44,9 @@ class TestTenantProvisioningRollback:
         setup_tenant fails, rollback is called, but drop_schema was broken
         (isidentifier rejected UUIDs with hyphens), leaving orphaned schemas.
         """
-        from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import pre_provision_tenant
+        from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
+            pre_provision_tenant,
+        )
 
         # Track which tenant_id gets created
         created_tenant_id = None

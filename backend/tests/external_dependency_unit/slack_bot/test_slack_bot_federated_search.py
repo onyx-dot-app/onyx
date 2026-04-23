@@ -816,7 +816,9 @@ def test_slack_channel_config_eager_loads_persona(db_session: Session) -> None:
     This prevents lazy loading failures when the session context changes later
     in the request handling flow (e.g., in handle_regular_answer).
     """
-    from onyx.db.slack_channel_config import fetch_slack_channel_config_for_channel_or_default
+    from onyx.db.slack_channel_config import (
+        fetch_slack_channel_config_for_channel_or_default,
+    )
 
     unique_id = str(uuid4())[:8]
 

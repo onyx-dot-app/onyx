@@ -28,7 +28,9 @@ from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.base import ACPEvent
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import KubernetesSandboxManager
+from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
+    KubernetesSandboxManager,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

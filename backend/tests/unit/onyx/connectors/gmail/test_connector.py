@@ -15,7 +15,9 @@ from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.gmail.connector import thread_to_document
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector_from_checkpoint
+from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector_from_checkpoint,
+)
 
 
 def test_thread_to_document() -> None:

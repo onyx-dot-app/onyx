@@ -11,10 +11,16 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    CodeInterpreterClient,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations.python.code_interpreter_client import StreamOutputEvent
-from onyx.tools.tool_implementations.python.code_interpreter_client import StreamResultEvent
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamOutputEvent,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    StreamResultEvent,
+)
 
 
 def _make_batch_response(

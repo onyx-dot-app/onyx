@@ -22,7 +22,9 @@ from onyx.db.models import Credential
 from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import get_doc_permission_sync_attempt
-from onyx.db.permission_sync_attempt import get_recent_doc_permission_sync_attempts_for_cc_pair
+from onyx.db.permission_sync_attempt import (
+    get_recent_doc_permission_sync_attempts_for_cc_pair,
+)
 from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
 from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_in_progress
 from tests.external_dependency_unit.conftest import create_test_user

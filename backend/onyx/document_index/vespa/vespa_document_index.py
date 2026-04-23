@@ -45,8 +45,12 @@ from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.utils import replace_invalid_doc_id_characters
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_vespa_filters
+from onyx.document_index.vespa.shared_utils.utils import (
+    replace_invalid_doc_id_characters,
+)
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_vespa_filters,
+)
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY

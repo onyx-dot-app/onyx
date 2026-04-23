@@ -6,7 +6,9 @@ from sqlalchemy.exc import IntegrityError
 
 from ee.onyx.auth.users import generate_anonymous_user_jwt_token
 from ee.onyx.server.tenants.anonymous_user_path import get_anonymous_user_path
-from ee.onyx.server.tenants.anonymous_user_path import get_tenant_id_for_anonymous_user_path
+from ee.onyx.server.tenants.anonymous_user_path import (
+    get_tenant_id_for_anonymous_user_path,
+)
 from ee.onyx.server.tenants.anonymous_user_path import modify_anonymous_user_path
 from ee.onyx.server.tenants.anonymous_user_path import validate_anonymous_user_path
 from ee.onyx.server.tenants.models import AnonymousUserPath

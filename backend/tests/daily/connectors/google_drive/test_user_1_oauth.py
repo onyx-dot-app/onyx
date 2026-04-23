@@ -7,9 +7,15 @@ from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import _clear_parents
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import assert_expected_docs_in_retrieved_docs
-from tests.daily.connectors.google_drive.consts_and_utils import assert_hierarchy_nodes_match_expected
-from tests.daily.connectors.google_drive.consts_and_utils import DONWLOAD_REVOKED_FILE_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_expected_docs_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    DONWLOAD_REVOKED_FILE_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
@@ -19,10 +25,18 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
-from tests.daily.connectors.google_drive.consts_and_utils import get_expected_hierarchy_for_test_user_1
-from tests.daily.connectors.google_drive.consts_and_utils import get_expected_hierarchy_for_test_user_1_my_drive_only
-from tests.daily.connectors.google_drive.consts_and_utils import get_expected_hierarchy_for_test_user_1_shared_drives_only
-from tests.daily.connectors.google_drive.consts_and_utils import get_expected_hierarchy_for_test_user_1_shared_with_me_only
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_my_drive_only,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_shared_drives_only,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_shared_with_me_only,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID

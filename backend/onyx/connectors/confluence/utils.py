@@ -18,7 +18,9 @@ from urllib.parse import urlparse
 import requests
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+)
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
 from onyx.file_processing.extract_file_text import extract_file_text

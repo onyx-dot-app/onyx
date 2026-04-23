@@ -55,13 +55,17 @@ from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
-from onyx.context.search.preprocessing.access_filters import build_access_filters_for_user
+from onyx.context.search.preprocessing.access_filters import (
+    build_access_filters_for_user,
+)
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.federated import get_federated_connector_document_set_mappings_by_document_set_names
+from onyx.db.federated import (
+    get_federated_connector_document_set_mappings_by_document_set_names,
+)
 from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
@@ -69,7 +73,9 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
-from onyx.federated_connectors.federated_retrieval import get_federated_retrieval_functions
+from onyx.federated_connectors.federated_retrieval import (
+    get_federated_retrieval_functions,
+)
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -93,10 +99,18 @@ from onyx.tools.tool_implementations.search.constants import LLM_NON_CUSTOM_QUER
 from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
-from onyx.tools.tool_implementations.search.search_utils import expand_section_with_context
-from onyx.tools.tool_implementations.search.search_utils import merge_overlapping_sections
-from onyx.tools.tool_implementations.search.search_utils import weighted_reciprocal_rank_fusion
-from onyx.tools.tool_implementations.utils import convert_inference_sections_to_llm_string
+from onyx.tools.tool_implementations.search.search_utils import (
+    expand_section_with_context,
+)
+from onyx.tools.tool_implementations.search.search_utils import (
+    merge_overlapping_sections,
+)
+from onyx.tools.tool_implementations.search.search_utils import (
+    weighted_reciprocal_rank_fusion,
+)
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time

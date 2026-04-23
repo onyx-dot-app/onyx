@@ -15,7 +15,9 @@ from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.document import DocumentManager
-from tests.integration.common_utils.managers.image_generation import ImageGenerationConfigManager
+from tests.integration.common_utils.managers.image_generation import (
+    ImageGenerationConfigManager,
+)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD

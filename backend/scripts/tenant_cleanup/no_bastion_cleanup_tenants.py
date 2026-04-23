@@ -30,7 +30,9 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_background_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_worker_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import read_tenant_ids_from_csv
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import TenantNotFoundInControlPlaneError
+from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
+)
 
 # Global lock for thread-safe operations
 _print_lock: Lock = Lock()

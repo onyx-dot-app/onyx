@@ -9,7 +9,9 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.vespa.shared_utils.utils import replace_invalid_doc_id_characters
+from onyx.document_index.vespa.shared_utils.utils import (
+    replace_invalid_doc_id_characters,
+)
 from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance

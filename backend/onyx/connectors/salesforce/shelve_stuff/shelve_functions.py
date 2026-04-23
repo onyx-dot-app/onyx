@@ -1,10 +1,14 @@
 import csv
 import shelve
 
-from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_child_to_parent_shelf_path
+from onyx.connectors.salesforce.shelve_stuff.shelve_utils import (
+    get_child_to_parent_shelf_path,
+)
 from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_id_type_shelf_path
 from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_object_shelf_path
-from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_parent_to_child_shelf_path
+from onyx.connectors.salesforce.shelve_stuff.shelve_utils import (
+    get_parent_to_child_shelf_path,
+)
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger

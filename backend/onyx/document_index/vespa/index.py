@@ -34,7 +34,9 @@ from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord as OldDocumentInsertionRecord
+from onyx.document_index.interfaces import (
+    DocumentInsertionRecord as OldDocumentInsertionRecord,
+)
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
@@ -50,7 +52,9 @@ from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_exist
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_vespa_filters
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_vespa_filters,
+)
 from onyx.document_index.vespa.vespa_document_index import TenantState
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.document_index.vespa_constants import BATCH_SIZE

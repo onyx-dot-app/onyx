@@ -30,9 +30,13 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import SearchToolUsage
-from onyx.tools.tool_implementations.custom.custom_tool import build_custom_tools_from_openapi_schema_and_headers
+from onyx.tools.tool_implementations.custom.custom_tool import (
+    build_custom_tools_from_openapi_schema_and_headers,
+)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
-from onyx.tools.tool_implementations.images.image_generation_tool import ImageGenerationTool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool

@@ -11,7 +11,9 @@ from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
-from onyx.server.manage.embedding.models import CloudEmbeddingProvider as ServerCloudEmbeddingProvider
+from onyx.server.manage.embedding.models import (
+    CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 from shared_configs.enums import EmbeddingProvider

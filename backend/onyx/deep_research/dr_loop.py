@@ -37,8 +37,12 @@ from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER
 from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER_TOKENS
-from onyx.prompts.deep_research.orchestration_layer import INTERNAL_SEARCH_CLARIFICATION_GUIDANCE
-from onyx.prompts.deep_research.orchestration_layer import INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE
+from onyx.prompts.deep_research.orchestration_layer import (
+    INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
+)
+from onyx.prompts.deep_research.orchestration_layer import (
+    INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE,
+)
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT_REASONING
 from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_PROMPT

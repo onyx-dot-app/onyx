@@ -88,7 +88,9 @@ from typing import cast
 from typing import List
 from typing import Optional
 
-from litellm.completion_extras.litellm_responses_transformation.transformation import LiteLLMResponsesTransformationHandler
+from litellm.completion_extras.litellm_responses_transformation.transformation import (
+    LiteLLMResponsesTransformationHandler,
+)
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
@@ -570,7 +572,9 @@ def _patch_azure_responses_should_fake_stream() -> None:
     Azure's Responses API supports native streaming, so we override this to always use
     real streaming (SyncResponsesAPIStreamingIterator).
     """
-    from litellm.llms.azure.responses.transformation import AzureOpenAIResponsesAPIConfig
+    from litellm.llms.azure.responses.transformation import (
+        AzureOpenAIResponsesAPIConfig,
+    )
 
     if (
         getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")

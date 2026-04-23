@@ -57,7 +57,9 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
-from onyx.db.hierarchy import update_hierarchy_node_permissions as db_update_hierarchy_node_permissions
+from onyx.db.hierarchy import (
+    update_hierarchy_node_permissions as db_update_hierarchy_node_permissions,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt

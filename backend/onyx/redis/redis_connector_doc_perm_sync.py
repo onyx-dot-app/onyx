@@ -15,7 +15,9 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
-from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_db_update_duration
+from onyx.server.metrics.perm_sync_metrics import (
+    observe_doc_perm_sync_db_update_duration,
+)
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 

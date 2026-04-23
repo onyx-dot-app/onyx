@@ -23,7 +23,9 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import ConnectionErrorRetryHandler
 from slack_sdk.http_retry import RetryHandler
-from slack_sdk.http_retry.builtin_interval_calculators import FixedValueRetryIntervalCalculator
+from slack_sdk.http_retry.builtin_interval_calculators import (
+    FixedValueRetryIntervalCalculator,
+)
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess

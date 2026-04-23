@@ -22,7 +22,9 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from tests.external_dependency_unit.answer.stream_test_assertions import assert_answer_stream_part_correct
+from tests.external_dependency_unit.answer.stream_test_assertions import (
+    assert_answer_stream_part_correct,
+)
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
 from tests.external_dependency_unit.answer.stream_test_utils import submit_query
 from tests.external_dependency_unit.answer.stream_test_utils import tokenise

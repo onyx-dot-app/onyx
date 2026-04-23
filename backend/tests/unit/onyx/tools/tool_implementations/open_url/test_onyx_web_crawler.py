@@ -8,8 +8,12 @@ import pytest
 from pydantic import BaseModel
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import DEFAULT_CONNECT_TIMEOUT_SECONDS
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import DEFAULT_READ_TIMEOUT_SECONDS
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_CONNECT_TIMEOUT_SECONDS,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_READ_TIMEOUT_SECONDS,
+)
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 
 

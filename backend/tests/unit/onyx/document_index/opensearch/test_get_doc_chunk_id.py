@@ -3,7 +3,9 @@ import pytest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.string_filtering import MAX_DOCUMENT_ID_ENCODED_LENGTH
+from onyx.document_index.opensearch.string_filtering import (
+    MAX_DOCUMENT_ID_ENCODED_LENGTH,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 SINGLE_TENANT_STATE = TenantState(

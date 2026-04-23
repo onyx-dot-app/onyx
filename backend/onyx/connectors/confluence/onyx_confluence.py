@@ -34,7 +34,9 @@ from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
 from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.connectors.confluence.models import ConfluenceUser
-from onyx.connectors.confluence.user_profile_override import process_confluence_user_profiles_override
+from onyx.connectors.confluence.user_profile_override import (
+    process_confluence_user_profiles_override,
+)
 from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url

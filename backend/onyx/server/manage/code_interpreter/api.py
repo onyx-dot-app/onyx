@@ -10,7 +10,9 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.manage.code_interpreter.models import CodeInterpreterServer
 from onyx.server.manage.code_interpreter.models import CodeInterpreterServerHealth
-from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    CodeInterpreterClient,
+)
 
 admin_router = APIRouter(prefix="/admin/code-interpreter")
 

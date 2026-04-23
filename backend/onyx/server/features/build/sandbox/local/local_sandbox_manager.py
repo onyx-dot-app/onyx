@@ -28,7 +28,9 @@ from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
 from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.local.process_manager import ProcessManager
-from onyx.server.features.build.sandbox.manager.directory_manager import DirectoryManager
+from onyx.server.features.build.sandbox.manager.directory_manager import (
+    DirectoryManager,
+)
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
@@ -1131,7 +1133,9 @@ class LocalSandboxManager(SandboxManager):
         Called after uploading a file. Only adds the section if it doesn't exist.
         Inserts the section above ## Skills for better document flow.
         """
-        from onyx.server.features.build.sandbox.util.agent_instructions import ATTACHMENTS_SECTION_CONTENT
+        from onyx.server.features.build.sandbox.util.agent_instructions import (
+            ATTACHMENTS_SECTION_CONTENT,
+        )
 
         agents_md_path = session_path / "AGENTS.md"
         if not agents_md_path.exists():

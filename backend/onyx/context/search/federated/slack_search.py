@@ -25,7 +25,9 @@ from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
 from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
 from onyx.context.search.federated.slack_search_utils import build_slack_queries
 from onyx.context.search.federated.slack_search_utils import get_channel_type
-from onyx.context.search.federated.slack_search_utils import get_channel_type_for_missing_scope
+from onyx.context.search.federated.slack_search_utils import (
+    get_channel_type_for_missing_scope,
+)
 from onyx.context.search.federated.slack_search_utils import is_recency_query
 from onyx.context.search.federated.slack_search_utils import should_include_message
 from onyx.context.search.models import ChunkIndexRequest

@@ -10,12 +10,24 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
-from tests.daily.connectors.google_drive.consts_and_utils import assert_expected_docs_in_retrieved_docs
-from tests.daily.connectors.google_drive.consts_and_utils import assert_hierarchy_nodes_match_expected
-from tests.daily.connectors.google_drive.consts_and_utils import EXTERNAL_SHARED_DOC_SINGLETON
-from tests.daily.connectors.google_drive.consts_and_utils import EXTERNAL_SHARED_DOCS_IN_FOLDER
-from tests.daily.connectors.google_drive.consts_and_utils import EXTERNAL_SHARED_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import EXTERNAL_SHARED_FOLDER_URL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_expected_docs_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_DOC_SINGLETON,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_DOCS_IN_FOLDER,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_URL,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
@@ -29,29 +41,53 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_I
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
-from tests.daily.connectors.google_drive.consts_and_utils import get_expected_hierarchy_for_shared_drives
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_shared_drives,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import id_to_name
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
-from tests.daily.connectors.google_drive.consts_and_utils import MISC_SHARED_DRIVE_FNAMES
-from tests.daily.connectors.google_drive.consts_and_utils import PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID
-from tests.daily.connectors.google_drive.consts_and_utils import PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID
-from tests.daily.connectors.google_drive.consts_and_utils import PERM_SYNC_DRIVE_ADMIN_ONLY_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    MISC_SHARED_DRIVE_FNAMES,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import RESTRICTED_ACCESS_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import RESTRICTED_ACCESS_FOLDER_URL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESTRICTED_ACCESS_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESTRICTED_ACCESS_FOLDER_URL,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_FOLDER_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EXTRA_DRIVE_1_ID
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EXTRA_DRIVE_2_ID
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EXTRA_FOLDER_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_1_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_2_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_FOLDER_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS

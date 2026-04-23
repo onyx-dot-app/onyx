@@ -24,7 +24,9 @@ from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_FENCE
 from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_payload
 from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_remaining
 from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
-from onyx.background.celery.tasks.vespa.document_sync import try_generate_stale_document_sync_tasks
+from onyx.background.celery.tasks.vespa.document_sync import (
+    try_generate_stale_document_sync_tasks,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import VESPA_SYNC_MAX_TASKS
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
@@ -57,7 +59,9 @@ from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import noop_fallback
 

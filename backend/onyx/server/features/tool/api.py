@@ -26,8 +26,12 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_method_specs
-from onyx.tools.tool_implementations.custom.openapi_parsing import validate_openapi_schema
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    validate_openapi_schema,
+)
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")

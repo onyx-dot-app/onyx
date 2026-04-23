@@ -11,7 +11,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
-from ee.onyx.configs.license_enforcement_config import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
+from ee.onyx.configs.license_enforcement_config import (
+    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+)
 from ee.onyx.server.middleware.license_enforcement import _is_ee_only_path
 from ee.onyx.server.middleware.license_enforcement import _is_path_allowed
 from onyx.server.settings.models import ApplicationStatus
@@ -87,7 +89,9 @@ class TestLicenseEnforcementMiddleware:
     @pytest.fixture
     def middleware_harness(self) -> MiddlewareHarness:
         """Create a test harness for the middleware."""
-        from ee.onyx.server.middleware.license_enforcement import add_license_enforcement_middleware
+        from ee.onyx.server.middleware.license_enforcement import (
+            add_license_enforcement_middleware,
+        )
 
         app = MagicMock()
         logger = MagicMock()

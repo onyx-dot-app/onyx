@@ -7,7 +7,9 @@ from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommen
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import model_configurations_for_provider
+from onyx.llm.well_known_providers.llm_provider_options import (
+    model_configurations_for_provider,
+)
 from onyx.llm.well_known_providers.models import SimpleKnownModel
 
 

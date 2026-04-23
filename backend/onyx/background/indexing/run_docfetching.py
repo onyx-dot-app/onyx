@@ -69,7 +69,9 @@ from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
 from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.indexing.persistent_document_writer import get_persistent_document_writer
+from onyx.server.features.build.indexing.persistent_document_writer import (
+    get_persistent_document_writer,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.postgres_sanitization import sanitize_document_for_postgres

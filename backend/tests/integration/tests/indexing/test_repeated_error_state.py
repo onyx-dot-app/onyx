@@ -3,7 +3,9 @@ import uuid
 
 import httpx
 
-from onyx.background.celery.tasks.docprocessing.utils import NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+from onyx.background.celery.tasks.docprocessing.utils import (
+    NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType

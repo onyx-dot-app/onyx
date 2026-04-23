@@ -48,7 +48,9 @@ from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWAR
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.llm_provider_options import get_recommendations
-from onyx.llm.well_known_providers.llm_provider_options import model_configurations_for_provider
+from onyx.llm.well_known_providers.llm_provider_options import (
+    model_configurations_for_provider,
+)
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest

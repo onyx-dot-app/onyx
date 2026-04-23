@@ -1,7 +1,9 @@
 from onyx.configs.app_configs import DEV_MODE
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
-from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 from shared_configs.configs import MULTI_TENANT
 
 

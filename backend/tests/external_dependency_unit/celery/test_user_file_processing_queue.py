@@ -33,9 +33,15 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_lock_key
-from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_queued_key
-from onyx.background.celery.tasks.user_file_processing.tasks import check_user_file_processing
-from onyx.background.celery.tasks.user_file_processing.tasks import process_single_user_file
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    _user_file_queued_key,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    check_user_file_processing,
+)
+from onyx.background.celery.tasks.user_file_processing.tasks import (
+    process_single_user_file,
+)
 from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask

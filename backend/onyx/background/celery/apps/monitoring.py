@@ -88,7 +88,9 @@ def _setup_prometheus_collectors(sender: Any) -> bool:
     Returns True if registration succeeded, False otherwise.
     """
     try:
-        from onyx.server.metrics.indexing_pipeline_setup import setup_indexing_pipeline_metrics
+        from onyx.server.metrics.indexing_pipeline_setup import (
+            setup_indexing_pipeline_metrics,
+        )
 
         setup_indexing_pipeline_metrics(sender.app)
         logger.info("Prometheus indexing pipeline collectors registered")

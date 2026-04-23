@@ -49,10 +49,16 @@ from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import test_llm
-from onyx.llm.well_known_providers.auto_update_service import fetch_llm_recommendations_from_github
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.well_known_providers.llm_provider_options import WellKnownLLMProviderDescriptor
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_available_well_known_llms,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    WellKnownLLMProviderDescriptor,
+)
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import BifrostFinalModelResponse

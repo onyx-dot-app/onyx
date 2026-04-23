@@ -18,12 +18,20 @@ from onyx.configs.constants import KV_GOOGLE_DRIVE_CRED_KEY
 from onyx.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_gmail_service
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_AUTHENTICATION_METHOD
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_AUTHENTICATION_METHOD,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+)
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_PRIMARY_ADMIN_KEY
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+)
 from onyx.connectors.google_utils.shared_constants import GOOGLE_SCOPES
-from onyx.connectors.google_utils.shared_constants import GoogleOAuthAuthenticationMethod
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleOAuthAuthenticationMethod,
+)
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.db.credentials import update_credential_json

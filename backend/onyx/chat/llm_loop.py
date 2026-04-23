@@ -647,7 +647,9 @@ def run_llm_loop(
         },
     ):
         # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import initialize_litellm  # Here for lazy load LiteLLM
+        from onyx.llm.litellm_singleton.config import (
+            initialize_litellm,
+        )  # Here for lazy load LiteLLM
 
         initialize_litellm()
 

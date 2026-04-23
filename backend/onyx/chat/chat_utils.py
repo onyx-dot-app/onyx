@@ -37,7 +37,9 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.file_store.utils import store_plaintext
 from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import populate_missing_default_entity_types__commit
+from onyx.kg.setup.kg_default_entity_definitions import (
+    populate_missing_default_entity_types__commit,
+)
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT

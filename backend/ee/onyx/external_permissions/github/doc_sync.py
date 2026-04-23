@@ -7,7 +7,9 @@ from github.Repository import Repository
 from ee.onyx.external_permissions.github.utils import fetch_repository_team_slugs
 from ee.onyx.external_permissions.github.utils import form_collaborators_group_id
 from ee.onyx.external_permissions.github.utils import form_organization_group_id
-from ee.onyx.external_permissions.github.utils import form_outside_collaborators_group_id
+from ee.onyx.external_permissions.github.utils import (
+    form_outside_collaborators_group_id,
+)
 from ee.onyx.external_permissions.github.utils import get_external_access_permission
 from ee.onyx.external_permissions.github.utils import get_repository_visibility
 from ee.onyx.external_permissions.github.utils import GitHubVisibility

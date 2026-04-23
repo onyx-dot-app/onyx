@@ -4,7 +4,9 @@ from typing import cast
 from PIL import Image
 
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.beat_schedule import CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.beat_schedule import (
+    CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
+)
 from onyx.configs.app_configs import ENABLE_TENANT_WORK_GATING
 from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
 from onyx.configs.app_configs import TENANT_WORK_GATING_TTL_SECONDS

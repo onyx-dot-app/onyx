@@ -51,7 +51,9 @@ def _run_auto_llm_update() -> None:
         return
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.llm.well_known_providers.auto_update_service import sync_llm_models_from_github
+    from onyx.llm.well_known_providers.auto_update_service import (
+        sync_llm_models_from_github,
+    )
 
     with get_session_with_current_tenant() as db_session:
         sync_llm_models_from_github(db_session)

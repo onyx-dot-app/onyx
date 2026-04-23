@@ -224,7 +224,7 @@ exclude = ["backend/generated", "backend/onyx/server/features/build/sandbox/kube
 typeCheckingMode = "off"
 
 [tool.ruff]
-line-length = 130
+line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]

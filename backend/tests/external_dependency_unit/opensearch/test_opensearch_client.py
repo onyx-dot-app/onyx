@@ -24,16 +24,24 @@ from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeo
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
-from onyx.document_index.opensearch.opensearch_document_index import generate_opensearch_filtered_access_control_list
+from onyx.document_index.opensearch.opensearch_document_index import (
+    generate_opensearch_filtered_access_control_list,
+)
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DocumentQuery
-from onyx.document_index.opensearch.search import get_min_max_normalization_pipeline_name_and_config
-from onyx.document_index.opensearch.search import get_normalization_pipeline_name_and_config
-from onyx.document_index.opensearch.search import get_zscore_normalization_pipeline_name_and_config
+from onyx.document_index.opensearch.search import (
+    get_min_max_normalization_pipeline_name_and_config,
+)
+from onyx.document_index.opensearch.search import (
+    get_normalization_pipeline_name_and_config,
+)
+from onyx.document_index.opensearch.search import (
+    get_zscore_normalization_pipeline_name_and_config,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 

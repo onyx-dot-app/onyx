@@ -5,7 +5,9 @@ from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.sharepoint.client_context import ClientContext
 
 from onyx.connectors.models import ExternalAccess
-from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 
 
 def get_sharepoint_external_access(

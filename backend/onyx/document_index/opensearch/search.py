@@ -16,10 +16,18 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
-from onyx.document_index.opensearch.constants import DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
-from onyx.document_index.opensearch.constants import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
-from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_PIPELINE
-from onyx.document_index.opensearch.constants import HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
+)
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
+)
+from onyx.document_index.opensearch.constants import (
+    HYBRID_SEARCH_NORMALIZATION_PIPELINE,
+)
+from onyx.document_index.opensearch.constants import (
+    HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
+)
 from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME

@@ -135,7 +135,9 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
             return cached
 
     try:
-        from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+        from onyx.db.connector_credential_pair import (
+            get_connector_credential_pair_from_id,
+        )
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
         with get_session_with_current_tenant() as db_session:

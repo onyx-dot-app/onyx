@@ -33,7 +33,9 @@ from onyx.prompts.user_info import USER_MEMORIES_PROMPT
 from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
 from onyx.prompts.user_info import USER_ROLE_PROMPT
 from onyx.tools.interface import Tool
-from onyx.tools.tool_implementations.images.image_generation_tool import ImageGenerationTool
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool

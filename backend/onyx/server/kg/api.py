@@ -21,7 +21,9 @@ from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.tools import get_builtin_tool
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
-from onyx.kg.setup.kg_default_entity_definitions import populate_missing_default_entity_types__commit
+from onyx.kg.setup.kg_default_entity_definitions import (
+    populate_missing_default_entity_types__commit,
+)
 from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_SYSTEM_PROMPT
 from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_TASK_PROMPT
 from onyx.server.features.persona.models import PersonaUpsertRequest
@@ -32,7 +34,9 @@ from onyx.server.kg.models import KGConfig
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from onyx.server.kg.models import SourceStatistics
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import KnowledgeGraphTool
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 admin_router = APIRouter(prefix="/admin/kg")

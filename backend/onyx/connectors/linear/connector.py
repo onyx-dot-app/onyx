@@ -13,7 +13,9 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import LINEAR_CLIENT_ID
 from onyx.configs.app_configs import LINEAR_CLIENT_SECRET
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_oauth_callback_uri
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_oauth_callback_uri,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector

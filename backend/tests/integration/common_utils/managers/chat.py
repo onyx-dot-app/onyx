@@ -300,7 +300,9 @@ class ChatSessionManager:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:
-                    from tests.integration.common_utils.test_models import GeneratedImage
+                    from tests.integration.common_utils.test_models import (
+                        GeneratedImage,
+                    )
 
                     images = data_obj.get("images", [])
                     ind_to_tool_use[

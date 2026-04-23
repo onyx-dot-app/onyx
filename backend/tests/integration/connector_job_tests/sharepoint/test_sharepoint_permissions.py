@@ -7,7 +7,9 @@ from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.document_acl import get_all_connector_documents
 from tests.integration.common_utils.document_acl import get_documents_by_permission_type
 from tests.integration.common_utils.document_acl import get_user_document_access_via_acl
-from tests.integration.connector_job_tests.sharepoint.conftest import SharepointTestEnvSetupTuple
+from tests.integration.connector_job_tests.sharepoint.conftest import (
+    SharepointTestEnvSetupTuple,
+)
 
 logger = setup_logger()
 

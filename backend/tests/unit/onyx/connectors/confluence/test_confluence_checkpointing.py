@@ -23,7 +23,9 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
-from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector_from_checkpoint
+from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector_from_checkpoint,
+)
 
 PAGE_SIZE = 2
 

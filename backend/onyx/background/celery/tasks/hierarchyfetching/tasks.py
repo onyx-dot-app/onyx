@@ -35,7 +35,9 @@ from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import HierarchyConnector
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.connector import mark_cc_pair_as_hierarchy_fetched
-from onyx.db.connector_credential_pair import fetch_indexable_standard_connector_credential_pair_ids
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_standard_connector_credential_pair_ids,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType

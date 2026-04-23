@@ -32,7 +32,9 @@ from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
 from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
 from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
-from onyx.onyxbot.slack.handlers.handle_message import remove_scheduled_feedback_reminder
+from onyx.onyxbot.slack.handlers.handle_message import (
+    remove_scheduled_feedback_reminder,
+)
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import build_feedback_id

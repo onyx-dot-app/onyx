@@ -13,7 +13,9 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.opensearch_migration.constants import GET_VESPA_CHUNKS_SLICE_COUNT
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    GET_VESPA_CHUNKS_SLICE_COUNT,
+)
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
 )
@@ -23,7 +25,9 @@ from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
 from onyx.db.models import OpenSearchTenantMigrationRecord
-from onyx.document_index.vespa.shared_utils.utils import replace_invalid_doc_id_characters
+from onyx.document_index.vespa.shared_utils.utils import (
+    replace_invalid_doc_id_characters,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

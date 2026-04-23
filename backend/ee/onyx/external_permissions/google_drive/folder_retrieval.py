@@ -3,7 +3,9 @@ from collections.abc import Iterator
 from googleapiclient.discovery import Resource
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from ee.onyx.external_permissions.google_drive.permission_retrieval import get_permissions_by_ids
+from ee.onyx.external_permissions.google_drive.permission_retrieval import (
+    get_permissions_by_ids,
+)
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.file_retrieval import generate_time_range_filter
 from onyx.connectors.google_drive.models import GoogleDriveFileType

@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.search import fetch_search_queries_for_user
 from ee.onyx.search.process_search_query import gather_search_stream
 from ee.onyx.search.process_search_query import stream_search_query
-from ee.onyx.secondary_llm_flows.search_flow_classification import classify_is_search_flow
+from ee.onyx.secondary_llm_flows.search_flow_classification import (
+    classify_is_search_flow,
+)
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationRequest
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationResponse
 from ee.onyx.server.query_and_chat.models import SearchFullResponse

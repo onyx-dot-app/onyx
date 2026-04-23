@@ -8,7 +8,9 @@ import pytest
 from pydantic import BaseModel
 from pydantic import field_validator
 
-from onyx.tools.tool_implementations.open_url.snippet_matcher import find_snippet_in_content
+from onyx.tools.tool_implementations.open_url.snippet_matcher import (
+    find_snippet_in_content,
+)
 
 """
 We want to store tests in the json file in the following format:

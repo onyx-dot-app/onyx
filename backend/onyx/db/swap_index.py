@@ -12,7 +12,9 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import cancel_indexing_attempts_for_search_settings
-from onyx.db.index_attempt import count_unique_active_cc_pairs_with_successful_index_attempts
+from onyx.db.index_attempt import (
+    count_unique_active_cc_pairs_with_successful_index_attempts,
+)
 from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider

@@ -22,7 +22,9 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import FILE_ID
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import MAX_NUM_CHARS
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import NUM_CHARS_FIELD
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import START_CHAR_FIELD
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    START_CHAR_FIELD,
+)
 
 TOOL_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"
 _PLACEMENT = Placement(turn_index=0)

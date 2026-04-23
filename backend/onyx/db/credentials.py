@@ -10,7 +10,9 @@ from sqlalchemy.sql.expression import or_
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+)
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential

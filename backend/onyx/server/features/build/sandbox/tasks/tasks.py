@@ -25,10 +25,14 @@ from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
-from onyx.server.features.build.db.build_session import mark_user_sessions_idle__no_commit
+from onyx.server.features.build.db.build_session import (
+    mark_user_sessions_idle__no_commit,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import KubernetesSandboxManager
+from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
+    KubernetesSandboxManager,
+)
 
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
@@ -84,7 +88,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         from onyx.db.enums import SandboxStatus
         from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+        from onyx.server.features.build.db.sandbox import (
+            update_sandbox_status__no_commit,
+        )
 
         sandbox_manager = get_sandbox_manager()
 
