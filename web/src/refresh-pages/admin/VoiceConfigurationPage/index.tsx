@@ -11,7 +11,7 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
   deleteVoiceProvider,
-} from "@/lib/admin/voice/svc";
+} from "@/lib/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";

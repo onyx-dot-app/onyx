@@ -4,8 +4,7 @@ import { markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgOnyxLogo, SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
-import type { IconProps } from "@opal/types";
+import { SvgOnyxLogo } from "@opal/logos";
 import Modal from "@/refresh-components/Modal";
 import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -14,143 +13,49 @@ import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputVertical } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import {
-  SvgArrowExchange,
-  SvgMicrophone,
-  SvgSlash,
-  SvgUnplug,
-} from "@opal/icons";
+import { SvgArrowExchange, SvgUnplug } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import { VoiceProviderView } from "@/hooks/useVoiceProviders";
+import type {
+  VoiceProviderView,
+  VoiceFormValues,
+  VoiceOption,
+} from "@/lib/voice/interfaces";
 import {
   testVoiceProvider,
   upsertVoiceProvider,
   fetchVoicesByType,
-  fetchLLMProviders,
-} from "@/lib/admin/voice/svc";
+} from "@/lib/voice/svc";
+import {
+  getProviderIcon as getProviderIconUtil,
+  getProviderLabel as getProviderLabelUtil,
+  PROVIDER_LABELS,
+  PROVIDER_API_KEY_URLS,
+  PROVIDER_DOCS_URLS,
+  PROVIDER_VOICE_DOCS_URLS,
+  OPENAI_STT_MODELS,
+  OPENAI_TTS_MODELS,
+  MODEL_ID_MAP,
+  type ProviderMode,
+} from "@/lib/voice/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-export type ProviderMode = "stt" | "tts";
-
-export function getProviderIcon(
-  providerType: string
-): React.FunctionComponent<IconProps> {
-  switch (providerType) {
-    case "openai":
-      return SvgOpenai;
-    case "azure":
-      return SvgAzure;
-    case "elevenlabs":
-      return SvgElevenLabs;
-    default:
-      return SvgMicrophone;
-  }
-}
-
-export function getProviderLabel(providerType: string): string {
-  switch (providerType) {
-    case "openai":
-      return "OpenAI";
-    case "azure":
-      return "Azure";
-    case "elevenlabs":
-      return "ElevenLabs";
-    default:
-      return providerType;
-  }
-}
+// Re-export for consumers that import from shared
+export { type ProviderMode } from "@/lib/voice/utils";
+export const getProviderIcon = getProviderIconUtil;
+export const getProviderLabel = getProviderLabelUtil;
 
 // ---------------------------------------------------------------------------
 // VoiceProviderSetupModal
 // ---------------------------------------------------------------------------
 
-interface VoiceOption {
-  value: string;
-  label: string;
-  description?: string;
-}
-
-interface LLMProviderView {
-  id: number;
-  name: string;
-  provider: string;
-  api_key: string | null;
-}
-
-interface ApiKeyOption {
-  value: string;
-  label: string;
-  description?: string;
-}
-
 interface VoiceProviderSetupModalProps {
   providerType: string;
   existingProvider: VoiceProviderView | null;
-  mode: "stt" | "tts";
+  mode: ProviderMode;
   defaultModelId?: string | null;
   onSuccess: () => void;
-}
-
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: "OpenAI",
-  azure: "Azure Speech Services",
-  elevenlabs: "ElevenLabs",
-};
-
-const PROVIDER_API_KEY_URLS: Record<string, string> = {
-  openai: "https://platform.openai.com/api-keys",
-  azure: "https://portal.azure.com/",
-  elevenlabs: "https://elevenlabs.io/app/settings/api-keys",
-};
-
-const PROVIDER_DOCS_URLS: Record<string, string> = {
-  openai: "https://platform.openai.com/docs/guides/text-to-speech",
-  azure: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/",
-  elevenlabs: "https://elevenlabs.io/docs",
-};
-
-const PROVIDER_VOICE_DOCS_URLS: Record<string, { url: string; label: string }> =
-  {
-    openai: {
-      url: "https://platform.openai.com/docs/guides/text-to-speech#voice-options",
-      label: "OpenAI",
-    },
-    azure: {
-      url: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
-      label: "Azure",
-    },
-    elevenlabs: {
-      url: "https://elevenlabs.io/docs/voices/premade-voices",
-      label: "ElevenLabs",
-    },
-  };
-
-const OPENAI_STT_MODELS = [{ id: "whisper-1", name: "Whisper v1" }];
-
-const OPENAI_TTS_MODELS = [
-  { id: "tts-1", name: "TTS-1" },
-  { id: "tts-1-hd", name: "TTS-1 HD" },
-];
-
-// Map model IDs from cards to actual API model IDs
-const MODEL_ID_MAP: Record<string, string> = {
-  "tts-1": "tts-1",
-  "tts-1-hd": "tts-1-hd",
-  whisper: "whisper-1",
-};
-
-interface VoiceFormValues {
-  api_key: string;
-  target_uri: string;
-  stt_model: string;
-  tts_model: string;
-  default_voice: string;
 }
 
 export function VoiceProviderSetupModal({
@@ -169,50 +74,12 @@ export function VoiceProviderSetupModal({
   const label = PROVIDER_LABELS[providerType] ?? providerType;
   const ProviderIcon = getProviderIcon(providerType);
 
-  // Non-form state: LLM provider reuse (OpenAI only)
-  const [selectedLlmProviderId, setSelectedLlmProviderId] = useState<
-    number | null
-  >(null);
-  const [existingApiKeyOptions, setExistingApiKeyOptions] = useState<
-    ApiKeyOption[]
-  >([]);
-  const [llmProviderMap, setLlmProviderMap] = useState<Map<string, number>>(
-    new Map()
-  );
-
   // Non-form state: dynamic voice options
   const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [initialDefaultVoice, setInitialDefaultVoice] = useState(
     existingProvider?.default_voice ?? ""
   );
-
-  // Fetch existing OpenAI LLM providers (for API key reuse)
-  useEffect(() => {
-    if (providerType !== "openai") return;
-
-    fetchLLMProviders()
-      .then((res) => res.json())
-      .then((data: { providers: LLMProviderView[] } | LLMProviderView[]) => {
-        const providers = Array.isArray(data) ? data : data.providers ?? [];
-        const openaiProviders = providers.filter(
-          (p) => p.provider === "openai" && p.api_key
-        );
-        setExistingApiKeyOptions(
-          openaiProviders.map((p) => ({
-            value: p.api_key!,
-            label: p.api_key!,
-            description: `Used for LLM provider **${p.name}**`,
-          }))
-        );
-        const providerMap = new Map<string, number>();
-        openaiProviders.forEach((p) => {
-          if (p.api_key) providerMap.set(p.api_key, p.id);
-        });
-        setLlmProviderMap(providerMap);
-      })
-      .catch(() => setExistingApiKeyOptions([]));
-  }, [providerType]);
 
   // Fetch voices on mount
   useEffect(() => {
@@ -249,7 +116,7 @@ export function VoiceProviderSetupModal({
   });
 
   const initialValues: VoiceFormValues = {
-    api_key: "",
+    api_key: existingProvider?.api_key ?? "",
     target_uri: existingProvider?.target_uri ?? "",
     stt_model: existingProvider?.stt_model ?? "whisper-1",
     tts_model: initialTtsModel,
@@ -260,17 +127,15 @@ export function VoiceProviderSetupModal({
     values: VoiceFormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = values.api_key.trim().length > 0;
-    const shouldSendApiKey = !selectedLlmProviderId && apiKeyChanged;
-    const shouldUseStoredKey =
-      isEditing && !selectedLlmProviderId && !shouldSendApiKey;
+    const apiKeyChanged = values.api_key !== initialValues.api_key;
+    const shouldUseStoredKey = isEditing && !apiKeyChanged;
 
     try {
-      // Test connection first (skip if reusing LLM provider key)
-      if (!selectedLlmProviderId) {
+      if (!shouldUseStoredKey) {
+        // Test connection
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
-          api_key: shouldSendApiKey ? values.api_key : undefined,
+          api_key: apiKeyChanged ? values.api_key : undefined,
           target_uri: values.target_uri || undefined,
           use_stored_key: shouldUseStoredKey,
         });
@@ -292,10 +157,9 @@ export function VoiceProviderSetupModal({
         id: existingProvider?.id,
         name: label,
         provider_type: providerType,
-        api_key: shouldSendApiKey ? values.api_key : undefined,
-        api_key_changed: shouldSendApiKey,
+        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_key_changed: apiKeyChanged,
         target_uri: values.target_uri || undefined,
-        llm_provider_id: selectedLlmProviderId,
         stt_model: values.stt_model,
         tts_model: values.tts_model,
         default_voice: values.default_voice,
@@ -321,7 +185,7 @@ export function VoiceProviderSetupModal({
   }
 
   return (
-    <Modal open>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md">
         <Formik
           initialValues={initialValues}
@@ -344,10 +208,10 @@ export function VoiceProviderSetupModal({
                   {providerType === "azure" && (
                     <InputVertical
                       title="Target URI"
-                      withLabel="target_uri"
                       subDescription={markdown(
                         "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: `https://westus.api.cognitive.microsoft.com/` or `https://westus.tts.speech.microsoft.com/`."
                       )}
+                      withLabel="target_uri"
                     >
                       <InputTypeInField
                         name="target_uri"
@@ -358,10 +222,10 @@ export function VoiceProviderSetupModal({
 
                   <InputVertical
                     title="API Key"
-                    withLabel="api_key"
                     subDescription={markdown(
                       `Paste your [API key](${PROVIDER_API_KEY_URLS[providerType]}) from ${label} to access your models.`
                     )}
+                    withLabel="api_key"
                   >
                     <PasswordInputTypeInField
                       name="api_key"
@@ -370,7 +234,7 @@ export function VoiceProviderSetupModal({
                   </InputVertical>
 
                   {mode === "stt" && providerType === "openai" && (
-                    <InputVertical title="STT Model" withLabel>
+                    <InputVertical title="STT Model" withLabel="stt_model">
                       <InputSelectField name="stt_model">
                         <InputSelect.Trigger />
                         <InputSelect.Content>
@@ -390,7 +254,7 @@ export function VoiceProviderSetupModal({
                         <InputVertical
                           title="Default Model"
                           subDescription="This model will be used by Onyx by default for text-to-speech."
-                          withLabel
+                          withLabel="tts_model"
                         >
                           <InputSelectField name="tts_model">
                             <InputSelect.Trigger />
@@ -416,7 +280,7 @@ export function VoiceProviderSetupModal({
                             PROVIDER_DOCS_URLS[providerType]
                           }).`
                         )}
-                        withLabel
+                        withLabel="default_voice"
                       >
                         <InputComboBoxField
                           name="default_voice"
@@ -484,7 +348,7 @@ export function VoiceDisconnectModal({
   const hasReplacements = replacementOptions.length > 0;
 
   return (
-    <Modal open>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md">
         <Modal.Header
           icon={SvgUnplug}
