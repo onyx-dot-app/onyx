@@ -314,12 +314,6 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
     assert response.content == _IMAGE_GEN_PNG_BYTES
 
 
-# Connector-ingested files: PR #10380 hardened `/chat/file/{file_id}` but
-# missed the connector branch (issue #10472), breaking `PreviewModal` with
-# "Failed to load document.". These tests pin that access lines up with
-# the underlying `Document` ACL.
-
-
 _CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
 
 
