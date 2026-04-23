@@ -183,6 +183,7 @@ def _process_file(
         title = onyx_metadata.title or onyx_metadata.file_display_name or title
         link = onyx_metadata.link or link
 
+    # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
     # `Document.file_id` doubles as the "stage these bytes into the
     # code-interpreter sandbox" signal read by
