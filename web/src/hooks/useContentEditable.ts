@@ -110,6 +110,9 @@ export function useContentEditable({
 
   const handleCompositionStart = useCallback(() => {
     isComposingRef.current = true;
+    if (ref.current) {
+      ref.current.removeAttribute("data-empty");
+    }
   }, []);
 
   const handleCompositionEnd = useCallback(() => {
