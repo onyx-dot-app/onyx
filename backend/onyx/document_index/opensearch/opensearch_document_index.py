@@ -747,6 +747,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 self._client.bulk_index_documents(
                     documents=chunk_batch,
                     tenant_state=self._tenant_state,
+                    # At this point we know for sure some docs from this batch
+                    # may exist, so we don't want to fail in that case.
+                    update_if_exists=True,
                 )
 
         for chunk in chunks:
