@@ -333,14 +333,12 @@ _CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
 
 def _seed_connector_file(
     *,
-    cc_pair_id: int,
     document_id: str,
 ) -> str:
     """Save bytes to the file store as `FileOrigin.CONNECTOR` and point the
     ingested `Document.file_id` at the returned storage id. The cc_pair
     already links the document via the ingestion API, so the ACL resolution
     path used by `user_can_access_chat_file` will find it."""
-    _ = cc_pair_id  # cc_pair linkage is established by DocumentManager
     file_store = get_default_file_store()
     storage_id = file_store.save_file(
         content=io.BytesIO(_CONNECTOR_FILE_BYTES),
@@ -381,7 +379,6 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
         api_key=api_key,
     )
     storage_id = _seed_connector_file(
-        cc_pair_id=public_cc_pair.id,
         document_id=document.id,
     )
 
@@ -418,7 +415,6 @@ def test_connector_file_denied_for_users_without_access(
         api_key=api_key,
     )
     storage_id = _seed_connector_file(
-        cc_pair_id=private_cc_pair.id,
         document_id=document.id,
     )
 
