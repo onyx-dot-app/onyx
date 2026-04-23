@@ -6,6 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { personaComparator } from "@/app/admin/agents/lib";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -52,11 +53,9 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
         </Text>
       </div>
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-        {agents
-          .sort((a, b) => b.id - a.id)
-          .map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
-          ))}
+        {agents.sort(personaComparator).map((agent) => (
+          <AgentCard key={agent.id} agent={agent} />
+        ))}
       </div>
     </div>
   );
