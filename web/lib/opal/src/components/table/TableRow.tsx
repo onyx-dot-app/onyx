@@ -42,6 +42,7 @@ function SortableTableRow({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -75,6 +76,7 @@ function SortableTableRow({
           }}
         >
           <button
+            ref={setActivatorNodeRef}
             type="button"
             className={cn(
               "absolute right-0 top-1/2 -translate-y-1/2 cursor-grab",
