@@ -875,7 +875,7 @@ def fetch_chat_file(
     file_id_from_user_file = get_file_id_by_user_file_id(file_id, user.id, db_session)
     if file_id_from_user_file:
         file_id = file_id_from_user_file
-    elif not user_can_access_chat_file(file_id, user.id, db_session):
+    elif not user_can_access_chat_file(file_id, user, db_session):
         # Return 404 (rather than 403) so callers cannot probe for file
         # existence across ownership boundaries.
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")

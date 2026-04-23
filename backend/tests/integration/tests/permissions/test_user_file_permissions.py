@@ -5,6 +5,9 @@ This file tests user file permissions in different scenarios:
 3. Image-generation tool outputs - files persisted on `ToolCall.generated_images`
    must be downloadable by the chat session owner (and by anyone if the session
    is publicly shared), but not by other users on private sessions.
+4. Connector-ingested files - files stored with `FileOrigin.CONNECTOR` must be
+   fetchable via `GET /chat/file/{file_id}` by any user whose ACL covers at
+   least one `Document` that references the file, and must be denied otherwise.
 """
 
 import io
@@ -17,13 +20,19 @@ import requests
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
+from onyx.db.models import Document
 from onyx.db.models import ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.api_key import APIKeyManager
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -301,3 +310,124 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
         f"got {response.status_code}: {response.text}"
     )
     assert response.content == _IMAGE_GEN_PNG_BYTES
+
+
+# -----------------------------------------------------------------------------
+# Connector-ingested file access checks
+#
+# Files ingested by connectors (e.g. the File connector) are saved to the file
+# store with `FileOrigin.CONNECTOR` and referenced from the corresponding
+# `Document.file_id`. The `PreviewModal` in the frontend downloads these via
+# `GET /chat/file/{file_id}` when no external `.link` is available.
+#
+# The chat-file hardening in PR #10380 omitted this branch, causing a
+# "Failed to load document." regression (tracked in issue #10472). These tests
+# pin the fix: connector files must be readable by any user whose ACL covers
+# at least one Document that references the file, and must stay gated for
+# users whose ACL does not.
+# -----------------------------------------------------------------------------
+
+
+_CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
+
+
+def _seed_connector_file(
+    *,
+    cc_pair_id: int,
+    document_id: str,
+) -> str:
+    """Save bytes to the file store as `FileOrigin.CONNECTOR` and point the
+    ingested `Document.file_id` at the returned storage id. The cc_pair
+    already links the document via the ingestion API, so the ACL resolution
+    path used by `user_can_access_chat_file` will find it."""
+    _ = cc_pair_id  # cc_pair linkage is established by DocumentManager
+    file_store = get_default_file_store()
+    storage_id = file_store.save_file(
+        content=io.BytesIO(_CONNECTOR_FILE_BYTES),
+        display_name="connector_doc.txt",
+        file_origin=FileOrigin.CONNECTOR,
+        file_type="text/plain",
+    )
+    with get_session_with_current_tenant() as db_session:
+        document = db_session.get(Document, document_id)
+        assert document is not None, f"Seeded document {document_id} not found"
+        document.file_id = storage_id
+        db_session.commit()
+    return storage_id
+
+
+def test_connector_file_is_accessible_via_chat_file_endpoint(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Regression test for issue #10472.
+
+    A file ingested by a connector (e.g. the File connector) is served from
+    the file store with `FileOrigin.CONNECTOR`. When its owning cc_pair is
+    PUBLIC, any authenticated user must be able to fetch it via
+    `GET /chat/file/{file_id}` — previously this returned 404, breaking
+    `PreviewModal` with "Failed to load document."."""
+    admin_user: DATestUser = UserManager.create(name="connector_admin")
+    basic_user: DATestUser = UserManager.create(name="connector_basic")
+
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    public_cc_pair = CCPairManager.create_from_scratch(
+        access_type=AccessType.PUBLIC,
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+    document = DocumentManager.seed_doc_with_content(
+        cc_pair=public_cc_pair,
+        content="hello from connector",
+        api_key=api_key,
+    )
+    storage_id = _seed_connector_file(
+        cc_pair_id=public_cc_pair.id,
+        document_id=document.id,
+    )
+
+    for user in (admin_user, basic_user):
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/file/{storage_id}",
+            headers=user.headers,
+        )
+        assert response.status_code == 200, (
+            f"User {user.email} must be able to fetch a PUBLIC connector file, "
+            f"got {response.status_code}: {response.text}"
+        )
+        assert response.content == _CONNECTOR_FILE_BYTES
+
+
+def test_connector_file_denied_for_users_without_access(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Flip side of the regression fix: a connector file backed by a PRIVATE
+    cc_pair must NOT be readable by users who have no ACL overlap with the
+    cc_pair, even after the fix."""
+    admin_user: DATestUser = UserManager.create(name="priv_connector_admin")
+    basic_user: DATestUser = UserManager.create(name="priv_connector_basic")
+
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    private_cc_pair = CCPairManager.create_from_scratch(
+        access_type=AccessType.PRIVATE,
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+    document = DocumentManager.seed_doc_with_content(
+        cc_pair=private_cc_pair,
+        content="private connector content",
+        api_key=api_key,
+    )
+    storage_id = _seed_connector_file(
+        cc_pair_id=private_cc_pair.id,
+        document_id=document.id,
+    )
+
+    basic_response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{storage_id}",
+        headers=basic_user.headers,
+    )
+    assert basic_response.status_code in (403, 404), (
+        f"Non-member should be denied on PRIVATE connector file, got "
+        f"{basic_response.status_code}: {basic_response.text}"
+    )
+    assert basic_response.content != _CONNECTOR_FILE_BYTES
