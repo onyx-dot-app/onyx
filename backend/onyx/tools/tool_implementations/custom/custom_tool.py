@@ -28,6 +28,8 @@ from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
+from onyx.tools.models import USER_EMAIL_PLACEHOLDER
+from onyx.tools.models import USER_ID_PLACEHOLDER
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -285,6 +287,8 @@ def build_custom_tools_from_openapi_schema_and_headers(
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
             MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
+            USER_ID_PLACEHOLDER: dynamic_schema_info.user_id,
+            USER_EMAIL_PLACEHOLDER: dynamic_schema_info.user_email,
         }
 
         for placeholder, value in placeholders.items():
