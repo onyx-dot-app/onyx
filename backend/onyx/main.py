@@ -558,13 +558,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
         AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
     ):
-        try:
-            google_login_scopes = list(
-                GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
-            )
-        except Exception as e:
-            logger.warning(f"Error configuring Google OAuth login scopes: {e}")
-            google_login_scopes = list(GOOGLE_LOGIN_BASE_SCOPES)
+        google_login_scopes = list(
+            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
+        )
 
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
