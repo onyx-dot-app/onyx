@@ -548,7 +548,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       const activeEl = document.activeElement;
       const isFocused =
         activeEl instanceof HTMLElement &&
-        activeEl.id === "onyx-chat-input-textarea";
+        activeEl.id === "onyx-chat-input-textbox";
       const target = event.target;
       const isInteractive =
         target instanceof HTMLElement && !!target.closest(INTERACTIVE_SELECTOR);
@@ -562,7 +562,7 @@ function Root({ children, enableBackground }: AppRootProps) {
     inputWasFocused.current = false;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
-    const textarea = document.getElementById("onyx-chat-input-textarea");
+    const textarea = document.getElementById("onyx-chat-input-textbox");
     // Only restore focus if no other element has grabbed it since mousedown.
     if (textarea && document.activeElement !== textarea) {
       textarea.focus();

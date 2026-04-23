@@ -74,7 +74,7 @@ for (const theme of THEMES) {
     });
 
     test("chat input is visible and focusable", async ({ page }) => {
-      const textarea = page.locator("#onyx-chat-input-textarea");
+      const textarea = page.locator("#onyx-chat-input-textbox");
       await expect(textarea).toBeVisible({ timeout: 10000 });
 
       await textarea.click();

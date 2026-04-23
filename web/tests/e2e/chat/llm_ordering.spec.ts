@@ -42,7 +42,7 @@ test.describe("LLM Ordering", () => {
     await ensureImageGenerationEnabled(page);
 
     await page.goto("/app");
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
+    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
     const trigger = page.getByTestId("model-selector").locator("button").last();
     const originalTriggerText = (await trigger.textContent())?.trim() ?? "";

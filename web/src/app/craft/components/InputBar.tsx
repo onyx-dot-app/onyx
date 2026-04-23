@@ -3,11 +3,10 @@
 import {
   memo,
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useCallback,
-  useEffect,
   useRef,
-  useState,
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
@@ -39,8 +38,7 @@ import {
   SvgOrganization,
   SvgAlertCircle,
 } from "@opal/icons";
-
-const MAX_INPUT_HEIGHT = 200;
+import { useContentEditable } from "@/hooks/useContentEditable";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -166,9 +164,25 @@ const InputBar = memo(
     ) => {
       const router = useRouter();
       const demoDataEnabled = useDemoDataEnabled();
-      const [message, setMessage] = useState("");
+      const inputWrapperRef = useRef<HTMLDivElement>(null);
+      const {
+        ref: inputRef,
+        message,
+        setContent,
+        clearContent,
+        handleInput: onInput,
+        handleCompositionStart,
+        handleCompositionEnd,
+        insertTextAtCursor,
+        setCursorToEnd,
+      } = useContentEditable({
+        wrapperRef: inputWrapperRef,
+      });
 
-      const textAreaRef = useRef<HTMLTextAreaElement>(null);
+      useEffect(() => {
+        inputRef.current?.focus();
+      }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -180,44 +194,19 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
-      // Expose reset, focus, and setMessage methods to parent via ref
       useImperativeHandle(ref, () => ({
         reset: () => {
-          setMessage("");
+          clearContent();
           clearFiles();
         },
         focus: () => {
-          textAreaRef.current?.focus();
+          inputRef.current?.focus();
+          setCursorToEnd();
         },
         setMessage: (msg: string) => {
-          setMessage(msg);
-          // Move cursor to end after setting message
-          setTimeout(() => {
-            const textarea = textAreaRef.current;
-            if (textarea) {
-              textarea.focus();
-              textarea.setSelectionRange(msg.length, msg.length);
-            }
-          }, 0);
+          setContent(msg);
         },
       }));
-
-      // Auto-resize textarea based on content
-      useEffect(() => {
-        const textarea = textAreaRef.current;
-        if (textarea) {
-          textarea.style.height = "0px";
-          textarea.style.height = `${Math.min(
-            textarea.scrollHeight,
-            MAX_INPUT_HEIGHT
-          )}px`;
-        }
-      }, [message]);
-
-      // Auto-focus on mount
-      useEffect(() => {
-        textAreaRef.current?.focus();
-      }, []);
 
       const handleFileSelect = useCallback(
         async (e: ChangeEvent<HTMLInputElement>) => {
@@ -235,18 +224,16 @@ const InputBar = memo(
           const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
           if (pastedFiles.length > 0) {
             event.preventDefault();
-            // Context handles session binding internally
             uploadFiles(pastedFiles);
+            return;
           }
-        },
-        [uploadFiles]
-      );
 
-      const handleInputChange = useCallback(
-        (event: ChangeEvent<HTMLTextAreaElement>) => {
-          setMessage(event.target.value);
+          event.preventDefault();
+          const text = event.clipboardData.getData("text/plain");
+          if (!text) return;
+          insertTextAtCursor(text);
         },
-        []
+        [uploadFiles, insertTextAtCursor]
       );
 
       const handleSubmit = useCallback(() => {
@@ -258,11 +245,9 @@ const InputBar = memo(
 
         if (hasMessage) {
           onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-          setMessage("");
+          clearContent();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
-          // User hit Enter with only files attached: remove files from input bar
-          // (File stays in session; no way to delete from session for now)
           clearFiles({ suppressRefetch: true });
         }
       }, [
@@ -275,10 +260,12 @@ const InputBar = memo(
         currentMessageFiles,
         clearFiles,
         demoDataEnabled,
+        clearContent,
       ]);
 
       const handleKeyDown = useCallback(
-        (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        (event: KeyboardEvent<HTMLDivElement>) => {
+          // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
             !event.shiftKey &&
@@ -331,34 +318,41 @@ const InputBar = memo(
             )}
 
             {/* Input area */}
-            <textarea
-              onPaste={handlePaste}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              ref={textAreaRef}
-              className={cn(
-                "w-full",
-                "h-[44px]",
-                "outline-none",
-                "bg-transparent",
-                "resize-none",
-                "placeholder:text-text-03",
-                "whitespace-pre-wrap",
-                "break-word",
-                "overscroll-contain",
-                "overflow-y-auto",
-                "px-3",
-                "pb-2",
-                "pt-3"
-              )}
-              autoFocus
-              style={{ scrollbarWidth: "thin" }}
-              role="textarea"
-              aria-multiline
-              placeholder={placeholder}
-              value={message}
-              disabled={disabled}
-            />
+            <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
+              <div
+                ref={inputRef}
+                contentEditable={!disabled}
+                suppressContentEditableWarning
+                onPaste={handlePaste}
+                onInput={onInput}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onKeyDown={handleKeyDown}
+                className={cn(
+                  "w-full",
+                  "h-full",
+                  "min-h-[44px]",
+                  "outline-none",
+                  "bg-transparent",
+                  "whitespace-pre-wrap",
+                  "break-words",
+                  "overscroll-contain",
+                  "overflow-y-auto",
+                  "px-3",
+                  "pb-2",
+                  "pt-3"
+                )}
+                tabIndex={0}
+                style={{
+                  scrollbarWidth: "thin",
+                  scrollbarColor: "var(--border-02) transparent",
+                }}
+                role="textbox"
+                aria-label={placeholder}
+                aria-multiline={true}
+                data-placeholder={placeholder}
+              />
+            </div>
 
             {/* Bottom controls */}
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">

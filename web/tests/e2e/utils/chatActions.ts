@@ -37,8 +37,8 @@ export async function sendMessage(page: Page, message: string) {
     .locator('[data-testid="onyx-ai-message"]')
     .count();
 
-  await page.locator("#onyx-chat-input-textarea").click();
-  await page.locator("#onyx-chat-input-textarea").fill(message);
+  await page.locator("#onyx-chat-input-textbox").click();
+  await page.locator("#onyx-chat-input-textbox").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
   // Wait for a NEW AI message to appear (count should increase)
