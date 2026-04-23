@@ -619,6 +619,18 @@ test.describe("Keyboard Edge Cases", () => {
     const text = await input.textContent();
     expect(text?.trim()).toBe("x");
   });
+
+  test("inline spans do not produce spurious newlines", async ({ page }) => {
+    await mockChatEndpoint(page, buildMockStream("Mock response"));
+    await page.evaluate(() => {
+      const el = document.getElementById("onyx-chat-input-textbox")!;
+      el.innerHTML = 'hello <span contenteditable="false">tile</span> world';
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.keyboard.press("Enter");
+    const messageEl = page.locator(HUMAN_MESSAGE_SELECTOR);
+    await expect(messageEl).toContainText("hello tile world");
+  });
 });
 
 test.describe("Visual Regression", () => {

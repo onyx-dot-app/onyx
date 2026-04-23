@@ -52,6 +52,19 @@ export function insertTextAtCursor(element: HTMLElement, text: string): string {
  * Read the plain-text content of a contentEditable element, converting
  * <br> elements to newlines via DOM traversal (avoids innerText reflow).
  */
+const BLOCK_TAGS = new Set([
+  "DIV",
+  "P",
+  "BLOCKQUOTE",
+  "LI",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+]);
+
 export function getTextContent(element: HTMLElement): string {
   const parts: string[] = [];
   const nodes = Array.from(element.childNodes);
@@ -64,9 +77,7 @@ export function getTextContent(element: HTMLElement): string {
       if (el.tagName === "BR") {
         parts.push("\n");
       } else {
-        // Block elements (e.g. <div> from Chrome's Enter) get a leading newline
-        // unless they're the first child
-        if (i > 0) {
+        if (i > 0 && BLOCK_TAGS.has(el.tagName)) {
           parts.push("\n");
         }
         parts.push(getTextContent(el));

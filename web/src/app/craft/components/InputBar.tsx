@@ -343,7 +343,7 @@ const InputBar = memo(
                   "pb-2",
                   "pt-3"
                 )}
-                tabIndex={0}
+                tabIndex={disabled ? -1 : 0}
                 style={{
                   scrollbarWidth: "thin",
                   scrollbarColor: "var(--border-02) transparent",

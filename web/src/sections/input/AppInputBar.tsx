@@ -823,7 +823,7 @@ const AppInputBar = React.memo(
                       onCompositionStart={handleCompositionStart}
                       onCompositionEnd={handleCompositionEnd}
                       className="p-[2px] w-full h-full outline-none bg-transparent whitespace-pre-wrap break-words overflow-y-auto"
-                      tabIndex={0}
+                      tabIndex={disabled ? -1 : 0}
                       style={{
                         scrollbarWidth: "thin",
                         scrollbarColor: "var(--border-02) transparent",
