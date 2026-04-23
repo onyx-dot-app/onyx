@@ -4,6 +4,7 @@
 import "@opal/components/table/styles.css";
 
 import { useEffect, useMemo } from "react";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { flexRender } from "@tanstack/react-table";
 import useDataTable, {
   toOnyxSortDirection,
@@ -335,277 +336,304 @@ export function Table<TData>(props: DataTableProps<TData>) {
     );
   }
 
+  const dndContextWrapper = hasDraggable
+    ? (children: React.ReactNode) => (
+        <DndContext
+          sensors={draggableReturn.dndContextProps.sensors}
+          collisionDetection={
+            draggableReturn.dndContextProps.collisionDetection
+          }
+          modifiers={draggableReturn.dndContextProps.modifiers}
+          onDragStart={draggableReturn.dndContextProps.onDragStart}
+          onDragEnd={draggableReturn.dndContextProps.onDragEnd}
+          onDragCancel={draggableReturn.dndContextProps.onDragCancel}
+        >
+          {children}
+          <DragOverlay dropAnimation={null}>
+            {draggableReturn.activeId && (
+              <table>
+                <tbody>
+                  {(() => {
+                    const row = table
+                      .getRowModel()
+                      .rows.find(
+                        (r) => getRowId(r.original) === draggableReturn.activeId
+                      );
+                    if (!row) return null;
+                    return (
+                      <DragOverlayRow
+                        row={row}
+                        columnWidths={columnWidths}
+                        columnKindMap={columnKindMap}
+                        qualifierColumn={qualifierColumn}
+                        isSelectable={isSelectable}
+                      />
+                    );
+                  })()}
+                </tbody>
+              </table>
+            )}
+          </DragOverlay>
+        </DndContext>
+      )
+    : (children: React.ReactNode) => children;
+
   return (
     <TableSizeProvider size={size}>
-      <div>
-        <div
-          className={cn(
-            "overflow-x-auto transition-opacity duration-150",
-            isServerLoading && "opacity-50 pointer-events-none"
-          )}
-          ref={containerRef}
-          style={{
-            ...(height != null
-              ? {
-                  maxHeight:
-                    typeof height === "number" ? `${height}px` : height,
-                  overflowY: "auto" as const,
-                }
-              : undefined),
-          }}
-        >
-          <TableElement
-            variant={variant}
-            selectionBehavior={selectionBehavior}
-            width={
-              Object.keys(columnWidths).length > 0
-                ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
-                : undefined
-            }
-          >
-            <colgroup>
-              {table.getVisibleLeafColumns().map((col) => (
-                <col
-                  key={col.id}
-                  style={
-                    columnWidths[col.id] != null
-                      ? { width: columnWidths[col.id] }
-                      : undefined
+      {dndContextWrapper(
+        <div>
+          <div
+            className={cn(
+              "overflow-x-auto transition-opacity duration-150",
+              isServerLoading && "opacity-50 pointer-events-none"
+            )}
+            ref={containerRef}
+            style={{
+              ...(height != null
+                ? {
+                    maxHeight:
+                      typeof height === "number" ? `${height}px` : height,
+                    overflowY: "auto" as const,
                   }
-                />
-              ))}
-            </colgroup>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header, headerIndex) => {
-                    const colDef = columnKindMap.get(header.id);
-
-                    // Qualifier header — select-all checkbox only for multi-select
-                    if (colDef?.kind === "qualifier") {
-                      return (
-                        <QualifierContainer key={header.id} type="head">
-                          {isMultiSelect && (
-                            <Checkbox
-                              checked={isAllRowsSelected}
-                              indeterminate={
-                                !isAllRowsSelected && selectedCount > 0
-                              }
-                              onCheckedChange={(checked) => {
-                                // Indeterminate → clear all; otherwise toggle normally
-                                if (!isAllRowsSelected && selectedCount > 0) {
-                                  toggleAllRowsSelected(false);
-                                } else {
-                                  toggleAllRowsSelected(checked);
-                                }
-                              }}
-                            />
-                          )}
-                        </QualifierContainer>
-                      );
-                    }
-
-                    // Actions header
-                    if (colDef?.kind === "actions") {
-                      const actionsDef = colDef as OnyxActionsColumn<TData>;
-                      return (
-                        <ActionsContainer key={header.id} type="head">
-                          {actionsDef.showColumnVisibility !== false && (
-                            <ColumnVisibilityPopover
-                              table={table}
-                              columnVisibility={
-                                table.getState().columnVisibility
-                              }
-                            />
-                          )}
-                          {actionsDef.showSorting !== false && (
-                            <SortingPopover
-                              table={table}
-                              sorting={table.getState().sorting}
-                              footerText={actionsDef.sortingFooterText}
-                            />
-                          )}
-                        </ActionsContainer>
-                      );
-                    }
-
-                    // Data / Display header
-                    const canSort = header.column.getCanSort();
-                    const sortDir = header.column.getIsSorted();
-                    const nextHeader = headerGroup.headers[headerIndex + 1];
-                    const canResize =
-                      header.column.getCanResize() &&
-                      !!nextHeader &&
-                      !widthConfig.fixedColumnIds.has(nextHeader.id);
-
-                    const dataCol =
-                      colDef?.kind === "data"
-                        ? (colDef as OnyxDataColumn<TData>)
-                        : null;
-
-                    return (
-                      <TableHead
-                        key={header.id}
-                        width={columnWidths[header.id]}
-                        sorted={
-                          canSort ? toOnyxSortDirection(sortDir) : undefined
-                        }
-                        onSort={
-                          canSort
-                            ? () => header.column.toggleSorting()
-                            : undefined
-                        }
-                        icon={dataCol?.icon}
-                        resizable={canResize}
-                        onResizeStart={
-                          canResize
-                            ? createResizeHandler(header.id, nextHeader.id)
-                            : undefined
-                        }
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-
-            <TableBody
-              dndSortable={hasDraggable ? draggableReturn : undefined}
-              renderDragOverlay={
-                hasDraggable
-                  ? (activeId) => {
-                      const row = table
-                        .getRowModel()
-                        .rows.find((r) => getRowId(r.original) === activeId);
-                      if (!row) return null;
-                      return (
-                        <DragOverlayRow
-                          row={row}
-                          columnWidths={columnWidths}
-                          columnKindMap={columnKindMap}
-                          qualifierColumn={qualifierColumn}
-                          isSelectable={isSelectable}
-                        />
-                      );
-                    }
+                : undefined),
+            }}
+          >
+            <TableElement
+              variant={variant}
+              selectionBehavior={selectionBehavior}
+              width={
+                Object.keys(columnWidths).length > 0
+                  ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
                   : undefined
               }
             >
-              {emptyState && table.getRowModel().rows.length === 0 && (
-                <tr>
-                  <td colSpan={table.getVisibleLeafColumns().length}>
-                    {emptyState}
-                  </td>
-                </tr>
-              )}
-              {table.getRowModel().rows.map((row) => {
-                const rowId = hasDraggable ? getRowId(row.original) : undefined;
+              <colgroup>
+                {table.getVisibleLeafColumns().map((col) => (
+                  <col
+                    key={col.id}
+                    style={
+                      columnWidths[col.id] != null
+                        ? { width: columnWidths[col.id] }
+                        : undefined
+                    }
+                  />
+                ))}
+              </colgroup>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header, headerIndex) => {
+                      const colDef = columnKindMap.get(header.id);
 
-                return (
-                  <TableRow
-                    key={row.id}
-                    sortableId={rowId}
-                    selected={row.getIsSelected()}
-                    onClick={() => {
-                      if (
-                        hasDraggable &&
-                        draggableReturn.wasDraggingRef.current
-                      ) {
-                        return;
-                      }
-                      if (onRowClick) {
-                        onRowClick(row.original);
-                      } else if (isSelectable) {
-                        if (!isMultiSelect) {
-                          // single-select: clear all, then select this row
-                          table.toggleAllRowsSelected(false);
-                        }
-                        row.toggleSelected();
-                      }
-                    }}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const cellColDef = columnKindMap.get(cell.column.id);
-
-                      // Qualifier cell
-                      if (cellColDef?.kind === "qualifier") {
-                        const qDef = cellColDef as OnyxQualifierColumn<TData>;
-
+                      // Qualifier header — select-all checkbox only for multi-select
+                      if (colDef?.kind === "qualifier") {
                         return (
-                          <QualifierContainer
-                            key={cell.id}
-                            type="cell"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <TableQualifier
-                              content={qDef.content}
-                              icon={qDef.getContent?.(row.original)}
-                              imageSrc={qDef.getImageSrc?.(row.original)}
-                              imageAlt={qDef.getImageAlt?.(row.original)}
-                              background={qDef.background}
-                              iconSize={qDef.iconSize}
-                              selectable={showQualifierCheckbox}
-                              selected={
-                                showQualifierCheckbox && row.getIsSelected()
-                              }
-                              onSelectChange={
-                                showQualifierCheckbox
-                                  ? (checked) => {
-                                      if (!isMultiSelect) {
-                                        table.toggleAllRowsSelected(false);
-                                      }
-                                      row.toggleSelected(checked);
-                                    }
-                                  : undefined
-                              }
-                            />
+                          <QualifierContainer key={header.id} type="head">
+                            {isMultiSelect && (
+                              <Checkbox
+                                checked={isAllRowsSelected}
+                                indeterminate={
+                                  !isAllRowsSelected && selectedCount > 0
+                                }
+                                onCheckedChange={(checked) => {
+                                  // Indeterminate → clear all; otherwise toggle normally
+                                  if (!isAllRowsSelected && selectedCount > 0) {
+                                    toggleAllRowsSelected(false);
+                                  } else {
+                                    toggleAllRowsSelected(checked);
+                                  }
+                                }}
+                              />
+                            )}
                           </QualifierContainer>
                         );
                       }
 
-                      // Actions cell
-                      if (cellColDef?.kind === "actions") {
+                      // Actions header
+                      if (colDef?.kind === "actions") {
+                        const actionsDef = colDef as OnyxActionsColumn<TData>;
                         return (
-                          <ActionsContainer
-                            key={cell.id}
-                            type="cell"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
+                          <ActionsContainer key={header.id} type="head">
+                            {actionsDef.showColumnVisibility !== false && (
+                              <ColumnVisibilityPopover
+                                table={table}
+                                columnVisibility={
+                                  table.getState().columnVisibility
+                                }
+                              />
+                            )}
+                            {actionsDef.showSorting !== false && (
+                              <SortingPopover
+                                table={table}
+                                sorting={table.getState().sorting}
+                                footerText={actionsDef.sortingFooterText}
+                              />
                             )}
                           </ActionsContainer>
                         );
                       }
 
-                      // Data / Display cell
+                      // Data / Display header
+                      const canSort = header.column.getCanSort();
+                      const sortDir = header.column.getIsSorted();
+                      const nextHeader = headerGroup.headers[headerIndex + 1];
+                      const canResize =
+                        header.column.getCanResize() &&
+                        !!nextHeader &&
+                        !widthConfig.fixedColumnIds.has(nextHeader.id);
+
+                      const dataCol =
+                        colDef?.kind === "data"
+                          ? (colDef as OnyxDataColumn<TData>)
+                          : null;
+
                       return (
-                        <TableCell
-                          key={cell.id}
-                          data-column-id={cell.column.id}
+                        <TableHead
+                          key={header.id}
+                          width={columnWidths[header.id]}
+                          sorted={
+                            canSort ? toOnyxSortDirection(sortDir) : undefined
+                          }
+                          onSort={
+                            canSort
+                              ? () => header.column.toggleSorting()
+                              : undefined
+                          }
+                          icon={dataCol?.icon}
+                          resizable={canResize}
+                          onResizeStart={
+                            canResize
+                              ? createResizeHandler(header.id, nextHeader.id)
+                              : undefined
+                          }
                         >
                           {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
+                            header.column.columnDef.header,
+                            header.getContext()
                           )}
-                        </TableCell>
+                        </TableHead>
                       );
                     })}
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </TableElement>
-        </div>
+                ))}
+              </TableHeader>
 
-        {footer && renderFooter(footer)}
-      </div>
+              <TableBody
+                dndSortable={hasDraggable ? draggableReturn : undefined}
+              >
+                {emptyState && table.getRowModel().rows.length === 0 && (
+                  <tr>
+                    <td colSpan={table.getVisibleLeafColumns().length}>
+                      {emptyState}
+                    </td>
+                  </tr>
+                )}
+                {table.getRowModel().rows.map((row) => {
+                  const rowId = hasDraggable
+                    ? getRowId(row.original)
+                    : undefined;
+
+                  return (
+                    <TableRow
+                      key={row.id}
+                      sortableId={rowId}
+                      selected={row.getIsSelected()}
+                      onClick={() => {
+                        if (
+                          hasDraggable &&
+                          draggableReturn.wasDraggingRef.current
+                        ) {
+                          return;
+                        }
+                        if (onRowClick) {
+                          onRowClick(row.original);
+                        } else if (isSelectable) {
+                          if (!isMultiSelect) {
+                            // single-select: clear all, then select this row
+                            table.toggleAllRowsSelected(false);
+                          }
+                          row.toggleSelected();
+                        }
+                      }}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const cellColDef = columnKindMap.get(cell.column.id);
+
+                        // Qualifier cell
+                        if (cellColDef?.kind === "qualifier") {
+                          const qDef = cellColDef as OnyxQualifierColumn<TData>;
+
+                          return (
+                            <QualifierContainer
+                              key={cell.id}
+                              type="cell"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TableQualifier
+                                content={qDef.content}
+                                icon={qDef.getContent?.(row.original)}
+                                imageSrc={qDef.getImageSrc?.(row.original)}
+                                imageAlt={qDef.getImageAlt?.(row.original)}
+                                background={qDef.background}
+                                iconSize={qDef.iconSize}
+                                selectable={showQualifierCheckbox}
+                                selected={
+                                  showQualifierCheckbox && row.getIsSelected()
+                                }
+                                onSelectChange={
+                                  showQualifierCheckbox
+                                    ? (checked) => {
+                                        if (!isMultiSelect) {
+                                          table.toggleAllRowsSelected(false);
+                                        }
+                                        row.toggleSelected(checked);
+                                      }
+                                    : undefined
+                                }
+                              />
+                            </QualifierContainer>
+                          );
+                        }
+
+                        // Actions cell
+                        if (cellColDef?.kind === "actions") {
+                          return (
+                            <ActionsContainer
+                              key={cell.id}
+                              type="cell"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </ActionsContainer>
+                          );
+                        }
+
+                        // Data / Display cell
+                        return (
+                          <TableCell
+                            key={cell.id}
+                            data-column-id={cell.column.id}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </TableElement>
+          </div>
+
+          {footer && renderFooter(footer)}
+        </div>
+      )}
     </TableSizeProvider>
   );
 }
