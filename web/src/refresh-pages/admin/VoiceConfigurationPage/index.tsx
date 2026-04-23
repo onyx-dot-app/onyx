@@ -288,7 +288,10 @@ export default function VoiceConfigurationPage() {
               }
             : undefined
         }
-        disconnectModalOpen={disconnectTarget?.providerId === provider?.id}
+        disconnectModalOpen={
+          disconnectModal.isOpen &&
+          disconnectTarget?.providerId === provider?.id
+        }
       />
     );
   };
