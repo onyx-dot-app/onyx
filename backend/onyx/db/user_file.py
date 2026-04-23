@@ -2,21 +2,13 @@ import datetime
 from uuid import UUID
 
 from sqlalchemy import func
-from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Document
-from onyx.db.models import FileRecord
 from onyx.db.models import Persona
 from onyx.db.models import Project__UserFile
-from onyx.db.models import User
 from onyx.db.models import UserFile
 
 
@@ -127,127 +119,6 @@ def get_file_id_by_user_file_id(
     if user_file:
         return user_file.file_id
     return None
-
-
-def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> bool:
-    """Return True if `user` is allowed to read the raw `file_id` served by
-    `GET /chat/file/{file_id}`. Access is granted when any of:
-
-    - The `file_id` is the storage id of a `UserFile` owned by the user.
-    - The `file_id` is a persona avatar (`Persona.uploaded_image_id`); avatars
-      are visible to any authenticated user.
-    - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
-      session the user owns or a session publicly shared via
-      `ChatSessionSharedStatus.PUBLIC`.
-    - The `file_id` is the storage id of a connector-ingested document
-      (`FileOrigin.CONNECTOR`) whose associated `Document` grants access to
-      this user via the standard ACL. This allows users to preview cited
-      files returned from indexed connector sources (e.g. the `File`
-      connector) through `PreviewModal`.
-    - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
-      tool call database entry is added. This the file is there and the FE can
-      request it despite us not having the linking tool call. We currently
-      hackily get around this by making these files public, but this will need
-      to change with a larger refactor.
-    """
-    owns_user_file = db_session.query(
-        select(UserFile.id)
-        .where(UserFile.file_id == file_id, UserFile.user_id == user.id)
-        .exists()
-    ).scalar()
-    if owns_user_file:
-        return True
-
-    # TODO: move persona avatars to a dedicated endpoint (e.g.
-    # /assistants/{id}/avatar) so this branch can be removed. /chat/file is
-    # currently overloaded with multiple asset classes (user files, chat
-    # attachments, tool outputs, avatars), forcing this access-check fan-out.
-    #
-    # Restrict the avatar path to CHAT_UPLOAD-origin files so an attacker
-    # cannot bind another user's USER_FILE (or any other origin) to their
-    # own persona and read it through this check.
-    is_persona_avatar = db_session.query(
-        select(Persona.id)
-        .join(FileRecord, FileRecord.file_id == Persona.uploaded_image_id)
-        .where(
-            Persona.uploaded_image_id == file_id,
-            FileRecord.file_origin == FileOrigin.CHAT_UPLOAD,
-        )
-        .exists()
-    ).scalar()
-    if is_persona_avatar:
-        return True
-
-    chat_file_stmt = (
-        select(ChatMessage.id)
-        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
-        .where(ChatMessage.files.op("@>")([{"id": file_id}]))
-        .where(
-            or_(
-                ChatSession.user_id == user.id,
-                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
-            )
-        )
-        .limit(1)
-    )
-    if db_session.execute(chat_file_stmt).first() is not None:
-        return True
-
-    if _user_can_access_connector_file(file_id, user, db_session):
-        return True
-
-    # TODO: Chat image generated images are currently public
-    # We will want to make this private but it requires a larger
-    # refactor.
-    is_chat_image_gen = db_session.query(
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_id == file_id,
-            FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
-        )
-        .exists()
-    ).scalar()
-    return bool(is_chat_image_gen)
-
-
-def _user_can_access_connector_file(
-    file_id: str, user: User, db_session: Session
-) -> bool:
-    """Grant access when `file_id` corresponds to a connector-ingested file
-    (`FileOrigin.CONNECTOR`) and the user's ACL overlaps the ACL of at least
-    one `Document` that references that `file_id`. Mirrors the access-control
-    layer applied during retrieval so preview access stays consistent with
-    search result access."""
-    # Imported here to avoid a circular import between `onyx.access.access`
-    # (which imports from this module for user-file ACL helpers) and this
-    # module.
-    from onyx.access.access import get_access_for_documents
-    from onyx.access.access import get_acl_for_user
-
-    is_connector_file = db_session.query(
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_id == file_id,
-            FileRecord.file_origin == FileOrigin.CONNECTOR,
-        )
-        .exists()
-    ).scalar()
-    if not is_connector_file:
-        return False
-
-    document_ids = (
-        db_session.execute(select(Document.id).where(Document.file_id == file_id))
-        .scalars()
-        .all()
-    )
-    if not document_ids:
-        return False
-
-    user_acl = get_acl_for_user(user, db_session)
-    doc_access = get_access_for_documents(list(document_ids), db_session)
-    return any(
-        not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
-    )
 
 
 def get_file_ids_by_user_file_ids(
