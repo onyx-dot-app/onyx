@@ -169,8 +169,6 @@ export default function AgentsTable() {
   const { user } = useUser();
 
   // Filter state
-  const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
-  const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
     new Set()
   );
@@ -401,7 +399,7 @@ export default function AgentsTable() {
           leftSearchIcon
         />
         <Section gap={0.25} flexDirection="row" justifyContent="start">
-          <Popover open={creatorFilterOpen} onOpenChange={setCreatorFilterOpen}>
+          <Popover>
             <Popover.Trigger asChild>
               <FilterButton
                 icon={SvgUser}
@@ -455,7 +453,7 @@ export default function AgentsTable() {
             </Popover.Content>
           </Popover>
 
-          <Popover open={actionsFilterOpen} onOpenChange={setActionsFilterOpen}>
+          <Popover>
             <Popover.Trigger asChild>
               <FilterButton
                 icon={SvgActions}
