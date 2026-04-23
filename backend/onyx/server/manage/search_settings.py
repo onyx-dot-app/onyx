@@ -27,6 +27,9 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
+from onyx.file_processing.unstructured import delete_unstructured_api_key
+from onyx.file_processing.unstructured import get_unstructured_api_key
+from onyx.file_processing.unstructured import update_unstructured_api_key
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
@@ -256,6 +259,29 @@ def update_saved_search_settings(
 
     # Re-sync default to match PRESENT search settings
     _sync_default_contextual_model(db_session)
+
+
+@router.get("/unstructured-api-key-set")
+def unstructured_api_key_set(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> bool:
+    api_key = get_unstructured_api_key()
+    return api_key is not None
+
+
+@router.put("/upsert-unstructured-api-key")
+def upsert_unstructured_api_key(
+    unstructured_api_key: str,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> None:
+    update_unstructured_api_key(unstructured_api_key)
+
+
+@router.delete("/delete-unstructured-api-key")
+def delete_unstructured_api_key_endpoint(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> None:
+    delete_unstructured_api_key()
 
 
 def validate_contextual_rag_model(
