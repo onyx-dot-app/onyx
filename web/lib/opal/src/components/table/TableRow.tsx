@@ -52,7 +52,6 @@ function SortableTableRow({
       className="tbl-row group/row"
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
-      {...attributes}
       {...listeners}
       {...props}
     >
