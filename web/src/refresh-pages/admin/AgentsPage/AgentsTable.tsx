@@ -20,6 +20,11 @@ import { SvgActions, SvgCheck, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useUser } from "@/providers/UserProvider";
+import {
+  OPEN_URL_TOOL_ID,
+  OPEN_URL_TOOL_NAME,
+  SYSTEM_TOOL_ICONS,
+} from "@/app/app/components/tools/constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,7 +32,7 @@ import { useUser } from "@/providers/UserProvider";
 
 type ActionFilterItem =
   | { type: "mcp_server"; mcpServerId: number; name: string }
-  | { type: "openapi"; toolId: number; name: string };
+  | { type: "tool"; toolId: number; name: string; systemIcon?: React.FC };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,6 +61,10 @@ function actionFilterKey(item: ActionFilterItem): string {
   return item.type === "mcp_server"
     ? `mcp:${item.mcpServerId}`
     : `tool:${item.toolId}`;
+}
+
+function isSystemTool(item: ActionFilterItem): boolean {
+  return item.type === "tool" && !!item.systemIcon;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,28 +264,45 @@ export default function AgentsTable() {
   }, [uniqueCreators, creatorSearchQuery]);
 
   // ---------------------------------------------------------------------------
-  // Actions filter data — MCP servers + OpenAPI actions
+  // Actions filter data
   // ---------------------------------------------------------------------------
 
   const uniqueActions: ActionFilterItem[] = useMemo(() => {
     const seenMcpServers = new Set<number>();
-    const openApiTools = new Map<number, { id: number; name: string }>();
+    const individualTools = new Map<
+      number,
+      { id: number; name: string; systemIcon?: React.FC }
+    >();
 
     allAgentRows.forEach((agent) => {
       agent.tools.forEach((tool) => {
-        // Skip built-in system tools
-        if (tool.in_code_tool_id) return;
+        // Skip OpenURL — it's an implicit tool, not a user-facing action
+        if (
+          tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_NAME
+        ) {
+          return;
+        }
 
         if (tool.mcp_server_id != null) {
           seenMcpServers.add(tool.mcp_server_id);
         } else {
-          openApiTools.set(tool.id, {
+          individualTools.set(tool.id, {
             id: tool.id,
             name: tool.display_name,
+            systemIcon: SYSTEM_TOOL_ICONS[tool.name],
           });
         }
       });
     });
+
+    // System tools first, then MCP servers, then OpenAPI/custom actions
+    const toolItems = Array.from(individualTools.values());
+    const systemItems: ActionFilterItem[] = toolItems
+      .filter((t) => !!t.systemIcon)
+      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     const mcpItems: ActionFilterItem[] = Array.from(seenMcpServers)
       .map((id) => ({
@@ -286,11 +312,12 @@ export default function AgentsTable() {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const openApiItems: ActionFilterItem[] = Array.from(openApiTools.values())
-      .map((t) => ({ type: "openapi" as const, toolId: t.id, name: t.name }))
+    const otherItems: ActionFilterItem[] = toolItems
+      .filter((t) => !t.systemIcon)
+      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return [...mcpItems, ...openApiItems];
+    return [...systemItems, ...mcpItems, ...otherItems];
   }, [allAgentRows, mcpServerNames]);
 
   const filteredActions = useMemo(() => {
@@ -323,8 +350,8 @@ export default function AgentsTable() {
     return `${selectedActionKeys.size} selected`;
   }, [selectedActionKeys, uniqueActions]);
 
-  // Derive selected MCP server IDs and OpenAPI tool IDs from keys
-  const { selectedMcpServerIds, selectedOpenApiToolIds } = useMemo(() => {
+  // Derive selected MCP server IDs and individual tool IDs from keys
+  const { selectedMcpServerIds, selectedToolIds } = useMemo(() => {
     const mcpIds = new Set<number>();
     const toolIds = new Set<number>();
     for (const key of Array.from(selectedActionKeys)) {
@@ -334,7 +361,7 @@ export default function AgentsTable() {
         toolIds.add(Number(key.slice(5)));
       }
     }
-    return { selectedMcpServerIds: mcpIds, selectedOpenApiToolIds: toolIds };
+    return { selectedMcpServerIds: mcpIds, selectedToolIds: toolIds };
   }, [selectedActionKeys]);
 
   // ---------------------------------------------------------------------------
@@ -351,7 +378,7 @@ export default function AgentsTable() {
         selectedActionKeys.size === 0 ||
         agent.tools.some(
           (tool) =>
-            selectedOpenApiToolIds.has(tool.id) ||
+            selectedToolIds.has(tool.id) ||
             (tool.mcp_server_id != null &&
               selectedMcpServerIds.has(tool.mcp_server_id))
         );
@@ -363,7 +390,7 @@ export default function AgentsTable() {
     selectedCreatorIds,
     selectedActionKeys,
     selectedMcpServerIds,
-    selectedOpenApiToolIds,
+    selectedToolIds,
   ]);
 
   // ---------------------------------------------------------------------------
@@ -490,14 +517,25 @@ export default function AgentsTable() {
                   value={actionsSearchQuery}
                   onChange={(e) => setActionsSearchQuery(e.target.value)}
                 />,
-                ...filteredActions.map((action) => {
+                ...filteredActions.flatMap((action, index) => {
                   const key = actionFilterKey(action);
                   const isSelected = selectedActionKeys.has(key);
+                  const icon =
+                    action.type === "tool" && action.systemIcon
+                      ? action.systemIcon
+                      : SvgActions;
 
-                  return (
+                  // Add separator after the last system tool
+                  const nextAction = filteredActions[index + 1];
+                  const needsSeparator =
+                    isSystemTool(action) &&
+                    nextAction &&
+                    !isSystemTool(nextAction);
+
+                  const lineItem = (
                     <LineItem
                       key={key}
-                      icon={SvgActions}
+                      icon={icon}
                       selected={isSelected}
                       emphasized
                       onClick={() => {
@@ -515,6 +553,8 @@ export default function AgentsTable() {
                       {action.name}
                     </LineItem>
                   );
+
+                  return needsSeparator ? [lineItem, null] : [lineItem];
                 }),
               ]}
             </PopoverMenu>
