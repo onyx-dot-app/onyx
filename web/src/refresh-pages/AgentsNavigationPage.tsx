@@ -328,6 +328,8 @@ export default function AgentsNavigationPage() {
         activeTab === "your" ? checkUserOwnsAgent(user, agent) : true;
       const isNotUnifiedAgent = agent.id !== 0;
 
+      const listedFilter = agent.is_listed || checkUserOwnsAgent(user, agent);
+
       const creatorFilter =
         selectedCreatorIds.size === 0 ||
         (agent.owner && selectedCreatorIds.has(agent.owner.id));
@@ -346,6 +348,7 @@ export default function AgentsNavigationPage() {
         (nameMatches || labelMatches) &&
         mineFilter &&
         isNotUnifiedAgent &&
+        listedFilter &&
         creatorFilter &&
         actionsFilter
       );
