@@ -20,6 +20,7 @@ import { SvgActions, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LineItemButton } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
+import useFilter from "@/hooks/useFilter";
 import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
@@ -175,8 +176,6 @@ export default function AgentsTable() {
   const [selectedActionKeys, setSelectedActionKeys] = useState<Set<string>>(
     new Set()
   );
-  const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
-  const [actionsSearchQuery, setActionsSearchQuery] = useState("");
 
   // MCP server names — fetched once for the filter dropdown
   const [mcpServerNames, setMcpServerNames] = useState<Map<number, string>>(
@@ -256,12 +255,11 @@ export default function AgentsTable() {
     return creators;
   }, [allAgentRows, user]);
 
-  const filteredCreators = useMemo(() => {
-    if (!creatorSearchQuery) return uniqueCreators;
-    return uniqueCreators.filter((creator) =>
-      creator.email.toLowerCase().includes(creatorSearchQuery.toLowerCase())
-    );
-  }, [uniqueCreators, creatorSearchQuery]);
+  const {
+    query: creatorSearchQuery,
+    setQuery: setCreatorSearchQuery,
+    filtered: filteredCreators,
+  } = useFilter(uniqueCreators, (c) => c.email);
 
   // ---------------------------------------------------------------------------
   // Actions filter data
@@ -320,11 +318,11 @@ export default function AgentsTable() {
     return [...systemItems, ...mcpItems, ...otherItems];
   }, [allAgentRows, mcpServerNames]);
 
-  const filteredActions = useMemo(() => {
-    if (!actionsSearchQuery) return uniqueActions;
-    const query = actionsSearchQuery.toLowerCase();
-    return uniqueActions.filter((a) => a.name.toLowerCase().includes(query));
-  }, [uniqueActions, actionsSearchQuery]);
+  const {
+    query: actionsSearchQuery,
+    setQuery: setActionsSearchQuery,
+    filtered: filteredActions,
+  } = useFilter(uniqueActions, (a) => a.name);
 
   // ---------------------------------------------------------------------------
   // Filter button labels
