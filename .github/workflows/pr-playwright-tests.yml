@@ -274,7 +274,7 @@ jobs:
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning]
           cache-dependency-path: ./web/package-lock.json
 
@@ -616,7 +616,7 @@ jobs:
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning]
           cache-dependency-path: ./web/package-lock.json
 
