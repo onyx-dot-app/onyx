@@ -7,9 +7,10 @@ no-op when an outer `generation_span` is already active — callers that
 explicitly wrap their calls (via `llm_generation_span`) continue to work and
 are not double-counted.
 
-Imports from `onyx.tracing.*` are performed lazily inside the wrappers to
-avoid an import cycle between `onyx.llm.interfaces` and
-`onyx.tracing.llm_utils` (which itself imports `LLM`).
+Imports from `onyx.tracing.llm_utils` stay lazy (inside the wrappers) because
+it imports `onyx.llm.interfaces`, which imports this module — loading it at
+module level would deadlock the import graph. Everything else is imported
+at the top of the file.
 """
 
 from __future__ import annotations
@@ -21,9 +22,14 @@ from collections.abc import Iterator
 from typing import Any
 from typing import TYPE_CHECKING
 
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
+from onyx.llm.model_response import Usage
+from onyx.tracing.framework.create import get_current_span
+from onyx.tracing.framework.span_data import GenerationSpanData
+
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
-    from onyx.llm.model_response import ChatCompletionDeltaToolCall
     from onyx.llm.model_response import ModelResponse
     from onyx.llm.model_response import ModelResponseStream
     from onyx.llm.models import ToolCall
@@ -50,9 +56,6 @@ def _outer_generation_span_active() -> bool:
       always has ``started_at = None``. The ``started_at`` check prevents a
       stale ``NoOpSpan`` from suppressing fallback tracing.
     """
-    from onyx.tracing.framework.create import get_current_span
-    from onyx.tracing.framework.span_data import GenerationSpanData
-
     current = get_current_span()
     return (
         current is not None
@@ -184,7 +187,6 @@ def wrap_stream(
             yield from stream_fn(self, *args, **kwargs)
             return
 
-        from onyx.llm.model_response import Usage
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_span_output
 
@@ -249,9 +251,6 @@ def _merge_tool_call_delta(
     keyed by ``index`` that can be converted to fully-formed ``ToolCall``
     objects via :func:`_finalize_tool_calls`.
     """
-    from onyx.llm.model_response import ChatCompletionDeltaToolCall
-    from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-
     existing = buffer.get(delta.index)
     if existing is None:
         # Copy into a fresh pydantic model so later mutations don't leak back
