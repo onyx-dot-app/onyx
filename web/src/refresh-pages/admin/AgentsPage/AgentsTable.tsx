@@ -402,134 +402,136 @@ export default function AgentsTable() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <InputTypeIn
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        placeholder="Search agents..."
-        leftSearchIcon
-      />
-      <Section gap={0.5} flexDirection="row" justifyContent="start">
-        <Popover open={creatorFilterOpen} onOpenChange={setCreatorFilterOpen}>
-          <Popover.Trigger asChild>
-            <FilterButton
-              icon={SvgUser}
-              active={selectedCreatorIds.size > 0}
-              onClear={() => setSelectedCreatorIds(new Set())}
-            >
-              {creatorFilterButtonText}
-            </FilterButton>
-          </Popover.Trigger>
-          <Popover.Content align="start">
-            <PopoverMenu>
-              {[
-                <InputTypeIn
-                  key="created-by"
-                  placeholder="Created by..."
-                  variant="internal"
-                  leftSearchIcon
-                  value={creatorSearchQuery}
-                  onChange={(e) => setCreatorSearchQuery(e.target.value)}
-                />,
-                ...filteredCreators.flatMap((creator) => {
-                  const isSelected = selectedCreatorIds.has(creator.id);
-                  const isCurrentUser = user && creator.id === user.id;
+    <div className="flex flex-col">
+      <Section gap={0.5}>
+        <InputTypeIn
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search agents..."
+          leftSearchIcon
+        />
+        <Section gap={0.25} flexDirection="row" justifyContent="start">
+          <Popover open={creatorFilterOpen} onOpenChange={setCreatorFilterOpen}>
+            <Popover.Trigger asChild>
+              <FilterButton
+                icon={SvgUser}
+                active={selectedCreatorIds.size > 0}
+                onClear={() => setSelectedCreatorIds(new Set())}
+              >
+                {creatorFilterButtonText}
+              </FilterButton>
+            </Popover.Trigger>
+            <Popover.Content align="start">
+              <PopoverMenu>
+                {[
+                  <InputTypeIn
+                    key="created-by"
+                    placeholder="Created by..."
+                    variant="internal"
+                    leftSearchIcon
+                    value={creatorSearchQuery}
+                    onChange={(e) => setCreatorSearchQuery(e.target.value)}
+                  />,
+                  ...filteredCreators.flatMap((creator) => {
+                    const isSelected = selectedCreatorIds.has(creator.id);
+                    const isCurrentUser = user && creator.id === user.id;
 
-                  return [
-                    <LineItemButton
-                      key={creator.id}
-                      sizePreset="main-ui"
-                      variant="body"
-                      prominence="muted"
-                      rounding="sm"
-                      icon={isCurrentUser ? SvgUser : undefined}
-                      title={creator.email}
-                      state={isSelected ? "selected" : "empty"}
-                      onClick={() => {
-                        setSelectedCreatorIds((prev) => {
-                          const newSet = new Set(prev);
-                          if (newSet.has(creator.id)) {
-                            newSet.delete(creator.id);
-                          } else {
-                            newSet.add(creator.id);
-                          }
-                          return newSet;
-                        });
-                      }}
-                    />,
-                  ];
-                }),
-              ]}
-            </PopoverMenu>
-          </Popover.Content>
-        </Popover>
+                    return [
+                      <LineItemButton
+                        key={creator.id}
+                        sizePreset="main-ui"
+                        variant="body"
+                        prominence="muted"
+                        rounding="sm"
+                        icon={isCurrentUser ? SvgUser : undefined}
+                        title={creator.email}
+                        state={isSelected ? "selected" : "empty"}
+                        onClick={() => {
+                          setSelectedCreatorIds((prev) => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(creator.id)) {
+                              newSet.delete(creator.id);
+                            } else {
+                              newSet.add(creator.id);
+                            }
+                            return newSet;
+                          });
+                        }}
+                      />,
+                    ];
+                  }),
+                ]}
+              </PopoverMenu>
+            </Popover.Content>
+          </Popover>
 
-        <Popover open={actionsFilterOpen} onOpenChange={setActionsFilterOpen}>
-          <Popover.Trigger asChild>
-            <FilterButton
-              icon={SvgActions}
-              active={selectedActionKeys.size > 0}
-              onClear={() => setSelectedActionKeys(new Set())}
-            >
-              {actionsFilterButtonText}
-            </FilterButton>
-          </Popover.Trigger>
-          <Popover.Content align="start">
-            <PopoverMenu>
-              {[
-                <InputTypeIn
-                  key="actions"
-                  placeholder="Filter actions..."
-                  variant="internal"
-                  leftSearchIcon
-                  value={actionsSearchQuery}
-                  onChange={(e) => setActionsSearchQuery(e.target.value)}
-                />,
-                ...filteredActions.flatMap((action, index) => {
-                  const key = actionFilterKey(action);
-                  const isSelected = selectedActionKeys.has(key);
-                  const icon =
-                    action.type === "tool" && action.systemIcon
-                      ? action.systemIcon
-                      : SvgActions;
+          <Popover open={actionsFilterOpen} onOpenChange={setActionsFilterOpen}>
+            <Popover.Trigger asChild>
+              <FilterButton
+                icon={SvgActions}
+                active={selectedActionKeys.size > 0}
+                onClear={() => setSelectedActionKeys(new Set())}
+              >
+                {actionsFilterButtonText}
+              </FilterButton>
+            </Popover.Trigger>
+            <Popover.Content align="start">
+              <PopoverMenu>
+                {[
+                  <InputTypeIn
+                    key="actions"
+                    placeholder="Filter actions..."
+                    variant="internal"
+                    leftSearchIcon
+                    value={actionsSearchQuery}
+                    onChange={(e) => setActionsSearchQuery(e.target.value)}
+                  />,
+                  ...filteredActions.flatMap((action, index) => {
+                    const key = actionFilterKey(action);
+                    const isSelected = selectedActionKeys.has(key);
+                    const icon =
+                      action.type === "tool" && action.systemIcon
+                        ? action.systemIcon
+                        : SvgActions;
 
-                  // Add separator after the last system tool
-                  const nextAction = filteredActions[index + 1];
-                  const needsSeparator =
-                    isSystemTool(action) &&
-                    nextAction &&
-                    !isSystemTool(nextAction);
+                    // Add separator after the last system tool
+                    const nextAction = filteredActions[index + 1];
+                    const needsSeparator =
+                      isSystemTool(action) &&
+                      nextAction &&
+                      !isSystemTool(nextAction);
 
-                  const lineItem = (
-                    <LineItemButton
-                      key={key}
-                      sizePreset="main-ui"
-                      variant="body"
-                      prominence="muted"
-                      rounding="sm"
-                      icon={icon}
-                      title={action.name}
-                      state={isSelected ? "selected" : "empty"}
-                      onClick={() => {
-                        setSelectedActionKeys((prev) => {
-                          const newSet = new Set(prev);
-                          if (newSet.has(key)) {
-                            newSet.delete(key);
-                          } else {
-                            newSet.add(key);
-                          }
-                          return newSet;
-                        });
-                      }}
-                    />
-                  );
+                    const lineItem = (
+                      <LineItemButton
+                        key={key}
+                        sizePreset="main-ui"
+                        variant="body"
+                        prominence="muted"
+                        rounding="sm"
+                        icon={icon}
+                        title={action.name}
+                        state={isSelected ? "selected" : "empty"}
+                        onClick={() => {
+                          setSelectedActionKeys((prev) => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(key)) {
+                              newSet.delete(key);
+                            } else {
+                              newSet.add(key);
+                            }
+                            return newSet;
+                          });
+                        }}
+                      />
+                    );
 
-                  return needsSeparator ? [lineItem, null] : [lineItem];
-                }),
-              ]}
-            </PopoverMenu>
-          </Popover.Content>
-        </Popover>
+                    return needsSeparator ? [lineItem, null] : [lineItem];
+                  }),
+                ]}
+              </PopoverMenu>
+            </Popover.Content>
+          </Popover>
+        </Section>
       </Section>
       <Table
         data={agentRows}
