@@ -222,11 +222,26 @@ def test_extract_prompt_returns_none_on_signature_mismatch() -> None:
 
 
 def test_validate_prompt_param_rejects_signature_without_prompt() -> None:
+    # Fixed parameter list with no ``prompt``, no ``*args``, no ``**kwargs``
+    # — the override cannot receive a prompt at all, so validation fails.
     def bad_override(self: object, foo: str) -> None:  # noqa: ARG001
         return None
 
-    with pytest.raises(TypeError, match="missing required 'prompt' parameter"):
+    with pytest.raises(TypeError, match="signature cannot accept a 'prompt' argument"):
         _validate_prompt_param(bad_override)
+
+
+def test_validate_prompt_param_accepts_catch_all_signature() -> None:
+    """Test doubles commonly override with ``*args, **kwargs`` catch-all.
+    Those signatures can accept a prompt via the variable-keyword parameter,
+    so validation must not reject them."""
+
+    def catch_all(self: object, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        return None
+
+    # Should not raise.
+    sig = _validate_prompt_param(catch_all)
+    assert sig is not None
 
 
 def test_wrap_invoke_raises_on_signature_without_prompt() -> None:
@@ -236,7 +251,7 @@ def test_wrap_invoke_raises_on_signature_without_prompt() -> None:
     def bad_invoke(self: object, foo: str) -> ModelResponse:  # noqa: ARG001
         raise AssertionError("bad_invoke should never run")
 
-    with pytest.raises(TypeError, match="missing required 'prompt' parameter"):
+    with pytest.raises(TypeError, match="signature cannot accept a 'prompt' argument"):
         wrap_invoke(cast(Callable[..., ModelResponse], bad_invoke))
 
 

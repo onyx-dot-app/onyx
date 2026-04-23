@@ -61,21 +61,37 @@ def _outer_generation_span_active() -> bool:
 
 
 def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
-    """Return the signature of ``fn`` after asserting it exposes ``prompt``.
+    """Return the signature of ``fn``, asserting it can accept a ``prompt``.
 
     Runs once at wrap time so a subclass whose ``invoke`` / ``stream``
-    signature drifts away from the abstract base surfaces a clear error
-    during class creation rather than silently producing blank-input spans
-    at runtime. The returned :class:`inspect.Signature` is reused by
-    :func:`_extract_prompt` to bind arguments per call.
+    signature can't possibly carry a ``prompt`` surfaces a clear error at
+    class creation rather than silently producing blank-input spans at
+    runtime.
+
+    An override is considered valid if it has any of:
+    - a named ``prompt`` parameter (the expected shape), or
+    - a ``**kwargs`` (VAR_KEYWORD) parameter that could carry it, or
+    - an ``*args`` (VAR_POSITIONAL) parameter that could carry it.
+
+    Test doubles commonly use ``*args, **kwargs`` catch-alls to ignore the
+    full signature — those are accepted here. Only overrides that *can't*
+    receive a prompt at all (e.g. a fixed unrelated parameter list) are
+    rejected.
     """
     sig = inspect.signature(fn)
-    if _PROMPT_PARAM_NAME not in sig.parameters:
+    params = sig.parameters.values()
+    has_prompt = _PROMPT_PARAM_NAME in sig.parameters
+    accepts_var_keyword = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+    accepts_var_positional = any(
+        p.kind is inspect.Parameter.VAR_POSITIONAL for p in params
+    )
+    if not (has_prompt or accepts_var_keyword or accepts_var_positional):
         name = getattr(fn, "__qualname__", repr(fn))
         raise TypeError(
-            f"Cannot auto-trace {name}: missing required "
-            f"'{_PROMPT_PARAM_NAME}' parameter. LLM.invoke / LLM.stream "
-            f"subclass overrides must keep the 'prompt' parameter name."
+            f"Cannot auto-trace {name}: signature cannot accept a "
+            f"'{_PROMPT_PARAM_NAME}' argument. LLM.invoke / LLM.stream "
+            f"subclass overrides must either keep the 'prompt' parameter "
+            f"name or accept *args / **kwargs."
         )
     return sig
 
