@@ -16,7 +16,7 @@ import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Persona } from "@/app/admin/agents/interfaces";
-import { SvgActions, SvgCheck, SvgUser } from "@opal/icons";
+import { SvgActions, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useUser } from "@/providers/UserProvider";
@@ -466,13 +466,7 @@ export default function AgentsTable() {
                   return [
                     <LineItem
                       key={creator.id}
-                      icon={
-                        isSelected
-                          ? SvgCheck
-                          : isCurrentUser
-                            ? SvgUser
-                            : () => null
-                      }
+                      icon={isCurrentUser ? SvgUser : () => null}
                       selected={isSelected}
                       emphasized
                       onClick={() => {
