@@ -29,6 +29,16 @@ def sample_embeddings() -> List[List[float]]:
     return [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
 
 
+def _build_google_embed_response(
+    sample_embeddings: List[List[float]],
+) -> MagicMock:
+    response = MagicMock()
+    response.embeddings = [
+        MagicMock(values=embedding) for embedding in sample_embeddings
+    ]
+    return response
+
+
 @pytest.mark.asyncio
 async def test_cloud_embedding_context_manager() -> None:
     async with CloudEmbedding("fake-key", EmbeddingProvider.OPENAI) as embedding:
@@ -84,4 +94,109 @@ async def test_rate_limit_handling() -> None:
                 texts=["test"],
                 model_name="fake-model",
                 text_type=EmbedTextType.QUERY,
+            )
+
+
+@pytest.mark.asyncio
+async def test_vertex_embed_keeps_task_type_for_existing_models(
+    sample_embeddings: List[List[float]],
+) -> None:
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as mock_credentials:
+        mock_credentials.return_value = MagicMock()
+
+        with patch("google.genai.Client") as mock_genai_client:
+            mock_client = MagicMock()
+            mock_client.aio.models.embed_content = AsyncMock(
+                return_value=_build_google_embed_response(sample_embeddings[:1])
+            )
+            mock_client.aio.aclose = AsyncMock()
+            mock_genai_client.return_value = mock_client
+
+            embedding = CloudEmbedding(
+                '{"project_id":"test-project"}',
+                EmbeddingProvider.GOOGLE,
+            )
+            try:
+                result = await embedding._embed_vertex(
+                    ["query text"],
+                    "text-embedding-005",
+                    "RETRIEVAL_QUERY",
+                    128,
+                )
+            finally:
+                await embedding.aclose()
+
+            assert result == sample_embeddings[:1]
+
+            embed_call = mock_client.aio.models.embed_content.await_args
+            assert embed_call is not None
+            config = embed_call.kwargs["config"]
+            contents = embed_call.kwargs["contents"]
+
+            assert config.task_type == "RETRIEVAL_QUERY"
+            assert config.output_dimensionality == 128
+            assert config.auto_truncate is True
+            assert contents[0].parts[0].text == "query text"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("embedding_type", "expected_instruction"),
+    [
+        (
+            "RETRIEVAL_QUERY",
+            "Represent this query for retrieving relevant documents.",
+        ),
+        (
+            "RETRIEVAL_DOCUMENT",
+            "Represent this document for retrieval.",
+        ),
+    ],
+)
+async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
+    embedding_type: str,
+    expected_instruction: str,
+    sample_embeddings: List[List[float]],
+) -> None:
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as mock_credentials:
+        mock_credentials.return_value = MagicMock()
+
+        with patch("google.genai.Client") as mock_genai_client:
+            mock_client = MagicMock()
+            mock_client.aio.models.embed_content = AsyncMock(
+                return_value=_build_google_embed_response(sample_embeddings[:1])
+            )
+            mock_client.aio.aclose = AsyncMock()
+            mock_genai_client.return_value = mock_client
+
+            embedding = CloudEmbedding(
+                '{"project_id":"test-project"}',
+                EmbeddingProvider.GOOGLE,
+            )
+            try:
+                result = await embedding._embed_vertex(
+                    ["document text"],
+                    "google/gemini-embedding-2",
+                    embedding_type,
+                    256,
+                )
+            finally:
+                await embedding.aclose()
+
+            assert result == sample_embeddings[:1]
+
+            embed_call = mock_client.aio.models.embed_content.await_args
+            assert embed_call is not None
+            config = embed_call.kwargs["config"]
+            contents = embed_call.kwargs["contents"]
+
+            assert config.task_type is None
+            assert config.output_dimensionality == 256
+            assert config.auto_truncate is True
+            assert (
+                contents[0].parts[0].text == f"{expected_instruction}\n\ndocument text"
             )
