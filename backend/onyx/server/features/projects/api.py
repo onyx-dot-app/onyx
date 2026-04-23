@@ -62,12 +62,8 @@ def _trigger_user_file_project_sync(
         logger.info(f"Queued in-process project sync for user_file_id={user_file_id}")
         return
 
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
-        enqueue_user_file_project_sync_task,
-    )
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
-        get_user_file_project_sync_queue_depth,
-    )
+    from onyx.background.celery.tasks.user_file_processing.tasks import enqueue_user_file_project_sync_task
+    from onyx.background.celery.tasks.user_file_processing.tasks import get_user_file_project_sync_queue_depth
     from onyx.background.celery.versioned_apps.client import app as client_app
     from onyx.redis.redis_pool import get_redis_client
 

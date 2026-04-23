@@ -20,9 +20,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.dr_mock_tools import (
-    get_research_agent_additional_tool_definitions,
-)
+from onyx.deep_research.dr_mock_tools import get_research_agent_additional_tool_definitions
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
@@ -35,9 +33,7 @@ from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.dr_tool_prompts import (
-    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
-)
+from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION_REASONING
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT

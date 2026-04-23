@@ -8,9 +8,7 @@ import time
 import pytest
 
 from onyx.server.query_and_chat.streaming_models import StreamingType
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    HEARTBEAT_INTERVAL,
-)
+from onyx.tools.tool_implementations.images.image_generation_tool import HEARTBEAT_INTERVAL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestLLMProvider

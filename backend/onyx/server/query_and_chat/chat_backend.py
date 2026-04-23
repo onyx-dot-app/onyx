@@ -90,9 +90,7 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import SetPreferredResponseRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
-from onyx.server.query_and_chat.session_loading import (
-    translate_assistant_message_to_packets,
-)
+from onyx.server.query_and_chat.session_loading import translate_assistant_message_to_packets
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider

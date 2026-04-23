@@ -26,9 +26,7 @@ from onyx.connectors.github.connector import GithubConnectorStage
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
-from tests.unit.onyx.connectors.utils import (
-    load_everything_from_checkpoint_connector_from_checkpoint,
-)
+from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector_from_checkpoint
 
 
 @pytest.fixture

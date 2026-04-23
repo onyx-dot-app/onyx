@@ -9,9 +9,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import DocumentFailure
 from onyx.db.models import SearchSettings
-from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk_embedding,
-)
+from onyx.document_index.chunk_content_enrichment import generate_enriched_content_for_chunk_embedding
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
@@ -25,7 +23,6 @@ from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger()
 

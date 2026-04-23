@@ -2,12 +2,8 @@
 
 import pytest
 
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from tests.integration.common_utils.managers.image_generation import (
-    ImageGenerationConfigManager,
-)
+from onyx.tools.tool_implementations.images.image_generation_tool import ImageGenerationTool
+from tests.integration.common_utils.managers.image_generation import ImageGenerationConfigManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.managers.user import UserManager

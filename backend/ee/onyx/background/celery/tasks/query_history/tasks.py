@@ -22,7 +22,6 @@ from onyx.db.tasks import mark_task_as_started_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

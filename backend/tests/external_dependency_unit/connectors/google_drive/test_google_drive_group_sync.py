@@ -5,9 +5,7 @@ from unittest.mock import patch
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
-    _perform_external_group_sync,
-)
+from ee.onyx.background.celery.tasks.external_group_syncing.tasks import _perform_external_group_sync
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource

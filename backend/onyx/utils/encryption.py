@@ -3,9 +3,7 @@ from typing import Any
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 from onyx.configs.constants import MASK_CREDENTIAL_CHAR
 from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_AUTHENTICATION_METHOD
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 

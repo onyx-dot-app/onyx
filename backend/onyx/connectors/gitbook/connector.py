@@ -17,7 +17,6 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 GITBOOK_API_BASE = "https://api.gitbook.com/v1/"

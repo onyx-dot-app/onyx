@@ -11,9 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.db.federated import (
-    get_federated_connector_document_set_mappings_by_document_set_names,
-)
+from onyx.db.federated import get_federated_connector_document_set_mappings_by_document_set_names
 from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots

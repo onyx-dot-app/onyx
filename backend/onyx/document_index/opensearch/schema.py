@@ -22,16 +22,11 @@ from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
 from onyx.document_index.opensearch.constants import EF_SEARCH
 from onyx.document_index.opensearch.constants import M
 from onyx.document_index.opensearch.string_filtering import DocumentIDTooLongError
-from onyx.document_index.opensearch.string_filtering import (
-    filter_and_validate_document_id,
-)
-from onyx.document_index.opensearch.string_filtering import (
-    MAX_DOCUMENT_ID_ENCODED_LENGTH,
-)
+from onyx.document_index.opensearch.string_filtering import filter_and_validate_document_id
+from onyx.document_index.opensearch.string_filtering import MAX_DOCUMENT_ID_ENCODED_LENGTH
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
 
 TITLE_FIELD_NAME = "title"
 TITLE_VECTOR_FIELD_NAME = "title_vector"

@@ -59,7 +59,6 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
-
 # ---------------------------------------------------------------------------
 # Mock connector that stages a file, yields a doc, then crashes
 # ---------------------------------------------------------------------------

@@ -9,20 +9,14 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_PRIMARY_ADMIN_KEY
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.document_search import (
-    DocumentSearchManager,
-)
+from tests.integration.common_utils.managers.document_search import DocumentSearchManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestCCPair
@@ -30,9 +24,7 @@ from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
-from tests.integration.connector_job_tests.google.google_drive_api_utils import (
-    GoogleDriveManager,
-)
+from tests.integration.connector_job_tests.google.google_drive_api_utils import GoogleDriveManager
 
 
 @pytest.fixture()

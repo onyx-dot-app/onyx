@@ -13,12 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
-    _MAX_TENANTS_PER_RUN,
-)
-from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
-    check_available_tenants,
-)
+from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import _MAX_TENANTS_PER_RUN
+from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import check_available_tenants
 
 # Access the underlying function directly, bypassing Celery's task wrapper
 # which injects `self` as the first argument when bind=True.

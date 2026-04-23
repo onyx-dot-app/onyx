@@ -10,15 +10,9 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    delete_user_file_impl,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    process_user_file_impl,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    project_sync_user_file_impl,
-)
+from onyx.background.celery.tasks.user_file_processing.tasks import delete_user_file_impl
+from onyx.background.celery.tasks.user_file_processing.tasks import process_user_file_impl
+from onyx.background.celery.tasks.user_file_processing.tasks import project_sync_user_file_impl
 
 TASKS_MODULE = "onyx.background.celery.tasks.user_file_processing.tasks"
 

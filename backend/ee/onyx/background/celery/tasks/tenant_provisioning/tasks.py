@@ -243,9 +243,7 @@ def pre_provision_tenant() -> bool:
                 f"Rolling back failed tenant provisioning for: {tenant_id}"
             )
             try:
-                from ee.onyx.server.tenants.provisioning import (
-                    rollback_tenant_provisioning,
-                )
+                from ee.onyx.server.tenants.provisioning import rollback_tenant_provisioning
 
                 asyncio.run(rollback_tenant_provisioning(tenant_id))
             except Exception:

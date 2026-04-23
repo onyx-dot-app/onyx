@@ -11,9 +11,7 @@ from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    get_experts_stores_representations,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_experts_stores_representations
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
@@ -23,13 +21,9 @@ from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
-from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk_text,
-)
+from onyx.document_index.chunk_content_enrichment import generate_enriched_content_for_chunk_text
 from onyx.document_index.interfaces import DocumentIndex as OldDocumentIndex
-from onyx.document_index.interfaces import (
-    DocumentInsertionRecord as OldDocumentInsertionRecord,
-)
+from onyx.document_index.interfaces import DocumentInsertionRecord as OldDocumentInsertionRecord
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
@@ -57,15 +51,9 @@ from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
-from onyx.document_index.opensearch.search import (
-    get_min_max_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
-    get_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
-    get_zscore_normalization_pipeline_name_and_config,
-)
+from onyx.document_index.opensearch.search import get_min_max_normalization_pipeline_name_and_config
+from onyx.document_index.opensearch.search import get_normalization_pipeline_name_and_config
+from onyx.document_index.opensearch.search import get_zscore_normalization_pipeline_name_and_config
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.utils.logger import setup_logger
@@ -73,7 +61,6 @@ from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger(__name__)
 

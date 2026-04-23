@@ -5,7 +5,6 @@ from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
 
-
 TOTALS_HEADER = (
     "Totals and overall aggregates across all rows. This sheet can answer "
     "whole-dataset questions about total, overall, grand total, sum across "

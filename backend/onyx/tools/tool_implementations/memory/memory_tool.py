@@ -27,7 +27,6 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

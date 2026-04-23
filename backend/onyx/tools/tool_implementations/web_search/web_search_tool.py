@@ -18,23 +18,13 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
-from onyx.tools.tool_implementations.utils import (
-    convert_inference_sections_to_llm_string,
-)
+from onyx.tools.tool_implementations.utils import convert_inference_sections_to_llm_string
 from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_search_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
-    provider_requires_api_key,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
-    filter_web_search_results_with_no_title_or_snippet,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
-    inference_section_from_internet_search_result,
-)
+from onyx.tools.tool_implementations.web_search.providers import build_search_provider_from_config
+from onyx.tools.tool_implementations.web_search.providers import provider_requires_api_key
+from onyx.tools.tool_implementations.web_search.utils import filter_web_search_results_with_no_title_or_snippet
+from onyx.tools.tool_implementations.web_search.utils import inference_section_from_internet_search_result
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.enums import WebSearchProviderType

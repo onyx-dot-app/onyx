@@ -6,9 +6,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
-    build_vespa_filters,
-)
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import build_vespa_filters
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN

@@ -17,9 +17,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.docfetching.task_creation_utils import (
-    try_creating_docfetching_task,
-)
+from onyx.background.celery.tasks.docfetching.task_creation_utils import try_creating_docfetching_task
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.connectors.models import InputType

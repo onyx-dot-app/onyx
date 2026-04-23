@@ -40,15 +40,9 @@ from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import StripePublishableKeyResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
-from ee.onyx.server.billing.service import (
-    create_checkout_session as create_checkout_service,
-)
-from ee.onyx.server.billing.service import (
-    create_customer_portal_session as create_portal_service,
-)
-from ee.onyx.server.billing.service import (
-    get_billing_information as get_billing_service,
-)
+from ee.onyx.server.billing.service import create_checkout_session as create_checkout_service
+from ee.onyx.server.billing.service import create_customer_portal_session as create_portal_service
+from ee.onyx.server.billing.service import get_billing_information as get_billing_service
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User

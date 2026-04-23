@@ -11,10 +11,7 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import collect_llm_credential_values
 from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import scrub_sensitive_values
-from onyx.llm.utils import (
-    test_llm as run_test_llm,
-)  # aliased to avoid pytest collection
-
+from onyx.llm.utils import test_llm as run_test_llm  # aliased to avoid pytest collection
 
 _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (

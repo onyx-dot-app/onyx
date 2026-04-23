@@ -10,15 +10,11 @@ from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    datetime_from_utc_timestamp,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_from_utc_timestamp
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import tabular_file_to_sections
 from onyx.connectors.drupal_wiki.models import DrupalWikiCheckpoint
 from onyx.connectors.drupal_wiki.models import DrupalWikiPage
 from onyx.connectors.drupal_wiki.models import DrupalWikiPageResponse

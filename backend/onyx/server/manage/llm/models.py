@@ -18,12 +18,9 @@ from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
 
-
 if TYPE_CHECKING:
-    from onyx.db.models import (
-        LLMProvider as LLMProviderModel,
-        ModelConfiguration as ModelConfigurationModel,
-    )
+    from onyx.db.models import LLMProvider as LLMProviderModel
+    from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
@@ -74,9 +71,7 @@ class LLMProviderDescriptor(BaseModel):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
-        from onyx.llm.well_known_providers.llm_provider_options import (
-            get_provider_display_name,
-        )
+        from onyx.llm.well_known_providers.llm_provider_options import get_provider_display_name
 
         provider = llm_provider_model.provider
 

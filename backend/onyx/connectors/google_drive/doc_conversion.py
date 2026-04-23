@@ -13,13 +13,9 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    extract_and_stage_tabular_file,
-)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import extract_and_stage_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import tabular_file_to_sections
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.models import GDriveMimeType
@@ -48,9 +44,7 @@ from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()

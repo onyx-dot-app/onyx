@@ -10,15 +10,9 @@ from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_migration_state
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
 from onyx.db.opensearch_migration import set_enable_opensearch_retrieval_with_commit
-from onyx.server.manage.opensearch_migration.models import (
-    OpenSearchMigrationStatusResponse,
-)
-from onyx.server.manage.opensearch_migration.models import (
-    OpenSearchRetrievalStatusRequest,
-)
-from onyx.server.manage.opensearch_migration.models import (
-    OpenSearchRetrievalStatusResponse,
-)
+from onyx.server.manage.opensearch_migration.models import OpenSearchMigrationStatusResponse
+from onyx.server.manage.opensearch_migration.models import OpenSearchRetrievalStatusRequest
+from onyx.server.manage.opensearch_migration.models import OpenSearchRetrievalStatusResponse
 
 admin_router = APIRouter(prefix="/admin/opensearch-migration")
 

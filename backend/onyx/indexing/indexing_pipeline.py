@@ -19,9 +19,7 @@ from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    get_experts_stores_representations,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_experts_stores_representations
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
@@ -41,9 +39,7 @@ from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
-from onyx.document_index.document_index_utils import (
-    get_multipass_config,
-)
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
 from onyx.document_index.interfaces import DocumentMetadata
@@ -85,7 +81,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
-
 
 logger = setup_logger()
 

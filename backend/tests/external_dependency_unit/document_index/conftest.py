@@ -18,9 +18,7 @@ from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
-)
+from onyx.document_index.opensearch.opensearch_document_index import OpenSearchOldDocumentIndex
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout

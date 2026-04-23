@@ -6,9 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.preprocessing.access_filters import (
-    build_access_filters_for_user,
-)
+from onyx.context.search.preprocessing.access_filters import build_access_filters_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -20,7 +18,6 @@ from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo
 from onyx.server.documents.models import DocumentInfo
 from onyx.server.utils_vector_db import require_vector_db
-
 
 router = APIRouter(prefix="/document")
 

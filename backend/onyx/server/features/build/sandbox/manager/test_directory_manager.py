@@ -13,9 +13,7 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build.sandbox.manager.directory_manager import (
-    DirectoryManager,
-)
+from onyx.server.features.build.sandbox.manager.directory_manager import DirectoryManager
 
 
 @pytest.fixture

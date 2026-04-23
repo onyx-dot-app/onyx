@@ -88,9 +88,7 @@ from typing import cast
 from typing import List
 from typing import Optional
 
-from litellm.completion_extras.litellm_responses_transformation.transformation import (
-    LiteLLMResponsesTransformationHandler,
-)
+from litellm.completion_extras.litellm_responses_transformation.transformation import LiteLLMResponsesTransformationHandler
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
@@ -277,18 +275,13 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
     def _patched_responses_chunk_parser(
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
+        from litellm.types.llms.openai import ChatCompletionToolCallFunctionChunk
+        from litellm.types.llms.openai import ResponsesAPIStreamEvents
+        from litellm.types.utils import ChatCompletionToolCallChunk
+        from litellm.types.utils import Delta
+        from litellm.types.utils import ModelResponseStream
+        from litellm.types.utils import StreamingChoices
         from pydantic import BaseModel
-
-        from litellm.types.llms.openai import (
-            ChatCompletionToolCallFunctionChunk,
-            ResponsesAPIStreamEvents,
-        )
-        from litellm.types.utils import (
-            ChatCompletionToolCallChunk,
-            Delta,
-            ModelResponseStream,
-            StreamingChoices,
-        )
 
         parsed_chunk = chunk
         if not parsed_chunk:
@@ -577,9 +570,7 @@ def _patch_azure_responses_should_fake_stream() -> None:
     Azure's Responses API supports native streaming, so we override this to always use
     real streaming (SyncResponsesAPIStreamingIterator).
     """
-    from litellm.llms.azure.responses.transformation import (
-        AzureOpenAIResponsesAPIConfig,
-    )
+    from litellm.llms.azure.responses.transformation import AzureOpenAIResponsesAPIConfig
 
     if (
         getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
@@ -622,7 +613,8 @@ def _patch_responses_api_usage_format() -> None:
     - litellm/llms/volcengine/responses/transformation.py (line 280)
     - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
     """
-    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
+    from litellm.types.llms.openai import ResponseAPIUsage
+    from litellm.types.llms.openai import ResponsesAPIResponse
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
@@ -684,12 +676,11 @@ def _patch_logging_assembled_streaming_response() -> None:
     """
     from litellm import LiteLLMLoggingObj
     from litellm.responses.utils import ResponseAPILoggingUtils
-    from litellm.types.llms.openai import (
-        ResponseAPIUsage,
-        ResponseCompletedEvent,
-        ResponsesAPIResponse,
-    )
-    from litellm.types.utils import ModelResponse, TextCompletionResponse
+    from litellm.types.llms.openai import ResponseAPIUsage
+    from litellm.types.llms.openai import ResponseCompletedEvent
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.utils import ModelResponse
+    from litellm.types.utils import TextCompletionResponse
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 
@@ -775,8 +766,9 @@ def _patch_responses_metadata_none() -> None:
             which does not guard against metadata being explicitly None. Same pattern exists
             on line 1407 for async path.
     """
-    import litellm as _litellm
     from functools import wraps
+
+    import litellm as _litellm
 
     original_responses = _litellm.responses
 

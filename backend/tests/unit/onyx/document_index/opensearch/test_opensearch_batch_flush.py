@@ -7,9 +7,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchDocumentIndex,
-)
+from onyx.document_index.opensearch.opensearch_document_index import OpenSearchDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 

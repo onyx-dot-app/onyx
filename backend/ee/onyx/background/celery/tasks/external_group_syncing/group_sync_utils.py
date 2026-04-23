@@ -1,8 +1,6 @@
 from sqlalchemy.orm import Session
 
-from ee.onyx.external_permissions.sync_params import (
-    source_group_sync_is_cc_pair_agnostic,
-)
+from ee.onyx.external_permissions.sync_params import source_group_sync_is_cc_pair_agnostic
 from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_source
 from onyx.db.models import ConnectorCredentialPair

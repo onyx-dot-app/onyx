@@ -30,21 +30,15 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
-from onyx.connectors.google_drive.doc_conversion import (
-    convert_drive_item_to_document,
-)
+from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
-from onyx.connectors.google_drive.file_retrieval import (
-    get_all_files_in_my_drive_and_shared,
-)
+from onyx.connectors.google_drive.file_retrieval import get_all_files_in_my_drive_and_shared
 from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
-from onyx.connectors.google_drive.file_retrieval import (
-    get_files_by_web_view_links_batch,
-)
+from onyx.connectors.google_drive.file_retrieval import get_files_by_web_view_links_batch
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
@@ -62,9 +56,7 @@ from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_PRIMARY_ADMIN_KEY
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE

@@ -10,9 +10,7 @@ from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.constants import SECTION_SEPARATOR
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    get_metadata_keys_to_ignore,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_metadata_keys_to_ignore
 from onyx.connectors.models import IndexingDocument
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import extract_blurb

@@ -3,14 +3,10 @@ import os
 import shutil
 
 from onyx.connectors.salesforce.shelve_stuff.shelve_functions import find_ids_by_type
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import (
-    get_affected_parent_ids_by_type,
-)
+from onyx.connectors.salesforce.shelve_stuff.shelve_functions import get_affected_parent_ids_by_type
 from onyx.connectors.salesforce.shelve_stuff.shelve_functions import get_child_ids
 from onyx.connectors.salesforce.shelve_stuff.shelve_functions import get_record
-from onyx.connectors.salesforce.shelve_stuff.shelve_functions import (
-    update_sf_db_with_csv,
-)
+from onyx.connectors.salesforce.shelve_stuff.shelve_functions import update_sf_db_with_csv
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.connectors.salesforce.utils import get_object_type_path
 

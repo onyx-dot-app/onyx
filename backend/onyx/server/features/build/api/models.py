@@ -11,13 +11,11 @@ from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
-from onyx.server.features.build.sandbox.models import (
-    FilesystemEntry as FileSystemEntry,
-)
+from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
 
 if TYPE_CHECKING:
-    from onyx.db.models import Sandbox
     from onyx.db.models import BuildSession
+    from onyx.db.models import Sandbox
 
 
 # ===== Session Models =====

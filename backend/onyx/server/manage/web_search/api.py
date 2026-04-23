@@ -33,19 +33,11 @@ from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
 from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.tools.tool_implementations.open_url.utils import (
-    filter_web_contents_with_no_title_or_content,
-)
+from onyx.tools.tool_implementations.open_url.utils import filter_web_contents_with_no_title_or_content
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_content_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_search_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
-    provider_requires_api_key,
-)
+from onyx.tools.tool_implementations.web_search.providers import build_content_provider_from_config
+from onyx.tools.tool_implementations.web_search.providers import build_search_provider_from_config
+from onyx.tools.tool_implementations.web_search.providers import provider_requires_api_key
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.enums import WebContentProviderType

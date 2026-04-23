@@ -61,20 +61,12 @@ from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_doc_feedback_button
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_button
-from onyx.onyxbot.slack.handlers.handle_buttons import (
-    handle_followup_resolved_button,
-)
-from onyx.onyxbot.slack.handlers.handle_buttons import (
-    handle_generate_answer_button,
-)
-from onyx.onyxbot.slack.handlers.handle_buttons import (
-    handle_publish_ephemeral_message_button,
-)
+from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_resolved_button
+from onyx.onyxbot.slack.handlers.handle_buttons import handle_generate_answer_button
+from onyx.onyxbot.slack.handlers.handle_buttons import handle_publish_ephemeral_message_button
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_slack_feedback
 from onyx.onyxbot.slack.handlers.handle_message import handle_message
-from onyx.onyxbot.slack.handlers.handle_message import (
-    remove_scheduled_feedback_reminder,
-)
+from onyx.onyxbot.slack.handlers.handle_message import remove_scheduled_feedback_reminder
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo

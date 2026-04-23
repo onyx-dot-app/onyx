@@ -26,14 +26,10 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import add_deletion_failure_message
-from onyx.db.connector_credential_pair import (
-    delete_connector_credential_pair__no_commit,
-)
+from onyx.db.connector_credential_pair import delete_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.document import (
-    delete_all_documents_by_connector_credential_pair__no_commit,
-)
+from onyx.db.document import delete_all_documents_by_connector_credential_pair__no_commit
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -43,12 +39,8 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
-from onyx.db.permission_sync_attempt import (
-    delete_doc_permission_sync_attempts__no_commit,
-)
-from onyx.db.permission_sync_attempt import (
-    delete_external_group_permission_sync_attempts__no_commit,
-)
+from onyx.db.permission_sync_attempt import delete_doc_permission_sync_attempts__no_commit
+from onyx.db.permission_sync_attempt import delete_external_group_permission_sync_attempts__no_commit
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
@@ -65,9 +57,7 @@ from onyx.server.metrics.deletion_metrics import inc_deletion_completed
 from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
 from onyx.server.metrics.deletion_metrics import inc_deletion_started
 from onyx.server.metrics.deletion_metrics import observe_deletion_taskset_duration
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
 from onyx.utils.variable_functionality import noop_fallback
 
 

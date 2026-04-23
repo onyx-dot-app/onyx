@@ -25,9 +25,7 @@ from onyx.db.relationships import transfer_relationship
 from onyx.db.relationships import transfer_relationship_type
 from onyx.db.relationships import upsert_relationship
 from onyx.db.relationships import upsert_relationship_type
-from onyx.document_index.vespa.kg_interactions import (
-    get_kg_vespa_info_update_requests_for_document,
-)
+from onyx.document_index.vespa.kg_interactions import get_kg_vespa_info_update_requests_for_document
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id

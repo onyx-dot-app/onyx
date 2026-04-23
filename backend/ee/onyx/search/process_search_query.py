@@ -22,9 +22,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
-from onyx.tools.tool_implementations.search.search_utils import (
-    weighted_reciprocal_rank_fusion,
-)
+from onyx.tools.tool_implementations.search.search_utils import weighted_reciprocal_rank_fusion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 

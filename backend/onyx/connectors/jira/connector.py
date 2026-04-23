@@ -22,9 +22,7 @@ from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    is_atlassian_date_error,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import is_atlassian_date_error
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -54,7 +52,6 @@ from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -1081,6 +1078,7 @@ def make_checkpoint_callback(
 
 if __name__ == "__main__":
     import os
+
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
 

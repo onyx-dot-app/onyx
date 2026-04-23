@@ -14,12 +14,8 @@ from unittest.mock import patch
 import pytest
 
 from onyx.tools.models import ToolCallException
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    REFERENCE_IMAGE_FILE_IDS_FIELD,
-)
+from onyx.tools.tool_implementations.images.image_generation_tool import ImageGenerationTool
+from onyx.tools.tool_implementations.images.image_generation_tool import REFERENCE_IMAGE_FILE_IDS_FIELD
 
 
 def _make_tool(

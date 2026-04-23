@@ -235,9 +235,20 @@ select = [
   "ARG",
   "E",
   "F",
+  "I",
   "S324",
   "W",
 ]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+order-by-type = false
+known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
+
+[tool.ruff.lint.per-file-ignores]
+# alembic has a folder named `alembic` in backend/ which confuses import sorters
+"backend/alembic/**" = ["I"]
+"backend/alembic_tenants/**" = ["I"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

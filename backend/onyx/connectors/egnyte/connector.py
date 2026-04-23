@@ -13,9 +13,7 @@ from onyx.configs.app_configs import EGNYTE_CLIENT_ID
 from onyx.configs.app_configs import EGNYTE_CLIENT_SECRET
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    get_oauth_callback_uri,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_oauth_callback_uri
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import OAuthConnector
@@ -33,7 +31,6 @@ from onyx.file_processing.extract_file_text import read_text_file
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
-
 
 logger = setup_logger()
 

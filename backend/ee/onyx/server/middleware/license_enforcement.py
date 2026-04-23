@@ -50,9 +50,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
-from ee.onyx.configs.license_enforcement_config import (
-    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
-)
+from ee.onyx.configs.license_enforcement_config import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS

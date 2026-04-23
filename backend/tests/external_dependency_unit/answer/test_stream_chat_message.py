@@ -27,34 +27,20 @@ from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
-from tests.external_dependency_unit.answer.stream_test_assertions import (
-    assert_answer_stream_part_correct,
-)
+from tests.external_dependency_unit.answer.stream_test_assertions import assert_answer_stream_part_correct
 from tests.external_dependency_unit.answer.stream_test_builder import StreamTestBuilder
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
-from tests.external_dependency_unit.answer.stream_test_utils import (
-    create_packet_with_agent_response_delta,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import (
-    create_packet_with_reasoning_delta,
-)
+from tests.external_dependency_unit.answer.stream_test_utils import create_packet_with_agent_response_delta
+from tests.external_dependency_unit.answer.stream_test_utils import create_packet_with_reasoning_delta
 from tests.external_dependency_unit.answer.stream_test_utils import create_placement
-from tests.external_dependency_unit.answer.stream_test_utils import (
-    mock_web_content_to_search_doc,
-)
-from tests.external_dependency_unit.answer.stream_test_utils import (
-    mock_web_search_result_to_search_doc,
-)
+from tests.external_dependency_unit.answer.stream_test_utils import mock_web_content_to_search_doc
+from tests.external_dependency_unit.answer.stream_test_utils import mock_web_search_result_to_search_doc
 from tests.external_dependency_unit.answer.stream_test_utils import submit_query
 from tests.external_dependency_unit.answer.stream_test_utils import tokenise
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.mock_content_provider import MockWebContent
-from tests.external_dependency_unit.mock_content_provider import (
-    use_mock_content_provider,
-)
-from tests.external_dependency_unit.mock_image_provider import (
-    use_mock_image_generation_provider,
-)
+from tests.external_dependency_unit.mock_content_provider import use_mock_content_provider
+from tests.external_dependency_unit.mock_image_provider import use_mock_image_generation_provider
 from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import LLMReasoningResponse
 from tests.external_dependency_unit.mock_llm import LLMToolCallResponse

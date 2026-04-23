@@ -32,18 +32,10 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _user_file_delete_lock_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _user_file_delete_queued_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    check_for_user_file_delete,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    process_single_user_file_delete,
-)
+from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_delete_lock_key
+from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_delete_queued_key
+from onyx.background.celery.tasks.user_file_processing.tasks import check_for_user_file_delete
+from onyx.background.celery.tasks.user_file_processing.tasks import process_single_user_file_delete
 from onyx.configs.constants import CELERY_USER_FILE_DELETE_TASK_EXPIRES
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask

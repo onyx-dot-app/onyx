@@ -147,9 +147,7 @@ def test_health_check_not_called_when_server_disabled(
 
 
 def test_health_check_cached_on_second_call() -> None:
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-    )
+    from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
     mock_response = MagicMock()
@@ -164,10 +162,8 @@ def test_health_check_cached_on_second_call() -> None:
 
 @patch(f"{CLIENT_MODULE}.time")
 def test_health_check_refreshed_after_ttl_expires(mock_time: MagicMock) -> None:
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-        _HEALTH_CACHE_TTL_SECONDS,
-    )
+    from onyx.tools.tool_implementations.python.code_interpreter_client import _HEALTH_CACHE_TTL_SECONDS
+    from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
     mock_response = MagicMock()
@@ -191,9 +187,7 @@ def test_health_check_refreshed_after_ttl_expires(mock_time: MagicMock) -> None:
 
 
 def test_health_check_no_cache_by_default() -> None:
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-    )
+    from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
     mock_response = MagicMock()

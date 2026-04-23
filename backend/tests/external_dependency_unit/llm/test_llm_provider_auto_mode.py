@@ -30,9 +30,7 @@ from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommen
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.manage.llm.api import put_llm_provider
-from onyx.server.manage.llm.api import (
-    test_default_provider as run_test_default_provider,
-)
+from onyx.server.manage.llm.api import test_default_provider as run_test_default_provider
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 

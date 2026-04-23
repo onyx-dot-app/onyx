@@ -19,9 +19,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
-from onyx.db.connector_credential_pair import (
-    update_connector_credential_pair_from_id,
-)
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission

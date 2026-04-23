@@ -17,18 +17,10 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.opensearch_migration.constants import (
-    GET_VESPA_CHUNKS_SLICE_COUNT,
-)
-from onyx.background.celery.tasks.opensearch_migration.tasks import (
-    is_continuation_token_done_for_all_slices,
-)
-from onyx.background.celery.tasks.opensearch_migration.tasks import (
-    migrate_chunks_from_vespa_to_opensearch_task,
-)
-from onyx.background.celery.tasks.opensearch_migration.transformer import (
-    transform_vespa_chunks_to_opensearch_chunks,
-)
+from onyx.background.celery.tasks.opensearch_migration.constants import GET_VESPA_CHUNKS_SLICE_COUNT
+from onyx.background.celery.tasks.opensearch_migration.tasks import is_continuation_token_done_for_all_slices
+from onyx.background.celery.tasks.opensearch_migration.tasks import migrate_chunks_from_vespa_to_opensearch_task
+from onyx.background.celery.tasks.opensearch_migration.transformer import transform_vespa_chunks_to_opensearch_chunks
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.configs.constants import SOURCE_TYPE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -73,7 +65,6 @@ from onyx.document_index.vespa_constants import USER_PROJECT
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
-
 
 CHUNK_COUNT = 5
 

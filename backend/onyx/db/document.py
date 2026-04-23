@@ -44,9 +44,7 @@ from onyx.db.models import KGEntity
 from onyx.db.models import KGRelationship
 from onyx.db.models import User
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
-from onyx.db.relationships import (
-    delete_from_kg_relationships_extraction_staging__no_commit,
-)
+from onyx.db.relationships import delete_from_kg_relationships_extraction_staging__no_commit
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict

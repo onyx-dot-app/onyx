@@ -17,9 +17,7 @@ from onyx.db.persona import upsert_persona
 from onyx.db.tools import get_builtin_tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.errors import EERequiredError
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
 
 
 def _build_persona_name(channel_name: str | None) -> str:

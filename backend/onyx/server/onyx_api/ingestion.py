@@ -23,9 +23,7 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_all_document_indices
-from onyx.indexing.adapters.document_indexing_adapter import (
-    DocumentIndexingBatchAdapter,
-)
+from onyx.indexing.adapters.document_indexing_adapter import DocumentIndexingBatchAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.server.onyx_api.models import DocMinimalInfo

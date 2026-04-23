@@ -15,13 +15,9 @@ from onyx.context.search.utils import inference_section_from_chunks
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import DocumentIndex as NewDocumentIndex
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
-)
+from onyx.document_index.opensearch.opensearch_document_index import OpenSearchOldDocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
-from onyx.federated_connectors.federated_retrieval import (
-    get_federated_retrieval_functions,
-)
+from onyx.federated_connectors.federated_retrieval import get_federated_retrieval_functions
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel

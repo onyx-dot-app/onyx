@@ -12,7 +12,6 @@ from onyx.chat.citation_utils import collapse_citations
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 
-
 # ============================================================================
 # Helper Functions
 # ============================================================================

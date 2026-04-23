@@ -67,33 +67,19 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
-)
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPExecClient,
-)
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import ACPEvent
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import ACPExecClient
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.util.agent_instructions import (
-    ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
-    generate_agent_instructions,
-)
-from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
+from onyx.server.features.build.sandbox.util.agent_instructions import ATTACHMENTS_SECTION_CONTENT
+from onyx.server.features.build.sandbox.util.agent_instructions import generate_agent_instructions
+from onyx.server.features.build.sandbox.util.opencode_config import build_opencode_config
+from onyx.server.features.build.sandbox.util.persona_mapping import generate_user_identity_content
 from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
 from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
+from onyx.server.features.build.sandbox.util.persona_mapping import ORGANIZATION_STRUCTURE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

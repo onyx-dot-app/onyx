@@ -18,9 +18,7 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
-from tests.integration.common_utils.test_document_utils import (
-    create_test_document_failure,
-)
+from tests.integration.common_utils.test_document_utils import create_test_document_failure
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 

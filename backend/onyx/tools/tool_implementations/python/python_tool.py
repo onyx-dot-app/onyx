@@ -27,21 +27,12 @@ from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
-    CodeInterpreterClient,
-)
+from onyx.tools.tool_implementations.python.code_interpreter_client import CodeInterpreterClient
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
-    StreamErrorEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
-    StreamOutputEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
-    StreamResultEvent,
-)
+from onyx.tools.tool_implementations.python.code_interpreter_client import StreamErrorEvent
+from onyx.tools.tool_implementations.python.code_interpreter_client import StreamOutputEvent
+from onyx.tools.tool_implementations.python.code_interpreter_client import StreamResultEvent
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

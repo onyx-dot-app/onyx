@@ -26,9 +26,7 @@ from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    is_atlassian_date_error,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import is_atlassian_date_error
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -1054,6 +1052,7 @@ class ConfluenceConnector(
 
 if __name__ == "__main__":
     import os
+
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
 

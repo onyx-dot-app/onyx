@@ -14,7 +14,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 
-
 # Counter for generating unique file IDs in mock file store
 _mock_file_id_counter = 0
 

@@ -27,15 +27,9 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    check_for_user_file_project_sync,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    process_single_user_file_project_sync,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    user_file_project_sync_lock_key,
-)
+from onyx.background.celery.tasks.user_file_processing.tasks import check_for_user_file_project_sync
+from onyx.background.celery.tasks.user_file_processing.tasks import process_single_user_file_project_sync
+from onyx.background.celery.tasks.user_file_processing.tasks import user_file_project_sync_lock_key
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserFile

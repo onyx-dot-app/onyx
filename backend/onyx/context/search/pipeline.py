@@ -10,9 +10,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.preprocessing.access_filters import (
-    build_access_filters_for_user,
-)
+from onyx.context.search.preprocessing.access_filters import build_access_filters_for_user
 from onyx.context.search.retrieval.search_runner import search_chunks
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.models import User

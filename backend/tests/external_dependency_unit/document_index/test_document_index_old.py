@@ -14,9 +14,7 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentUserFields
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
-)
+from onyx.document_index.opensearch.opensearch_document_index import OpenSearchOldDocumentIndex
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.contextvars import get_current_tenant_id

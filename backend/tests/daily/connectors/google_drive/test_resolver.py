@@ -11,9 +11,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    ALL_EXPECTED_HIERARCHY_NODES,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import ALL_EXPECTED_HIERARCHY_NODES
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
 

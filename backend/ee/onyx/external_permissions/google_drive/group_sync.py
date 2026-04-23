@@ -4,12 +4,8 @@ from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.google_drive.folder_retrieval import (
-    get_folder_permissions_by_ids,
-)
-from ee.onyx.external_permissions.google_drive.folder_retrieval import (
-    get_modified_folders,
-)
+from ee.onyx.external_permissions.google_drive.folder_retrieval import get_folder_permissions_by_ids
+from ee.onyx.external_permissions.google_drive.folder_retrieval import get_modified_folders
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
 from onyx.connectors.google_drive.connector import GoogleDriveConnector

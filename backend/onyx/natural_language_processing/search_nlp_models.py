@@ -28,9 +28,7 @@ from retry import retry
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
 from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
-from onyx.configs.model_configs import (
-    BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
-)
+from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface

@@ -55,9 +55,7 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
-from onyx.server.features.build.db.build_session import (
-    fetch_llm_provider_by_type_for_build_mode,
-)
+from onyx.server.features.build.db.build_session import fetch_llm_provider_by_type_for_build_mode
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
@@ -72,18 +70,12 @@ from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    SSEKeepalive,
-)
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import SSEKeepalive
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.tasks.tasks import (
-    _get_disabled_user_library_paths,
-)
+from onyx.server.features.build.sandbox.tasks.tasks import _get_disabled_user_library_paths
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
-from onyx.server.features.build.session.prompts import (
-    FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
-)
+from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
@@ -415,9 +407,7 @@ class SessionManager:
 
         # Check sandbox limits for multi-tenant deployments
         if MULTI_TENANT:
-            from onyx.server.features.build.configs import (
-                SANDBOX_MAX_CONCURRENT_PER_ORG,
-            )
+            from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 
             running_count = get_running_sandbox_count_by_tenant(
                 self._db_session, tenant_id
@@ -1048,9 +1038,7 @@ class SessionManager:
         snapshots = get_snapshots_for_session(self._db_session, session_id)
         if snapshots:
             from onyx.file_store.file_store import get_default_file_store
-            from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-                SnapshotManager,
-            )
+            from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 
             snapshot_manager = SnapshotManager(get_default_file_store())
             for snapshot in snapshots:
@@ -1695,6 +1683,7 @@ class SessionManager:
             raise ValueError("Only markdown (.md) files can be exported as DOCX")
 
         import tempfile
+
         import pypandoc
 
         md_text = content_bytes.decode("utf-8")
@@ -2230,9 +2219,7 @@ class SessionManager:
         Returns:
             True if sandbox was terminated, False if user had no sandbox
         """
-        from onyx.server.features.build.db.sandbox import (
-            update_sandbox_status__no_commit,
-        )
+        from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:

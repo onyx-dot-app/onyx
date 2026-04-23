@@ -10,9 +10,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.managers.image_generation import (
-    ImageGenerationConfigManager,
-)
+from tests.integration.common_utils.managers.image_generation import ImageGenerationConfigManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all

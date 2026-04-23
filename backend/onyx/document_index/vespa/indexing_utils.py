@@ -13,18 +13,12 @@ from http import HTTPStatus
 import httpx
 from retry import retry
 
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    get_experts_stores_representations,
-)
-from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk_text,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import get_experts_stores_representations
+from onyx.document_index.chunk_content_enrichment import generate_enriched_content_for_chunk_text
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.vespa.shared_utils.utils import (
-    replace_invalid_doc_id_characters,
-)
+from onyx.document_index.vespa.shared_utils.utils import replace_invalid_doc_id_characters
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import AGGREGATED_CHUNK_BOOST_FACTOR
 from onyx.document_index.vespa_constants import BLURB
@@ -61,7 +55,6 @@ from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
-
 
 logger = setup_logger()
 

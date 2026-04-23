@@ -9,9 +9,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.context.search.federated.models import SlackMessage
 from onyx.context.search.federated.slack_search import _fetch_thread_context
-from onyx.context.search.federated.slack_search import (
-    fetch_thread_contexts_with_rate_limit_handling,
-)
+from onyx.context.search.federated.slack_search import fetch_thread_contexts_with_rate_limit_handling
 from onyx.context.search.federated.slack_search import SlackRateLimitError
 from onyx.context.search.federated.slack_search import ThreadContextResult
 

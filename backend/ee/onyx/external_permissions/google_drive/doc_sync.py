@@ -4,9 +4,7 @@ from datetime import timezone
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
-from ee.onyx.external_permissions.google_drive.permission_retrieval import (
-    get_permissions_by_ids,
-)
+from ee.onyx.external_permissions.google_drive.permission_retrieval import get_permissions_by_ids
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess

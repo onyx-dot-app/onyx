@@ -62,15 +62,9 @@ from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.user_library import get_or_create_craft_connector
 from onyx.server.features.build.db.user_library import get_user_storage_bytes
-from onyx.server.features.build.indexing.persistent_document_writer import (
-    get_persistent_document_writer,
-)
-from onyx.server.features.build.indexing.persistent_document_writer import (
-    PersistentDocumentWriter,
-)
-from onyx.server.features.build.indexing.persistent_document_writer import (
-    S3PersistentDocumentWriter,
-)
+from onyx.server.features.build.indexing.persistent_document_writer import get_persistent_document_writer
+from onyx.server.features.build.indexing.persistent_document_writer import PersistentDocumentWriter
+from onyx.server.features.build.indexing.persistent_document_writer import S3PersistentDocumentWriter
 from onyx.server.features.build.utils import sanitize_filename as api_sanitize_filename
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

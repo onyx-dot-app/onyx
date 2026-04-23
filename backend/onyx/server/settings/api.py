@@ -24,9 +24,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
-from onyx.server.settings.models import (
-    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
-)
+from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
 from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
 from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
@@ -34,9 +32,7 @@ from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()

@@ -45,9 +45,7 @@ from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
-from fastapi_users.authentication import (
-    RedisStrategy,  # ty: ignore[possibly-missing-import]
-)
+from fastapi_users.authentication import RedisStrategy  # ty: ignore[possibly-missing-import]
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
@@ -1101,7 +1099,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
+            from fastapi import HTTPException
+            from fastapi import status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

@@ -17,9 +17,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.shared.tasks import (
-    document_by_cc_pair_cleanup_task,
-)
+from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.document import delete_all_documents_for_connector_credential_pair
@@ -34,7 +32,6 @@ from tests.external_dependency_unit.indexing_helpers import get_filerecord
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_doc
 from tests.external_dependency_unit.indexing_helpers import stage_file
-
 
 # ---------------------------------------------------------------------------
 # Helpers (file-local)

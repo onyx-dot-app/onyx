@@ -14,9 +14,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.federated import (
-    create_federated_connector as db_create_federated_connector,
-)
+from onyx.db.federated import create_federated_connector as db_create_federated_connector
 from onyx.db.federated import delete_federated_connector
 from onyx.db.federated import fetch_all_federated_connectors
 from onyx.db.federated import fetch_federated_connector_by_id

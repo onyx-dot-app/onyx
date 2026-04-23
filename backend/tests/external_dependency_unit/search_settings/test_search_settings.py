@@ -24,7 +24,6 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.search_settings import set_new_search_settings
 from onyx.server.manage.search_settings import update_saved_search_settings
 
-
 TEST_CONTEXTUAL_RAG_LLM_NAME = "test-contextual-model"
 TEST_CONTEXTUAL_RAG_LLM_PROVIDER = "test-contextual-provider"
 

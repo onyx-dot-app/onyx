@@ -75,23 +75,15 @@ from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.features.build.api.api import public_build_router
 from onyx.server.features.build.api.api import router as build_router
-from onyx.server.features.default_assistant.api import (
-    router as default_assistant_router,
-)
+from onyx.server.features.default_assistant.api import router as default_assistant_router
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.hierarchy.api import router as hierarchy_router
-from onyx.server.features.input_prompt.api import (
-    admin_router as admin_input_prompt_router,
-)
-from onyx.server.features.input_prompt.api import (
-    basic_router as input_prompt_router,
-)
+from onyx.server.features.input_prompt.api import admin_router as admin_input_prompt_router
+from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.notifications.api import router as notification_router
-from onyx.server.features.oauth_config.api import (
-    admin_router as admin_oauth_config_router,
-)
+from onyx.server.features.oauth_config.api import admin_router as admin_oauth_config_router
 from onyx.server.features.oauth_config.api import router as oauth_config_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_agents_router
@@ -106,33 +98,23 @@ from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.manage.administrative import router as admin_router
-from onyx.server.manage.code_interpreter.api import (
-    admin_router as code_interpreter_admin_router,
-)
+from onyx.server.manage.code_interpreter.api import admin_router as code_interpreter_admin_router
 from onyx.server.manage.discord_bot.api import router as discord_bot_router
 from onyx.server.manage.embedding.api import admin_router as embedding_admin_router
 from onyx.server.manage.embedding.api import basic_router as embedding_router
 from onyx.server.manage.get_state import router as state_router
-from onyx.server.manage.image_generation.api import (
-    admin_router as image_generation_admin_router,
-)
+from onyx.server.manage.image_generation.api import admin_router as image_generation_admin_router
 from onyx.server.manage.llm.api import admin_router as llm_admin_router
 from onyx.server.manage.llm.api import basic_router as llm_router
-from onyx.server.manage.opensearch_migration.api import (
-    admin_router as opensearch_migration_admin_router,
-)
+from onyx.server.manage.opensearch_migration.api import admin_router as opensearch_migration_admin_router
 from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
 from onyx.server.manage.voice.api import admin_router as voice_admin_router
 from onyx.server.manage.voice.user_api import router as voice_router
 from onyx.server.manage.voice.websocket_api import router as voice_websocket_router
-from onyx.server.manage.web_search.api import (
-    admin_router as web_search_admin_router,
-)
-from onyx.server.metrics.postgres_connection_pool import (
-    setup_postgres_connection_pool_metrics,
-)
+from onyx.server.manage.web_search.api import admin_router as web_search_admin_router
+from onyx.server.metrics.postgres_connection_pool import setup_postgres_connection_pool_metrics
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
@@ -141,16 +123,12 @@ from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
-from onyx.server.query_and_chat.query_backend import (
-    admin_router as admin_query_router,
-)
+from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml import router as saml_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
-from onyx.server.token_rate_limits.api import (
-    router as token_rate_limit_settings_router,
-)
+from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx

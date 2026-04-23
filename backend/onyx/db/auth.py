@@ -24,9 +24,7 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+from onyx.utils.variable_functionality import fetch_versioned_implementation_with_fallback
 
 T = TypeVar("T", bound=tuple[Any, ...])
 

@@ -22,9 +22,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
-from onyx.chat.prompt_utils import (
-    get_default_base_system_prompt,
-)
+from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -57,9 +55,7 @@ from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -651,9 +647,7 @@ def run_llm_loop(
         },
     ):
         # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import (
-            initialize_litellm,
-        )  # Here for lazy load LiteLLM
+        from onyx.llm.litellm_singleton.config import initialize_litellm  # Here for lazy load LiteLLM
 
         initialize_litellm()
 

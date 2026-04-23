@@ -7,9 +7,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
-from onyx.context.search.preprocessing.access_filters import (
-    build_access_filters_for_user,
-)
+from onyx.context.search.preprocessing.access_filters import build_access_filters_for_user
 from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission

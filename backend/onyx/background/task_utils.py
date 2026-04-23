@@ -138,9 +138,7 @@ def _claim_next_sync_file(
 
 def drain_processing_loop(tenant_id: str) -> None:
     """Process all pending PROCESSING user files."""
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
-        process_user_file_impl,
-    )
+    from onyx.background.celery.tasks.user_file_processing.tasks import process_user_file_impl
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
     while True:
@@ -160,9 +158,7 @@ def drain_processing_loop(tenant_id: str) -> None:
 
 def drain_delete_loop(tenant_id: str) -> None:
     """Delete all pending DELETING user files."""
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
-        delete_user_file_impl,
-    )
+    from onyx.background.celery.tasks.user_file_processing.tasks import delete_user_file_impl
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
     failed: set[UUID] = set()
@@ -184,9 +180,7 @@ def drain_delete_loop(tenant_id: str) -> None:
 
 def drain_project_sync_loop(tenant_id: str) -> None:
     """Sync all pending project/persona metadata for user files."""
-    from onyx.background.celery.tasks.user_file_processing.tasks import (
-        project_sync_user_file_impl,
-    )
+    from onyx.background.celery.tasks.user_file_processing.tasks import project_sync_user_file_impl
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
     failed: set[UUID] = set()

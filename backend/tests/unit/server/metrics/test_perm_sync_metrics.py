@@ -16,13 +16,10 @@ from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
-from onyx.server.metrics.perm_sync_metrics import (
-    observe_doc_perm_sync_db_update_duration,
-)
+from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_db_update_duration
 from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
 from onyx.server.metrics.perm_sync_metrics import observe_group_sync_duration
 from onyx.server.metrics.perm_sync_metrics import observe_group_sync_upsert_duration
-
 
 # --- Doc permission sync: overall duration ---
 

@@ -21,7 +21,6 @@ from ee.onyx.server.tenants.proxy import get_license_payload_allow_expired
 from ee.onyx.server.tenants.proxy import get_optional_license_payload
 from ee.onyx.server.tenants.proxy import verify_license_auth
 
-
 # All tests that use license auth need LICENSE_ENFORCEMENT_ENABLED=True
 LICENSE_ENABLED_PATCH = patch(
     "ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True
@@ -483,8 +482,8 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_includes_seats_in_body_when_provided(self) -> None:
         """Should include seats in request body when provided."""
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
         from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
@@ -528,8 +527,8 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_excludes_seats_when_not_provided(self) -> None:
         """Should not include seats in request body when not provided."""
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
         from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
@@ -567,8 +566,8 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_includes_seats_for_new_customer(self) -> None:
         """Should include seats for new customer without license."""
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
         from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}

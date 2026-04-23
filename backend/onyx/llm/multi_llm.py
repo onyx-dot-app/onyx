@@ -31,24 +31,16 @@ from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
-from onyx.llm.well_known_providers.constants import (
-    AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import (
-    AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
-)
+from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT
+from onyx.llm.well_known_providers.constants import AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT
 from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG
 from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT
 from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
-from onyx.llm.well_known_providers.constants import (
-    AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
-)
+from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import (
-    VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
-)
+from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
@@ -438,8 +430,10 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
+        from litellm.exceptions import RateLimitError
+        from litellm.exceptions import Timeout
+
         from onyx.llm.litellm_singleton import litellm
-        from litellm.exceptions import Timeout, RateLimitError
 
         #########################
         # Flags that modify the final arguments
@@ -750,8 +744,8 @@ class LitellmLLM(LLM):
             # only held during connection setup (not the full inference).
             # The chunks are then collected outside the lock and reassembled
             # into a single ModelResponse via stream_chunk_builder.
-            from litellm import stream_chunk_builder
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+            from litellm import stream_chunk_builder
 
             stream_response = cast(
                 LiteLLMCustomStreamWrapper,

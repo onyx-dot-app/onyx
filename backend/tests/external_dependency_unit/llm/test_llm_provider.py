@@ -23,12 +23,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
-from onyx.server.manage.llm.api import (
-    test_default_provider as run_test_default_provider,
-)
-from onyx.server.manage.llm.api import (
-    test_llm_configuration as run_test_llm_configuration,
-)
+from onyx.server.manage.llm.api import test_default_provider as run_test_default_provider
+from onyx.server.manage.llm.api import test_llm_configuration as run_test_llm_configuration
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest

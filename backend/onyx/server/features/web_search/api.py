@@ -21,32 +21,16 @@ from onyx.server.manage.web_search.models import WebSearchProviderView
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
-    DEFAULT_MAX_HTML_SIZE_BYTES,
-)
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
-    DEFAULT_MAX_PDF_SIZE_BYTES,
-)
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
-    OnyxWebCrawler,
-)
-from onyx.tools.tool_implementations.open_url.utils import (
-    filter_web_contents_with_no_title_or_content,
-)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import DEFAULT_MAX_HTML_SIZE_BYTES
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import DEFAULT_MAX_PDF_SIZE_BYTES
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.open_url.utils import filter_web_contents_with_no_title_or_content
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_content_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
-    build_search_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
-    filter_web_search_results_with_no_title_or_snippet,
-)
-from onyx.tools.tool_implementations.web_search.utils import (
-    truncate_search_result_content,
-)
+from onyx.tools.tool_implementations.web_search.providers import build_content_provider_from_config
+from onyx.tools.tool_implementations.web_search.providers import build_search_provider_from_config
+from onyx.tools.tool_implementations.web_search.utils import filter_web_search_results_with_no_title_or_snippet
+from onyx.tools.tool_implementations.web_search.utils import truncate_search_result_content
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
