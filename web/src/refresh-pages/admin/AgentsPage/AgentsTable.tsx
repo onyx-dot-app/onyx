@@ -467,7 +467,9 @@ export default function AgentsTable() {
                     <LineItemButton
                       key={creator.id}
                       sizePreset="main-ui"
-                      variant="section"
+                      variant="body"
+                      prominence="muted"
+                      rounding="sm"
                       icon={isCurrentUser ? SvgUser : undefined}
                       title={creator.email}
                       state={isSelected ? "selected" : "empty"}
@@ -530,7 +532,9 @@ export default function AgentsTable() {
                     <LineItemButton
                       key={key}
                       sizePreset="main-ui"
-                      variant="section"
+                      variant="body"
+                      prominence="muted"
+                      rounding="sm"
                       icon={icon}
                       title={action.name}
                       state={isSelected ? "selected" : "empty"}
