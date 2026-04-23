@@ -208,45 +208,22 @@ def collect_user_file_access(user_file: UserFile) -> tuple[set[str], bool]:
 
 
 def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> bool:
-    """Return True if `user` is allowed to read the raw `file_id` served by
-    `GET /chat/file/{file_id}`. Access is granted when any of:
+    """Return True if `user` can read `file_id` via `GET /chat/file/{file_id}`.
 
-    TODO(auth-perf): this function fans out 4–5 queries per request because
-    `/chat/file/{file_id}` is overloaded with unrelated asset classes (user
-    files, persona avatars, chat attachments, tool outputs, connector files).
-    The proper fix is to split this into per-asset-class endpoints
-    (`/user-files/{id}`, `/assistants/{id}/avatar`, `/messages/{id}/files/{n}`,
-    etc.) where the URL itself carries the access-control context and a single
-    indexed lookup suffices. The connector-file branch in particular does a
-    JSONB scan on every call — see `_documents_from_file_connector_config`.
+    The endpoint is overloaded across several asset classes, so we check
+    each in turn (cheapest first, so common paths short-circuit before the
+    JSONB scan in `_documents_from_file_connector_config`):
 
-    - The `file_id` is the storage id of a `UserFile` owned by the user.
-    - The `file_id` is a persona avatar (`Persona.uploaded_image_id`); avatars
-      are visible to any authenticated user.
-    - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
-      session the user owns or a session publicly shared via
+    - `UserFile` owned by the user.
+    - `Persona.uploaded_image_id` (avatars are public to authenticated users).
+    - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
-    - The `file_id` is a `FileRecord` with origin `CHAT_IMAGE_GEN`.
-      TODO: A CHAT_IMAGE_GEN file is uploaded to the file store before
-      the linking tool-call DB row is written, so the FE can request it
-      even though there's nothing to ACL-check against. We currently
-      hack around this by treating these files as public; tightening it
-      requires a larger refactor of the streaming/tool-call write order.
-      Ordered before the connector-file branch so image previews
-      short-circuit on an indexed primary-key lookup instead of falling
-      through to the JSONB fallback.
-    - The `file_id` is referenced by a `Document` (via `Document.file_id`)
-      whose ACL grants access to this user. `Document.file_id` is only
-      populated by connector ingestion, so this covers any connector-ingested
-      file regardless of its `FileOrigin` stamp (which has varied over time:
-      `OTHER` pre-#10484, `CONNECTOR_FILE_UPLOAD` post-#10484, and
-      `CONNECTOR` for pipeline-promoted files). For non-tabular File
-      connector uploads `Document.file_id` is left NULL
-      (`backend/onyx/connectors/file/connector.py:190`), so we also fall
-      back to the cc_pair ACL of any `Connector` whose
-      `connector_specific_config['file_locations']` lists this `file_id`.
-      Lets users preview cited files from indexed connectors through
-      `PreviewModal`.
+    - `FileRecord` with origin `CHAT_IMAGE_GEN` (see inline TODO).
+    - `Document` whose ACL grants access (covers connector-ingested files).
+
+    TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
+    URL carries the access context and one indexed lookup suffices, instead
+    of fanning out 4–5 queries across unrelated classes on every request.
     """
     owns_user_file = db_session.query(
         select(UserFile.id)
@@ -256,14 +233,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if owns_user_file:
         return True
 
-    # TODO: move persona avatars to a dedicated endpoint (e.g.
-    # /assistants/{id}/avatar) so this branch can be removed. /chat/file is
-    # currently overloaded with multiple asset classes (user files, chat
-    # attachments, tool outputs, avatars), forcing this access-check fan-out.
-    #
-    # Restrict the avatar path to CHAT_UPLOAD-origin files so an attacker
-    # cannot bind another user's USER_FILE (or any other origin) to their
-    # own persona and read it through this check.
+    # TODO: move persona avatars to a dedicated endpoint so this branch
+    # can go away. Restrict to CHAT_UPLOAD-origin for now so an attacker
+    # cannot bind another user's USER_FILE to their persona and read it
+    # through this check.
     is_persona_avatar = db_session.query(
         select(Persona.id)
         .join(FileRecord, FileRecord.file_id == Persona.uploaded_image_id)
@@ -291,12 +264,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if db_session.execute(chat_file_stmt).first() is not None:
         return True
 
-    # TODO: Chat image generated images are currently public; tighten
-    # this once the tool-call linkage is populated before the file lands
-    # in the store. Ordered above the connector-file branch so image-gen
-    # previews short-circuit on an indexed `FileRecord.file_id` primary-
-    # key lookup rather than falling through to the JSONB fallback in
-    # `_documents_from_file_connector_config`.
+    # TODO: CHAT_IMAGE_GEN files are public because the bytes land in the
+    # store before the linking tool-call row is written; tightening this
+    # requires reordering the streaming/tool-call writes. Kept above the
+    # connector branch so previews hit a PK lookup, not the JSONB scan.
     is_chat_image_gen = db_session.query(
         select(FileRecord.file_id)
         .where(
@@ -314,28 +285,21 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
 def _user_can_access_connector_file(
     file_id: str, user: User, db_session: Session
 ) -> bool:
-    """Grant access when `file_id` is reachable from a `Document` whose ACL
-    overlaps the user's ACL. Mirrors the access-control layer applied during
-    retrieval so preview access stays consistent with search result access.
+    """Mirror retrieval-time ACL: grant access if any `Document` referencing
+    `file_id` has an ACL the user satisfies.
 
     Two lookup paths:
+    1. `Document.file_id == file_id` — fast path; set by most connectors
+       and by tabular File-connector uploads.
+    2. `Connector.connector_specific_config['file_locations']` — fallback
+       for non-tabular File-connector uploads (which leave
+       `Document.file_id=NULL`). Documents under one cc_pair share its
+       ACL, so any one representative document answers the question.
 
-    1. `Document.file_id == file_id` — the fast path. Covers tabular File
-       connector uploads, Blob/SharePoint attachments, and any other
-       connector that stamps `Document.file_id` during ingestion.
-    2. `Connector.connector_specific_config['file_locations']` contains
-       `file_id` — the fallback. The File connector only sets
-       `Document.file_id` for tabular inputs
-       (`backend/onyx/connectors/file/connector.py:190`), so non-tabular
-       uploads (txt/pdf/docx/etc.) have no direct `Document.file_id` link.
-       In that case the `Connector` config still points at the file_id, and
-       every `Document` indexed through its cc_pair shares the same ACL —
-       so checking any one representative document answers the question.
-
-    The `FileRecord.file_origin` is intentionally not consulted: it has
-    varied historically (`OTHER` pre-#10484, `CONNECTOR_FILE_UPLOAD` post-
-    #10484, and `CONNECTOR` for pipeline-promoted files) and any origin
-    filter would either miss legacy files or grow into a grab-bag."""
+    `FileRecord.file_origin` is deliberately not consulted: the stamp has
+    varied across releases and any origin filter would either miss legacy
+    files or sprawl.
+    """
     document_ids: list[str] = list(
         db_session.execute(select(Document.id).where(Document.file_id == file_id))
         .scalars()
@@ -357,38 +321,16 @@ def _documents_from_file_connector_config(
     file_id: str, db_session: Session
 ) -> list[str]:
     """Return one representative document per `Connector` whose
-    `connector_specific_config['file_locations']` lists `file_id`.
+    `connector_specific_config['file_locations']` lists `file_id`. Documents
+    under a single cc_pair share its ACL, so one sample per connector is
+    enough for the downstream ACL check.
 
-    Documents ingested through a single cc_pair share that cc_pair's ACL,
-    so one sample per connector is enough for the downstream ACL check.
-    Almost always a single connector, since file_ids are UUIDs.
-
-    TODO(delete-me): this whole function is a temporary patch for a data-
-    layer inconsistency — the File connector only stamps `Document.file_id`
-    for tabular inputs (see `backend/onyx/connectors/file/connector.py:190`),
-    leaving non-tabular uploads with `Document.file_id=NULL` even though
-    the bytes exist in the file store. The `@>` containment check on a
-    JSONB array also can't use a btree index, so every miss on the fast
-    path runs a scan of `connector.connector_specific_config`.
-
-    The proper fix decouples `Document.file_id` (linkage) from the
-    code-interpreter staging signal that currently rides on it:
-
-      1. In `build_python_chat_files_from_search_docs`
-         (`onyx/chat/chat_utils.py:882`), add an
-         `is_tabular_file(record.display_name)` guard so stamping
-         `Document.file_id` on non-tabular files doesn't cause every
-         cited PDF/TXT/DOCX to be auto-staged into the Python sandbox.
-      2. In the File connector (`onyx/connectors/file/connector.py:190`),
-         drop the `is_tabular_file` gate so `Document.file_id` is stamped
-         unconditionally. New uploads then take the fast path by design.
-      3. Alembic backfill: for every existing non-tabular connector file,
-         join `connector.connector_specific_config->'file_locations'` →
-         `document_by_connector_credential_pair` → `document` and set
-         `document.file_id`. One-time cost at deploy.
-      4. Delete this helper and the fallback branch in
-         `_user_can_access_connector_file`. The access check collapses to
-         a single indexed `SELECT document.id WHERE file_id = :file_id`.
+    TODO(delete-me): exists only because the File connector leaves
+    `Document.file_id=NULL` for non-tabular uploads (see comment in
+    `onyx/connectors/file/connector.py`). The `@>` lookup also can't use
+    a btree index, so every fast-path miss does a JSONB scan. Once the
+    connector stamps `Document.file_id` unconditionally and a backfill
+    runs, this helper and its caller branch can go away.
     """
     connector_ids: list[int] = list(
         db_session.execute(
@@ -404,9 +346,8 @@ def _documents_from_file_connector_config(
     if not connector_ids:
         return []
 
-    # In practice `connector_ids` has length 1 (file_ids are UUIDs), so
-    # the per-connector fan-out here is a non-issue; not worth folding
-    # into a `DISTINCT ON` when the whole helper is slated for deletion.
+    # `connector_ids` is virtually always length 1 (file_ids are UUIDs),
+    # so the per-connector fan-out here is a non-issue.
     document_ids: list[str] = []
     for connector_id in connector_ids:
         doc_id = db_session.execute(

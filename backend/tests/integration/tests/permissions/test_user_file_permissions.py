@@ -314,20 +314,10 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
     assert response.content == _IMAGE_GEN_PNG_BYTES
 
 
-# -----------------------------------------------------------------------------
-# Connector-ingested file access checks
-#
-# Files ingested by connectors (e.g. the File connector) are saved to the file
-# store with `FileOrigin.CONNECTOR` and referenced from the corresponding
-# `Document.file_id`. The `PreviewModal` in the frontend downloads these via
-# `GET /chat/file/{file_id}` when no external `.link` is available.
-#
-# The chat-file hardening in PR #10380 omitted this branch, causing a
-# "Failed to load document." regression (tracked in issue #10472). These tests
-# pin the fix: connector files must be readable by any user whose ACL covers
-# at least one Document that references the file, and must stay gated for
-# users whose ACL does not.
-# -----------------------------------------------------------------------------
+# Connector-ingested files: PR #10380 hardened `/chat/file/{file_id}` but
+# missed the connector branch (issue #10472), breaking `PreviewModal` with
+# "Failed to load document.". These tests pin that access lines up with
+# the underlying `Document` ACL.
 
 
 _CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
@@ -338,10 +328,8 @@ def _seed_connector_file(
     document_id: str,
     file_origin: FileOrigin = FileOrigin.CONNECTOR,
 ) -> str:
-    """Save bytes to the file store under a connector-adjacent origin and
-    point the ingested `Document.file_id` at the returned storage id. The
-    cc_pair already links the document via the ingestion API, so the ACL
-    resolution path used by `user_can_access_chat_file` will find it."""
+    """Save bytes and link `Document.file_id` to the storage id, exercising
+    the fast path in `_user_can_access_connector_file`."""
     file_store = get_default_file_store()
     storage_id = file_store.save_file(
         content=io.BytesIO(_CONNECTOR_FILE_BYTES),
@@ -357,15 +345,11 @@ def _seed_connector_file(
     return storage_id
 
 
-# Connector-ingested files have carried several origin stamps over time:
-#   * `FileOrigin.CONNECTOR` — pipeline-promoted during indexing.
-#   * `FileOrigin.CONNECTOR_FILE_UPLOAD` — admin uploads via the connector
-#     upload API (added in #10484).
-#   * `FileOrigin.OTHER` — the pre-#10484 stamp for admin connector uploads.
-#     Files from that era still live in production file stores, so the
-#     preview path must stay backwards-compatible with them.
-# All that matters for access is that a `Document` references the `file_id`;
-# the `FileOrigin` stamp is not consulted by `_user_can_access_connector_file`.
+# Origins that connector-ingested files have carried in prod: pipeline-
+# promoted (`CONNECTOR`), modern admin upload (`CONNECTOR_FILE_UPLOAD`,
+# added in #10484), and legacy admin upload (`OTHER`, pre-#10484). The
+# access check ignores origin, but parametrizing here guards against a
+# regression that re-introduces an origin filter.
 _CONNECTOR_FILE_ORIGINS = [
     FileOrigin.CONNECTOR,
     FileOrigin.CONNECTOR_FILE_UPLOAD,
@@ -378,14 +362,9 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
     reset: None,  # noqa: ARG001
     file_origin: FileOrigin,
 ) -> None:
-    """Regression test for issue #10472.
-
-    Connector-ingested files have carried several `FileOrigin` stamps over
-    time (`CONNECTOR`, `CONNECTOR_FILE_UPLOAD`, or `OTHER` for pre-#10484
-    admin uploads). When the owning cc_pair is PUBLIC, any authenticated
-    user must be able to fetch the file via `GET /chat/file/{file_id}`
-    regardless of origin — previously this returned 404, breaking
-    `PreviewModal` with "Failed to load document."."""
+    """Regression test for #10472: PUBLIC connector file is fetchable by
+    any authenticated user via `/chat/file/{file_id}`, regardless of
+    `FileOrigin` stamp."""
     admin_user: DATestUser = UserManager.create(name="connector_admin")
     basic_user: DATestUser = UserManager.create(name="connector_basic")
 
@@ -422,10 +401,8 @@ def test_connector_file_denied_for_users_without_access(
     reset: None,  # noqa: ARG001
     file_origin: FileOrigin,
 ) -> None:
-    """Flip side of the regression fix: a connector file backed by a PRIVATE
-    cc_pair must NOT be readable by users who have no ACL overlap with the
-    cc_pair, even after the fix. Covers every `FileOrigin` stamp the
-    connector file path has used historically."""
+    """Flip side: a PRIVATE cc_pair connector file stays denied for users
+    with no ACL overlap, across every historical `FileOrigin` stamp."""
     admin_user: DATestUser = UserManager.create(name="priv_connector_admin")
     basic_user: DATestUser = UserManager.create(name="priv_connector_basic")
 
@@ -457,26 +434,12 @@ def test_connector_file_denied_for_users_without_access(
     assert basic_response.content != _CONNECTOR_FILE_BYTES
 
 
-# -----------------------------------------------------------------------------
-# Non-tabular File-connector upload access checks
-#
-# The File connector only stamps `Document.file_id` for tabular files
-# (`backend/onyx/connectors/file/connector.py:190`). Non-tabular uploads
-# (txt/pdf/docx/etc.) leave `Document.file_id=NULL`, so the `Document.file_id`
-# lookup path alone is not enough — users clicking a citation on a .txt file
-# would previously see "Failed to load document." even for publicly-indexed
-# connector files.
-#
-# The access check falls back to matching the file_id against
-# `Connector.connector_specific_config['file_locations']`, which the File
-# connector populates for every uploaded file regardless of extension. These
-# tests pin that fallback across both current (`CONNECTOR_FILE_UPLOAD`) and
-# legacy pre-#10484 (`OTHER`) origin stamps.
-# -----------------------------------------------------------------------------
-
-
-# `CONNECTOR` isn't included here because pipeline-promoted files already get
-# `Document.file_id` stamped, so they never hit the connector-config fallback.
+# Non-tabular File-connector uploads (txt/pdf/docx/...) leave
+# `Document.file_id=NULL` (see `connectors/file/connector.py`), so the fast
+# path misses and access falls back to matching against
+# `Connector.connector_specific_config['file_locations']`. These tests pin
+# that fallback. `CONNECTOR` is excluded because pipeline-promoted files
+# always get `Document.file_id` stamped and so never hit the fallback.
 _NON_TABULAR_FILE_ORIGINS = [
     FileOrigin.CONNECTOR_FILE_UPLOAD,
     FileOrigin.OTHER,
@@ -490,10 +453,8 @@ def _seed_non_tabular_file_connector_cc_pair(
     access_type: AccessType,
     groups: list[int] | None = None,
 ) -> DATestCCPair:
-    """Build a File-source cc_pair whose `connector_specific_config` points at
-    `file_id` WITHOUT linking any `Document.file_id` to it — mirroring what
-    happens in prod when a user uploads a non-tabular file through the File
-    connector UI."""
+    """Build a File-source cc_pair pointing at `file_id` without setting
+    `Document.file_id` — mirrors a non-tabular upload."""
     return CCPairManager.create_from_scratch(
         user_performing_action=admin_user,
         source=DocumentSource.FILE,
@@ -509,10 +470,9 @@ def _seed_non_tabular_file_connector_cc_pair(
 
 
 def _save_non_tabular_file_bytes(file_id: str, file_origin: FileOrigin) -> None:
-    """Write bytes into the file store under the *exact* `file_id` referenced
-    by `Connector.connector_specific_config['file_locations']`. We cannot reuse
-    `_seed_connector_file` because that helper also stamps `Document.file_id`,
-    which would bypass the fallback path we're trying to exercise."""
+    """Save bytes under the exact `file_id` listed in the cc_pair's
+    `file_locations`. Can't reuse `_seed_connector_file` because that
+    stamps `Document.file_id` and would bypass the fallback under test."""
     file_store = get_default_file_store()
     file_store.save_file(
         content=io.BytesIO(_CONNECTOR_FILE_BYTES),
@@ -528,11 +488,8 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
     reset: None,  # noqa: ARG001
     file_origin: FileOrigin,
 ) -> None:
-    """Non-tabular File connector uploads (txt/pdf/docx/etc.) have no
-    `Document.file_id` link, so the original fix for #10472 left them
-    unreachable via `/chat/file/{file_id}`. The fallback keyed off
-    `Connector.connector_specific_config['file_locations']` is what lets
-    `PreviewModal` render these files again."""
+    """PUBLIC non-tabular File-connector upload: the JSONB fallback in
+    `_user_can_access_connector_file` lets any user fetch it."""
     admin_user: DATestUser = UserManager.create(name="non_tabular_admin")
     basic_user: DATestUser = UserManager.create(name="non_tabular_basic")
     api_key = APIKeyManager.create(user_performing_action=admin_user)
@@ -544,8 +501,8 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
         access_type=AccessType.PUBLIC,
     )
 
-    # Ingest a document against this cc_pair but do NOT set its `file_id` —
-    # that's what makes this the "non-tabular" case.
+    # Document ingested against the cc_pair without `file_id` — the
+    # "non-tabular" case under test.
     DocumentManager.seed_doc_with_content(
         cc_pair=public_cc_pair,
         content="non-tabular body text",
@@ -571,9 +528,8 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     reset: None,  # noqa: ARG001
     file_origin: FileOrigin,
 ) -> None:
-    """Flip side of the fallback: a non-tabular File-connector upload owned by
-    a PRIVATE cc_pair must stay gated for users with no ACL overlap, even
-    though the connector-config fallback finds the file."""
+    """PRIVATE non-tabular File-connector upload: ACL still gates access
+    even though the JSONB fallback locates the file."""
     admin_user: DATestUser = UserManager.create(name="non_tabular_priv_admin")
     basic_user: DATestUser = UserManager.create(name="non_tabular_priv_basic")
     api_key = APIKeyManager.create(user_performing_action=admin_user)
