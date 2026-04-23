@@ -27,9 +27,7 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
-    OnyxWebCrawler,
-)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )

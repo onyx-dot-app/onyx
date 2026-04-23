@@ -13,7 +13,6 @@ from onyx.tools.tool_implementations.utils import (
 )
 from onyx.tools.tool_implementations.utils import FILE_ASSOCIATED_GUIDANCE
 
-
 FID = "550e8400-e29b-41d4-a716-446655440000"
 
 

@@ -1,4 +1,4 @@
-import { AlertIcon, TriangleAlertIcon } from "@/components/icons/icons";
+import { SvgAlertCircle, SvgAlertTriangle } from "@opal/icons";
 import { useState, JSX } from "react";
 
 export type StatusOptions = "in-progress" | "failed" | "warning" | "success";
@@ -27,13 +27,13 @@ export const ResponseSection = ({
     icon = <></>;
   }
   if (status === "failed") {
-    icon = <AlertIcon size={16} className="text-red-500" />;
+    icon = <SvgAlertCircle size={16} className="text-red-500" />;
   }
   if (status === "success") {
     icon = <></>;
   }
   if (status === "warning") {
-    icon = <TriangleAlertIcon size={16} className="text-yellow-600" />;
+    icon = <SvgAlertTriangle size={16} className="text-yellow-600" />;
   }
 
   // use `desiredOpenStatus` if user has not clicked to open/close, otherwise use

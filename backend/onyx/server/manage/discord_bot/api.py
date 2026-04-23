@@ -32,9 +32,7 @@ from onyx.server.manage.discord_bot.models import DiscordChannelConfigUpdateRequ
 from onyx.server.manage.discord_bot.models import DiscordGuildConfigCreateResponse
 from onyx.server.manage.discord_bot.models import DiscordGuildConfigResponse
 from onyx.server.manage.discord_bot.models import DiscordGuildConfigUpdateRequest
-from onyx.server.manage.discord_bot.utils import (
-    generate_discord_registration_key,
-)
+from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/manage/admin/discord-bot")

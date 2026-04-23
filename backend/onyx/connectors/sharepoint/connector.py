@@ -41,6 +41,9 @@ from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    extract_and_stage_tabular_file,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
@@ -73,6 +76,7 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_store.staging import RawFileCallback
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
@@ -529,6 +533,7 @@ def _convert_driveitem_to_document_with_permissions(
     parent_hierarchy_raw_node_id: str | None = None,
     access_token: str | None = None,
     treat_sharing_link_as_public: bool = False,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
 
     if not driveitem.name or not driveitem.id:
@@ -598,6 +603,8 @@ def _convert_driveitem_to_document_with_permissions(
             )
 
     sections: list[TextSection | ImageSection | TabularSection] = []
+    # Only tabular files carry a `file_id` on the Document
+    staged_file_id: str | None = None
     file_ext = get_file_ext(driveitem.name)
 
     if not content_bytes:
@@ -615,13 +622,24 @@ def _convert_driveitem_to_document_with_permissions(
         sections.append(image_section)
     elif is_tabular_file(driveitem.name):
         try:
-            sections.extend(
-                tabular_file_to_sections(
+            if raw_file_callback is not None:
+                result = extract_and_stage_tabular_file(
                     file=io.BytesIO(content_bytes),
                     file_name=driveitem.name,
+                    content_type=mime_type or "application/octet-stream",
+                    raw_file_callback=raw_file_callback,
                     link=driveitem.web_url or "",
                 )
-            )
+                sections.extend(result.sections)
+                staged_file_id = result.staged_file_id
+            else:
+                sections.extend(
+                    tabular_file_to_sections(
+                        file=io.BytesIO(content_bytes),
+                        file_name=driveitem.name,
+                        link=driveitem.web_url or "",
+                    )
+                )
         except Exception as e:
             logger.warning(
                 f"Failed to extract tabular sections for '{driveitem.name}': {e}"
@@ -698,6 +716,7 @@ def _convert_driveitem_to_document_with_permissions(
         ],
         metadata={"drive": drive_name},
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+        file_id=staged_file_id,
     )
     return doc
 
@@ -2482,6 +2501,7 @@ class SharepointConnector(
                         graph_api_base=self.graph_api_base,
                         access_token=access_token,
                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                        raw_file_callback=self.raw_file_callback,
                     )
 
                     if isinstance(doc_or_failure, Document):

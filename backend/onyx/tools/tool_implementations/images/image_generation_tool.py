@@ -29,9 +29,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.b64 import get_image_type_from_bytes

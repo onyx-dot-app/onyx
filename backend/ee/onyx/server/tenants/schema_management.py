@@ -3,12 +3,12 @@ import os
 import re
 from types import SimpleNamespace
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from alembic import command
-from alembic.config import Config
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from shared_configs.configs import TENANT_ID_PREFIX

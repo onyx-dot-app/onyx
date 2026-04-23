@@ -103,8 +103,8 @@ class AsanaConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    import time
     import os
+    import time
 
     logger.notice("Starting Asana connector test")
     connector = AsanaConnector(

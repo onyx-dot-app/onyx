@@ -30,7 +30,6 @@ from tests.external_dependency_unit.document_index.conftest import (
     make_indexing_metadata,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

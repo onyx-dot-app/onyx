@@ -27,7 +27,6 @@ from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_doc
 from tests.external_dependency_unit.indexing_helpers import stage_file
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

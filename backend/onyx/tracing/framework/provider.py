@@ -8,6 +8,8 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from onyx.utils.logger import setup_logger
+
 from .processor_interface import TracingProcessor
 from .scope import Scope
 from .spans import NoOpSpan
@@ -17,7 +19,6 @@ from .spans import TSpanData
 from .traces import NoOpTrace
 from .traces import Trace
 from .traces import TraceImpl
-from onyx.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 

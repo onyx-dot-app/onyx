@@ -24,7 +24,6 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
 

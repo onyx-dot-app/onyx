@@ -25,6 +25,7 @@ from onyx.server.manage.voice.models import VoiceProviderTestRequest
 from onyx.server.manage.voice.models import VoiceProviderUpdateSuccess
 from onyx.server.manage.voice.models import VoiceProviderUpsertRequest
 from onyx.server.manage.voice.models import VoiceProviderView
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -58,6 +59,7 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
 
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
     """Convert a VoiceProvider model to a VoiceProviderView."""
+    raw_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else None
     return VoiceProviderView(
         id=provider.id,
         name=provider.name,
@@ -67,6 +69,7 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         stt_model=provider.stt_model,
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
+        api_key=mask_string(raw_key) if raw_key else None,
         has_api_key=bool(provider.api_key),
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
     )

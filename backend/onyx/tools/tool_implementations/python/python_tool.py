@@ -42,7 +42,6 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 )
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 CODE_FIELD = "code"

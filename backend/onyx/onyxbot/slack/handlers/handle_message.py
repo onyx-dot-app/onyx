@@ -12,12 +12,8 @@ from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
-from onyx.onyxbot.slack.handlers.handle_regular_answer import (
-    handle_regular_answer,
-)
-from onyx.onyxbot.slack.handlers.handle_standard_answers import (
-    handle_standard_answers,
-)
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
+from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
 from onyx.onyxbot.slack.utils import fetch_user_ids_from_groups

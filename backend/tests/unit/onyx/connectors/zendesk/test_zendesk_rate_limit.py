@@ -43,9 +43,9 @@ def test_zendesk_client_per_minute_rate_limiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Import here to allow monkeypatching modules safely
-    from onyx.connectors.zendesk.connector import ZendeskClient
     import onyx.connectors.cross_connector_utils.rate_limit_wrapper as rlw
     import onyx.connectors.zendesk.connector as zendesk_mod
+    from onyx.connectors.zendesk.connector import ZendeskClient
 
     fake_time = _FakeTime()
 
