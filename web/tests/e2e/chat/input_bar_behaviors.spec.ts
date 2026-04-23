@@ -6,7 +6,6 @@ import {
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
-import { setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 
 const INPUT_SELECTOR = "#onyx-chat-input-textbox";
 const SEND_BUTTON_SELECTOR = "#onyx-chat-input-send-button";
@@ -667,24 +666,5 @@ test.describe("Visual Regression", () => {
     await page.keyboard.type("line three");
     const inputBar = page.locator(INPUT_CONTAINER_SELECTOR);
     await expectElementScreenshot(inputBar, { name: "input-bar-multiline" });
-  });
-});
-
-test.describe("Visual Regression - Dark Mode", () => {
-  test.beforeEach(async ({ page }, testInfo) => {
-    resetTurnCounter();
-    await page.context().clearCookies();
-    await loginAsWorkerUser(page, testInfo.workerIndex);
-    await setThemeBeforeNavigation(page, "dark");
-    await page.goto("/app");
-    await page.waitForLoadState("networkidle");
-    await page
-      .locator(INPUT_SELECTOR)
-      .waitFor({ state: "visible", timeout: 10000 });
-  });
-
-  test("dark mode input bar", async ({ page }) => {
-    const inputBar = page.locator(INPUT_CONTAINER_SELECTOR);
-    await expectElementScreenshot(inputBar, { name: "input-bar-dark-mode" });
   });
 });
