@@ -200,6 +200,28 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
+# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
+# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
+# minimum required to identify the user via OpenID Connect.
+GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
+
+# Applicable for Google OAuth login, allows you to override the scopes that
+# are requested from Google. Mirrors OIDC_SCOPE_OVERRIDE; useful when the
+# access token needs to be passed through to tool calls that require
+# additional Google API scopes.
+GOOGLE_OAUTH_SCOPE_OVERRIDE: list[str] | None = None
+_GOOGLE_OAUTH_SCOPE_OVERRIDE = os.environ.get("GOOGLE_OAUTH_SCOPE_OVERRIDE")
+
+if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
+    try:
+        GOOGLE_OAUTH_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _GOOGLE_OAUTH_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        logger.exception(
+            f"Error configuring Google OAuth login scopes: {_GOOGLE_OAUTH_SCOPE_OVERRIDE}"
+        )
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
