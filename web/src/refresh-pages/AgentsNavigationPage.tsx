@@ -57,8 +57,13 @@ export default function AgentsNavigationPage() {
     searchInputRef.current?.focus();
   });
 
+  const nonBuiltinAgents = useMemo(
+    () => agents.filter((a) => !a.builtin_persona),
+    [agents]
+  );
+
   const { filtered: agentsFilteredByFilters, filterBar } =
-    useAgentsFilters(agents);
+    useAgentsFilters(nonBuiltinAgents);
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agentsFilteredByFilters.filter((agent) => {
@@ -71,16 +76,10 @@ export default function AgentsNavigationPage() {
 
       const mineFilter =
         activeTab === "your" ? checkUserOwnsAgent(user, agent) : true;
-      const isNotUnifiedAgent = agent.id !== 0;
 
       const listedFilter = agent.is_listed || checkUserOwnsAgent(user, agent);
 
-      return (
-        (nameMatches || labelMatches) &&
-        mineFilter &&
-        isNotUnifiedAgent &&
-        listedFilter
-      );
+      return (nameMatches || labelMatches) && mineFilter && listedFilter;
     });
   }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
