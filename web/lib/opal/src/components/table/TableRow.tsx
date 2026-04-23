@@ -1,11 +1,8 @@
 "use client";
 
-import { cn } from "@opal/utils";
-import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { SvgHandle } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,8 +16,6 @@ export interface TableRowProps
   disabled?: boolean;
   /** When provided, makes this row sortable via @dnd-kit */
   sortableId?: string;
-  /** Show drag handle overlay. Defaults to true when sortableId is set. */
-  showDragHandle?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -29,20 +24,16 @@ export interface TableRowProps
 
 function SortableTableRow({
   sortableId,
-  showDragHandle = true,
   selected,
   disabled,
   ref: _externalRef,
   children,
   ...props
 }: TableRowProps) {
-  const resolvedSize = useTableSize();
-
   const {
     attributes,
     listeners,
     setNodeRef,
-    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -59,41 +50,13 @@ function SortableTableRow({
       ref={setNodeRef}
       style={style}
       className="tbl-row group/row"
-      data-drag-handle={showDragHandle || undefined}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
       {...attributes}
+      {...listeners}
       {...props}
     >
       {children}
-      {showDragHandle && (
-        <td
-          style={{
-            width: 0,
-            padding: 0,
-            position: "relative",
-            zIndex: 20,
-          }}
-        >
-          <button
-            ref={setActivatorNodeRef}
-            type="button"
-            className={cn(
-              "absolute right-0 top-1/2 -translate-y-1/2 cursor-grab",
-              "opacity-0 group-hover/row:opacity-100 transition-opacity",
-              "flex items-center justify-center rounded"
-            )}
-            aria-label="Drag to reorder"
-            onMouseDown={(e) => e.preventDefault()}
-            {...listeners}
-          >
-            <SvgHandle
-              size={resolvedSize === "md" ? 12 : 16}
-              className="text-border-02"
-            />
-          </button>
-        </td>
-      )}
     </tr>
   );
 }
@@ -104,7 +67,6 @@ function SortableTableRow({
 
 export default function TableRow({
   sortableId,
-  showDragHandle,
   selected,
   disabled,
   ref,
@@ -114,7 +76,6 @@ export default function TableRow({
     return (
       <SortableTableRow
         sortableId={sortableId}
-        showDragHandle={showDragHandle}
         selected={selected}
         disabled={disabled}
         ref={ref}
