@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, createTableColumns, FilterButton } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -16,7 +16,18 @@ import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Persona } from "@/app/admin/agents/interfaces";
-import { SvgUser } from "@opal/icons";
+import { SvgActions, SvgCheck, SvgUser } from "@opal/icons";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import {
+  SEARCH_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+  OPEN_URL_TOOL_ID,
+  OPEN_URL_TOOL_NAME,
+  SYSTEM_TOOL_ICONS,
+} from "@/app/app/components/tools/constants";
+import { useUser } from "@/providers/UserProvider";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,6 +46,7 @@ function toAgentRow(persona: Persona): AgentRow {
     owner: persona.owner,
     groups: persona.groups,
     users: persona.users,
+    tools: persona.tools,
     uploaded_image_id: persona.uploaded_image_id,
     icon_name: persona.icon_name,
   };
@@ -137,15 +149,165 @@ const PAGE_SIZE = 10;
 
 export default function AgentsTable() {
   const [searchTerm, setSearchTerm] = useState("");
+  const { user } = useUser();
+
+  // Filter state
+  const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
+  const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
+  const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [selectedActionIds, setSelectedActionIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
+  const [actionsSearchQuery, setActionsSearchQuery] = useState("");
 
   const { personas, isLoading, error, refresh } = useAdminPersonas();
 
   const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
-  const agentRows: AgentRow[] = useMemo(
+  const allAgentRows: AgentRow[] = useMemo(
     () => personas.filter((p) => !p.builtin_persona).map(toAgentRow),
     [personas]
   );
+
+  // ---------------------------------------------------------------------------
+  // Creator filter data
+  // ---------------------------------------------------------------------------
+
+  const uniqueCreators = useMemo(() => {
+    const creatorsMap = new Map<string, { id: string; email: string }>();
+    allAgentRows.forEach((agent) => {
+      if (agent.owner) {
+        creatorsMap.set(agent.owner.id, agent.owner);
+      }
+    });
+
+    let creators = Array.from(creatorsMap.values()).sort((a, b) =>
+      a.email.localeCompare(b.email)
+    );
+
+    if (user) {
+      const hasCurrentUser = creators.some((c) => c.id === user.id);
+      if (!hasCurrentUser) {
+        creators = [{ id: user.id, email: user.email }, ...creators];
+      } else {
+        creators = creators.sort((a, b) => {
+          if (a.id === user.id) return -1;
+          if (b.id === user.id) return 1;
+          return a.email.localeCompare(b.email);
+        });
+      }
+    }
+
+    return creators;
+  }, [allAgentRows, user]);
+
+  const filteredCreators = useMemo(() => {
+    if (!creatorSearchQuery) return uniqueCreators;
+    return uniqueCreators.filter((creator) =>
+      creator.email.toLowerCase().includes(creatorSearchQuery.toLowerCase())
+    );
+  }, [uniqueCreators, creatorSearchQuery]);
+
+  // ---------------------------------------------------------------------------
+  // Actions filter data
+  // ---------------------------------------------------------------------------
+
+  const uniqueActions = useMemo(() => {
+    const actionsMap = new Map<
+      number,
+      { id: number; name: string; display_name: string }
+    >();
+
+    allAgentRows.forEach((agent) => {
+      agent.tools.forEach((tool) => {
+        if (
+          tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_NAME
+        ) {
+          return;
+        }
+        actionsMap.set(tool.id, {
+          id: tool.id,
+          name: tool.name,
+          display_name: tool.display_name,
+        });
+      });
+    });
+
+    const systemToolIds = [
+      SEARCH_TOOL_ID,
+      IMAGE_GENERATION_TOOL_ID,
+      WEB_SEARCH_TOOL_ID,
+    ];
+
+    const allActions = Array.from(actionsMap.values());
+    const systemTools = allActions
+      .filter((a) => systemToolIds.includes(a.name))
+      .sort((a, b) => a.display_name.localeCompare(b.display_name));
+    const otherTools = allActions
+      .filter((a) => !systemToolIds.includes(a.name))
+      .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+    return [...systemTools, ...otherTools];
+  }, [allAgentRows]);
+
+  const filteredActions = useMemo(() => {
+    if (!actionsSearchQuery) return uniqueActions;
+    const query = actionsSearchQuery.toLowerCase();
+    return uniqueActions.filter((action) =>
+      action.display_name.toLowerCase().includes(query)
+    );
+  }, [uniqueActions, actionsSearchQuery]);
+
+  // ---------------------------------------------------------------------------
+  // Filter button labels
+  // ---------------------------------------------------------------------------
+
+  const creatorFilterButtonText = useMemo(() => {
+    if (selectedCreatorIds.size === 0) return "Everyone";
+    if (selectedCreatorIds.size === 1) {
+      const selectedId = Array.from(selectedCreatorIds)[0];
+      const creator = uniqueCreators.find((c) => c.id === selectedId);
+      return creator ? `By ${creator.email}` : "Everyone";
+    }
+    return `${selectedCreatorIds.size} people`;
+  }, [selectedCreatorIds, uniqueCreators]);
+
+  const actionsFilterButtonText = useMemo(() => {
+    if (selectedActionIds.size === 0) return "All Actions";
+    if (selectedActionIds.size === 1) {
+      const selectedId = Array.from(selectedActionIds)[0];
+      const action = uniqueActions.find((a) => a.id === selectedId);
+      return action?.display_name ?? "All Actions";
+    }
+    return `${selectedActionIds.size} selected`;
+  }, [selectedActionIds, uniqueActions]);
+
+  // ---------------------------------------------------------------------------
+  // Filtered rows
+  // ---------------------------------------------------------------------------
+
+  const agentRows = useMemo(() => {
+    return allAgentRows.filter((agent) => {
+      const creatorFilter =
+        selectedCreatorIds.size === 0 ||
+        (agent.owner && selectedCreatorIds.has(agent.owner.id));
+
+      const actionsFilter =
+        selectedActionIds.size === 0 ||
+        agent.tools.some((tool) => selectedActionIds.has(tool.id));
+
+      return creatorFilter && actionsFilter;
+    });
+  }, [allAgentRows, selectedCreatorIds, selectedActionIds]);
+
+  // ---------------------------------------------------------------------------
+  // Reorder handler
+  // ---------------------------------------------------------------------------
 
   const handleReorder = async (
     _orderedIds: string[],
@@ -187,6 +349,129 @@ export default function AgentsTable() {
         placeholder="Search agents..."
         leftSearchIcon
       />
+      <div className="flex flex-row gap-2">
+        <Popover open={creatorFilterOpen} onOpenChange={setCreatorFilterOpen}>
+          <Popover.Trigger asChild>
+            <FilterButton
+              icon={SvgUser}
+              active={selectedCreatorIds.size > 0}
+              onClear={() => setSelectedCreatorIds(new Set())}
+            >
+              {creatorFilterButtonText}
+            </FilterButton>
+          </Popover.Trigger>
+          <Popover.Content align="start">
+            <PopoverMenu>
+              {[
+                <InputTypeIn
+                  key="created-by"
+                  placeholder="Created by..."
+                  variant="internal"
+                  leftSearchIcon
+                  value={creatorSearchQuery}
+                  onChange={(e) => setCreatorSearchQuery(e.target.value)}
+                />,
+                ...filteredCreators.flatMap((creator) => {
+                  const isSelected = selectedCreatorIds.has(creator.id);
+                  const isCurrentUser = user && creator.id === user.id;
+
+                  return [
+                    <LineItem
+                      key={creator.id}
+                      icon={
+                        isCurrentUser
+                          ? SvgUser
+                          : isSelected
+                            ? SvgCheck
+                            : () => null
+                      }
+                      selected={isSelected}
+                      emphasized
+                      onClick={() => {
+                        setSelectedCreatorIds((prev) => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(creator.id)) {
+                            newSet.delete(creator.id);
+                          } else {
+                            newSet.add(creator.id);
+                          }
+                          return newSet;
+                        });
+                      }}
+                    >
+                      {creator.email}
+                    </LineItem>,
+                  ];
+                }),
+              ]}
+            </PopoverMenu>
+          </Popover.Content>
+        </Popover>
+
+        <Popover open={actionsFilterOpen} onOpenChange={setActionsFilterOpen}>
+          <Popover.Trigger asChild>
+            <FilterButton
+              icon={SvgActions}
+              active={selectedActionIds.size > 0}
+              onClear={() => setSelectedActionIds(new Set())}
+            >
+              {actionsFilterButtonText}
+            </FilterButton>
+          </Popover.Trigger>
+          <Popover.Content align="start">
+            <PopoverMenu>
+              {[
+                <InputTypeIn
+                  key="actions"
+                  placeholder="Filter actions..."
+                  variant="internal"
+                  leftSearchIcon
+                  value={actionsSearchQuery}
+                  onChange={(e) => setActionsSearchQuery(e.target.value)}
+                />,
+                ...filteredActions.flatMap((action, index) => {
+                  const isSelected = selectedActionIds.has(action.id);
+                  const systemIcon = SYSTEM_TOOL_ICONS[action.name];
+                  const isSystemTool = !!systemIcon;
+
+                  const nextAction = filteredActions[index + 1];
+                  const nextIsSystemTool = nextAction
+                    ? !!SYSTEM_TOOL_ICONS[nextAction.name]
+                    : false;
+                  const needsSeparator =
+                    isSystemTool && nextAction && !nextIsSystemTool;
+
+                  const icon = systemIcon ?? SvgActions;
+
+                  const lineItem = (
+                    <LineItem
+                      key={action.id}
+                      icon={icon}
+                      selected={isSelected}
+                      emphasized
+                      onClick={() => {
+                        setSelectedActionIds((prev) => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(action.id)) {
+                            newSet.delete(action.id);
+                          } else {
+                            newSet.add(action.id);
+                          }
+                          return newSet;
+                        });
+                      }}
+                    >
+                      {action.display_name}
+                    </LineItem>
+                  );
+
+                  return needsSeparator ? [lineItem, null] : [lineItem];
+                }),
+              ]}
+            </PopoverMenu>
+          </Popover.Content>
+        </Popover>
+      </div>
       <Table
         data={agentRows}
         columns={columns}
