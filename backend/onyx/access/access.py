@@ -214,10 +214,11 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       session the user owns or a session publicly shared via
       `ChatSessionSharedStatus.PUBLIC`.
     - The `file_id` is the storage id of a connector-ingested document
-      (`FileOrigin.CONNECTOR`) whose associated `Document` grants access to
-      this user via the standard ACL. This allows users to preview cited
-      files returned from indexed connector sources (e.g. the `File`
-      connector) through `PreviewModal`.
+      (`FileOrigin.CONNECTOR` or `FileOrigin.CONNECTOR_FILE_UPLOAD`) whose
+      associated `Document` grants access to this user via the standard
+      ACL. This allows users to preview cited files returned from indexed
+      connector sources (e.g. the `File` connector, or admin-uploaded
+      files via the connector upload API) through `PreviewModal`.
     - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
       tool call database entry is added. This the file is there and the FE can
       request it despite us not having the linking tool call. We currently
@@ -288,15 +289,17 @@ def _user_can_access_connector_file(
     file_id: str, user: User, db_session: Session
 ) -> bool:
     """Grant access when `file_id` corresponds to a connector-ingested file
-    (`FileOrigin.CONNECTOR`) and the user's ACL overlaps the ACL of at least
-    one `Document` that references that `file_id`. Mirrors the access-control
-    layer applied during retrieval so preview access stays consistent with
-    search result access."""
+    (`FileOrigin.CONNECTOR` or `FileOrigin.CONNECTOR_FILE_UPLOAD`) and the
+    user's ACL overlaps the ACL of at least one `Document` that references
+    that `file_id`. Mirrors the access-control layer applied during retrieval
+    so preview access stays consistent with search result access."""
     is_connector_file = db_session.query(
         select(FileRecord.file_id)
         .where(
             FileRecord.file_id == file_id,
-            FileRecord.file_origin == FileOrigin.CONNECTOR,
+            FileRecord.file_origin.in_(
+                [FileOrigin.CONNECTOR, FileOrigin.CONNECTOR_FILE_UPLOAD]
+            ),
         )
         .exists()
     ).scalar()

@@ -334,16 +334,17 @@ _CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
 def _seed_connector_file(
     *,
     document_id: str,
+    file_origin: FileOrigin = FileOrigin.CONNECTOR,
 ) -> str:
-    """Save bytes to the file store as `FileOrigin.CONNECTOR` and point the
-    ingested `Document.file_id` at the returned storage id. The cc_pair
-    already links the document via the ingestion API, so the ACL resolution
-    path used by `user_can_access_chat_file` will find it."""
+    """Save bytes to the file store under a connector-adjacent origin and
+    point the ingested `Document.file_id` at the returned storage id. The
+    cc_pair already links the document via the ingestion API, so the ACL
+    resolution path used by `user_can_access_chat_file` will find it."""
     file_store = get_default_file_store()
     storage_id = file_store.save_file(
         content=io.BytesIO(_CONNECTOR_FILE_BYTES),
         display_name="connector_doc.txt",
-        file_origin=FileOrigin.CONNECTOR,
+        file_origin=file_origin,
         file_type="text/plain",
     )
     with get_session_with_current_tenant() as db_session:
@@ -354,14 +355,28 @@ def _seed_connector_file(
     return storage_id
 
 
+# Both `FileOrigin.CONNECTOR` (pipeline-promoted) and
+# `FileOrigin.CONNECTOR_FILE_UPLOAD` (admin-uploaded via the connector upload
+# API) flow through the same indexing path and land on `Document.file_id`.
+# `_user_can_access_connector_file` must treat them identically.
+_CONNECTOR_FILE_ORIGINS = [
+    FileOrigin.CONNECTOR,
+    FileOrigin.CONNECTOR_FILE_UPLOAD,
+]
+
+
+@pytest.mark.parametrize("file_origin", _CONNECTOR_FILE_ORIGINS)
 def test_connector_file_is_accessible_via_chat_file_endpoint(
     reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
 ) -> None:
     """Regression test for issue #10472.
 
     A file ingested by a connector (e.g. the File connector) is served from
-    the file store with `FileOrigin.CONNECTOR`. When its owning cc_pair is
-    PUBLIC, any authenticated user must be able to fetch it via
+    the file store with `FileOrigin.CONNECTOR`. Admin-uploaded connector
+    files are stored as `FileOrigin.CONNECTOR_FILE_UPLOAD` but flow through
+    the same indexing path. When the owning cc_pair is PUBLIC, any
+    authenticated user must be able to fetch it via
     `GET /chat/file/{file_id}` — previously this returned 404, breaking
     `PreviewModal` with "Failed to load document."."""
     admin_user: DATestUser = UserManager.create(name="connector_admin")
@@ -380,6 +395,7 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
     )
     storage_id = _seed_connector_file(
         document_id=document.id,
+        file_origin=file_origin,
     )
 
     for user in (admin_user, basic_user):
@@ -388,18 +404,21 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
             headers=user.headers,
         )
         assert response.status_code == 200, (
-            f"User {user.email} must be able to fetch a PUBLIC connector file, "
-            f"got {response.status_code}: {response.text}"
+            f"User {user.email} must be able to fetch a PUBLIC connector file "
+            f"(origin={file_origin}), got {response.status_code}: {response.text}"
         )
         assert response.content == _CONNECTOR_FILE_BYTES
 
 
+@pytest.mark.parametrize("file_origin", _CONNECTOR_FILE_ORIGINS)
 def test_connector_file_denied_for_users_without_access(
     reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
 ) -> None:
     """Flip side of the regression fix: a connector file backed by a PRIVATE
     cc_pair must NOT be readable by users who have no ACL overlap with the
-    cc_pair, even after the fix."""
+    cc_pair, even after the fix. Covers both `CONNECTOR` and
+    `CONNECTOR_FILE_UPLOAD` origins."""
     admin_user: DATestUser = UserManager.create(name="priv_connector_admin")
     basic_user: DATestUser = UserManager.create(name="priv_connector_basic")
 
@@ -416,6 +435,7 @@ def test_connector_file_denied_for_users_without_access(
     )
     storage_id = _seed_connector_file(
         document_id=document.id,
+        file_origin=file_origin,
     )
 
     basic_response = requests.get(
@@ -423,7 +443,8 @@ def test_connector_file_denied_for_users_without_access(
         headers=basic_user.headers,
     )
     assert basic_response.status_code in (403, 404), (
-        f"Non-member should be denied on PRIVATE connector file, got "
-        f"{basic_response.status_code}: {basic_response.text}"
+        f"Non-member should be denied on PRIVATE connector file "
+        f"(origin={file_origin}), got {basic_response.status_code}: "
+        f"{basic_response.text}"
     )
     assert basic_response.content != _CONNECTOR_FILE_BYTES
