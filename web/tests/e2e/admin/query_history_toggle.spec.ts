@@ -12,7 +12,7 @@ async function expandAdvancedOptions(page: Page): Promise<void> {
 
   const queryHistoryTrigger = page
     .locator("label")
-    .filter({ hasText: "Query History" })
+    .filter({ hasText: "Query History Visibility" })
     .first();
 
   const alreadyVisible = await queryHistoryTrigger
@@ -31,11 +31,11 @@ async function getQueryHistoryValue(page: Page): Promise<string> {
 
   const trigger = page
     .locator("label")
-    .filter({ hasText: "Query History" })
+    .filter({ hasText: "Query History Visibility" })
     .locator('[role="combobox"]');
 
   const text = (await trigger.textContent()) ?? "";
-  for (const label of ["Normal", "Anonymized", "Disabled"]) {
+  for (const label of ["Show with User Info", "Anonymized", "Hidden"]) {
     if (text.includes(label)) return label;
   }
   return text;
@@ -43,7 +43,7 @@ async function getQueryHistoryValue(page: Page): Promise<string> {
 
 async function setQueryHistoryType(
   page: Page,
-  value: "Normal" | "Anonymized" | "Disabled"
+  value: "Show with User Info" | "Anonymized" | "Hidden"
 ): Promise<void> {
   await page.goto("/admin/configuration/chat-preferences");
   await page.waitForLoadState("networkidle");
@@ -54,7 +54,7 @@ async function setQueryHistoryType(
 
   const trigger = page
     .locator("label")
-    .filter({ hasText: "Query History" })
+    .filter({ hasText: "Query History Visibility" })
     .locator('[role="combobox"]');
 
   await trigger.scrollIntoViewIfNeeded();
@@ -76,7 +76,7 @@ test.describe("Query History Toggle @exclusive", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    await setQueryHistoryType(page, "Normal");
+    await setQueryHistoryType(page, "Show with User Info");
   });
 
   test("dropdown shows current value and persists after reload", async ({
@@ -86,7 +86,9 @@ test.describe("Query History Toggle @exclusive", () => {
     await page.waitForLoadState("networkidle");
 
     const currentValue = await getQueryHistoryValue(page);
-    expect(["Normal", "Anonymized", "Disabled"]).toContain(currentValue);
+    expect(["Show with User Info", "Anonymized", "Hidden"]).toContain(
+      currentValue
+    );
 
     await setQueryHistoryType(page, "Anonymized");
 
@@ -97,13 +99,13 @@ test.describe("Query History Toggle @exclusive", () => {
     expect(newValue).toBe("Anonymized");
   });
 
-  test("setting to Disabled hides query history sidebar link", async ({
+  test("setting to Hidden hides query history sidebar link", async ({
     page,
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Query History page requires enterprise license");
 
-    await setQueryHistoryType(page, "Normal");
+    await setQueryHistoryType(page, "Show with User Info");
 
     await page.goto("/admin/performance/usage");
     await page.waitForLoadState("networkidle");
@@ -114,7 +116,7 @@ test.describe("Query History Toggle @exclusive", () => {
     );
     await expect(queryHistoryLink).toBeVisible({ timeout: 5000 });
 
-    await setQueryHistoryType(page, "Disabled");
+    await setQueryHistoryType(page, "Hidden");
 
     await page.goto("/admin/performance/usage");
     await page.waitForLoadState("networkidle");
@@ -127,19 +129,19 @@ test.describe("Query History Toggle @exclusive", () => {
   });
 
   test("can cycle through all three options", async ({ page }) => {
-    await setQueryHistoryType(page, "Normal");
+    await setQueryHistoryType(page, "Show with User Info");
     await page.reload();
     await page.waitForLoadState("networkidle");
-    expect(await getQueryHistoryValue(page)).toBe("Normal");
+    expect(await getQueryHistoryValue(page)).toBe("Show with User Info");
 
     await setQueryHistoryType(page, "Anonymized");
     await page.reload();
     await page.waitForLoadState("networkidle");
     expect(await getQueryHistoryValue(page)).toBe("Anonymized");
 
-    await setQueryHistoryType(page, "Disabled");
+    await setQueryHistoryType(page, "Hidden");
     await page.reload();
     await page.waitForLoadState("networkidle");
-    expect(await getQueryHistoryValue(page)).toBe("Disabled");
+    expect(await getQueryHistoryValue(page)).toBe("Hidden");
   });
 });
