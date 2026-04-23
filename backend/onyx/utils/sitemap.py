@@ -1,13 +1,25 @@
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from typing import Set
 from urllib.parse import urljoin
 
 import requests
+from dateutil import parser as dateutil_parser
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _parse_lastmod(lastmod_text: str | None) -> datetime | None:
+    """Parse a sitemap ``<lastmod>`` value. Returns None on missing/invalid input."""
+    if not lastmod_text:
+        return None
+    try:
+        return dateutil_parser.parse(lastmod_text.strip())
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def _get_sitemap_locations_from_robots(base_url: str) -> Set[str]:
@@ -26,9 +38,14 @@ def _get_sitemap_locations_from_robots(base_url: str) -> Set[str]:
     return sitemap_urls
 
 
-def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
-    """Extract URLs from a sitemap XML file"""
-    urls: set[str] = set()
+def _extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
+    """Extract URLs and their ``<lastmod>`` from a sitemap XML file.
+
+    Returns a mapping of URL to parsed lastmod datetime (or None if absent / unparseable).
+    Sitemap-index entries are recursed; if the same URL appears in multiple sub-sitemaps
+    the last one wins — sitemaps are expected to have unique URLs in practice.
+    """
+    urls: dict[str, datetime | None] = {}
     try:
         resp = requests.get(sitemap_url, timeout=10)
         if resp.status_code != 200:
@@ -42,16 +59,19 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
         ns = namespace.group(0) if namespace else ""
 
         if root.tag == f"{ns}sitemapindex":
-            # This is a sitemap index
-            for sitemap in root.findall(f".//{ns}loc"):
-                if sitemap.text:
-                    sub_urls = _extract_urls_from_sitemap(sitemap.text)
-                    urls.update(sub_urls)
+            for sitemap in root.findall(f".//{ns}sitemap"):
+                loc_el = sitemap.find(f"{ns}loc")
+                if loc_el is not None and loc_el.text:
+                    urls.update(_extract_urls_from_sitemap(loc_el.text))
         else:
-            # This is a regular sitemap
-            for url in root.findall(f".//{ns}loc"):
-                if url.text:
-                    urls.add(url.text)
+            for url_el in root.findall(f".//{ns}url"):
+                loc_el = url_el.find(f"{ns}loc")
+                if loc_el is None or not loc_el.text:
+                    continue
+                lastmod_el = url_el.find(f"{ns}lastmod")
+                urls[loc_el.text] = _parse_lastmod(
+                    lastmod_el.text if lastmod_el is not None else None
+                )
 
     except Exception as e:
         logger.warning(f"Error processing sitemap {sitemap_url}: {e}")
@@ -59,10 +79,10 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
     return urls
 
 
-def list_pages_for_site(site: str) -> list[str]:
-    """Get list of pages from a site's sitemaps"""
+def list_pages_for_site(site: str) -> dict[str, datetime | None]:
+    """Get a mapping of URL → lastmod for pages discovered via a site's sitemaps."""
     site = site.rstrip("/")
-    all_urls = set()
+    all_urls: dict[str, datetime | None] = {}
 
     # Try both common sitemap locations
     sitemap_paths = ["/sitemap.xml", "/sitemap_index.xml"]
@@ -75,4 +95,4 @@ def list_pages_for_site(site: str) -> list[str]:
     for sitemap_url in sitemap_locations:
         all_urls.update(_extract_urls_from_sitemap(sitemap_url))
 
-    return list(all_urls)
+    return all_urls

@@ -4,6 +4,7 @@ import socket
 import time
 from datetime import datetime
 from datetime import timezone
+from email.utils import formatdate
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -35,6 +36,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
@@ -340,7 +342,24 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+def _parse_sitemap_lastmod(lastmod_text: str | None) -> datetime | None:
+    """Parse a ``<lastmod>`` value; return None on missing/invalid input."""
+    if not lastmod_text:
+        return None
+    try:
+        from dateutil import parser as dateutil_parser
+
+        return dateutil_parser.parse(lastmod_text.strip())
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
+    """Return a mapping of URL → parsed ``<lastmod>`` (or None) for the sitemap.
+
+    Falls back to :func:`list_pages_for_site` if the given URL doesn't look like a
+    sitemap. Raises ``RuntimeError`` if no URLs can be discovered.
+    """
     # requests should handle brotli compression automatically
     # as long as the brotli package is available in the venv. Leaving this line here to avoid
     # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
@@ -349,16 +368,29 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-        urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
-            for loc_tag in soup.find_all("loc")
-        ]
 
-        if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+        urls: dict[str, datetime | None] = {}
+        for url_tag in soup.find_all("url"):
+            loc_tag = url_tag.find("loc")
+            if not loc_tag or not loc_tag.text:
+                continue
+            lastmod_tag = url_tag.find("lastmod")
+            urls[_ensure_absolute_url(sitemap_url, loc_tag.text)] = (
+                _parse_sitemap_lastmod(lastmod_tag.text if lastmod_tag else None)
+            )
+
+        # Fallback: some sitemaps (or the input URL itself) emit bare <loc> tags
+        # without wrapping <url> — collect those too, minus any already captured.
+        if not urls:
+            for loc_tag in soup.find_all("loc"):
+                if loc_tag.text:
+                    urls[_ensure_absolute_url(sitemap_url, loc_tag.text)] = None
+
+        if not urls and not soup.find_all("urlset"):
             # the given url doesn't look like a sitemap, let's try to find one
             urls = list_pages_for_site(sitemap_url)
 
-        if len(urls) == 0:
+        if not urls:
             raise ValueError(
                 f"No URLs found in sitemap {sitemap_url}. Try using the 'single' or 'recursive' scraping options instead."
             )
@@ -442,7 +474,7 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         )
 
 
-class WebConnector(LoadConnector, SlimConnector):
+class WebConnector(LoadConnector, PollConnector, SlimConnector):
     MAX_RETRIES = 3
 
     def __init__(
@@ -459,6 +491,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
+        # Populated in SITEMAP mode with per-URL <lastmod> values (or None when
+        # absent); used by poll_source to skip URLs unchanged since the last poll.
+        self._sitemap_lastmod: dict[str, datetime | None] = {}
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -468,7 +503,10 @@ class WebConnector(LoadConnector, SlimConnector):
             self.to_visit_list = [_ensure_valid_url(base_url)]
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
-            self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
+            self._sitemap_lastmod = extract_urls_from_sitemap(
+                _ensure_valid_url(base_url)
+            )
+            self.to_visit_list = list(self._sitemap_lastmod.keys())
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
             # Explicitly check if running in multi-tenant mode to prevent potential security risks
@@ -498,12 +536,18 @@ class WebConnector(LoadConnector, SlimConnector):
         initial_url: str,
         session_ctx: ScrapeSessionContext,
         slim: bool = False,
+        poll_start: SecondsSinceUnixEpoch | None = None,
     ) -> ScrapeResult:
         """Returns a ScrapeResult object with a doc and retry flag.
 
         When slim=True, skips scroll, PDF content download, and content extraction.
         The bot-detection render wait (5s) fires on CF/403 responses regardless of slim.
         networkidle is always awaited so JS-rendered links are discovered correctly.
+
+        When ``poll_start`` is provided the HEAD request carries
+        ``If-Modified-Since``; on a ``304 Not Modified`` response we skip the
+        Playwright navigation entirely and return an empty result so the
+        framework keeps the existing indexed copy untouched.
         """
 
         if session_ctx.playwright is None:
@@ -517,10 +561,23 @@ class WebConnector(LoadConnector, SlimConnector):
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
-        # First do a HEAD request to check content type without downloading the entire content
+        # First do a HEAD request to check content type without downloading the entire content.
+        # When polling, piggyback If-Modified-Since so a well-behaved origin can short-circuit
+        # the expensive Playwright step for unchanged URLs.
+        head_headers = dict(DEFAULT_HEADERS)
+        if poll_start is not None:
+            head_headers["If-Modified-Since"] = formatdate(poll_start, usegmt=True)
+
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
+            initial_url, headers=head_headers, allow_redirects=True
         )
+
+        if poll_start is not None and head_response.status_code == 304:
+            logger.info(
+                f"{index}: Skipping {initial_url} (304 Not Modified since last poll)"
+            )
+            return result
+
         content_type = head_response.headers.get("content-type")
         is_pdf = is_pdf_resource(initial_url, content_type)
 
@@ -701,23 +758,17 @@ class WebConnector(LoadConnector, SlimConnector):
 
         return result
 
-    def load_from_state(self, slim: bool = False) -> GenerateDocumentsOutput:
-        """Traverses through all pages found on the website and converts them into
-        documents.
+    def _scrape_urls(
+        self,
+        session_ctx: ScrapeSessionContext,
+        slim: bool,
+        poll_start: SecondsSinceUnixEpoch | None,
+    ) -> GenerateDocumentsOutput:
+        """Drive the Playwright scrape loop over ``session_ctx.to_visit``.
 
-        When slim=True, yields SlimDocument objects (URL id only, no content).
-        Playwright is used in all modes — slim skips content extraction only.
+        When ``poll_start`` is provided, each URL's HEAD request carries
+        ``If-Modified-Since`` and ``304`` short-circuits the Playwright step.
         """
-
-        if not self.to_visit_list:
-            raise ValueError("No URLs to visit")
-
-        base_url = self.to_visit_list[0]  # For the recursive case
-        check_internet_connection(base_url)  # make sure we can connect to the base url
-
-        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
-        session_ctx.initialize()
-
         batch: list[Document | SlimDocument | HierarchyNode] = []
 
         while session_ctx.to_visit:
@@ -751,7 +802,13 @@ class WebConnector(LoadConnector, SlimConnector):
                     time.sleep(delay)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx, slim=slim)
+                    result = self._do_scrape(
+                        index,
+                        initial_url,
+                        session_ctx,
+                        slim=slim,
+                        poll_start=poll_start,
+                    )
                     if result.retry:
                         continue
 
@@ -780,12 +837,72 @@ class WebConnector(LoadConnector, SlimConnector):
             session_ctx.at_least_one_doc = True
             yield batch  # ty: ignore[invalid-yield]
 
+        session_ctx.stop()
+
+    def load_from_state(self, slim: bool = False) -> GenerateDocumentsOutput:
+        """Traverses through all pages found on the website and converts them into
+        documents.
+
+        When slim=True, yields SlimDocument objects (URL id only, no content).
+        Playwright is used in all modes — slim skips content extraction only.
+        """
+
+        if not self.to_visit_list:
+            raise ValueError("No URLs to visit")
+
+        base_url = self.to_visit_list[0]  # For the recursive case
+        check_internet_connection(base_url)  # make sure we can connect to the base url
+
+        session_ctx = ScrapeSessionContext(base_url, list(self.to_visit_list))
+        session_ctx.initialize()
+
+        yield from self._scrape_urls(session_ctx, slim=slim, poll_start=None)
+
         if not session_ctx.at_least_one_doc:
             if session_ctx.last_error:
                 raise RuntimeError(session_ctx.last_error)
             raise RuntimeError("No valid pages found.")
 
-        session_ctx.stop()
+    @override
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        """Yield documents changed since ``start`` (seconds since epoch).
+
+        In SITEMAP mode the sitemap's ``<lastmod>`` filters the URL list cheaply
+        (no HTTP per URL beyond the sitemap fetch), and for URLs without a
+        ``<lastmod>`` a conditional HEAD in ``_do_scrape`` can still skip the
+        Playwright navigation when the origin supports ``If-Modified-Since``.
+
+        For other modes the call delegates to ``load_from_state`` — the
+        framework still gets a refresh, just not an incremental one.
+        """
+        _ = end
+        if self.web_connector_type != WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+            yield from self.load_from_state()
+            return
+
+        changed_urls = [
+            url
+            for url, lastmod in self._sitemap_lastmod.items()
+            if lastmod is None or lastmod.timestamp() >= start
+        ]
+        skipped = len(self._sitemap_lastmod) - len(changed_urls)
+        if skipped:
+            logger.info(
+                f"Sitemap poll: skipping {skipped} URL(s) unchanged since last poll "
+                f"(based on <lastmod>)"
+            )
+        if not changed_urls:
+            return
+
+        base_url = changed_urls[0]
+        check_internet_connection(base_url)
+
+        session_ctx = ScrapeSessionContext(base_url, changed_urls)
+        session_ctx.initialize()
+
+        yield from self._scrape_urls(session_ctx, slim=False, poll_start=start)
 
     @override
     def retrieve_all_slim_docs(
