@@ -12,9 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
+from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
@@ -28,9 +26,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.connector_credential_pair import remove_credential_from_connector
-from onyx.db.connector_credential_pair import (
-    update_connector_credential_pair_from_id,
-)
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
@@ -44,9 +40,7 @@ from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import (
-    get_latest_successful_index_attempt_for_cc_pair_id,
-)
+from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt

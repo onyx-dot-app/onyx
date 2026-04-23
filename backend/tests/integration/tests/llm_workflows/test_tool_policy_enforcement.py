@@ -9,7 +9,6 @@ from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
-
 _DUMMY_OPENAI_API_KEY = "sk-mock-tool-policy-tests"
 
 

@@ -12,9 +12,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    validate_openapi_schema,
-)
+from onyx.tools.tool_implementations.custom.custom_tool import validate_openapi_schema
 from onyx.utils.headers import HeaderItemDict
 
 

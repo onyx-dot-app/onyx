@@ -38,7 +38,7 @@ import {
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { EmptyMessageCard } from "@opal/components";
-import { Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -913,37 +913,79 @@ export default function ChatPreferencesPage() {
             <SimpleCollapsible.Content>
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
-                  <InputHorizontal
-                    title="Keep Chat History"
-                    description="Specify how long Onyx should retain chats in your organization."
-                    withLabel
-                    center
-                  >
-                    <InputSelect
-                      value={
-                        s.maximum_chat_retention_days?.toString() ?? "forever"
-                      }
-                      onValueChange={(value) => {
-                        void saveSettings({
-                          maximum_chat_retention_days:
-                            value === "forever" ? null : parseInt(value, 10),
-                        });
-                      }}
+                  <Section>
+                    <InputHorizontal
+                      title="Keep Chat History"
+                      description="Specify how long Onyx should retain chats in your organization."
+                      withLabel
                     >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="forever">
-                          Forever
-                        </InputSelect.Item>
-                        <InputSelect.Item value="7">7 days</InputSelect.Item>
-                        <InputSelect.Item value="30">30 days</InputSelect.Item>
-                        <InputSelect.Item value="90">90 days</InputSelect.Item>
-                        <InputSelect.Item value="365">
-                          365 days
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
-                  </InputHorizontal>
+                      <InputSelect
+                        value={
+                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                        }
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            maximum_chat_retention_days:
+                              value === "forever" ? null : parseInt(value, 10),
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item value="forever">
+                            Forever
+                          </InputSelect.Item>
+                          <InputSelect.Item value="7">7 days</InputSelect.Item>
+                          <InputSelect.Item value="30">
+                            30 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="90">
+                            90 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="365">
+                            365 days
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+
+                    <InputHorizontal
+                      title="Query History Visibility"
+                      description="Control how your organization's full chat history appears in the Admin Panel."
+                      withLabel
+                    >
+                      <InputSelect
+                        value={s.query_history_type ?? QueryHistoryType.NORMAL}
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            query_history_type: value as QueryHistoryType,
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={QueryHistoryType.NORMAL}
+                            description="All queries are visible to admins and linked to individual users."
+                          >
+                            Show with User Info
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.ANONYMIZED}
+                            description="Queries are visible to admins with user identity removed"
+                          >
+                            Anonymized
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.DISABLED}
+                            description="Query history reporting is disabled."
+                          >
+                            Hidden
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+                  </Section>
                 </Card>
 
                 <Card border="solid" rounding="lg">

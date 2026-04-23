@@ -31,7 +31,6 @@ from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -186,7 +185,11 @@ def _process_file(
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
+    # Only set the file id if it is a tabular document
+    doc_file_id = None
     if is_tabular_file(file_name):
+        doc_file_id = file_id
+
         # Produce TabularSections
         lowered_name = file_name.lower()
         if lowered_name.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
@@ -250,6 +253,7 @@ def _process_file(
             primary_owners=primary_owners,
             secondary_owners=secondary_owners,
             metadata=custom_tags,
+            file_id=doc_file_id,
         )
     ]
 

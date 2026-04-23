@@ -95,6 +95,7 @@ from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
@@ -618,6 +619,23 @@ def check_indexing_completion(
         storage.cleanup_all_batches()
     except Exception:
         logger.exception("Failed to clean up document batches - continuing")
+
+    # Reap any STAGING files this attempt staged but never promoted.
+    # Safe to run here: indexing_completed guarantees every docprocessing
+    # batch has finished, so anything still STAGING for this attempt is a
+    # genuine drop (connector emitted no Document, or the Document was
+    # filtered as stale by `index_doc_batch_prepare`).
+    try:
+        with get_session_with_current_tenant() as cleanup_session:
+            cleanup_staged_files_for_attempt(
+                index_attempt_id=index_attempt_id,
+                db_session=cleanup_session,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to run attempt-end staging cleanup; orphans will be "
+            "caught by the next attempt's start-of-run sweep."
+        )
 
     logger.info(f"Database coordination completed for attempt {index_attempt_id}")
 

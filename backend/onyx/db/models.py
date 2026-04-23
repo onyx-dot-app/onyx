@@ -3,113 +3,106 @@ import json
 from typing import Any
 from typing import Literal
 from typing import NotRequired
-from uuid import uuid4
-
-from pydantic import BaseModel
-from sqlalchemy.orm import validates
-
-from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
-from pydantic import ValidationError
-
-from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from uuid import uuid4
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
+from pydantic import BaseModel
+from pydantic import ValidationError
+from sqlalchemy import BigInteger
 from sqlalchemy import Boolean
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
+from sqlalchemy import event
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
-from sqlalchemy import BigInteger
-
+from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
-from sqlalchemy import event
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm import validates
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
-from sqlalchemy import PrimaryKeyConstraint
+from typing_extensions import TypedDict  # noreorder
 
-from onyx.db.enums import AccountType
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import (
-    ANONYMOUS_USER_UUID,
-    DEFAULT_BOOST,
-    FederatedConnectorSource,
-    MilestoneRecordType,
-)
+from onyx.configs.constants import ANONYMOUS_USER_UUID
+from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FederatedConnectorSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
-from onyx.db.enums import (
-    AccessType,
-    ArtifactType,
-    BuildSessionStatus,
-    EmbeddingPrecision,
-    HierarchyNodeType,
-    HookFailStrategy,
-    HookPoint,
-    IndexingMode,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
-    ProcessingMode,
-    SandboxStatus,
-    SyncType,
-    SyncStatus,
-    MCPAuthenticationType,
-    UserFileStatus,
-    MCPAuthenticationPerformer,
-    MCPTransport,
-    MCPServerStatus,
-    Permission,
-    GrantSource,
-    LLMModelFlowType,
-    ThemePreference,
-    DefaultAppMode,
-    SwitchoverType,
-    SharingScope,
-)
+from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
+from onyx.db.enums import AccessType
+from onyx.db.enums import AccountType
+from onyx.db.enums import ArtifactType
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import GrantSource
+from onyx.db.enums import HierarchyNodeType
+from onyx.db.enums import HookFailStrategy
+from onyx.db.enums import HookPoint
+from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPServerStatus
+from onyx.db.enums import MCPTransport
+from onyx.db.enums import OpenSearchDocumentMigrationStatus
+from onyx.db.enums import OpenSearchTenantMigrationStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ProcessingMode
+from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SharingScope
+from onyx.db.enums import SwitchoverType
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.enums import TaskStatus
-from onyx.db.pydantic_type import PydanticListType, PydanticType
-from onyx.kg.models import KGEntityTypeAttributes
-from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
+from onyx.db.enums import ThemePreference
+from onyx.db.enums import UserFileStatus
+from onyx.db.pydantic_type import PydanticListType
+from onyx.db.pydantic_type import PydanticType
 from onyx.file_store.models import FileDescriptor
+from onyx.kg.models import KGEntityTypeAttributes
+from onyx.kg.models import KGStage
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
-from onyx.kg.models import KGStage
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
-from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
+from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
+from onyx.utils.special_types import JSON_ro
 from shared_configs.enums import EmbeddingProvider
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL

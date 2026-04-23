@@ -41,9 +41,17 @@ logger = setup_logger()
 CAPTCHA_COOKIE_NAME = "onyx_captcha_verified"
 
 # Enterprise Assessment reason enums defined by Google — not a
-# per-deployment tuning knob.
+# per-deployment tuning knob. Any of these reasons on a token means the
+# risk signal is strong enough to reject outright regardless of the
+# numeric score.
 _HARD_REJECT_REASONS: frozenset[str] = frozenset(
-    {"AUTOMATION", "UNEXPECTED_ENVIRONMENT", "TOO_MUCH_TRAFFIC"}
+    {
+        "AUTOMATION",
+        "UNEXPECTED_ENVIRONMENT",
+        "TOO_MUCH_TRAFFIC",
+        "LOW_CONFIDENCE_SCORE",
+        "SUSPECTED_CARDING",
+    }
 )
 
 # Matches Google's own ~2 minute token validity window.

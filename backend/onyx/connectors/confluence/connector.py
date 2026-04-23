@@ -1054,6 +1054,7 @@ class ConfluenceConnector(
 
 if __name__ == "__main__":
     import os
+
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
 

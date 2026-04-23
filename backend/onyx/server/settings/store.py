@@ -52,7 +52,8 @@ def load_settings() -> Settings:
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled
-    settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
+    if settings.query_history_type is None:
+        settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
 
     if DISABLE_USER_KNOWLEDGE:
         settings.user_knowledge_enabled = False

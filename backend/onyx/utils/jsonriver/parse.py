@@ -18,7 +18,6 @@ from .tokenize import json_token_type_to_string
 from .tokenize import JsonTokenType
 from .tokenize import Tokenizer
 
-
 # Type definitions for JSON values
 JsonValue = Union[None, bool, float, str, list["JsonValue"], dict[str, "JsonValue"]]
 JsonObject = dict[str, JsonValue]

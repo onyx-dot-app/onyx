@@ -3,7 +3,6 @@ from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import RESEARCH_AGENT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 
-
 # ruff: noqa: E501, W605 start
 CLARIFICATION_PROMPT = f"""
 You are a clarification agent that runs prior to deep research. Assess whether you need to ask clarifying questions, or if the user has already provided enough information for you to start research. \

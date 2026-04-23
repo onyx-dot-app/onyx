@@ -960,7 +960,6 @@ from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
 from tests.external_dependency_unit.mock_llm import use_mock_llm
 
-
 # ---------------------------------------------------------------------------
 # Mock Code Interpreter Server
 # ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { InfoIcon } from "@/components/icons/icons";
+import { SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { Tooltip } from "@opal/components";
 import { SvgClock } from "@opal/icons";
@@ -78,7 +78,7 @@ export function IndexAttemptsTable({
               >
                 <span className="flex items-center">
                   Total Docs
-                  <InfoIcon className="ml-1 w-4 h-4" />
+                  <SvgInfo className="ml-1 w-4 h-4" />
                 </span>
               </Tooltip>
             </TableHead>

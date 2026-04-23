@@ -30,9 +30,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
-from onyx.connectors.google_drive.doc_conversion import (
-    convert_drive_item_to_document,
-)
+from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files

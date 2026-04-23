@@ -13,7 +13,6 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

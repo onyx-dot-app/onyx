@@ -25,9 +25,7 @@ from onyx.auth.email_utils import send_email
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
+from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
@@ -41,34 +39,16 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.connectors.google_utils.google_auth import (
-    get_google_oauth_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    build_service_account_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_service_account_key,
-)
+from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_kv import build_service_account_creds
+from onyx.connectors.google_utils.google_kv import delete_google_app_cred
+from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import (
-    get_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    get_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import (
-    update_credential_access_tokens,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_service_account_key,
-)
+from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.google_kv import get_service_account_key
+from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
+from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
+from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -110,9 +90,7 @@ from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
-from onyx.db.index_attempt import (
-    get_latest_successful_index_attempts_parallel,
-)
+from onyx.db.index_attempt import get_latest_successful_index_attempts_parallel
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
@@ -642,7 +620,7 @@ def upload_files_api(
     unzip: bool = True,
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files, FileOrigin.OTHER, unzip=unzip)
+    return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)

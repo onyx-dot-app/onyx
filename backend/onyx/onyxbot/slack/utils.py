@@ -25,12 +25,8 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
-)
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
-)
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email

@@ -417,11 +417,9 @@ def read_docx_file(
     The images list returned is empty in this case.
     """
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     try:
         doc = md.convert(
@@ -461,11 +459,9 @@ def read_docx_file(
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"

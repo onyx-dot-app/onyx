@@ -14,6 +14,7 @@ COPY ./pytest.ini /app/pytest.ini
 COPY ./tests/integration /app/tests/integration
 # copies all files, but not folders, in the tests directory
 COPY ./tests/* /app/tests/
+COPY ./tests/utils/* /app/tests/utils/
 
 FROM base AS openapi-schema
 COPY ./scripts/onyx_openapi_schema.py /app/scripts/onyx_openapi_schema.py

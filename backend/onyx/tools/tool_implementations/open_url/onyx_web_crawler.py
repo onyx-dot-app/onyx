@@ -5,12 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
-from onyx.tools.tool_implementations.open_url.models import (
-    WebContent,
-)
-from onyx.tools.tool_implementations.open_url.models import (
-    WebContentProvider,
-)
+from onyx.tools.tool_implementations.open_url.models import WebContent
+from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException

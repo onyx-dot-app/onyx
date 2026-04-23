@@ -3,7 +3,6 @@ import json
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
 
-
 FILE_ASSOCIATED_GUIDANCE = (
     "Only a short excerpt from this document is shown below. The complete "
     'file is available in the sandbox as "{filename}" — prefer the Python '

@@ -16,7 +16,6 @@ from pathlib import Path
 
 import httpx
 
-
 # Configuration: Update these values before running
 URL = "https://YOUR_AZURE_OPENAI_DEPLOYMENT_URL_HERE.cognitiveservices.azure.com/"
 API_KEY = "YOUR_API_KEY_HERE"

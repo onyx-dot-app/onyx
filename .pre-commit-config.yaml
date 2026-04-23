@@ -103,31 +103,6 @@ repos:
       - id: black
         language_version: python3.11
 
-  # this is a fork which keeps compatibility with black
-  - repo: https://github.com/wimglenn/reorder-python-imports-black
-    rev: f55cd27f90f0cf0ee775002c2383ce1c7820013d # frozen: v3.14.0
-    hooks:
-      - id: reorder-python-imports
-        args: ["--py311-plus", "--application-directories=backend/"]
-        # need to ignore alembic files, since reorder-python-imports gets confused
-        # and thinks that alembic is a local package since there is a folder
-        # in the backend directory called `alembic`
-        exclude: ^backend/alembic/
-
-  # These settings will remove unused imports with side effects
-  # Note: The repo currently does not and should not have imports with side effects
-  - repo: https://github.com/PyCQA/autoflake
-    rev: 0544741e2b4a22b472d9d93e37d4ea9153820bb1 # frozen: v2.3.1
-    hooks:
-      - id: autoflake
-        args:
-          [
-            "--remove-all-unused-imports",
-            "--remove-unused-variables",
-            "--in-place",
-            "--recursive",
-          ]
-
   - repo: https://github.com/golangci/golangci-lint
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
@@ -140,6 +115,7 @@ repos:
     rev: 971923581912ef60a6b70dbf0c3e9a39563c9d47 # frozen: v0.11.4
     hooks:
       - id: ruff
+        args: ["--fix"]
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: ffb6a759a979008c0e6dff86e39f4745a2d9eac4 # frozen: v3.1.0

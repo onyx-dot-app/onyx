@@ -1,4 +1,4 @@
-import { IconProps } from "@/components/icons/icons";
+import type { IconProps } from "@opal/types";
 import { FunctionComponent } from "react";
 
 export interface LLMOption {

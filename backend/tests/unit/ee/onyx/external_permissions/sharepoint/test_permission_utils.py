@@ -8,15 +8,11 @@ import pytest
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    _is_public_item,
-)
+from ee.onyx.external_permissions.sharepoint.permission_utils import _is_public_item
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _iter_graph_collection,
 )
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    _normalize_email,
-)
+from ee.onyx.external_permissions.sharepoint.permission_utils import _normalize_email
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     AD_GROUP_ENUMERATION_THRESHOLD,
 )
@@ -27,7 +23,6 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import GroupsResult
-
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
 GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"

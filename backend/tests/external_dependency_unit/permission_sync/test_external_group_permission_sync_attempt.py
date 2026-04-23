@@ -21,24 +21,14 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import ExternalGroupPermissionSyncAttempt
-from onyx.db.permission_sync_attempt import (
-    complete_external_group_sync_attempt,
-)
-from onyx.db.permission_sync_attempt import (
-    create_external_group_sync_attempt,
-)
-from onyx.db.permission_sync_attempt import (
-    get_external_group_sync_attempt,
-)
+from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import get_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import (
     get_recent_external_group_sync_attempts_for_cc_pair,
 )
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_failed,
-)
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_in_progress,
-)
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_failed
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_in_progress
 from tests.external_dependency_unit.conftest import create_test_user
 
 
