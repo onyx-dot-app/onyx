@@ -27,6 +27,7 @@ import {
   OPEN_URL_TOOL_NAME,
   SYSTEM_TOOL_ICONS,
 } from "@/app/app/components/tools/constants";
+import { Section } from "@/layouts/general-layouts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -408,7 +409,7 @@ export default function AgentsTable() {
         placeholder="Search agents..."
         leftSearchIcon
       />
-      <div className="flex flex-row gap-2">
+      <Section gap={0.5} flexDirection="row" justifyContent="start">
         <Popover open={creatorFilterOpen} onOpenChange={setCreatorFilterOpen}>
           <Popover.Trigger asChild>
             <FilterButton
@@ -529,7 +530,7 @@ export default function AgentsTable() {
             </PopoverMenu>
           </Popover.Content>
         </Popover>
-      </div>
+      </Section>
       <Table
         data={agentRows}
         columns={columns}
