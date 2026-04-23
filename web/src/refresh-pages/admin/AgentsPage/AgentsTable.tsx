@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Table, createTableColumns, FilterButton } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -20,6 +20,14 @@ import { SvgActions, SvgCheck, SvgUser } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useUser } from "@/providers/UserProvider";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ActionFilterItem =
+  | { type: "mcp_server"; mcpServerId: number; name: string }
+  | { type: "openapi"; toolId: number; name: string };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,6 +50,12 @@ function toAgentRow(persona: Persona): AgentRow {
     uploaded_image_id: persona.uploaded_image_id,
     icon_name: persona.icon_name,
   };
+}
+
+function actionFilterKey(item: ActionFilterItem): string {
+  return item.type === "mcp_server"
+    ? `mcp:${item.mcpServerId}`
+    : `tool:${item.toolId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,11 +163,16 @@ export default function AgentsTable() {
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
     new Set()
   );
-  const [selectedActionIds, setSelectedActionIds] = useState<Set<number>>(
+  const [selectedActionKeys, setSelectedActionKeys] = useState<Set<string>>(
     new Set()
   );
   const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
   const [actionsSearchQuery, setActionsSearchQuery] = useState("");
+
+  // MCP server names — fetched once for the filter dropdown
+  const [mcpServerNames, setMcpServerNames] = useState<Map<number, string>>(
+    new Map()
+  );
 
   const { personas, isLoading, error, refresh } = useAdminPersonas();
 
@@ -163,6 +182,38 @@ export default function AgentsTable() {
     () => personas.filter((p) => !p.builtin_persona).map(toAgentRow),
     [personas]
   );
+
+  // Collect all MCP server IDs referenced by agents, then fetch names
+  const mcpServerIds = useMemo(() => {
+    const ids = new Set<number>();
+    allAgentRows.forEach((agent) => {
+      agent.tools.forEach((tool) => {
+        if (tool.mcp_server_id != null) ids.add(tool.mcp_server_id);
+      });
+    });
+    return ids;
+  }, [allAgentRows]);
+
+  useEffect(() => {
+    if (mcpServerIds.size === 0) return;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/mcp/servers");
+        if (!res.ok) return;
+        const data = await res.json();
+        const names = new Map<number, string>();
+        for (const server of data.mcp_servers ?? []) {
+          if (mcpServerIds.has(server.id)) {
+            names.set(server.id, server.name);
+          }
+        }
+        setMcpServerNames(names);
+      } catch {
+        // Silently fall back to "MCP Server {id}" labels
+      }
+    })();
+  }, [mcpServerIds]);
 
   // ---------------------------------------------------------------------------
   // Creator filter data
@@ -204,39 +255,48 @@ export default function AgentsTable() {
   }, [uniqueCreators, creatorSearchQuery]);
 
   // ---------------------------------------------------------------------------
-  // Actions filter data
+  // Actions filter data — MCP servers + OpenAPI actions
   // ---------------------------------------------------------------------------
 
-  const uniqueActions = useMemo(() => {
-    const actionsMap = new Map<
-      number,
-      { id: number; name: string; display_name: string }
-    >();
+  const uniqueActions: ActionFilterItem[] = useMemo(() => {
+    const seenMcpServers = new Set<number>();
+    const openApiTools = new Map<number, { id: number; name: string }>();
 
     allAgentRows.forEach((agent) => {
       agent.tools.forEach((tool) => {
-        // Only include MCP server actions and OpenAPI/custom actions,
-        // not built-in system tools (Search, Web Search, etc.)
+        // Skip built-in system tools
         if (tool.in_code_tool_id) return;
-        actionsMap.set(tool.id, {
-          id: tool.id,
-          name: tool.name,
-          display_name: tool.display_name,
-        });
+
+        if (tool.mcp_server_id != null) {
+          seenMcpServers.add(tool.mcp_server_id);
+        } else {
+          openApiTools.set(tool.id, {
+            id: tool.id,
+            name: tool.display_name,
+          });
+        }
       });
     });
 
-    return Array.from(actionsMap.values()).sort((a, b) =>
-      a.display_name.localeCompare(b.display_name)
-    );
-  }, [allAgentRows]);
+    const mcpItems: ActionFilterItem[] = Array.from(seenMcpServers)
+      .map((id) => ({
+        type: "mcp_server" as const,
+        mcpServerId: id,
+        name: mcpServerNames.get(id) ?? `MCP Server ${id}`,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const openApiItems: ActionFilterItem[] = Array.from(openApiTools.values())
+      .map((t) => ({ type: "openapi" as const, toolId: t.id, name: t.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return [...mcpItems, ...openApiItems];
+  }, [allAgentRows, mcpServerNames]);
 
   const filteredActions = useMemo(() => {
     if (!actionsSearchQuery) return uniqueActions;
     const query = actionsSearchQuery.toLowerCase();
-    return uniqueActions.filter((action) =>
-      action.display_name.toLowerCase().includes(query)
-    );
+    return uniqueActions.filter((a) => a.name.toLowerCase().includes(query));
   }, [uniqueActions, actionsSearchQuery]);
 
   // ---------------------------------------------------------------------------
@@ -254,14 +314,28 @@ export default function AgentsTable() {
   }, [selectedCreatorIds, uniqueCreators]);
 
   const actionsFilterButtonText = useMemo(() => {
-    if (selectedActionIds.size === 0) return "All Actions";
-    if (selectedActionIds.size === 1) {
-      const selectedId = Array.from(selectedActionIds)[0];
-      const action = uniqueActions.find((a) => a.id === selectedId);
-      return action?.display_name ?? "All Actions";
+    if (selectedActionKeys.size === 0) return "All Actions";
+    if (selectedActionKeys.size === 1) {
+      const key = Array.from(selectedActionKeys)[0];
+      const item = uniqueActions.find((a) => actionFilterKey(a) === key);
+      return item?.name ?? "All Actions";
     }
-    return `${selectedActionIds.size} selected`;
-  }, [selectedActionIds, uniqueActions]);
+    return `${selectedActionKeys.size} selected`;
+  }, [selectedActionKeys, uniqueActions]);
+
+  // Derive selected MCP server IDs and OpenAPI tool IDs from keys
+  const { selectedMcpServerIds, selectedOpenApiToolIds } = useMemo(() => {
+    const mcpIds = new Set<number>();
+    const toolIds = new Set<number>();
+    for (const key of Array.from(selectedActionKeys)) {
+      if (key.startsWith("mcp:")) {
+        mcpIds.add(Number(key.slice(4)));
+      } else if (key.startsWith("tool:")) {
+        toolIds.add(Number(key.slice(5)));
+      }
+    }
+    return { selectedMcpServerIds: mcpIds, selectedOpenApiToolIds: toolIds };
+  }, [selectedActionKeys]);
 
   // ---------------------------------------------------------------------------
   // Filtered rows
@@ -274,12 +348,23 @@ export default function AgentsTable() {
         (agent.owner && selectedCreatorIds.has(agent.owner.id));
 
       const actionsFilter =
-        selectedActionIds.size === 0 ||
-        agent.tools.some((tool) => selectedActionIds.has(tool.id));
+        selectedActionKeys.size === 0 ||
+        agent.tools.some(
+          (tool) =>
+            selectedOpenApiToolIds.has(tool.id) ||
+            (tool.mcp_server_id != null &&
+              selectedMcpServerIds.has(tool.mcp_server_id))
+        );
 
       return creatorFilter && actionsFilter;
     });
-  }, [allAgentRows, selectedCreatorIds, selectedActionIds]);
+  }, [
+    allAgentRows,
+    selectedCreatorIds,
+    selectedActionKeys,
+    selectedMcpServerIds,
+    selectedOpenApiToolIds,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Reorder handler
@@ -388,8 +473,8 @@ export default function AgentsTable() {
           <Popover.Trigger asChild>
             <FilterButton
               icon={SvgActions}
-              active={selectedActionIds.size > 0}
-              onClear={() => setSelectedActionIds(new Set())}
+              active={selectedActionKeys.size > 0}
+              onClear={() => setSelectedActionKeys(new Set())}
             >
               {actionsFilterButtonText}
             </FilterButton>
@@ -406,27 +491,28 @@ export default function AgentsTable() {
                   onChange={(e) => setActionsSearchQuery(e.target.value)}
                 />,
                 ...filteredActions.map((action) => {
-                  const isSelected = selectedActionIds.has(action.id);
+                  const key = actionFilterKey(action);
+                  const isSelected = selectedActionKeys.has(key);
 
                   return (
                     <LineItem
-                      key={action.id}
+                      key={key}
                       icon={SvgActions}
                       selected={isSelected}
                       emphasized
                       onClick={() => {
-                        setSelectedActionIds((prev) => {
+                        setSelectedActionKeys((prev) => {
                           const newSet = new Set(prev);
-                          if (newSet.has(action.id)) {
-                            newSet.delete(action.id);
+                          if (newSet.has(key)) {
+                            newSet.delete(key);
                           } else {
-                            newSet.add(action.id);
+                            newSet.add(key);
                           }
                           return newSet;
                         });
                       }}
                     >
-                      {action.display_name}
+                      {action.name}
                     </LineItem>
                   );
                 }),
