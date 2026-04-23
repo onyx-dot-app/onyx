@@ -33,6 +33,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import useMcpServers from "@/hooks/useMcpServers";
+import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { useUser } from "@/providers/UserProvider";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
@@ -93,6 +94,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
 ): UseAgentsFiltersReturn<T> {
   const { user } = useUser();
   const { mcpData } = useMcpServers();
+  const { tools: allTools } = useAvailableTools();
 
   // -- Selection state -------------------------------------------------------
 
@@ -149,7 +151,9 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
   // -- Actions filter data ---------------------------------------------------
 
   /**
-   * Unique actions derived from the agent list.
+   * Unique actions derived from ALL available tools (not just those on the
+   * passed-in agents). This ensures the dropdown is consistent across all
+   * pages.
    *
    * Ordering: system tools first (with their dedicated icons), then MCP
    * servers (grouped — one entry per server, not per tool), then
@@ -162,27 +166,25 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
       { id: number; name: string; systemIcon?: React.FC }
     >();
 
-    agents.forEach((agent) => {
-      agent.tools.forEach((tool) => {
-        // Skip OpenURL — implicit tool, not user-facing
-        if (
-          tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
-          tool.name === OPEN_URL_TOOL_ID ||
-          tool.name === OPEN_URL_TOOL_NAME
-        ) {
-          return;
-        }
+    allTools.forEach((tool) => {
+      // Skip OpenURL — implicit tool, not user-facing
+      if (
+        tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
+        tool.name === OPEN_URL_TOOL_ID ||
+        tool.name === OPEN_URL_TOOL_NAME
+      ) {
+        return;
+      }
 
-        if (tool.mcp_server_id != null) {
-          seenMcpServers.add(tool.mcp_server_id);
-        } else {
-          individualTools.set(tool.id, {
-            id: tool.id,
-            name: tool.display_name,
-            systemIcon: SYSTEM_TOOL_ICONS[tool.name],
-          });
-        }
-      });
+      if (tool.mcp_server_id != null) {
+        seenMcpServers.add(tool.mcp_server_id);
+      } else {
+        individualTools.set(tool.id, {
+          id: tool.id,
+          name: tool.display_name,
+          systemIcon: SYSTEM_TOOL_ICONS[tool.name],
+        });
+      }
     });
 
     const toolItems = Array.from(individualTools.values());
@@ -206,7 +208,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return [...systemItems, ...mcpItems, ...otherItems];
-  }, [agents, mcpServerNames]);
+  }, [allTools, mcpServerNames]);
 
   const actionsFilter = useFilter(uniqueActions, (a) => a.name);
 
