@@ -31,6 +31,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
+import useFilter from "@/hooks/useFilter";
 
 interface AgentsSectionProps {
   title: string;
@@ -78,8 +79,6 @@ export default function AgentsNavigationPage() {
   const [selectedMcpServerIds, setSelectedMcpServerIds] = useState<Set<number>>(
     new Set()
   );
-  const [creatorSearchQuery, setCreatorSearchQuery] = useState("");
-  const [actionsSearchQuery, setActionsSearchQuery] = useState("");
   const [mcpServersMap, setMcpServersMap] = useState<
     Map<number, { id: number; name: string }>
   >(new Map());
@@ -170,13 +169,11 @@ export default function AgentsNavigationPage() {
     return creators;
   }, [agents, user]);
 
-  const filteredCreators = useMemo(() => {
-    if (!creatorSearchQuery) return uniqueCreators;
-
-    return uniqueCreators.filter((creator) =>
-      creator.email.toLowerCase().includes(creatorSearchQuery.toLowerCase())
-    );
-  }, [uniqueCreators, creatorSearchQuery]);
+  const {
+    query: creatorSearchQuery,
+    setQuery: setCreatorSearchQuery,
+    filtered: filteredCreators,
+  } = useFilter(uniqueCreators, (c) => c.email);
 
   const uniqueActions = useMemo(() => {
     const actionsMap = new Map<
@@ -299,21 +296,15 @@ export default function AgentsNavigationPage() {
     ];
   }, [agents, mcpServersMap]);
 
-  const filteredActions = useMemo(() => {
-    if (!actionsSearchQuery) return uniqueActions;
-
-    const query = actionsSearchQuery.toLowerCase();
-    return uniqueActions.filter((action) => {
-      if (action.type === "tool") {
-        return action.display_name.toLowerCase().includes(query);
-      } else {
-        // For MCP groups, search through all tool names in the group
-        return action.tools.some((tool) =>
-          tool.display_name.toLowerCase().includes(query)
-        );
-      }
-    });
-  }, [uniqueActions, actionsSearchQuery]);
+  const {
+    query: actionsSearchQuery,
+    setQuery: setActionsSearchQuery,
+    filtered: filteredActions,
+  } = useFilter(uniqueActions, (action) =>
+    action.type === "tool"
+      ? action.display_name
+      : action.tools.map((t) => t.display_name).join(" ")
+  );
 
   const memoizedCurrentlyVisibleAgents = useMemo(() => {
     return agents.filter((agent) => {
