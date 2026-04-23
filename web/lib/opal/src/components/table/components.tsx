@@ -350,29 +350,24 @@ export function Table<TData>(props: DataTableProps<TData>) {
         >
           {children}
           <DragOverlay dropAnimation={null}>
-            {draggableReturn.activeId && (
-              <table>
-                <tbody>
-                  {(() => {
-                    const row = table
-                      .getRowModel()
-                      .rows.find(
-                        (r) => getRowId(r.original) === draggableReturn.activeId
-                      );
-                    if (!row) return null;
-                    return (
-                      <DragOverlayRow
-                        row={row}
-                        columnWidths={columnWidths}
-                        columnKindMap={columnKindMap}
-                        qualifierColumn={qualifierColumn}
-                        isSelectable={isSelectable}
-                      />
-                    );
-                  })()}
-                </tbody>
-              </table>
-            )}
+            {draggableReturn.activeId &&
+              (() => {
+                const row = table
+                  .getRowModel()
+                  .rows.find(
+                    (r) => getRowId(r.original) === draggableReturn.activeId
+                  );
+                if (!row) return null;
+                return (
+                  <DragOverlayRow
+                    row={row}
+                    columnWidths={columnWidths}
+                    columnKindMap={columnKindMap}
+                    qualifierColumn={qualifierColumn}
+                    isSelectable={isSelectable}
+                  />
+                );
+              })()}
           </DragOverlay>
         </DndContext>
       )
