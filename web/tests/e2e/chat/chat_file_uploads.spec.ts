@@ -13,11 +13,12 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 const SHORT_AI_RESPONSE = "I've reviewed the file you uploaded.";
 const IMAGE_GEN_AI_MESSAGE = "Here is the image I generated for you.";
 
-// Smallest known-valid 1x1 PNG — used both as a user-uploaded image and as
-// the mocked response for LLM-generated image fetches. The bytes pass PIL
-// validation (which the upload endpoint runs to reject malformed images).
-const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+// 50x50 black/white checkered PNG — clearly a test artifact, used both as a
+// user-uploaded image and as the mocked response for LLM-generated image
+// fetches. The bytes pass PIL validation (which the upload endpoint runs to
+// reject malformed images).
+const CHECKERED_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAVElEQVR42u3WwQkAIAwDQOP+O9cN+lJUuHylcFApyWhTVc1rkkOzczwZLCwsrN9YuXXH+1lLxMLCwtpz5XV5fwsLC0uX1+WxsLCwdHldHgsLC+uxLK9hJFqMAN43AAAAAElFTkSuQmCC",
   "base64"
 );
 
@@ -119,7 +120,7 @@ test.describe("Chat File Uploads", () => {
         {
           name: fileName,
           mimeType: "image/png",
-          buffer: TINY_PNG,
+          buffer: CHECKERED_PNG,
         },
       ]);
 
@@ -148,7 +149,7 @@ test.describe("Chat File Uploads", () => {
         {
           name: imageName,
           mimeType: "image/png",
-          buffer: TINY_PNG,
+          buffer: CHECKERED_PNG,
         },
       ]);
 
@@ -178,7 +179,7 @@ test.describe("Chat File Uploads", () => {
         await route.fulfill({
           status: 200,
           contentType: "image/png",
-          body: TINY_PNG,
+          body: CHECKERED_PNG,
         });
       });
 
