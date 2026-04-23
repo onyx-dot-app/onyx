@@ -137,6 +137,7 @@ export function useContentEditable({
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
         if (ref.current) {
+          ref.current.focus();
           setCursorToEndUtil(ref.current);
         }
       });

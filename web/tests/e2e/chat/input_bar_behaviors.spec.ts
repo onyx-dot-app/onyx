@@ -628,7 +628,9 @@ test.describe("Keyboard Edge Cases", () => {
     });
     await page.keyboard.press("Enter");
     const messageEl = page.locator(HUMAN_MESSAGE_SELECTOR);
-    await expect(messageEl).toContainText("hello tile world");
+    const text = await messageEl.textContent();
+    expect(text).toContain("hello tile world");
+    expect(text).not.toMatch(/hello\n.*tile/);
   });
 });
 
