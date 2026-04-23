@@ -472,6 +472,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         downloaded_file = self._download_object(key)
                         if downloaded_file is None:
                             continue
+                        tabular_sections: list[TabularSection] = []
                         staged_file_id: str | None = None
                         if self.raw_file_callback is not None:
                             content_type, _ = mimetypes.guess_type(file_name)
