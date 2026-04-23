@@ -185,7 +185,17 @@ def _process_file(
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
-    # Only set the file id if it is a tabular document
+    # Only set the file id if it is a tabular document. Non-tabular files
+    # thus have `Document.file_id=NULL`, which forces
+    # `onyx.access.access._user_can_access_connector_file` to fall back to
+    # a JSONB scan of `Connector.connector_specific_config['file_locations']`
+    # on every `/chat/file/{file_id}` access for a cited non-tabular doc.
+    # TODO: populate `Document.file_id` unconditionally here and move the
+    # "is this a tabular file?" check into
+    # `onyx.chat.chat_utils.build_python_chat_files_from_search_docs`
+    # (keyed off `FileRecord.display_name`), so we don't stage every PDF/
+    # TXT into the code-interpreter sandbox just because it now has a
+    # file_id. That would let us drop the fallback lookup path entirely.
     doc_file_id = None
     if is_tabular_file(file_name):
         doc_file_id = file_id

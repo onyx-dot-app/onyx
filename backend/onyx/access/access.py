@@ -1,8 +1,10 @@
 from collections.abc import Callable
 from typing import cast
 
+from sqlalchemy import cast as sa_cast
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
@@ -15,7 +17,9 @@ from onyx.db.document import get_access_info_for_documents
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
+from onyx.db.models import Connector
 from onyx.db.models import Document
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import FileRecord
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -207,6 +211,15 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     """Return True if `user` is allowed to read the raw `file_id` served by
     `GET /chat/file/{file_id}`. Access is granted when any of:
 
+    TODO(auth-perf): this function fans out 4–5 queries per request because
+    `/chat/file/{file_id}` is overloaded with unrelated asset classes (user
+    files, persona avatars, chat attachments, tool outputs, connector files).
+    The proper fix is to split this into per-asset-class endpoints
+    (`/user-files/{id}`, `/assistants/{id}/avatar`, `/messages/{id}/files/{n}`,
+    etc.) where the URL itself carries the access-control context and a single
+    indexed lookup suffices. The connector-file branch in particular does a
+    JSONB scan on every call — see `_documents_from_file_connector_config`.
+
     - The `file_id` is the storage id of a `UserFile` owned by the user.
     - The `file_id` is a persona avatar (`Persona.uploaded_image_id`); avatars
       are visible to any authenticated user.
@@ -218,8 +231,13 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       populated by connector ingestion, so this covers any connector-ingested
       file regardless of its `FileOrigin` stamp (which has varied over time:
       `OTHER` pre-#10484, `CONNECTOR_FILE_UPLOAD` post-#10484, and
-      `CONNECTOR` for pipeline-promoted files). Lets users preview cited
-      files from indexed connectors through `PreviewModal`.
+      `CONNECTOR` for pipeline-promoted files). For non-tabular File
+      connector uploads `Document.file_id` is left NULL
+      (`backend/onyx/connectors/file/connector.py:190`), so we also fall
+      back to the cc_pair ACL of any `Connector` whose
+      `connector_specific_config['file_locations']` lists this `file_id`.
+      Lets users preview cited files from indexed connectors through
+      `PreviewModal`.
     - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
       tool call database entry is added. This the file is there and the FE can
       request it despite us not having the linking tool call. We currently
@@ -289,28 +307,107 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
 def _user_can_access_connector_file(
     file_id: str, user: User, db_session: Session
 ) -> bool:
-    """Grant access when `file_id` is referenced by at least one `Document`
-    (via `Document.file_id`) whose ACL overlaps the user's ACL. Mirrors the
-    access-control layer applied during retrieval so preview access stays
-    consistent with search result access.
+    """Grant access when `file_id` is reachable from a `Document` whose ACL
+    overlaps the user's ACL. Mirrors the access-control layer applied during
+    retrieval so preview access stays consistent with search result access.
 
-    Gated on `Document.file_id` rather than `FileRecord.file_origin` because
-    (a) only connector ingestion writes `Document.file_id`, so its presence
-    is itself the signal that the file is connector-ingested, and (b) the
-    origin has varied historically (`OTHER` pre-#10484,
-    `CONNECTOR_FILE_UPLOAD` post-#10484, and `CONNECTOR` for pipeline-
-    promoted files) — any origin filter would either miss legacy files or
-    need to be widened to a grab-bag."""
-    document_ids = (
+    Two lookup paths:
+
+    1. `Document.file_id == file_id` — the fast path. Covers tabular File
+       connector uploads, Blob/SharePoint attachments, and any other
+       connector that stamps `Document.file_id` during ingestion.
+    2. `Connector.connector_specific_config['file_locations']` contains
+       `file_id` — the fallback. The File connector only sets
+       `Document.file_id` for tabular inputs
+       (`backend/onyx/connectors/file/connector.py:190`), so non-tabular
+       uploads (txt/pdf/docx/etc.) have no direct `Document.file_id` link.
+       In that case the `Connector` config still points at the file_id, and
+       every `Document` indexed through its cc_pair shares the same ACL —
+       so checking any one representative document answers the question.
+
+    The `FileRecord.file_origin` is intentionally not consulted: it has
+    varied historically (`OTHER` pre-#10484, `CONNECTOR_FILE_UPLOAD` post-
+    #10484, and `CONNECTOR` for pipeline-promoted files) and any origin
+    filter would either miss legacy files or grow into a grab-bag."""
+    document_ids: list[str] = list(
         db_session.execute(select(Document.id).where(Document.file_id == file_id))
         .scalars()
         .all()
     )
     if not document_ids:
+        document_ids = _documents_from_file_connector_config(file_id, db_session)
+    if not document_ids:
         return False
 
     user_acl = get_acl_for_user(user, db_session)
-    doc_access = get_access_for_documents(list(document_ids), db_session)
+    doc_access = get_access_for_documents(document_ids, db_session)
     return any(
         not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
     )
+
+
+def _documents_from_file_connector_config(
+    file_id: str, db_session: Session
+) -> list[str]:
+    """Return one representative document per `Connector` whose
+    `connector_specific_config['file_locations']` lists `file_id`.
+
+    Documents ingested through a single cc_pair share that cc_pair's ACL,
+    so one sample per connector is enough for the downstream ACL check.
+    Almost always a single connector, since file_ids are UUIDs.
+
+    TODO(perf): the `@>` containment check on a JSONB array cannot use a
+    regular btree index — at best we'd need a GIN index on
+    `connector.connector_specific_config`, and even then each File-connector
+    upload adds one entry to the array so lookups are O(files per connector)
+    per hit. The structurally correct fix is a dedicated join table, e.g.:
+
+        class ConnectorFile(Base):
+            file_id: Mapped[str] = mapped_column(primary_key=True)
+            connector_id: Mapped[int] = mapped_column(
+                ForeignKey("connector.id", ondelete="CASCADE"),
+                primary_key=True,
+            )
+
+    populated alongside `Connector.connector_specific_config['file_locations']`
+    by the File-connector upload/update/delete paths in
+    `onyx/server/documents/connector.py`. With that in place this function
+    becomes a single indexed `SELECT ... FROM connector_file` and the
+    per-connector fan-out loop below collapses into one JOIN.
+
+    TODO(model): a cleaner long-term fix is dropping
+    `Connector.connector_specific_config['file_locations']` entirely in favor
+    of the join table — the JSONB array is the only reason `Document.file_id`
+    vs. `FileRecord` vs. `connector_specific_config` are three different
+    sources of truth for "which cc_pair owns this file". Unifying them would
+    let the access check go through a single `(file_id) → cc_pair → ACL`
+    lookup instead of the two-step probe in `_user_can_access_connector_file`.
+    """
+    connector_ids: list[int] = list(
+        db_session.execute(
+            select(Connector.id).where(
+                Connector.connector_specific_config["file_locations"].op("@>")(
+                    sa_cast([file_id], postgresql.JSONB)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not connector_ids:
+        return []
+
+    # TODO(perf): this loop fires one query per matching connector. In
+    # practice `connector_ids` has length 1, but if it ever didn't, this
+    # could fold into a single `DISTINCT ON (connector_id)` query. Not
+    # urgent while the outer JSONB scan dominates the cost.
+    document_ids: list[str] = []
+    for connector_id in connector_ids:
+        doc_id = db_session.execute(
+            select(DocumentByConnectorCredentialPair.id)
+            .where(DocumentByConnectorCredentialPair.connector_id == connector_id)
+            .limit(1)
+        ).scalar()
+        if doc_id is not None:
+            document_ids.append(doc_id)
+    return document_ids

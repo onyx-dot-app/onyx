@@ -19,6 +19,7 @@ import pytest
 import requests
 
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ChatSessionSharedStatus
@@ -37,6 +38,7 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
@@ -449,6 +451,152 @@ def test_connector_file_denied_for_users_without_access(
     )
     assert basic_response.status_code in (403, 404), (
         f"Non-member should be denied on PRIVATE connector file "
+        f"(origin={file_origin}), got {basic_response.status_code}: "
+        f"{basic_response.text}"
+    )
+    assert basic_response.content != _CONNECTOR_FILE_BYTES
+
+
+# -----------------------------------------------------------------------------
+# Non-tabular File-connector upload access checks
+#
+# The File connector only stamps `Document.file_id` for tabular files
+# (`backend/onyx/connectors/file/connector.py:190`). Non-tabular uploads
+# (txt/pdf/docx/etc.) leave `Document.file_id=NULL`, so the `Document.file_id`
+# lookup path alone is not enough — users clicking a citation on a .txt file
+# would previously see "Failed to load document." even for publicly-indexed
+# connector files.
+#
+# The access check falls back to matching the file_id against
+# `Connector.connector_specific_config['file_locations']`, which the File
+# connector populates for every uploaded file regardless of extension. These
+# tests pin that fallback across both current (`CONNECTOR_FILE_UPLOAD`) and
+# legacy pre-#10484 (`OTHER`) origin stamps.
+# -----------------------------------------------------------------------------
+
+
+# `CONNECTOR` isn't included here because pipeline-promoted files already get
+# `Document.file_id` stamped, so they never hit the connector-config fallback.
+_NON_TABULAR_FILE_ORIGINS = [
+    FileOrigin.CONNECTOR_FILE_UPLOAD,
+    FileOrigin.OTHER,
+]
+
+
+def _seed_non_tabular_file_connector_cc_pair(
+    *,
+    admin_user: DATestUser,
+    file_id: str,
+    access_type: AccessType,
+    groups: list[int] | None = None,
+) -> DATestCCPair:
+    """Build a File-source cc_pair whose `connector_specific_config` points at
+    `file_id` WITHOUT linking any `Document.file_id` to it — mirroring what
+    happens in prod when a user uploads a non-tabular file through the File
+    connector UI."""
+    return CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+        source=DocumentSource.FILE,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={
+            "file_locations": [file_id],
+            "file_names": ["non_tabular.txt"],
+            "zip_metadata_file_id": None,
+        },
+        access_type=access_type,
+        groups=groups,
+    )
+
+
+def _save_non_tabular_file_bytes(file_id: str, file_origin: FileOrigin) -> None:
+    """Write bytes into the file store under the *exact* `file_id` referenced
+    by `Connector.connector_specific_config['file_locations']`. We cannot reuse
+    `_seed_connector_file` because that helper also stamps `Document.file_id`,
+    which would bypass the fallback path we're trying to exercise."""
+    file_store = get_default_file_store()
+    file_store.save_file(
+        content=io.BytesIO(_CONNECTOR_FILE_BYTES),
+        display_name="non_tabular.txt",
+        file_origin=file_origin,
+        file_type="text/plain",
+        file_id=file_id,
+    )
+
+
+@pytest.mark.parametrize("file_origin", _NON_TABULAR_FILE_ORIGINS)
+def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
+    reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
+) -> None:
+    """Non-tabular File connector uploads (txt/pdf/docx/etc.) have no
+    `Document.file_id` link, so the original fix for #10472 left them
+    unreachable via `/chat/file/{file_id}`. The fallback keyed off
+    `Connector.connector_specific_config['file_locations']` is what lets
+    `PreviewModal` render these files again."""
+    admin_user: DATestUser = UserManager.create(name="non_tabular_admin")
+    basic_user: DATestUser = UserManager.create(name="non_tabular_basic")
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+
+    file_id = str(uuid4())
+    public_cc_pair = _seed_non_tabular_file_connector_cc_pair(
+        admin_user=admin_user,
+        file_id=file_id,
+        access_type=AccessType.PUBLIC,
+    )
+
+    # Ingest a document against this cc_pair but do NOT set its `file_id` —
+    # that's what makes this the "non-tabular" case.
+    DocumentManager.seed_doc_with_content(
+        cc_pair=public_cc_pair,
+        content="non-tabular body text",
+        api_key=api_key,
+    )
+    _save_non_tabular_file_bytes(file_id, file_origin)
+
+    for user in (admin_user, basic_user):
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=user.headers,
+        )
+        assert response.status_code == 200, (
+            f"User {user.email} must access a PUBLIC File-connector non-tabular "
+            f"file (origin={file_origin}), got {response.status_code}: "
+            f"{response.text}"
+        )
+        assert response.content == _CONNECTOR_FILE_BYTES
+
+
+@pytest.mark.parametrize("file_origin", _NON_TABULAR_FILE_ORIGINS)
+def test_non_tabular_connector_file_denied_for_users_without_access(
+    reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
+) -> None:
+    """Flip side of the fallback: a non-tabular File-connector upload owned by
+    a PRIVATE cc_pair must stay gated for users with no ACL overlap, even
+    though the connector-config fallback finds the file."""
+    admin_user: DATestUser = UserManager.create(name="non_tabular_priv_admin")
+    basic_user: DATestUser = UserManager.create(name="non_tabular_priv_basic")
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+
+    file_id = str(uuid4())
+    private_cc_pair = _seed_non_tabular_file_connector_cc_pair(
+        admin_user=admin_user,
+        file_id=file_id,
+        access_type=AccessType.PRIVATE,
+    )
+    DocumentManager.seed_doc_with_content(
+        cc_pair=private_cc_pair,
+        content="non-tabular private content",
+        api_key=api_key,
+    )
+    _save_non_tabular_file_bytes(file_id, file_origin)
+
+    basic_response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{file_id}",
+        headers=basic_user.headers,
+    )
+    assert basic_response.status_code in (403, 404), (
+        f"Non-member should be denied on PRIVATE non-tabular connector file "
         f"(origin={file_origin}), got {basic_response.status_code}: "
         f"{basic_response.text}"
     )
