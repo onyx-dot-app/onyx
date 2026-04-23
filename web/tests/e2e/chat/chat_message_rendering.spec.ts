@@ -2,6 +2,14 @@ import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import {
+  buildMockSearchStream,
+  buildMockStream,
+  mockChatEndpoint,
+  mockChatEndpointSequence,
+  type MockDocument,
+  resetTurnCounter,
+} from "@tests/e2e/utils/chatMock";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -113,171 +121,12 @@ And this LaTeX source should remain a code block:
 \\int_0^1 x^2 \\, dx = \\frac{1}{3}
 \`\`\``;
 
-interface MockDocument {
-  document_id: string;
-  semantic_identifier: string;
-  link: string;
-  source_type: string;
-  blurb: string;
-  is_internet: boolean;
-}
-
-interface SearchMockOptions {
-  content: string;
-  queries: string[];
-  documents: MockDocument[];
-  /** Maps citation number -> document_id */
-  citations: Record<number, string>;
-  isInternetSearch?: boolean;
-}
-
-let turnCounter = 0;
-
-function buildMockStream(content: string): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const packets = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content,
-        final_documents: null,
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: {},
-      files: [],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-function buildMockSearchStream(options: SearchMockOptions): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const fullDocs = options.documents.map((doc) => ({
-    ...doc,
-    boost: 0,
-    hidden: false,
-    score: 0.95,
-    chunk_ind: 0,
-    match_highlights: [],
-    metadata: {},
-    updated_at: null,
-  }));
-
-  // Turn 0: search tool
-  // Turn 1: answer + citations
-  const packets: Record<string, unknown>[] = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "search_tool_start",
-        ...(options.isInternetSearch !== undefined && {
-          is_internet_search: options.isInternetSearch,
-        }),
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "search_tool_queries_delta", queries: options.queries },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "search_tool_documents_delta", documents: fullDocs },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "section_end" },
-    },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content: options.content,
-        final_documents: fullDocs,
-      },
-    },
-    ...Object.entries(options.citations).map(([num, docId]) => ({
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: "citation_info",
-        citation_number: Number(num),
-        document_id: docId,
-      },
-    })),
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: options.citations,
-      files: [],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-async function mockChatEndpoint(
-  page: Page,
-  responseContent: string
-): Promise<void> {
-  await page.route("**/api/chat/send-chat-message", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body: buildMockStream(responseContent),
-    });
-  });
-}
-
-async function mockChatEndpointSequence(
-  page: Page,
-  responses: string[]
-): Promise<void> {
-  let callIndex = 0;
-  await page.route("**/api/chat/send-chat-message", async (route) => {
-    const content =
-      responses[Math.min(callIndex, responses.length - 1)] ??
-      responses[responses.length - 1]!;
-    callIndex += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body: buildMockStream(content),
-    });
-  });
-}
-
 for (const theme of THEMES) {
   test.describe(`Chat Message Rendering (${theme} mode)`, () => {
     let chat: ChatPage;
 
     test.beforeEach(async ({ page }, testInfo) => {
-      turnCounter = 0;
+      resetTurnCounter();
       chat = new ChatPage(page);
       await page.context().clearCookies();
       await setThemeBeforeNavigation(page, theme);
@@ -289,7 +138,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -308,7 +157,7 @@ for (const theme of THEMES) {
     test.describe("Long Messages", () => {
       test("long user message renders without truncation", async ({ page }) => {
         await chat.goto();
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, LONG_USER_MESSAGE);
 
@@ -327,7 +176,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(LONG_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -346,7 +195,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, LONG_WORD_USER_MESSAGE);
 
@@ -373,7 +222,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(LONG_AI_RESPONSE));
 
         await sendMessage(page, LONG_USER_MESSAGE);
 
@@ -394,7 +243,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, MARKDOWN_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(MARKDOWN_AI_RESPONSE));
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
@@ -410,7 +259,7 @@ for (const theme of THEMES) {
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, LATEX_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(LATEX_AI_RESPONSE));
 
         await sendMessage(page, "Show me inline and block math");
 
@@ -710,7 +559,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, HEADINGS_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(HEADINGS_RESPONSE));
 
         await sendMessage(page, "Show me all heading levels");
 
@@ -743,7 +592,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -762,7 +611,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         page,
       }) => {
         await chat.goto();
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 

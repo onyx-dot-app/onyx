@@ -2,6 +2,12 @@ import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import {
+  buildMockImageGenStream,
+  buildMockStream,
+  mockChatEndpoint,
+  resetTurnCounter,
+} from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_AI_RESPONSE = "I've reviewed the file you uploaded.";
@@ -22,116 +28,6 @@ const PYTHON_CODE = `def greet(name: str) -> str:
 if __name__ == "__main__":
     print(greet("Onyx"))
 `;
-
-let turnCounter = 0;
-
-function buildMockStream(content: string): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const packets = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content,
-        final_documents: null,
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: {},
-      files: [],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-interface ImageGenStreamOptions {
-  fileId: string;
-  revisedPrompt: string;
-  message: string;
-}
-
-function buildMockImageGenStream({
-  fileId,
-  revisedPrompt,
-  message,
-}: ImageGenStreamOptions): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const packets = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "image_generation_start" },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "image_generation_final",
-        images: [
-          {
-            file_id: fileId,
-            url: `/api/chat/file/${fileId}`,
-            revised_prompt: revisedPrompt,
-            shape: "square",
-          },
-        ],
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "section_end" },
-    },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content: message,
-        final_documents: null,
-      },
-    },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: {},
-      files: [{ id: fileId, type: "image" }],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-async function mockChatEndpoint(page: Page, body: string): Promise<void> {
-  await page.route("**/api/chat/send-chat-message", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body,
-    });
-  });
-}
 
 interface UploadFile {
   name: string;
@@ -181,7 +77,7 @@ test.describe("Chat File Uploads", () => {
   let chat: ChatPage;
 
   test.beforeEach(async ({ page }, testInfo) => {
-    turnCounter = 0;
+    resetTurnCounter();
     chat = new ChatPage(page);
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
@@ -361,7 +257,7 @@ test.describe("Chat File Uploads", () => {
           .filter({ hasText: /python/i })
           .first()
       ).toBeVisible();
-      await expect(modal.getByText("greet")).toBeVisible();
+      await expect(modal.getByText("greet", { exact: true })).toBeVisible();
       await expect(modal.locator("a[download]")).toBeVisible();
 
       await expectElementScreenshot(modal, {
