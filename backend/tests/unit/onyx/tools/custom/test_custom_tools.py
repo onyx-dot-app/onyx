@@ -241,6 +241,139 @@ class TestCustomTool(unittest.TestCase):
         with self.assertRaises(ValueError) as _:
             validate_openapi_schema(invalid_schema)
 
+    @patch("onyx.tools.tool_implementations.custom.custom_tool.requests.request")
+    def test_custom_tool_user_placeholders(
+        self, mock_request: unittest.mock.MagicMock
+    ) -> None:
+        """USER_ID and USER_EMAIL placeholders are substituted across the
+        OpenAPI schema (server URL, paths, headers) at tool-build time."""
+        mock_response = unittest.mock.MagicMock()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"ok": True}
+        mock_request.return_value = mock_response
+
+        user_id = uuid.uuid4()
+        user_email = "alice@example.com"
+
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {
+                "version": "1.0.0",
+                "title": "User-aware API",
+                "description": "Schema with USER_ID/USER_EMAIL placeholders",
+            },
+            "servers": [{"url": "http://localhost:8080/users/USER_ID"}],
+            "paths": {
+                "/by-email/{email}": {
+                    "GET": {
+                        "summary": "Lookup by email",
+                        "operationId": "lookupByEmail",
+                        "parameters": [
+                            {
+                                "name": "email",
+                                "in": "path",
+                                "required": True,
+                                "schema": {
+                                    "type": "string",
+                                    "default": "USER_EMAIL",
+                                },
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+        validate_openapi_schema(schema)
+
+        tools = build_custom_tools_from_openapi_schema_and_headers(
+            tool_id=-1,
+            openapi_schema=schema,
+            custom_headers=[
+                {"key": "X-Onyx-User-Id", "value": "USER_ID"},
+                {
+                    "key": "X-Onyx-User-Email",  # pragma: allowlist secret
+                    "value": "USER_EMAIL",
+                },
+            ],
+            dynamic_schema_info=DynamicSchemaInfo(
+                chat_session_id=None,
+                message_id=None,
+                user_id=user_id,
+                user_email=user_email,
+            ),
+        )
+
+        tools[0].run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=None,
+            email=user_email,
+        )
+
+        expected_url = f"http://localhost:8080/users/{user_id}/by-email/{user_email}"
+        # Custom headers do NOT receive placeholder substitution today;
+        # only the OpenAPI schema string is templated.
+        expected_headers = {
+            "X-Onyx-User-Id": "USER_ID",
+            "X-Onyx-User-Email": "USER_EMAIL",
+        }
+        mock_request.assert_called_once_with(
+            "GET", expected_url, json=None, headers=expected_headers
+        )
+
+    @patch("onyx.tools.tool_implementations.custom.custom_tool.requests.request")
+    def test_custom_tool_user_placeholders_unset_are_left_alone(
+        self, mock_request: unittest.mock.MagicMock
+    ) -> None:
+        """When user_id/user_email aren't provided (e.g. anonymous user),
+        the literal placeholders remain in the schema rather than being
+        replaced with empty strings."""
+        mock_response = unittest.mock.MagicMock()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"ok": True}
+        mock_request.return_value = mock_response
+
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {
+                "version": "1.0.0",
+                "title": "User-aware API",
+                "description": "Schema with USER_ID placeholder but no user",
+            },
+            "servers": [{"url": "http://localhost:8080/users/USER_ID"}],
+            "paths": {
+                "/ping": {
+                    "GET": {
+                        "summary": "Ping",
+                        "operationId": "ping",
+                    }
+                }
+            },
+        }
+        validate_openapi_schema(schema)
+
+        tools = build_custom_tools_from_openapi_schema_and_headers(
+            tool_id=-1,
+            openapi_schema=schema,
+            dynamic_schema_info=DynamicSchemaInfo(
+                chat_session_id=None,
+                message_id=None,
+                user_id=None,
+                user_email=None,
+            ),
+        )
+
+        tools[0].run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=None,
+        )
+
+        mock_request.assert_called_once_with(
+            "GET",
+            "http://localhost:8080/users/USER_ID/ping",
+            json=None,
+            headers={},
+        )
+
     def test_custom_tool_final_result(self) -> None:
         """
         Test extracting the final result from a custom tool response.
