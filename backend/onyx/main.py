@@ -40,6 +40,8 @@ from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
+from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -556,10 +558,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
         AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
     ):
+        google_login_scopes = list(
+            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
+        )
+
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,
-            scopes=["openid", "email", "profile"],
+            scopes=google_login_scopes,
         )
         include_auth_router_with_prefix(
             application,
