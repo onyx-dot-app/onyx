@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 
@@ -49,12 +50,25 @@ class LLM(abc.ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        invoke_fn = cls.__dict__.get("invoke")
-        if invoke_fn is not None:
-            setattr(cls, "invoke", wrap_invoke(invoke_fn))
-        stream_fn = cls.__dict__.get("stream")
-        if stream_fn is not None:
-            setattr(cls, "stream", wrap_stream(stream_fn))
+        cls._wrap_method_if_defined("invoke", wrap_invoke)
+        cls._wrap_method_if_defined("stream", wrap_stream)
+
+    @classmethod
+    def _wrap_method_if_defined(
+        cls,
+        name: str,
+        wrapper_fn: Callable[[Callable[..., Any]], Callable[..., Any]],
+    ) -> None:
+        """Replace ``cls.<name>`` with ``wrapper_fn(cls.<name>)`` iff the method
+        is defined directly on this subclass.
+
+        Inherited methods are skipped — they've already been wrapped on the
+        parent class, so re-wrapping would nest two fallback spans around
+        the same call.
+        """
+        fn = cls.__dict__.get(name)
+        if fn is not None:
+            setattr(cls, name, wrapper_fn(fn))
 
     @property
     @abc.abstractmethod

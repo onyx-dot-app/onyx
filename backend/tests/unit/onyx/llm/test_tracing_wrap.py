@@ -18,8 +18,10 @@ declared but unused — hence the `ARG002` suppression at the file level.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
+from typing import cast
 
 import pytest
 
@@ -39,6 +41,7 @@ from onyx.llm.models import UserMessage
 from onyx.llm.tracing_wrap import _ALREADY_WRAPPED_ATTR
 from onyx.llm.tracing_wrap import _extract_prompt
 from onyx.llm.tracing_wrap import _outer_generation_span_active
+from onyx.llm.tracing_wrap import _validate_prompt_param
 from onyx.llm.tracing_wrap import wrap_invoke
 from onyx.llm.tracing_wrap import wrap_stream
 from onyx.tracing.framework.create import generation_span
@@ -192,16 +195,49 @@ def test_outer_guard_false_for_finished_span_leaked_into_contextvar() -> None:
             span.finish(reset_current=True)
 
 
+# `functools.wraps` sets __wrapped__ on the auto-wrapped methods so the
+# underlying (undecorated) function is reachable for signature introspection.
+# mypy doesn't know about this attribute on the Callable type, so we access
+# it via getattr below.
+
+
 def test_extract_prompt_reads_positional_arg() -> None:
-    assert _extract_prompt(("hi",), {}) == "hi"
+    llm = _FakeLLM()
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    assert _extract_prompt(sig, llm, ("hi",), {}) == "hi"
 
 
 def test_extract_prompt_reads_keyword_arg() -> None:
-    assert _extract_prompt((), {"prompt": "hi"}) == "hi"
+    llm = _FakeLLM()
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    assert _extract_prompt(sig, llm, (), {"prompt": "hi"}) == "hi"
 
 
-def test_extract_prompt_returns_none_when_missing() -> None:
-    assert _extract_prompt((), {}) is None
+def test_extract_prompt_returns_none_on_signature_mismatch() -> None:
+    """Unknown keyword arguments don't match the signature → bind fails →
+    extraction returns None rather than raising."""
+    llm = _FakeLLM()
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    assert _extract_prompt(sig, llm, (), {"not_a_real_param": "hi"}) is None
+
+
+def test_validate_prompt_param_rejects_signature_without_prompt() -> None:
+    def bad_override(self: object, foo: str) -> None:  # noqa: ARG001
+        return None
+
+    with pytest.raises(TypeError, match="missing required 'prompt' parameter"):
+        _validate_prompt_param(bad_override)
+
+
+def test_wrap_invoke_raises_on_signature_without_prompt() -> None:
+    """Wrap-time validation surfaces a clear error at class-creation time so
+    subclass signature drift doesn't silently produce blank-input spans."""
+
+    def bad_invoke(self: object, foo: str) -> ModelResponse:  # noqa: ARG001
+        raise AssertionError("bad_invoke should never run")
+
+    with pytest.raises(TypeError, match="missing required 'prompt' parameter"):
+        wrap_invoke(cast(Callable[..., ModelResponse], bad_invoke))
 
 
 def test_invoke_does_not_nest_inside_outer_generation_span() -> None:

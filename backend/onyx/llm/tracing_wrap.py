@@ -15,6 +15,7 @@ avoid an import cycle between `onyx.llm.interfaces` and
 from __future__ import annotations
 
 import functools
+import inspect
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 
 
 _ALREADY_WRAPPED_ATTR = "_onyx_tracing_wrapped"
+_PROMPT_PARAM_NAME = "prompt"
 
 
 def _outer_generation_span_active() -> bool:
@@ -58,17 +60,45 @@ def _outer_generation_span_active() -> bool:
     )
 
 
-def _extract_prompt(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
-    """Return the ``prompt`` argument passed to ``invoke``/``stream``, if any.
+def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
+    """Return the signature of ``fn`` after asserting it exposes ``prompt``.
 
-    ``LLM.invoke`` and ``LLM.stream`` take ``prompt`` as the first positional
-    parameter. Fallback to ``kwargs['prompt']`` when callers pass it by keyword.
-    Returns ``None`` if the argument cannot be located — the fallback span will
-    simply omit input messages rather than fail the request.
+    Runs once at wrap time so a subclass whose ``invoke`` / ``stream``
+    signature drifts away from the abstract base surfaces a clear error
+    during class creation rather than silently producing blank-input spans
+    at runtime. The returned :class:`inspect.Signature` is reused by
+    :func:`_extract_prompt` to bind arguments per call.
     """
-    if args:
-        return args[0]
-    return kwargs.get("prompt")
+    sig = inspect.signature(fn)
+    if _PROMPT_PARAM_NAME not in sig.parameters:
+        name = getattr(fn, "__qualname__", repr(fn))
+        raise TypeError(
+            f"Cannot auto-trace {name}: missing required "
+            f"'{_PROMPT_PARAM_NAME}' parameter. LLM.invoke / LLM.stream "
+            f"subclass overrides must keep the 'prompt' parameter name."
+        )
+    return sig
+
+
+def _extract_prompt(
+    sig: inspect.Signature,
+    self_: "LLM",
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any | None:
+    """Bind ``args`` / ``kwargs`` against ``sig`` and return the ``prompt`` value.
+
+    Uses ``Signature.bind`` so extraction is robust to any mix of positional
+    / keyword argument passing and immune to future parameter reordering.
+    Returns ``None`` if the arguments don't match the signature — the
+    fallback span will simply omit input messages rather than fail the
+    request.
+    """
+    try:
+        bound = sig.bind(self_, *args, **kwargs)
+    except TypeError:
+        return None
+    return bound.arguments.get(_PROMPT_PARAM_NAME)
 
 
 def wrap_invoke(
@@ -78,6 +108,8 @@ def wrap_invoke(
     if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):
         return invoke_fn
 
+    sig = _validate_prompt_param(invoke_fn)
+
     @functools.wraps(invoke_fn)
     def wrapper(self: "LLM", *args: Any, **kwargs: Any) -> "ModelResponse":
         if _outer_generation_span_active():
@@ -86,7 +118,7 @@ def wrap_invoke(
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_response
 
-        prompt = _extract_prompt(args, kwargs)
+        prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(
             self, flow="llm_invoke_fallback", input_messages=prompt
         ) as span:
@@ -123,6 +155,8 @@ def wrap_stream(
     if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):
         return stream_fn
 
+    sig = _validate_prompt_param(stream_fn)
+
     @functools.wraps(stream_fn)
     def wrapper(
         self: "LLM", *args: Any, **kwargs: Any
@@ -135,7 +169,7 @@ def wrap_stream(
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_span_output
 
-        prompt = _extract_prompt(args, kwargs)
+        prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(
             self, flow="llm_stream_fallback", input_messages=prompt
         ) as span:
