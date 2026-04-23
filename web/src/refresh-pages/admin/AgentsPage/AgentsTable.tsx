@@ -428,11 +428,11 @@ export default function AgentsTable() {
                       <LineItemButton
                         key={creator.id}
                         sizePreset="main-ui"
-                        variant="body"
-                        prominence="muted"
                         rounding="sm"
-                        icon={isCurrentUser ? SvgUser : undefined}
+                        selectVariant="select-heavy"
+                        icon={SvgUser}
                         title={creator.email}
+                        description={isCurrentUser ? "Me" : undefined}
                         state={isSelected ? "selected" : "empty"}
                         onClick={() => {
                           setSelectedCreatorIds((prev) => {
@@ -493,9 +493,8 @@ export default function AgentsTable() {
                       <LineItemButton
                         key={key}
                         sizePreset="main-ui"
-                        variant="body"
-                        prominence="muted"
                         rounding="sm"
+                        selectVariant="select-heavy"
                         icon={icon}
                         title={action.name}
                         state={isSelected ? "selected" : "empty"}
