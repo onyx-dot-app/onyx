@@ -696,6 +696,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             Exception: There was an error during the bulk index. This
                 includes the case where a document with the same ID already
                 exists if update_if_exists is False.
+            BulkIndexError: There was an error during the bulk index. This is a
+                known specific error type that is raised by the opensearchpy
+                library's bulk function.
         """
         if not documents:
             return
