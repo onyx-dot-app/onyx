@@ -18,12 +18,12 @@ import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   getProviderIcon,
   getProviderLabel,
   VoiceProviderSetupModal,
   VoiceDisconnectModal,
-  NO_DEFAULT_VALUE,
   type ProviderMode,
 } from "@/refresh-pages/admin/VoiceConfigurationPage/shared";
 
@@ -113,7 +113,9 @@ const pageDescription =
   "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
 
 export default function VoiceConfigurationPage() {
-  const [modalOpen, setModalOpen] = useState(false);
+  const setupModal = useCreateModal();
+  const disconnectModal = useCreateModal();
+
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [editingProvider, setEditingProvider] =
     useState<VoiceProviderView | null>(null);
@@ -124,9 +126,6 @@ export default function VoiceConfigurationPage() {
     providerLabel: string;
     providerType: string;
   } | null>(null);
-  const [replacementProviderId, setReplacementProviderId] = useState<
-    string | null
-  >(null);
 
   const { providers, isLoading, refresh: mutate } = useVoiceProviders();
 
@@ -139,7 +138,7 @@ export default function VoiceConfigurationPage() {
     setEditingProvider(null);
     setModalMode(mode);
     setSelectedModelId(modelId ?? null);
-    setModalOpen(true);
+    setupModal.toggle(true);
   };
 
   const handleEdit = (
@@ -151,7 +150,7 @@ export default function VoiceConfigurationPage() {
     setEditingProvider(provider);
     setModalMode(mode);
     setSelectedModelId(modelId ?? null);
-    setModalOpen(true);
+    setupModal.toggle(true);
   };
 
   const handleSetDefault = async (
@@ -196,55 +195,14 @@ export default function VoiceConfigurationPage() {
     }
   };
 
-  const handleModalClose = () => {
-    setModalOpen(false);
-    setSelectedProvider(null);
-    setEditingProvider(null);
-    setSelectedModelId(null);
-  };
-
-  const handleModalSuccess = () => {
+  const handleSetupSuccess = () => {
     mutate();
-    handleModalClose();
+    setupModal.toggle(false);
   };
 
   const handleDisconnect = async () => {
     if (!disconnectTarget) return;
     try {
-      const targetProvider = providers.find(
-        (p) => p.id === disconnectTarget.providerId
-      );
-
-      // If a replacement was selected (not "No Default"), activate it for each
-      // mode the disconnected provider was default for
-      if (replacementProviderId && replacementProviderId !== NO_DEFAULT_VALUE) {
-        const repId = Number(replacementProviderId);
-
-        if (targetProvider?.is_default_stt) {
-          const resp = await activateVoiceProvider(repId, "stt");
-          if (!resp.ok) {
-            const errorBody = await resp.json().catch(() => ({}));
-            throw new Error(
-              typeof errorBody?.detail === "string"
-                ? errorBody.detail
-                : "Failed to activate replacement STT provider."
-            );
-          }
-        }
-
-        if (targetProvider?.is_default_tts) {
-          const resp = await activateVoiceProvider(repId, "tts");
-          if (!resp.ok) {
-            const errorBody = await resp.json().catch(() => ({}));
-            throw new Error(
-              typeof errorBody?.detail === "string"
-                ? errorBody.detail
-                : "Failed to activate replacement TTS provider."
-            );
-          }
-        }
-      }
-
       const response = await deleteVoiceProvider(disconnectTarget.providerId);
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
@@ -257,13 +215,12 @@ export default function VoiceConfigurationPage() {
       await mutate();
       toast.success(`${disconnectTarget.providerLabel} disconnected`);
     } catch (err) {
-      console.error("Failed to disconnect voice provider:", err);
       toast.error(
         err instanceof Error ? err.message : "Unexpected error occurred."
       );
     } finally {
+      disconnectModal.toggle(false);
       setDisconnectTarget(null);
-      setReplacementProviderId(null);
     }
   };
 
@@ -321,12 +278,14 @@ export default function VoiceConfigurationPage() {
         }}
         onDisconnect={
           status !== "disconnected" && provider
-            ? () =>
+            ? () => {
                 setDisconnectTarget({
                   providerId: provider.id,
                   providerLabel: getProviderLabel(model.providerType),
                   providerType: model.providerType,
-                })
+                });
+                disconnectModal.toggle(true);
+              }
             : undefined
         }
         disconnectModalOpen={disconnectTarget?.providerId === provider?.id}
@@ -352,30 +311,27 @@ export default function VoiceConfigurationPage() {
 
   return (
     <>
-      {disconnectTarget && (
-        <VoiceDisconnectModal
-          disconnectTarget={disconnectTarget}
-          providers={providers}
-          replacementProviderId={replacementProviderId}
-          onReplacementChange={setReplacementProviderId}
-          onClose={() => {
-            setDisconnectTarget(null);
-            setReplacementProviderId(null);
-          }}
-          onDisconnect={() => void handleDisconnect()}
-        />
-      )}
+      <disconnectModal.Provider>
+        {disconnectTarget && (
+          <VoiceDisconnectModal
+            disconnectTarget={disconnectTarget}
+            providers={providers}
+            onDisconnect={() => void handleDisconnect()}
+          />
+        )}
+      </disconnectModal.Provider>
 
-      {modalOpen && selectedProvider && (
-        <VoiceProviderSetupModal
-          providerType={selectedProvider}
-          existingProvider={editingProvider}
-          mode={modalMode}
-          defaultModelId={selectedModelId}
-          onClose={handleModalClose}
-          onSuccess={handleModalSuccess}
-        />
-      )}
+      <setupModal.Provider>
+        {selectedProvider && (
+          <VoiceProviderSetupModal
+            providerType={selectedProvider}
+            existingProvider={editingProvider}
+            mode={modalMode}
+            defaultModelId={selectedModelId}
+            onSuccess={handleSetupSuccess}
+          />
+        )}
+      </setupModal.Provider>
 
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
