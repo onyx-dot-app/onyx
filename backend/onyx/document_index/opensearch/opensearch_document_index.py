@@ -724,6 +724,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         already_existed=num_chunks_deleted > 0,
                     )
                 )
+                # Refresh the index because deletion may take a little to
+                # propagate, and if a chunk's deletion still has not propagated
+                # by the time we try to index the new chunk below, an exception
+                # will be raised.
+                self._client.refresh_index()
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
             self._client.bulk_index_documents(
