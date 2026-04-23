@@ -320,10 +320,13 @@ def _user_can_access_connector_file(
 def _documents_from_file_connector_config(
     file_id: str, db_session: Session
 ) -> list[str]:
-    """Return one representative document per `Connector` whose
-    `connector_specific_config['file_locations']` lists `file_id`. Documents
-    under a single cc_pair share its ACL, so one sample per connector is
-    enough for the downstream ACL check.
+    """Return one representative document per cc_pair (connector +
+    credential) whose `Connector.connector_specific_config['file_locations']`
+    lists `file_id`. Sampling per cc_pair (not per connector) is required
+    because ACLs are scoped to the cc_pair: the same connector paired with
+    different credentials can have different ACLs, and a user with access
+    via one credential must not be denied because we sampled a doc from
+    another.
 
     TODO(delete-me): exists only because the File connector leaves
     `Document.file_id=NULL` for non-tabular uploads (see comment in
@@ -332,27 +335,33 @@ def _documents_from_file_connector_config(
     connector stamps `Document.file_id` unconditionally and a backfill
     runs, this helper and its caller branch can go away.
     """
-    connector_ids: list[int] = list(
-        db_session.execute(
-            select(Connector.id).where(
-                Connector.connector_specific_config["file_locations"].op("@>")(
-                    sa_cast([file_id], postgresql.JSONB)
-                )
+    cc_pair_keys = db_session.execute(
+        select(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .join(
+            Connector,
+            Connector.id == DocumentByConnectorCredentialPair.connector_id,
+        )
+        .where(
+            Connector.connector_specific_config["file_locations"].op("@>")(
+                sa_cast([file_id], postgresql.JSONB)
             )
         )
-        .scalars()
-        .all()
-    )
-    if not connector_ids:
+        .distinct()
+    ).all()
+    if not cc_pair_keys:
         return []
 
-    # `connector_ids` is virtually always length 1 (file_ids are UUIDs),
-    # so the per-connector fan-out here is a non-issue.
     document_ids: list[str] = []
-    for connector_id in connector_ids:
+    for connector_id, credential_id in cc_pair_keys:
         doc_id = db_session.execute(
             select(DocumentByConnectorCredentialPair.id)
-            .where(DocumentByConnectorCredentialPair.connector_id == connector_id)
+            .where(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            )
             .limit(1)
         ).scalar()
         if doc_id is not None:
