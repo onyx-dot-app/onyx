@@ -320,6 +320,15 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         default: true,
       },
+      {
+        type: "checkbox",
+        query: "Include source code files?",
+        label: "Include Code Files",
+        name: "include_code_files",
+        description:
+          "Index source code files from the repository. Warning: this can be slow for large repositories.",
+        default: false,
+      },
     ],
   },
   bitbucket: {
@@ -1928,6 +1937,7 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_code_files: boolean;
 }
 
 export interface BitbucketConfig {
