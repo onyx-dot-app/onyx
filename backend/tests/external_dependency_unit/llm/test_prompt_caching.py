@@ -271,7 +271,7 @@ def test_openai_prompt_caching_reduces_costs(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause this test to begin passing which will cause a CI run to fail, acting as a reminder to re-enable this test.",
+    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause a CI run to fail if this test passes, acting as a reminder to re-enable this test.",
 )
 # @pytest.mark.skipif(
 #     not os.environ.get("ANTHROPIC_API_KEY"),

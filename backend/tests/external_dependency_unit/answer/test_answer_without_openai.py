@@ -28,7 +28,7 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause this test to begin passing which will cause a CI run to fail, acting as a reminder to re-enable this test.",
+    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause a CI run to fail if this test passes, acting as a reminder to re-enable this test.",
 )
 def test_answer_with_only_anthropic_provider(
     db_session: Session,
