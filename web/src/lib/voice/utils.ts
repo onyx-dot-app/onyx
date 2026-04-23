@@ -2,10 +2,11 @@ import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
 import { SvgMicrophone } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 
+export type VoiceProviderType = "openai" | "azure" | "elevenlabs";
 export type ProviderMode = "stt" | "tts";
 
 export function getProviderIcon(
-  providerType: string
+  providerType: VoiceProviderType | (string & {})
 ): React.FunctionComponent<IconProps> {
   switch (providerType) {
     case "openai":
@@ -19,7 +20,9 @@ export function getProviderIcon(
   }
 }
 
-export function getProviderLabel(providerType: string): string {
+export function getProviderLabel(
+  providerType: VoiceProviderType | (string & {})
+): string {
   switch (providerType) {
     case "openai":
       return "OpenAI";
