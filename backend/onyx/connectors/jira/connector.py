@@ -55,7 +55,6 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 ONE_HOUR = 3600
@@ -1081,6 +1080,7 @@ def make_checkpoint_callback(
 
 if __name__ == "__main__":
     import os
+
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
 

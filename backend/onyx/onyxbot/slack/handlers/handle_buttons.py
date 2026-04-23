@@ -35,9 +35,7 @@ from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
-from onyx.onyxbot.slack.handlers.handle_regular_answer import (
-    handle_regular_answer,
-)
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import build_feedback_id
 from onyx.onyxbot.slack.utils import decompose_action_id
@@ -52,7 +50,6 @@ from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

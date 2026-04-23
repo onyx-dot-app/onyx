@@ -61,9 +61,7 @@ from onyx.connectors.slack.models import MessageType
 from onyx.connectors.slack.models import ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
-from onyx.connectors.slack.utils import (
-    expert_info_from_slack_id,
-)
+from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 from onyx.connectors.slack.utils import SlackTextCleaner
@@ -1274,6 +1272,7 @@ class SlackConnector(
 if __name__ == "__main__":
     import os
     import time
+
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
     from shared_configs.contextvars import get_current_tenant_id
 

@@ -18,7 +18,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

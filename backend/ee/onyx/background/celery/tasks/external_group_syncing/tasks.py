@@ -51,15 +51,9 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
-from onyx.db.permission_sync_attempt import (
-    create_external_group_sync_attempt,
-)
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_failed,
-)
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_in_progress,
-)
+from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_failed
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_in_progress
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector

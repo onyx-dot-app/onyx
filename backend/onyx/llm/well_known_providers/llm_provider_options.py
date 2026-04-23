@@ -138,6 +138,7 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import re
+
     import litellm
 
     # TODO: remove these lists once we have a comprehensive model configuration page

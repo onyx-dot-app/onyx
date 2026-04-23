@@ -74,7 +74,6 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
 
-
 logger = setup_logger(__name__)
 
 

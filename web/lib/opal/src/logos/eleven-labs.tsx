@@ -3,13 +3,16 @@ const SvgElevenLabs = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 16 16"
+    viewBox="0 0 52 52"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     {...props}
   >
-    <path d="M10.5 2H13V14H10.5V2Z" fill="var(--text-05)" />
-    <path d="M3 2H5.5V14H3V2Z" fill="var(--text-05)" />
+    <path
+      d="M30.6667 3.29004H40V48.7123H30.6667V3.29004Z"
+      fill="var(--text-05)"
+    />
+    <path d="M12 3.29004H21.3333V48.7123H12V3.29004Z" fill="var(--text-05)" />
   </svg>
 );
 export default SvgElevenLabs;

@@ -32,7 +32,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
 
-
 # Simple OpenAPI schema for testing
 SIMPLE_OPENAPI_SCHEMA: dict[str, Any] = {
     "openapi": "3.0.0",

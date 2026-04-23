@@ -15,7 +15,6 @@ from onyx.llm.utils import (
     test_llm as run_test_llm,
 )  # aliased to avoid pytest collection
 
-
 _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (
     '{"private_key":"-----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----"}'

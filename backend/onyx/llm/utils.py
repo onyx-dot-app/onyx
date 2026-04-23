@@ -31,7 +31,6 @@ from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
-
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView
 
@@ -148,19 +147,19 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import BadRequestError
-    from litellm.exceptions import AuthenticationError
-    from litellm.exceptions import PermissionDeniedError
-    from litellm.exceptions import NotFoundError
-    from litellm.exceptions import UnprocessableEntityError
-    from litellm.exceptions import RateLimitError
-    from litellm.exceptions import ContextWindowExceededError
     from litellm.exceptions import APIConnectionError
     from litellm.exceptions import APIError
-    from litellm.exceptions import Timeout
-    from litellm.exceptions import ContentPolicyViolationError
+    from litellm.exceptions import AuthenticationError
+    from litellm.exceptions import BadRequestError
     from litellm.exceptions import BudgetExceededError
+    from litellm.exceptions import ContentPolicyViolationError
+    from litellm.exceptions import ContextWindowExceededError
+    from litellm.exceptions import NotFoundError
+    from litellm.exceptions import PermissionDeniedError
+    from litellm.exceptions import RateLimitError
     from litellm.exceptions import ServiceUnavailableError
+    from litellm.exceptions import Timeout
+    from litellm.exceptions import UnprocessableEntityError
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)

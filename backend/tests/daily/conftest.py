@@ -23,6 +23,13 @@ from onyx.db.models import UserRole
 from onyx.main import get_application
 from onyx.utils.logger import setup_logger
 
+# Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
+from tests.utils.pytest_secrets import (
+    pytest_collection_modifyitems as pytest_collection_modifyitems,
+)
+from tests.utils.pytest_secrets import pytest_configure as pytest_configure
+from tests.utils.pytest_secrets import test_secrets as test_secrets
+
 logger = setup_logger()
 
 load_dotenv()

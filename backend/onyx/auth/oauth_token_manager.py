@@ -13,7 +13,6 @@ from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
-
 logger = setup_logger()
 
 

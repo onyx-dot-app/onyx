@@ -9,7 +9,6 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from tests.daily.connectors.utils import load_all_from_connector
 
-
 PUBLIC_CHANNEL_NAME = "#daily-connector-test-channel"
 PRIVATE_CHANNEL_NAME = "#private-channel"
 PRIVATE_CHANNEL_USERS = [

@@ -45,7 +45,6 @@ from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 
-
 # ACP Protocol version
 ACP_PROTOCOL_VERSION = 1
 

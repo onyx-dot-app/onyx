@@ -1759,6 +1759,7 @@ def get_all_mcp_tools(
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select
+
     from onyx.db.models import Tool
 
     # Query MCP tools ordered by ID to maintain consistent ordering

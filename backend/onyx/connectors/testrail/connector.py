@@ -27,7 +27,6 @@ from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
 
-
 logger = setup_logger()
 
 
@@ -537,11 +536,9 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    from onyx.configs.app_configs import (
-        TESTRAIL_API_KEY,
-        TESTRAIL_BASE_URL,
-        TESTRAIL_USERNAME,
-    )
+    from onyx.configs.app_configs import TESTRAIL_API_KEY
+    from onyx.configs.app_configs import TESTRAIL_BASE_URL
+    from onyx.configs.app_configs import TESTRAIL_USERNAME
 
     connector = TestRailConnector()
 
