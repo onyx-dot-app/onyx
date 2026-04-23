@@ -226,6 +226,15 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     - The `file_id` appears in a `ChatMessage.files` descriptor of a chat
       session the user owns or a session publicly shared via
       `ChatSessionSharedStatus.PUBLIC`.
+    - The `file_id` is a `FileRecord` with origin `CHAT_IMAGE_GEN`.
+      TODO: A CHAT_IMAGE_GEN file is uploaded to the file store before
+      the linking tool-call DB row is written, so the FE can request it
+      even though there's nothing to ACL-check against. We currently
+      hack around this by treating these files as public; tightening it
+      requires a larger refactor of the streaming/tool-call write order.
+      Ordered before the connector-file branch so image previews
+      short-circuit on an indexed primary-key lookup instead of falling
+      through to the JSONB fallback.
     - The `file_id` is referenced by a `Document` (via `Document.file_id`)
       whose ACL grants access to this user. `Document.file_id` is only
       populated by connector ingestion, so this covers any connector-ingested
@@ -238,11 +247,6 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       `connector_specific_config['file_locations']` lists this `file_id`.
       Lets users preview cited files from indexed connectors through
       `PreviewModal`.
-    - TODO: An CHAT_IMAGE_GEN file is uploaded to the file store before a
-      tool call database entry is added. This the file is there and the FE can
-      request it despite us not having the linking tool call. We currently
-      hackily get around this by making these files public, but this will need
-      to change with a larger refactor.
     """
     owns_user_file = db_session.query(
         select(UserFile.id)
@@ -287,12 +291,12 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if db_session.execute(chat_file_stmt).first() is not None:
         return True
 
-    if _user_can_access_connector_file(file_id, user, db_session):
-        return True
-
-    # TODO: Chat image generated images are currently public
-    # We will want to make this private but it requires a larger
-    # refactor.
+    # TODO: Chat image generated images are currently public; tighten
+    # this once the tool-call linkage is populated before the file lands
+    # in the store. Ordered above the connector-file branch so image-gen
+    # previews short-circuit on an indexed `FileRecord.file_id` primary-
+    # key lookup rather than falling through to the JSONB fallback in
+    # `_documents_from_file_connector_config`.
     is_chat_image_gen = db_session.query(
         select(FileRecord.file_id)
         .where(
@@ -301,7 +305,10 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         )
         .exists()
     ).scalar()
-    return bool(is_chat_image_gen)
+    if is_chat_image_gen:
+        return True
+
+    return _user_can_access_connector_file(file_id, user, db_session)
 
 
 def _user_can_access_connector_file(
@@ -356,32 +363,32 @@ def _documents_from_file_connector_config(
     so one sample per connector is enough for the downstream ACL check.
     Almost always a single connector, since file_ids are UUIDs.
 
-    TODO(perf): the `@>` containment check on a JSONB array cannot use a
-    regular btree index — at best we'd need a GIN index on
-    `connector.connector_specific_config`, and even then each File-connector
-    upload adds one entry to the array so lookups are O(files per connector)
-    per hit. The structurally correct fix is a dedicated join table, e.g.:
+    TODO(delete-me): this whole function is a temporary patch for a data-
+    layer inconsistency — the File connector only stamps `Document.file_id`
+    for tabular inputs (see `backend/onyx/connectors/file/connector.py:190`),
+    leaving non-tabular uploads with `Document.file_id=NULL` even though
+    the bytes exist in the file store. The `@>` containment check on a
+    JSONB array also can't use a btree index, so every miss on the fast
+    path runs a scan of `connector.connector_specific_config`.
 
-        class ConnectorFile(Base):
-            file_id: Mapped[str] = mapped_column(primary_key=True)
-            connector_id: Mapped[int] = mapped_column(
-                ForeignKey("connector.id", ondelete="CASCADE"),
-                primary_key=True,
-            )
+    The proper fix decouples `Document.file_id` (linkage) from the
+    code-interpreter staging signal that currently rides on it:
 
-    populated alongside `Connector.connector_specific_config['file_locations']`
-    by the File-connector upload/update/delete paths in
-    `onyx/server/documents/connector.py`. With that in place this function
-    becomes a single indexed `SELECT ... FROM connector_file` and the
-    per-connector fan-out loop below collapses into one JOIN.
-
-    TODO(model): a cleaner long-term fix is dropping
-    `Connector.connector_specific_config['file_locations']` entirely in favor
-    of the join table — the JSONB array is the only reason `Document.file_id`
-    vs. `FileRecord` vs. `connector_specific_config` are three different
-    sources of truth for "which cc_pair owns this file". Unifying them would
-    let the access check go through a single `(file_id) → cc_pair → ACL`
-    lookup instead of the two-step probe in `_user_can_access_connector_file`.
+      1. In `build_python_chat_files_from_search_docs`
+         (`onyx/chat/chat_utils.py:882`), add an
+         `is_tabular_file(record.display_name)` guard so stamping
+         `Document.file_id` on non-tabular files doesn't cause every
+         cited PDF/TXT/DOCX to be auto-staged into the Python sandbox.
+      2. In the File connector (`onyx/connectors/file/connector.py:190`),
+         drop the `is_tabular_file` gate so `Document.file_id` is stamped
+         unconditionally. New uploads then take the fast path by design.
+      3. Alembic backfill: for every existing non-tabular connector file,
+         join `connector.connector_specific_config->'file_locations'` →
+         `document_by_connector_credential_pair` → `document` and set
+         `document.file_id`. One-time cost at deploy.
+      4. Delete this helper and the fallback branch in
+         `_user_can_access_connector_file`. The access check collapses to
+         a single indexed `SELECT document.id WHERE file_id = :file_id`.
     """
     connector_ids: list[int] = list(
         db_session.execute(
@@ -397,10 +404,9 @@ def _documents_from_file_connector_config(
     if not connector_ids:
         return []
 
-    # TODO(perf): this loop fires one query per matching connector. In
-    # practice `connector_ids` has length 1, but if it ever didn't, this
-    # could fold into a single `DISTINCT ON (connector_id)` query. Not
-    # urgent while the outer JSONB scan dominates the cost.
+    # In practice `connector_ids` has length 1 (file_ids are UUIDs), so
+    # the per-connector fan-out here is a non-issue; not worth folding
+    # into a `DISTINCT ON` when the whole helper is slated for deletion.
     document_ids: list[str] = []
     for connector_id in connector_ids:
         doc_id = db_session.execute(

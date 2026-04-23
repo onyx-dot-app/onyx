@@ -183,19 +183,35 @@ def _process_file(
         title = onyx_metadata.title or onyx_metadata.file_display_name or title
         link = onyx_metadata.link or link
 
-    # Build sections: first the text as a single Section
+    # Build sections: first the text as a single Section.
     sections: list[TextSection | ImageSection | TabularSection] = []
-    # Only set the file id if it is a tabular document. Non-tabular files
-    # thus have `Document.file_id=NULL`, which forces
-    # `onyx.access.access._user_can_access_connector_file` to fall back to
-    # a JSONB scan of `Connector.connector_specific_config['file_locations']`
-    # on every `/chat/file/{file_id}` access for a cited non-tabular doc.
-    # TODO: populate `Document.file_id` unconditionally here and move the
-    # "is this a tabular file?" check into
+    # `Document.file_id` is currently doing double duty: the linkage back
+    # to the raw bytes AND the "these bytes are pandas-ready, stage them
+    # into the code-interpreter sandbox" signal consumed by
     # `onyx.chat.chat_utils.build_python_chat_files_from_search_docs`
-    # (keyed off `FileRecord.display_name`), so we don't stage every PDF/
-    # TXT into the code-interpreter sandbox just because it now has a
-    # file_id. That would let us drop the fallback lookup path entirely.
+    # (`chat/chat_utils.py:882`). That code auto-uploads any CONNECTOR /
+    # CONNECTOR_FILE_UPLOAD file_id with no tabular check, so stamping
+    # every connector file here would bloat every Python tool call with
+    # cited PDFs/TXTs/DOCXs.
+    #
+    # The narrow side effect: non-tabular uploads land with
+    # `Document.file_id=NULL` even though the bytes exist in the file
+    # store, which forces `_user_can_access_connector_file` (in
+    # `onyx/access/access.py`) into a JSONB scan of
+    # `Connector.connector_specific_config['file_locations']` on every
+    # `/chat/file/{file_id}` request.
+    #
+    # TODO: decouple linkage from the staging signal, in this order:
+    #   1. Add `is_tabular_file(record.display_name)` in
+    #      `build_python_chat_files_from_search_docs` so only tabular
+    #      files continue to auto-stage.
+    #   2. Remove the `is_tabular_file` gate below so every upload gets
+    #      `Document.file_id` set.
+    #   3. Alembic backfill for existing non-tabular connector rows
+    #      (join `connector_specific_config->'file_locations'` →
+    #      `document_by_connector_credential_pair` → `document`).
+    #   4. Delete the JSONB fallback in
+    #      `onyx.access.access._documents_from_file_connector_config`.
     doc_file_id = None
     if is_tabular_file(file_name):
         doc_file_id = file_id
