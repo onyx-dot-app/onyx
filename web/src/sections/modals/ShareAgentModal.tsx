@@ -232,7 +232,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                       ? "Your administrator has restricted the user directory. Contact an admin to share this agent with other users."
                       : undefined
                   }
-                  tooltipSide="bottom"
+                  side="bottom"
                 >
                   <div className="w-full">
                     <InputComboBox
