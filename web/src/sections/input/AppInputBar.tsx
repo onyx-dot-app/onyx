@@ -147,6 +147,7 @@ const AppInputBar = React.memo(
     const {
       ref: inputRef,
       message,
+      isEmpty,
       setContent,
       clearContent,
       handleInput,
@@ -839,6 +840,7 @@ const AppInputBar = React.memo(
                                 ? "Search connected sources"
                                 : "How can I help you today?"
                       }
+                      data-empty={isEmpty ? "" : undefined}
                       onKeyDown={(event) => {
                         // Queue navigation mode
                         if (highlightedQueueIndex !== null) {
