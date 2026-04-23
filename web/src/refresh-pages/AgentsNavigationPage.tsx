@@ -77,9 +77,7 @@ export default function AgentsNavigationPage() {
       const mineFilter =
         activeTab === "your" ? checkUserOwnsAgent(user, agent) : true;
 
-      const listedFilter = agent.is_listed || checkUserOwnsAgent(user, agent);
-
-      return (nameMatches || labelMatches) && mineFilter && listedFilter;
+      return (nameMatches || labelMatches) && mineFilter;
     });
   }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
