@@ -40,10 +40,19 @@ export function useContentEditable({
   const isComposingRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const rafRef = useRef<number | null>(null);
+  const wrapperPaddingYRef = useRef(0);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
   }, [onContentChange]);
+
+  useEffect(() => {
+    if (wrapperRef.current) {
+      const cs = getComputedStyle(wrapperRef.current);
+      wrapperPaddingYRef.current =
+        parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    }
+  }, [wrapperRef]);
 
   useEffect(() => {
     return () => {
@@ -59,7 +68,10 @@ export function useContentEditable({
     if (!wrapper || !div) return;
 
     wrapper.style.height = `${minHeight}px`;
-    const clamped = Math.min(Math.max(div.scrollHeight, minHeight), maxHeight);
+    const clamped = Math.min(
+      Math.max(div.scrollHeight + wrapperPaddingYRef.current, minHeight),
+      maxHeight
+    );
     wrapper.style.height = `${clamped}px`;
   }, [wrapperRef, minHeight, maxHeight]);
 

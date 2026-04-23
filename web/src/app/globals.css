@@ -493,4 +493,7 @@ textarea {
   color: var(--text-03);
   pointer-events: none;
   position: absolute;
+  top: 0;
+  left: 0;
+  padding: inherit;
 }

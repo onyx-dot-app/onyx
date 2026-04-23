@@ -55,7 +55,8 @@ export function insertTextAtCursor(element: HTMLElement, text: string): string {
 export function getTextContent(element: HTMLElement): string {
   const parts: string[] = [];
   const nodes = Array.from(element.childNodes);
-  for (const node of nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
     if (node.nodeType === Node.TEXT_NODE) {
       parts.push(node.textContent ?? "");
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -63,6 +64,11 @@ export function getTextContent(element: HTMLElement): string {
       if (el.tagName === "BR") {
         parts.push("\n");
       } else {
+        // Block elements (e.g. <div> from Chrome's Enter) get a leading newline
+        // unless they're the first child
+        if (i > 0) {
+          parts.push("\n");
+        }
         parts.push(getTextContent(el));
       }
     }

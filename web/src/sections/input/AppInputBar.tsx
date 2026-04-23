@@ -21,6 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import { getTextContent } from "@/lib/contentEditable";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -423,7 +424,7 @@ const AppInputBar = React.memo(
     const handleContentEditableInput = useCallback(
       (event: React.FormEvent<HTMLDivElement>) => {
         handleInput(event);
-        const text = event.currentTarget.innerText ?? "";
+        const text = getTextContent(event.currentTarget as HTMLElement);
         if (text.startsWith("/")) {
           setShowPrompts(true);
           setPromptFilterQuery(text.slice(1));
