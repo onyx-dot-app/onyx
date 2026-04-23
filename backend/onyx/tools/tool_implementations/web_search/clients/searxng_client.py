@@ -1,6 +1,7 @@
 import requests
-from fastapi import HTTPException
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
 )
@@ -64,22 +65,20 @@ class SearXNGClient(WebSearchProvider):
                 f"HTTPError: status_code={status_code}, e.response={e.response.status_code if e.response else None}, error={e}"
             )
             if status_code == 429:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "This SearXNG instance does not allow API requests. "
-                        "Use a private instance and configure it to allow bots."
-                    ),
+                raise OnyxError(
+                    OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+                    "This SearXNG instance does not allow API requests. "
+                    "Use a private instance and configure it to allow bots.",
                 ) from e
             elif status_code == 404:
-                raise HTTPException(
-                    status_code=400,
-                    detail="This SearXNG instance was not found. Please check the URL and try again.",
+                raise OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "This SearXNG instance was not found. Please check the URL and try again.",
                 ) from e
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"SearXNG connection failed (status {status_code}): {str(e)}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    f"SearXNG connection failed (status {status_code}): {str(e)}",
                 ) from e
 
         # Not a sure way to check if this is a SearXNG instance as opposed to some other website that
@@ -91,9 +90,9 @@ class SearXNGClient(WebSearchProvider):
             config.get("brand", {}).get("GIT_URL")
             != "https://github.com/searxng/searxng"
         ):
-            raise HTTPException(
-                status_code=400,
-                detail="This does not appear to be a SearXNG instance. Please check the URL and try again.",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "This does not appear to be a SearXNG instance. Please check the URL and try again.",
             )
 
         # Test that JSON mode is enabled by performing a simple search
@@ -122,16 +121,14 @@ class SearXNGClient(WebSearchProvider):
         except requests.HTTPError as e:
             status_code = e.response.status_code if e.response is not None else None
             if status_code == 403:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Got a 403 response when trying to reach SearXNG. This likely means that "
-                        "JSON format is not enabled on this SearXNG instance. "
-                        "Please enable JSON format in your SearXNG settings.yml file by adding "
-                        "'json' to the 'search.formats' list."
-                    ),
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Got a 403 response when trying to reach SearXNG. This likely means that "
+                    "JSON format is not enabled on this SearXNG instance. "
+                    "Please enable JSON format in your SearXNG settings.yml file by adding "
+                    "'json' to the 'search.formats' list.",
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to test search on SearXNG instance (status {status_code}): {str(e)}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"Failed to test search on SearXNG instance (status {status_code}): {str(e)}",
             ) from e

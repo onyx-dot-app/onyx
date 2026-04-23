@@ -186,7 +186,7 @@ def check_llm_cost_limit_for_provider(
         llm_provider_api_key: The API key of the LLM provider that will be used
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED if limit exceeded
     """
     if not is_usage_limits_enabled():
         return
@@ -210,7 +210,7 @@ def check_usage_and_raise(
     pending_amount: float | int = 0,
 ) -> None:
     """
-    Check if usage limit would be exceeded and raise HTTPException if so.
+    Check if usage limit would be exceeded and raise OnyxError if so.
 
     Args:
         db_session: Database session for the tenant
@@ -219,7 +219,7 @@ def check_usage_and_raise(
         pending_amount: Amount about to be used
 
     Raises:
-        HTTPException: 429 Too Many Requests if limit exceeded
+        OnyxError: RATE_LIMITED if limit exceeded
     """
     if not is_usage_limits_enabled():
         return
