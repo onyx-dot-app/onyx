@@ -34,7 +34,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 
-
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
 

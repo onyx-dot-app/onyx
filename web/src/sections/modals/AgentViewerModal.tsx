@@ -7,12 +7,7 @@ import { FullPersona } from "@/app/admin/agents/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import {
-  Card as CardLayout,
-  Content,
-  ContentAction,
-  InputHorizontal,
-} from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
@@ -80,19 +75,14 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         ) : undefined
       }
     >
-      <CardLayout.Header
-        headerPadding="sm"
-        headerChildren={
-          <ContentAction
-            icon={serverIcon}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-          />
-        }
-        topRightChildren={
+      <ContentAction
+        icon={serverIcon}
+        title={server.name}
+        description={server.description}
+        sizePreset="main-ui"
+        variant="section"
+        padding="lg"
+        rightChildren={
           <Button
             prominence="internal"
             rightIcon={expanded ? SvgFold : SvgExpand}
@@ -112,18 +102,13 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <CardLayout.Header
-        headerPadding="sm"
-        headerChildren={
-          <Content
-            icon={SvgActions}
-            title={tool.display_name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-        }
+    <Card border="solid" rounding="lg" padding="md">
+      <Content
+        icon={SvgActions}
+        title={tool.display_name}
+        description={tool.description}
+        sizePreset="main-ui"
+        variant="section"
       />
     </Card>
   );

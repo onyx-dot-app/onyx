@@ -21,7 +21,6 @@ from onyx.server.documents.models import ChunkInfo
 from onyx.server.documents.models import DocumentInfo
 from onyx.server.utils_vector_db import require_vector_db
 
-
 router = APIRouter(prefix="/document")
 
 

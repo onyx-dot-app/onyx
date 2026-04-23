@@ -309,7 +309,7 @@ python-dotenv==1.2.2
     # via
     #   litellm
     #   pydantic-settings
-python-multipart==0.0.22
+python-multipart==0.0.26
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
     # via mcp

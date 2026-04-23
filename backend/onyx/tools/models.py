@@ -23,7 +23,6 @@ from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
-
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
 

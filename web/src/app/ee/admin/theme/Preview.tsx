@@ -5,7 +5,7 @@ import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { cn, ensureHrefProtocol } from "@/lib/utils";
-import { OnyxIcon } from "@/components/icons/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
@@ -88,7 +88,7 @@ function PreviewLogo({
       className={cn("flex-shrink-0 rounded-full", className)}
     />
   ) : (
-    <OnyxIcon size={size} className={cn("flex-shrink-0", className)} />
+    <SvgOnyxLogo size={size} className={cn("flex-shrink-0", className)} />
   );
 }
 

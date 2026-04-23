@@ -52,6 +52,7 @@ from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
@@ -927,6 +928,38 @@ def delete_documents__no_commit(db_session: Session, document_ids: list[str]) ->
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 
 
+def get_file_ids_for_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> list[str]:
+    """Return the non-null `file_id` values attached to the given documents."""
+    if not document_ids:
+        return []
+    rows = (
+        db_session.query(DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return [row.file_id for row in rows if row.file_id is not None]
+
+
+def get_document_id_to_file_id_map(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, str]:
+    """Return a `{document_id: file_id}` map for docs that have a file_id."""
+    if not document_ids:
+        return {}
+    rows = (
+        db_session.query(DbDocument.id, DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return {doc_id: file_id for doc_id, file_id in rows}
+
+
 def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
@@ -970,6 +1003,27 @@ def delete_documents_complete__no_commit(
     delete_documents__no_commit(db_session, document_ids)
 
 
+def delete_documents_complete(
+    db_session: Session,
+    document_ids: list[str],
+) -> None:
+    """Fully remove documents AND best-effort delete their attached files.
+
+    To be used when a document is finished and should be disposed of.
+    Removes the row and the potentially associated file.
+    """
+    file_ids_to_delete = get_file_ids_for_document_ids(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    delete_documents_complete__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    db_session.commit()
+    delete_files_best_effort(file_ids_to_delete)
+
+
 def delete_all_documents_for_connector_credential_pair(
     db_session: Session,
     connector_id: int,
@@ -1001,10 +1055,9 @@ def delete_all_documents_for_connector_credential_pair(
         if not document_ids:
             break
 
-        delete_documents_complete__no_commit(
+        delete_documents_complete(
             db_session=db_session, document_ids=list(document_ids)
         )
-        db_session.commit()
 
         if time.monotonic() - start_time > timeout:
             raise RuntimeError("Timeout reached while deleting documents")

@@ -22,7 +22,7 @@ export function NewSlackBotForm() {
       <SettingsLayouts.Header
         icon={SvgSlack}
         title="New Slack Bot"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>

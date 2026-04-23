@@ -403,6 +403,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             await enforce_signup_rate_limit(request)
 
         # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaAction
         from onyx.auth.captcha import CaptchaVerificationError
         from onyx.auth.captcha import is_captcha_enabled
         from onyx.auth.captcha import verify_captcha_token
@@ -418,9 +419,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 captcha_token = request.headers.get("X-Captcha-Token")
 
             try:
-                await verify_captcha_token(
-                    captcha_token or "", expected_action="signup"
-                )
+                await verify_captcha_token(captcha_token or "", CaptchaAction.SIGNUP)
             except CaptchaVerificationError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
@@ -1102,7 +1101,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
+            from fastapi import HTTPException
+            from fastapi import status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

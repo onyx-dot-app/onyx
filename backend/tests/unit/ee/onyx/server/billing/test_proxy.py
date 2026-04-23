@@ -7,10 +7,11 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from ee.onyx.server.license.models import LicensePayload
+
 from .conftest import make_license_payload
 from .conftest import make_mock_http_client
 from .conftest import make_mock_response
-from ee.onyx.server.license.models import LicensePayload
 
 
 class TestProxySeatUpdate:

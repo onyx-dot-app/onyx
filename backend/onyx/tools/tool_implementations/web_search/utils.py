@@ -9,7 +9,6 @@ from onyx.tools.tool_implementations.open_url.snippet_matcher import (
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
-
 TRUNCATED_CONTENT_SUFFIX = " [...truncated]"
 TRUNCATED_CONTENT_PREFIX = "[...truncated] "
 

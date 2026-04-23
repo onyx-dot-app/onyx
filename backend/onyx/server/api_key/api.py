@@ -14,7 +14,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
 
-
 router = APIRouter(prefix="/admin/api-key")
 
 

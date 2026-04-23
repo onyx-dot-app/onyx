@@ -8,7 +8,6 @@ from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 
-
 # Always retain at least this many attempts per connector/search settings pair
 NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP = 10
 

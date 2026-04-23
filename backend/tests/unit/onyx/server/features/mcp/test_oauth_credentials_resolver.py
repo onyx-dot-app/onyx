@@ -7,14 +7,21 @@ credential field as unchanged, the backend reuses the stored value instead of
 overwriting it with whatever (likely masked) string the form replayed.
 """
 
+from typing import Literal
+
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
 from onyx.server.features.mcp.api import _build_oauth_admin_config_data
+from onyx.server.features.mcp.api import _build_oauth_admin_config_data_for_update
 from onyx.server.features.mcp.api import _resolve_oauth_credentials
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.utils.encryption import mask_string
+
+TokenEndpointAuthMethod = Literal[
+    "none", "client_secret_post", "client_secret_basic", "private_key_jwt"
+]
 
 
 def _make_existing_client(
@@ -29,6 +36,37 @@ def _make_existing_client(
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
         token_endpoint_auth_method=("client_secret_post" if client_secret else "none"),
+    )
+
+
+def _make_dcr_registered_client(
+    *,
+    client_id: str = "dcr-client-id",
+    client_secret: str | None = "dcr-client-secret",
+    token_endpoint_auth_method: TokenEndpointAuthMethod = "client_secret_basic",
+) -> OAuthClientInformationFull:
+    """Build a client_info that looks like a real DCR response — with the
+    provider-managed fields the merge helper is responsible for preserving.
+
+    NOTE: the MCP SDK's `OAuthClientInformationFull` only models a subset of
+    the DCR response (RFC 7591). RFC 7592 fields like `registration_access_token`
+    and `registration_client_uri` are not on the model and are silently
+    dropped at validate time. The merge helper can therefore only preserve
+    fields that the SDK actually models — primarily `client_id_issued_at`,
+    `client_secret_expires_at`, the negotiated `token_endpoint_auth_method`,
+    and metadata like `client_name`.
+    """
+    return OAuthClientInformationFull(
+        client_id=client_id,
+        client_secret=client_secret,
+        client_id_issued_at=1_700_000_000,
+        client_secret_expires_at=1_900_000_000,
+        client_name="DCR Registered Client",
+        redirect_uris=[AnyUrl("https://idp.example.com/legacy-callback")],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        token_endpoint_auth_method=token_endpoint_auth_method,
+        scope="openid profile",
     )
 
 
@@ -140,11 +178,9 @@ class TestResolveOAuthCredentials:
             )
 
     def test_no_existing_client_passes_request_values_through(self) -> None:
-        # Create flow: nothing is stored yet; both flags are False (the default)
-        # but there's nothing to fall back to. The resolver should resolve to
-        # None for both fields, leaving the caller to handle the create path
-        # explicitly (which `_upsert_mcp_server` does by only invoking the
-        # resolver when an `existing_client` is present).
+        # Nothing stored yet but the form replayed defaults (both *_changed False).
+        # `_connect_oauth` always runs the resolver; we must keep the submitted
+        # credentials so OAuth config is not rebuilt empty after upsert.
         resolved_id, resolved_secret = _resolve_oauth_credentials(
             request_client_id="user-typed-id",
             request_client_id_changed=False,
@@ -153,8 +189,8 @@ class TestResolveOAuthCredentials:
             existing_client=None,
         )
 
-        assert resolved_id is None
-        assert resolved_secret is None
+        assert resolved_id == "user-typed-id"
+        assert resolved_secret == "user-typed-secret"
 
     def test_no_existing_client_with_changed_flags_uses_request_values(self) -> None:
         resolved_id, resolved_secret = _resolve_oauth_credentials(
@@ -205,3 +241,172 @@ class TestBuildOAuthAdminConfigData:
         assert client_info_dict["client_id"] == "confidential-id"
         assert client_info_dict["client_secret"] == "confidential-secret"
         assert client_info_dict["token_endpoint_auth_method"] == "client_secret_post"
+
+
+class TestBuildOAuthAdminConfigDataForUpdate:
+    """Tests for the merge variant that preserves provider-managed fields
+    (`client_id_issued_at`, `client_secret_expires_at`,
+    `token_endpoint_auth_method`, etc.) when re-saving OAuth config.
+
+    See `plans/mcp-oauth-resubmit-preserve-client-info.md`.
+    """
+
+    def test_only_client_secret_changed_preserves_dcr_metadata(self) -> None:
+        existing = _make_dcr_registered_client(
+            client_id="dcr-id",
+            client_secret="old-secret",
+            token_endpoint_auth_method="client_secret_basic",
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="dcr-id",
+            client_secret="new-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        # admin-managed fields reflect the update
+        assert client_info_dict["client_id"] == "dcr-id"
+        assert client_info_dict["client_secret"] == "new-secret"
+        # provider-managed fields are preserved
+        assert client_info_dict["client_id_issued_at"] == 1_700_000_000
+        assert client_info_dict["client_secret_expires_at"] == 1_900_000_000
+        assert client_info_dict["token_endpoint_auth_method"] == "client_secret_basic"
+        assert client_info_dict["client_name"] == "DCR Registered Client"
+
+    def test_client_id_changed_discards_dcr_metadata(self) -> None:
+        existing = _make_dcr_registered_client(
+            client_id="old-dcr-id",
+            client_secret="old-secret",
+            token_endpoint_auth_method="client_secret_basic",
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="brand-new-id",
+            client_secret="brand-new-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        assert client_info_dict["client_id"] == "brand-new-id"
+        assert client_info_dict["client_secret"] == "brand-new-secret"
+        # DCR metadata tied to the OLD client_id is stale; we should start
+        # fresh from the template.
+        assert client_info_dict.get("client_id_issued_at") is None
+        assert client_info_dict.get("client_secret_expires_at") is None
+        assert client_info_dict.get("client_name") is None
+        # Template path negotiates auth method based on secret presence.
+        assert client_info_dict["token_endpoint_auth_method"] == "client_secret_post"
+
+    def test_existing_without_dcr_metadata_resubmit_succeeds(self) -> None:
+        # Manually-entered confidential client with no provider-managed
+        # fields to preserve: the merge path should still cleanly update
+        # the secret without erroring out.
+        existing = _make_existing_client(
+            client_id="manual-id",
+            client_secret="old-secret",
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="manual-id",
+            client_secret="new-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        assert client_info_dict["client_id"] == "manual-id"
+        assert client_info_dict["client_secret"] == "new-secret"
+        assert client_info_dict["token_endpoint_auth_method"] == "client_secret_post"
+        assert client_info_dict.get("client_id_issued_at") is None
+
+    def test_no_client_id_returns_empty_config(self) -> None:
+        # A resubmit that clears the client_id (e.g., admin wants to fall
+        # back to DCR) collapses to the template's empty-config behavior
+        # rather than carrying the merged dict forward with a None id.
+        existing = _make_dcr_registered_client(client_id="dcr-id")
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id=None,
+            client_secret=None,
+            existing_client=existing,
+        )
+
+        assert config_data == {"headers": {}}
+        assert MCPOAuthKeys.CLIENT_INFO.value not in config_data
+
+    def test_public_to_confidential_keeps_negotiated_auth_method(self) -> None:
+        # Existing registration was negotiated as a public client
+        # (token_endpoint_auth_method="none"). Admin types a brand-new
+        # secret without changing the client_id. The provider-negotiated
+        # auth method is preserved verbatim — admin must explicitly
+        # re-register the client with the IdP to switch flows.
+        existing = _make_dcr_registered_client(
+            client_id="public-id",
+            client_secret=None,
+            token_endpoint_auth_method="none",
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="public-id",
+            client_secret="newly-typed-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        assert client_info_dict["client_id"] == "public-id"
+        assert client_info_dict["client_secret"] == "newly-typed-secret"
+        assert client_info_dict["token_endpoint_auth_method"] == "none"
+
+    def test_stale_none_auth_method_is_healed_from_secret_presence(self) -> None:
+        # Before the helper enforced `token_endpoint_auth_method`, records
+        # could be persisted with it as None. The SDK silently omits the
+        # client secret on token exchange in that case, which manifests as
+        # `invalid_client` from the IdP. The merge path heals these records
+        # by deriving the method from the resolved client_secret.
+        existing = OAuthClientInformationFull(
+            client_id="legacy-id",
+            client_secret="legacy-secret",
+            redirect_uris=[AnyUrl("https://example.com/callback")],
+            grant_types=["authorization_code", "refresh_token"],
+            response_types=["code"],
+            token_endpoint_auth_method=None,
+        )
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="legacy-id",
+            client_secret="legacy-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        assert client_info_dict["token_endpoint_auth_method"] == "client_secret_post"
+
+    def test_redirect_uris_and_scope_are_refreshed_from_defaults(self) -> None:
+        # The admin-managed fields (redirect_uris, scope) should always be
+        # rewritten from our deployment config, not preserved from the
+        # stored value — otherwise we'd be stuck with whatever a
+        # mis-deployed callback URL was originally registered as.
+        existing = _make_dcr_registered_client(client_id="dcr-id")
+
+        config_data = _build_oauth_admin_config_data_for_update(
+            client_id="dcr-id",
+            client_secret="new-secret",
+            existing_client=existing,
+        )
+
+        client_info_dict = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        assert client_info_dict is not None
+        # redirect_uris was overwritten from our WEB_DOMAIN-derived default
+        assert client_info_dict["redirect_uris"] != [
+            "https://idp.example.com/legacy-callback"
+        ]
+        assert any(
+            "/mcp/oauth/callback" in str(u) for u in client_info_dict["redirect_uris"]
+        )
+        # scope is reset to REQUESTED_SCOPE (currently None)
+        assert client_info_dict.get("scope") is None

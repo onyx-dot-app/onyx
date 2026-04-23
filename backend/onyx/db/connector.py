@@ -46,8 +46,8 @@ def check_user_files_exist(db_session: Session) -> bool:
     when there are no regular connectors but there are user files
     (User Knowledge mode).
     """
-    from onyx.db.models import UserFile
     from onyx.db.enums import UserFileStatus
+    from onyx.db.models import UserFile
 
     stmt = select(exists(UserFile).where(UserFile.status == UserFileStatus.COMPLETED))
     result = db_session.execute(stmt)

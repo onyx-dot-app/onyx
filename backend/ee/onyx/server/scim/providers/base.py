@@ -25,7 +25,6 @@ from ee.onyx.server.scim.models import ScimUserResource
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 
-
 logger = logging.getLogger(__name__)
 
 COMMON_IGNORED_PATCH_PATHS: frozenset[str] = frozenset(

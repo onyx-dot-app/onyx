@@ -7,7 +7,6 @@ from onyx.voice.providers.openai import _http_to_ws_url
 from onyx.voice.providers.openai import OpenAIRealtimeMessageType
 from onyx.voice.providers.openai import OpenAIVoiceProvider
 
-
 # --- _http_to_ws_url ---
 
 

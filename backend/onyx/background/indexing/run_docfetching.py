@@ -60,6 +60,7 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.file_store.staging import build_raw_file_callback
 from onyx.file_store.staging import RawFileCallback
+from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
@@ -284,6 +285,18 @@ def run_docfetching_entrypoint(
         cc_pair_id=connector_credential_pair_id,
         tenant_id=tenant_id,
     )
+
+    # Reap STAGING orphans from prior attempts on this cc_pair BEFORE we
+    # start fetching. Catches the crashed-worker case where the previous
+    # attempt couldn't run its own `finally` cleanup (OOM kill, pod
+    # eviction). Scoped by cc_pair + tenant so the sweep stays bounded.
+    with get_session_with_current_tenant() as reap_session:
+        reap_prior_attempt_staged_files(
+            current_attempt_id=index_attempt_id,
+            cc_pair_id=connector_credential_pair_id,
+            tenant_id=tenant_id,
+            db_session=reap_session,
+        )
 
     connector_document_extraction(
         app,

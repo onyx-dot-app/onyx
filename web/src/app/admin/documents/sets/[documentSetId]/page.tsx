@@ -101,7 +101,7 @@ export default function Page(props: {
       <SettingsLayouts.Header
         icon={route.icon}
         title="Edit Document Set"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>

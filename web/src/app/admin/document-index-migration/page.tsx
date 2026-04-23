@@ -229,7 +229,7 @@ export default function Page() {
         icon={route.icon}
         title={route.title}
         description="Monitor the migration from Vespa to OpenSearch and control the active retrieval source."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <MigrationStatusSection />

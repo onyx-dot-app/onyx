@@ -65,7 +65,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title="New Document Set"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>

@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    extract_and_stage_tabular_file,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
@@ -43,6 +46,7 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -50,6 +54,12 @@ from onyx.utils.variable_functionality import (
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
+
+
+class FileExtractionResult(BaseModel):
+    sections: list[TextSection | ImageSection | TabularSection]
+    staged_file_id: str | None = None
+
 
 # Cache for folder path lookups to avoid redundant API calls
 # Maps folder_id -> (folder_name, parent_id)
@@ -300,7 +310,8 @@ def _download_and_extract_sections_basic(
     service: GoogleDriveService,
     allow_images: bool,
     size_threshold: int,
-) -> list[TextSection | ImageSection | TabularSection]:
+    raw_file_callback: RawFileCallback | None = None,
+) -> FileExtractionResult:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
     file_name = file["name"]
@@ -313,10 +324,35 @@ def _download_and_extract_sections_basic(
     def response_call() -> bytes:
         return download_request(service, file_id, size_threshold)
 
+    def _extract_tabular(
+        raw_bytes: bytes, name: str, content_type: str
+    ) -> FileExtractionResult:
+        staged_file_id: str | None = None
+        if raw_file_callback is not None:
+            result = extract_and_stage_tabular_file(
+                file=io.BytesIO(raw_bytes),
+                file_name=name,
+                content_type=content_type,
+                raw_file_callback=raw_file_callback,
+                link=link,
+            )
+            tabular_sections = result.sections
+            staged_file_id = result.staged_file_id
+        else:
+            tabular_sections = tabular_file_to_sections(
+                io.BytesIO(raw_bytes),
+                file_name=name,
+                link=link,
+            )
+        sections: list[TextSection | ImageSection | TabularSection] = list(
+            tabular_sections
+        )
+        return FileExtractionResult(sections=sections, staged_file_id=staged_file_id)
+
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
         if not allow_images:
-            return []
+            return FileExtractionResult(sections=[])
 
         # Store images for later processing
         sections: list[TextSection | ImageSection | TabularSection] = []
@@ -332,7 +368,7 @@ def _download_and_extract_sections_basic(
             sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process image {file_name}: {e}")
-        return sections
+        return FileExtractionResult(sections=sections)
 
     # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
@@ -343,37 +379,35 @@ def _download_and_extract_sections_basic(
         response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
-            return []
+            return FileExtractionResult(sections=[])
 
         if export_mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
             # Synthesize an extension on the filename
             ext = ".xlsx" if export_mime_type == SPREADSHEET_MIME_TYPE else ".csv"
-            return list(
-                tabular_file_to_sections(
-                    io.BytesIO(response),
-                    file_name=f"{file_name}{ext}",
-                    link=link,
-                )
+            return _extract_tabular(
+                raw_bytes=response,
+                name=f"{file_name}{ext}",
+                content_type=export_mime_type,
             )
 
         text = response.decode("utf-8")
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     # Process based on mime type
     if mime_type == "text/plain":
         try:
             text = response_call().decode("utf-8")
-            return [TextSection(link=link, text=text)]
+            return FileExtractionResult(sections=[TextSection(link=link, text=text)])
         except UnicodeDecodeError as e:
             logger.warning(f"Failed to extract text from {file_name}: {e}")
-            return []
+            return FileExtractionResult(sections=[])
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
         text, _ = read_docx_file(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -389,12 +423,8 @@ def _download_and_extract_sections_basic(
             and not is_tabular_file(file_name)
         ):
             tabular_file_name = f"{file_name}.xlsx"
-        return list(
-            tabular_file_to_sections(
-                io.BytesIO(response_call()),
-                file_name=tabular_file_name,
-                link=link,
-            )
+        return _extract_tabular(
+            response_call(), name=tabular_file_name, content_type=mime_type
         )
 
     elif (
@@ -402,7 +432,9 @@ def _download_and_extract_sections_basic(
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
         text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
-        return [TextSection(link=link, text=text)] if text else []
+        return FileExtractionResult(
+            sections=[TextSection(link=link, text=text)] if text else []
+        )
 
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
@@ -422,20 +454,20 @@ def _download_and_extract_sections_basic(
                 pdf_sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process PDF images in {file_name}: {e}")
-        return pdf_sections
+        return FileExtractionResult(sections=pdf_sections)
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
     if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(f"Skipping file {file.get('name')} due to extension.")
-        return []
+        return FileExtractionResult(sections=[])
 
     try:
         text = extract_file_text(io.BytesIO(response_call()), file_name)
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
     except Exception as e:
         logger.warning(f"Failed to extract text from {file_name}: {e}")
-        return []
+        return FileExtractionResult(sections=[])
 
 
 def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
@@ -564,6 +596,7 @@ def convert_drive_item_to_document(
     permission_sync_context: PermissionSyncContext | None,
     retriever_emails: list[str],
     file: GoogleDriveFileType,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
@@ -590,6 +623,7 @@ def convert_drive_item_to_document(
             retriever_email,
             file,
             permission_sync_context,
+            raw_file_callback,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -635,11 +669,13 @@ def _convert_drive_item_to_document(
     # if not specified, we will not sync permissions
     # will also be a no-op if EE is not enabled
     permission_sync_context: PermissionSyncContext | None,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
     """
     sections: list[TextSection | ImageSection | TabularSection] = []
+    staged_file_id: str | None = None
 
     # Only construct these services when needed
     def _get_drive_service() -> GoogleDriveService:
@@ -686,10 +722,17 @@ def _convert_drive_item_to_document(
                         logger.debug(
                             f"found smart chips in {file.get('name')}, aligning with basic sections"
                         )
-                        basic_sections = _download_and_extract_sections_basic(
-                            file, _get_drive_service(), allow_images, size_threshold
+                        basic_extraction = _download_and_extract_sections_basic(
+                            file,
+                            _get_drive_service(),
+                            allow_images,
+                            size_threshold,
+                            raw_file_callback,
                         )
-                        sections = align_basic_advanced(basic_sections, doc_sections)
+                        sections = align_basic_advanced(
+                            basic_extraction.sections, doc_sections
+                        )
+                        staged_file_id = basic_extraction.staged_file_id
 
             except Exception as e:
                 logger.warning(
@@ -697,9 +740,15 @@ def _convert_drive_item_to_document(
                 )
         # Not Google Doc, attempt basic extraction
         else:
-            sections = _download_and_extract_sections_basic(
-                file, _get_drive_service(), allow_images, size_threshold
+            basic_extraction = _download_and_extract_sections_basic(
+                file,
+                _get_drive_service(),
+                allow_images,
+                size_threshold,
+                raw_file_callback,
             )
+            sections = basic_extraction.sections
+            staged_file_id = basic_extraction.staged_file_id
 
         # If we still don't have any sections, skip this file
         if not sections:
@@ -760,6 +809,7 @@ def _convert_drive_item_to_document(
             ),
             external_access=external_access,
             parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
+            file_id=staged_file_id,
         )
     except Exception as e:
         doc_id = "unknown"

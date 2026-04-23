@@ -38,7 +38,7 @@ import {
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { EmptyMessageCard } from "@opal/components";
-import { Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -119,29 +119,23 @@ function MCPServerCard({
         hasContent ? (
           <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
-              <Card key={tool.id} border="solid" rounding="md" padding="sm">
-                <CardLayout.Header
-                  headerChildren={
-                    <Content
-                      icon={tool.icon}
-                      title={tool.name}
-                      description={tool.description}
-                      sizePreset="main-ui"
-                      variant="section"
+              <Card key={tool.id} border="solid" rounding="md">
+                <InputHorizontal
+                  icon={tool.icon}
+                  title={tool.name}
+                  description={tool.description}
+                  withLabel
+                >
+                  <Tooltip tooltip={authTooltip} side="top">
+                    <Switch
+                      checked={isToolEnabled(tool.id)}
+                      onCheckedChange={(checked) =>
+                        onToggleTool(tool.id, checked)
+                      }
+                      disabled={needsAuth}
                     />
-                  }
-                  topRightChildren={
-                    <Tooltip tooltip={authTooltip} side="top">
-                      <Switch
-                        checked={isToolEnabled(tool.id)}
-                        onCheckedChange={(checked) =>
-                          onToggleTool(tool.id, checked)
-                        }
-                        disabled={needsAuth}
-                      />
-                    </Tooltip>
-                  }
-                />
+                  </Tooltip>
+                </InputHorizontal>
               </Card>
             ))}
           </Section>
@@ -149,28 +143,6 @@ function MCPServerCard({
       }
     >
       <CardLayout.Header
-        headerPadding="sm"
-        headerChildren={
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <Tooltip tooltip={authTooltip} side="top">
-                <Switch
-                  checked={serverEnabled}
-                  onCheckedChange={(checked) =>
-                    onToggleTools(allToolIds, checked)
-                  }
-                  disabled={needsAuth}
-                />
-              </Tooltip>
-            }
-          />
-        }
         bottomChildren={
           tools.length > 0 ? (
             <Section flexDirection="row" gap={0.5}>
@@ -192,7 +164,29 @@ function MCPServerCard({
             </Section>
           ) : undefined
         }
-      />
+      >
+        <div className="p-2">
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <Tooltip tooltip={authTooltip} side="top">
+                <Switch
+                  checked={serverEnabled}
+                  onCheckedChange={(checked) =>
+                    onToggleTools(allToolIds, checked)
+                  }
+                  disabled={needsAuth}
+                />
+              </Tooltip>
+            }
+          />
+        </div>
+      </CardLayout.Header>
     </Card>
   );
 }
@@ -552,7 +546,7 @@ export default function ChatPreferencesPage() {
           icon={route.icon}
           title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>
@@ -888,31 +882,20 @@ export default function ChatPreferencesPage() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <Card
-                          key={tool.id}
-                          border="solid"
-                          rounding="lg"
-                          padding="md"
-                        >
-                          <CardLayout.Header
-                            headerChildren={
-                              <Content
-                                icon={SvgActions}
-                                title={tool.display_name || tool.name}
-                                description={tool.description}
-                                sizePreset="main-ui"
-                                variant="section"
-                              />
-                            }
-                            topRightChildren={
-                              <Switch
-                                checked={isToolEnabled(tool.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleTool(tool.id, checked)
-                                }
-                              />
-                            }
-                          />
+                        <Card key={tool.id} border="solid" rounding="lg">
+                          <InputHorizontal
+                            icon={SvgActions}
+                            title={tool.display_name || tool.name}
+                            description={tool.description}
+                            withLabel
+                          >
+                            <Switch
+                              checked={isToolEnabled(tool.id)}
+                              onCheckedChange={(checked) =>
+                                toggleTool(tool.id, checked)
+                              }
+                            />
+                          </InputHorizontal>
                         </Card>
                       ))}
                     </Section>
@@ -930,36 +913,79 @@ export default function ChatPreferencesPage() {
             <SimpleCollapsible.Content>
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
-                  <InputHorizontal
-                    title="Keep Chat History"
-                    description="Specify how long Onyx should retain chats in your organization."
-                    withLabel
-                  >
-                    <InputSelect
-                      value={
-                        s.maximum_chat_retention_days?.toString() ?? "forever"
-                      }
-                      onValueChange={(value) => {
-                        void saveSettings({
-                          maximum_chat_retention_days:
-                            value === "forever" ? null : parseInt(value, 10),
-                        });
-                      }}
+                  <Section>
+                    <InputHorizontal
+                      title="Keep Chat History"
+                      description="Specify how long Onyx should retain chats in your organization."
+                      withLabel
                     >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="forever">
-                          Forever
-                        </InputSelect.Item>
-                        <InputSelect.Item value="7">7 days</InputSelect.Item>
-                        <InputSelect.Item value="30">30 days</InputSelect.Item>
-                        <InputSelect.Item value="90">90 days</InputSelect.Item>
-                        <InputSelect.Item value="365">
-                          365 days
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
-                  </InputHorizontal>
+                      <InputSelect
+                        value={
+                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                        }
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            maximum_chat_retention_days:
+                              value === "forever" ? null : parseInt(value, 10),
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item value="forever">
+                            Forever
+                          </InputSelect.Item>
+                          <InputSelect.Item value="7">7 days</InputSelect.Item>
+                          <InputSelect.Item value="30">
+                            30 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="90">
+                            90 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="365">
+                            365 days
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+
+                    <InputHorizontal
+                      title="Query History Visibility"
+                      description="Control how your organization's full chat history appears in the Admin Panel."
+                      withLabel
+                    >
+                      <InputSelect
+                        value={s.query_history_type ?? QueryHistoryType.NORMAL}
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            query_history_type: value as QueryHistoryType,
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={QueryHistoryType.NORMAL}
+                            description="All queries are visible to admins and linked to individual users."
+                          >
+                            Show with User Info
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.ANONYMIZED}
+                            description="Queries are visible to admins with user identity removed"
+                          >
+                            Anonymized
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.DISABLED}
+                            description="Query history reporting is disabled."
+                          >
+                            Hidden
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+                  </Section>
                 </Card>
 
                 <Card border="solid" rounding="lg">

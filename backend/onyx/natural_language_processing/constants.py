@@ -8,7 +8,6 @@ of API-based calls to bypass the model server.
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 
-
 # Default model names for different providers
 DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_COHERE_MODEL = "embed-english-light-v3.0"

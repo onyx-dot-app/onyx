@@ -59,6 +59,7 @@ from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
+from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -92,21 +93,11 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.constants import (
-    KEYWORD_QUERY_HYBRID_ALPHA,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_KEYWORD_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_NON_CUSTOM_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_SEMANTIC_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    MAX_CHUNKS_FOR_RELEVANCE,
-)
+from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
+from onyx.tools.tool_implementations.search.constants import LLM_KEYWORD_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import LLM_NON_CUSTOM_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -813,6 +804,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
                 llm_facing_response="",
             )
+
+        # Enrich chunks with `Document.file_id` (Postgres-only metadata not
+        # stored in Vespa).
+        with get_session_with_current_tenant() as enrichment_session:
+            populate_file_ids_on_sections(top_sections, enrichment_session)
 
         # Convert InferenceSections to SearchDocs for emission
         search_docs = convert_inference_sections_to_search_docs(

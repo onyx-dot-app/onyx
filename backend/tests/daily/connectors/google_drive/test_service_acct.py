@@ -58,9 +58,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    PILL_FOLDER_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_ID,
 )
@@ -75,9 +73,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_DRIVE_B_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
@@ -92,19 +88,13 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_2_MY_DRIVE,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_3_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
 
 
 @patch(

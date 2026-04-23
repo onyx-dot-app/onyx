@@ -29,7 +29,6 @@ from onyx.server.metrics.opensearch_search import track_opensearch_search_in_pro
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
-
 CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 
 

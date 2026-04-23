@@ -9,9 +9,7 @@ from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rl_requests,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector

@@ -23,7 +23,6 @@ from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
-
 FILE_READER_TOOL_ID = "FileReaderTool"
 
 

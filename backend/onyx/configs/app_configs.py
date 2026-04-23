@@ -1155,12 +1155,20 @@ INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() ==
 # Enable captcha verification for new user registration
 CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "").lower() == "true"
 
-# Google reCAPTCHA secret key (server-side validation)
-RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
-
-# Minimum score threshold for reCAPTCHA v3 (0.0-1.0, higher = more likely human)
-# 0.5 is the recommended default
+RECAPTCHA_ENTERPRISE_PROJECT_ID = os.environ.get("RECAPTCHA_ENTERPRISE_PROJECT_ID", "")
+RECAPTCHA_ENTERPRISE_API_KEY = os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
+RECAPTCHA_SITE_KEY = os.environ.get("RECAPTCHA_SITE_KEY", "")
+RECAPTCHA_HOSTNAME_ALLOWLIST = frozenset(
+    h.strip()
+    for h in os.environ.get("RECAPTCHA_HOSTNAME_ALLOWLIST", "").split(",")
+    if h.strip()
+)
 RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
+
+# Shared secret for automated health-check clients (e.g. BetterStack Playwright)
+# to bypass login captcha. Empty value = bypass disabled (fail-closed). Sent by
+# the client as the `X-Healthcheck-Token` header and compared constant-time.
+HEALTH_CHECK_BYPASS_TOKEN = os.environ.get("HEALTH_CHECK_BYPASS_TOKEN", "")
 
 # Opt-in per-IP rate limit on /auth/register.
 SIGNUP_RATE_LIMIT_ENABLED = (
