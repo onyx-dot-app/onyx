@@ -157,7 +157,7 @@ export default function Page({ params }: Props) {
     error: channelsError,
     refreshChannels,
   } = useDiscordChannels(guildId);
-  const { personas, isLoading: personasLoading } = useAdminAgents({
+  const { agents, isLoading: personasLoading } = useAdminAgents({
     includeDefault: true,
   });
   const [isUpdating, setIsUpdating] = useState(false);
@@ -365,7 +365,7 @@ export default function Page({ params }: Props) {
                   <InputSelect.Item value="default">
                     Default Agent
                   </InputSelect.Item>
-                  {personas.map((persona) => (
+                  {agents.map((persona) => (
                     <InputSelect.Item
                       key={persona.id}
                       value={persona.id.toString()}
@@ -381,7 +381,7 @@ export default function Page({ params }: Props) {
 
         <GuildDetailContent
           guildId={guildId}
-          personas={personas}
+          personas={agents}
           localChannels={localChannels}
           onChannelUpdate={handleChannelUpdate}
           handleEnableAll={handleEnableAll}

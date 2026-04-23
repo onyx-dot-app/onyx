@@ -140,21 +140,21 @@ function buildColumns(onMutate: () => void) {
 export default function AgentsTable() {
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { personas, isLoading, refresh } = useAdminAgents();
+  const { agents, isLoading, refresh } = useAdminAgents();
 
   const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
-  const nonBuiltinPersonas = useMemo(
-    () => personas.filter((p) => !p.builtin_persona),
-    [personas]
+  const nonBuiltinAgents = useMemo(
+    () => agents.filter((p) => !p.builtin_persona),
+    [agents]
   );
 
-  const { filtered: filteredPersonas, filterBar } =
-    useAgentsFilters(nonBuiltinPersonas);
+  const { filtered: filteredAgents, filterBar } =
+    useAgentsFilters(nonBuiltinAgents);
 
   const agentRows: AgentRow[] = useMemo(
-    () => filteredPersonas.map(toAgentRow),
-    [filteredPersonas]
+    () => filteredAgents.map(toAgentRow),
+    [filteredAgents]
   );
 
   async function handleReorder(
