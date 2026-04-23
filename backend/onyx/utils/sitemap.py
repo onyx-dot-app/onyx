@@ -1,6 +1,7 @@
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from datetime import timezone
 from typing import Set
 from urllib.parse import urljoin
 
@@ -12,14 +13,26 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _parse_lastmod(lastmod_text: str | None) -> datetime | None:
-    """Parse a sitemap ``<lastmod>`` value. Returns None on missing/invalid input."""
+def parse_sitemap_lastmod(lastmod_text: str | None) -> datetime | None:
+    """Parse a sitemap ``<lastmod>`` value into a timezone-aware UTC datetime.
+
+    The sitemap spec permits both full W3C datetimes (``2026-01-15T10:00:00+00:00``)
+    and date-only values (``2024-06-01``). Date-only strings yield a naive datetime
+    from ``dateutil.parser``; to keep downstream ``.timestamp()`` calls consistent
+    across host timezones we treat naive values as UTC midnight and normalize any
+    aware value to UTC.
+
+    Returns ``None`` on missing or unparseable input.
+    """
     if not lastmod_text:
         return None
     try:
-        return dateutil_parser.parse(lastmod_text.strip())
+        parsed = dateutil_parser.parse(lastmod_text.strip())
     except (ValueError, TypeError, OverflowError):
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _get_sitemap_locations_from_robots(base_url: str) -> Set[str]:
@@ -69,7 +82,7 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
                 if loc_el is None or not loc_el.text:
                     continue
                 lastmod_el = url_el.find(f"{ns}lastmod")
-                urls[loc_el.text] = _parse_lastmod(
+                urls[loc_el.text] = parse_sitemap_lastmod(
                     lastmod_el.text if lastmod_el is not None else None
                 )
 

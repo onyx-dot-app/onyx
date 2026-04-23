@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -82,11 +83,14 @@ def test_extracts_lastmod_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
     result = sitemap._extract_urls_from_sitemap("https://example.com/sitemap.xml")
 
     assert set(result.keys()) == {"https://example.com/a", "https://example.com/b"}
-    assert isinstance(result["https://example.com/a"], datetime)
-    assert result["https://example.com/a"].year == 2026
-    assert result["https://example.com/a"].month == 1
-    assert result["https://example.com/b"] is not None
-    assert result["https://example.com/b"].year == 2024
+    # Full W3C datetime: normalized to UTC.
+    assert result["https://example.com/a"] == datetime(
+        2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc
+    )
+    # Date-only: naive from dateutil, promoted to UTC midnight by our parser.
+    assert result["https://example.com/b"] == datetime(
+        2024, 6, 1, 0, 0, 0, tzinfo=timezone.utc
+    )
 
 
 def test_missing_lastmod_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,8 +102,25 @@ def test_missing_lastmod_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = sitemap._extract_urls_from_sitemap("https://example.com/sitemap.xml")
 
-    assert result["https://example.com/has-lastmod"] is not None
+    assert result["https://example.com/has-lastmod"] == datetime(
+        2026, 2, 2, 0, 0, 0, tzinfo=timezone.utc
+    )
     assert result["https://example.com/no-lastmod"] is None
+
+
+def test_non_utc_offset_normalized_to_utc() -> None:
+    # +05:00 → same wall-clock shifted back 5 hours when normalized to UTC.
+    assert sitemap.parse_sitemap_lastmod("2026-03-10T09:00:00+05:00") == datetime(
+        2026, 3, 10, 4, 0, 0, tzinfo=timezone.utc
+    )
+
+
+def test_naive_input_treated_as_utc() -> None:
+    # Naive datetime string → UTC (not local time).
+    result = sitemap.parse_sitemap_lastmod("2026-03-10T12:34:56")
+    assert result is not None
+    assert result.tzinfo == timezone.utc
+    assert result == datetime(2026, 3, 10, 12, 34, 56, tzinfo=timezone.utc)
 
 
 def test_malformed_lastmod_is_none_not_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,5 +154,7 @@ def test_sitemapindex_merges_children(monkeypatch: pytest.MonkeyPatch) -> None:
         "https://example.com/child-a",
         "https://example.com/child-b",
     }
-    assert result["https://example.com/child-a"] is not None
+    assert result["https://example.com/child-a"] == datetime(
+        2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc
+    )
     assert result["https://example.com/child-b"] is None

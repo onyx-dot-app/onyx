@@ -47,6 +47,7 @@ from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.sitemap import parse_sitemap_lastmod
 from onyx.utils.web_content import extract_pdf_text
 from onyx.utils.web_content import is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
@@ -342,18 +343,6 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def _parse_sitemap_lastmod(lastmod_text: str | None) -> datetime | None:
-    """Parse a ``<lastmod>`` value; return None on missing/invalid input."""
-    if not lastmod_text:
-        return None
-    try:
-        from dateutil import parser as dateutil_parser
-
-        return dateutil_parser.parse(lastmod_text.strip())
-    except (ValueError, TypeError, OverflowError):
-        return None
-
-
 def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
     """Return a mapping of URL → parsed ``<lastmod>`` (or None) for the sitemap.
 
@@ -376,7 +365,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
                 continue
             lastmod_tag = url_tag.find("lastmod")
             urls[_ensure_absolute_url(sitemap_url, loc_tag.text)] = (
-                _parse_sitemap_lastmod(lastmod_tag.text if lastmod_tag else None)
+                parse_sitemap_lastmod(lastmod_tag.text if lastmod_tag else None)
             )
 
         # Fallback: some sitemaps (or the input URL itself) emit bare <loc> tags
@@ -833,7 +822,6 @@ class WebConnector(LoadConnector, PollConnector, SlimConnector):
                 batch = []
 
         if batch:
-            session_ctx.stop()
             session_ctx.at_least_one_doc = True
             yield batch  # ty: ignore[invalid-yield]
 
