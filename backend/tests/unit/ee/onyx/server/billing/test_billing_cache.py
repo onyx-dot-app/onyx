@@ -172,6 +172,31 @@ def test_corrupt_cache_entry_is_refetched_from_cp() -> None:
     redis.setex.assert_called_once()
 
 
+def test_pydantic_validation_error_on_deserialize_refetches_and_overwrites() -> None:
+    """Schema-drift case: valid JSON envelope whose payload no longer matches
+    the current BillingInformation schema. Pydantic raises ``ValidationError``,
+    which is NOT a subclass of ``ValueError`` in v2 — the cache layer must
+    still treat it as a corrupt entry, refetch from CP, and overwrite.
+    """
+    # Valid JSON + correct envelope shape, but payload is missing every
+    # required BillingInformation field → ValidationError on model construction.
+    cached_bytes = (
+        b'{"type":"billing","payload":{"stripe_subscription_id":"sub_stale"}}'
+    )
+    redis = _fake_redis(get_return=cached_bytes)
+    billing = _billing("active")
+
+    with (
+        patch.object(bc, "get_shared_redis_client", return_value=redis),
+        patch.object(bc, "fetch_billing_information", return_value=billing) as cp_fetch,
+    ):
+        result = cached_fetch_billing_information("tenant_abc")
+
+    assert result == billing
+    cp_fetch.assert_called_once_with("tenant_abc")
+    redis.setex.assert_called_once()
+
+
 def test_tenant_keys_are_isolated() -> None:
     """Cache keys must not collide across tenants."""
     redis = _fake_redis(get_return=None)
