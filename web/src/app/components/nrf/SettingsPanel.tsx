@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
+  ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 
 interface SettingRowProps {
@@ -95,7 +96,8 @@ export const SettingsPanel = ({
 }) => {
   const { useOnyxAsNewTab } = useNRFPreferences();
   const { theme, setTheme } = useTheme();
-  const { user, updateUserChatBackground } = useUser();
+  const { user, updateUserChatBackground, updateUserThemePreference } =
+    useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
@@ -104,10 +106,12 @@ export const SettingsPanel = ({
     setTheme(isDark ? "light" : "dark");
   };
 
-  const handleBackgroundChange = (backgroundId: string) => {
-    updateUserChatBackground(
-      backgroundId === CHAT_BACKGROUND_NONE ? null : backgroundId
-    );
+  const handleBackgroundChange = (bg: ChatBackgroundOption) => {
+    updateUserChatBackground(bg.id === CHAT_BACKGROUND_NONE ? null : bg.id);
+    if (bg.theme) {
+      setTheme(bg.theme);
+      updateUserThemePreference(bg.theme);
+    }
   };
 
   return (
@@ -191,7 +195,7 @@ export const SettingsPanel = ({
                   label={bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
-                  onClick={() => handleBackgroundChange(bg.id)}
+                  onClick={() => handleBackgroundChange(bg)}
                 />
               ))}
             </div>
