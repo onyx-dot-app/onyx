@@ -5,6 +5,7 @@ from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -987,7 +988,7 @@ class TestLitellmModelDetailsModelInfo:
     """Unit tests for LitellmModelDetails model_info parsing (#9959)."""
 
     @staticmethod
-    def _details(model_info: dict | None) -> LitellmModelDetails:
+    def _details(model_info: dict[str, Any] | None) -> LitellmModelDetails:
         return LitellmModelDetails(
             id="m",
             object="model",
