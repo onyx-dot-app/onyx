@@ -19,6 +19,7 @@ from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
+from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
@@ -148,6 +149,126 @@ class TestGetOllamaAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+    def test_max_input_tokens_from_parameters_num_ctx(self) -> None:
+        """Regression #9364: max_input_tokens comes from parameters.num_ctx,
+        not model_info[<arch>.context_length]. Sending the architectural max
+        as num_ctx evicts the model from VRAM on consumer hardware."""
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        mock_session = MagicMock()
+        show_response = {
+            "model_info": {
+                # Architectural ceiling — must be ignored by the fix.
+                "general.architecture": "qwen3moe",
+                "qwen3moe.context_length": 262144,
+            },
+            "capabilities": ["completion"],
+            "parameters": "num_ctx                        8192\nstop <|im_start|>\n",
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = {
+                "models": [{"name": "qwen3-30b-a3b-8k:latest"}]
+            }
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens == 8192
+
+    def test_max_input_tokens_none_when_num_ctx_absent(self) -> None:
+        """When no num_ctx is declared in parameters, we leave max_input_tokens
+        unset (None) rather than falling back to the architectural ceiling."""
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        mock_session = MagicMock()
+        show_response = {
+            "model_info": {
+                "general.architecture": "qwen3moe",
+                "qwen3moe.context_length": 262144,
+            },
+            "capabilities": ["completion"],
+            "parameters": "stop <|im_start|>\nstop <|im_end|>\n",
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = {"models": [{"name": "qwen3:latest"}]}
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+
+
+class TestOllamaModelDetailsGetNumCtx:
+    """Unit tests for OllamaModelDetails.get_num_ctx parameter parsing."""
+
+    @staticmethod
+    def _details(parameters: str) -> OllamaModelDetails:
+        return OllamaModelDetails(
+            model_info={}, capabilities=["completion"], parameters=parameters
+        )
+
+    def test_returns_configured_value(self) -> None:
+        assert (
+            self._details(
+                "num_ctx                        8192\nstop <|im_start|>\n"
+            ).get_num_ctx()
+            == 8192
+        )
+
+    def test_absent_returns_none(self) -> None:
+        assert (
+            self._details("stop <|im_start|>\nstop <|im_end|>\n").get_num_ctx() is None
+        )
+
+    def test_empty_string_returns_none(self) -> None:
+        assert self._details("").get_num_ctx() is None
+
+    def test_default_field_is_empty_string(self) -> None:
+        # Real Ollama responses may omit "parameters" entirely.
+        details = OllamaModelDetails(model_info={}, capabilities=["completion"])
+        assert details.get_num_ctx() is None
+
+    def test_malformed_value_returns_none(self) -> None:
+        assert self._details("num_ctx not-a-number\n").get_num_ctx() is None
+
+    def test_zero_or_negative_returns_none(self) -> None:
+        assert self._details("num_ctx 0\n").get_num_ctx() is None
+        assert self._details("num_ctx -1\n").get_num_ctx() is None
+
+    def test_whitespace_variations(self) -> None:
+        # Tabs, multiple spaces, trailing whitespace, blank lines.
+        assert self._details("\n\t  num_ctx\t\t16384  \n\n").get_num_ctx() == 16384
+
+    def test_num_ctx_among_many_other_params(self) -> None:
+        params = (
+            "stop                           <|im_start|>\n"
+            "stop                           <|im_end|>\n"
+            "temperature                    0.7\n"
+            "num_ctx                        4096\n"
+            "top_p                          0.9\n"
+        )
+        assert self._details(params).get_num_ctx() == 4096
 
 
 class TestGetOpenRouterAvailableModels:
