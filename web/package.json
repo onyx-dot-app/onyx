@@ -134,7 +134,7 @@
     "@types/react-dom": "19.2.3",
     "@types/stats.js": "^0.17.4",
     "@types/uuid": "^9.0.8",
-    "@typescript/native-preview": "7.0.0-dev.20251222.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260424.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "baseline-browser-mapping": "^2.9.19",
     "eslint": "^9.39.1",
