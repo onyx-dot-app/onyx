@@ -14,6 +14,7 @@ from datetime import timezone
 import pytest
 
 from onyx.connectors.imap.connector import _convert_email_headers_and_body_into_document
+from onyx.connectors.imap.connector import _parse_addrs
 from onyx.connectors.imap.connector import _parse_singular_addr
 from onyx.connectors.imap.models import EmailHeaders
 
@@ -67,6 +68,30 @@ def test_parse_singular_addr_multiple_uses_first_and_warns(
     assert any(
         "singular address header but found 2" in r.getMessage() for r in caplog.records
     )
+
+
+def test_parse_singular_addr_quoted_display_name_with_comma() -> None:
+    # Valid RFC 5322 address with a comma inside the quoted display name.
+    # Naive comma-splitting would wrongly treat this as two addresses;
+    # getaddresses correctly parses it as one.
+    assert _parse_singular_addr('"Doe, John" <john@example.com>') == (
+        "Doe, John",
+        "john@example.com",
+    )
+
+
+def test_parse_addrs_quoted_display_name_with_comma_is_single_entry() -> None:
+    assert _parse_addrs('"Doe, John" <john@example.com>') == [
+        ("Doe, John", "john@example.com")
+    ]
+
+
+def test_parse_addrs_multiple_mixed_with_quoted_commas() -> None:
+    result = _parse_addrs('"Doe, John" <john@example.com>, alice@example.com')
+    assert result == [
+        ("Doe, John", "john@example.com"),
+        ("", "alice@example.com"),
+    ]
 
 
 def test_parse_singular_addr_malformed_and_one_valid() -> None:

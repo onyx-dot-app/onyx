@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from datetime import timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -430,9 +430,10 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # email.utils.getaddresses honors RFC 5322 quoting, so display names that
+    # contain commas (e.g. ``"Doe, John" <john@example.com>``) are parsed as a
+    # single address instead of being split on the comma.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str] | None:
