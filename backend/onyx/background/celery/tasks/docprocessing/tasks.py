@@ -13,7 +13,6 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from fastapi import HTTPException
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -93,6 +92,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
@@ -1471,14 +1471,18 @@ def _docprocessing_task(
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-    # Check if chunk indexing usage limit has been exceeded before processing
+    # Check if chunk indexing usage limit has been exceeded before processing.
+    # check_usage_and_raise raises OnyxError; hitting a trial/paid usage limit
+    # is an expected user-facing condition (not an actionable error), so we
+    # mark the attempt failed and return cleanly instead of raising (which
+    # would ship ONYX-BACKEND-H6ED to Sentry on every queued batch of an
+    # over-limit tenant).
     if USAGE_LIMITS_ENABLED:
         try:
             _check_chunk_usage_limit(tenant_id)
-        except HTTPException as e:
-            # Log the error and fail the indexing attempt
-            task_logger.error(
-                f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"
+        except OnyxError as e:
+            task_logger.warning(
+                f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e.detail}"
             )
             with get_session_with_current_tenant() as db_session:
                 from onyx.db.index_attempt import mark_attempt_failed
@@ -1486,9 +1490,9 @@ def _docprocessing_task(
                 mark_attempt_failed(
                     index_attempt_id=index_attempt_id,
                     db_session=db_session,
-                    failure_reason=str(e),
+                    failure_reason=e.detail,
                 )
-            raise
+            return
 
     task_logger.info(
         f"Processing document batch: attempt={index_attempt_id} batch_num={batch_num} "

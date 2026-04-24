@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from opensearchpy import NotFoundError
+from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
@@ -740,10 +741,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
-            self._client.bulk_index_documents(
-                documents=chunk_batch,
-                tenant_state=self._tenant_state,
-            )
+            try:
+                self._client.bulk_index_documents(
+                    documents=chunk_batch,
+                    tenant_state=self._tenant_state,
+                )
+            except BulkIndexError as e:
+                # There are several reasons why this might be raised, but the
+                # most likely one is if the deletion has not had enough time to
+                # propogate throughout the index, in which case this would be
+                # raised with some form of "version_conflict_engine_exception
+                # version conflict, document already exists" messaging.
+                # Refresh the index and try one more time. We do not refresh
+                # after every delete because this may become expensive.
+                logger.warning(
+                    f"Failed to bulk index documents: {e}. Refreshing index and trying again."
+                )
+                self._client.refresh_index()
+                self._client.bulk_index_documents(
+                    documents=chunk_batch,
+                    tenant_state=self._tenant_state,
+                    # At this point we know for sure some docs from this batch
+                    # may exist, so we don't want to fail in that case.
+                    update_if_exists=True,
+                )
 
         for chunk in chunks:
             doc_id = chunk.source_document.id

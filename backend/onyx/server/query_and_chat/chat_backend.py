@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.access.access import user_can_access_chat_file
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -63,7 +64,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import increment_usage
 from onyx.db.usage import UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
-from onyx.db.user_file import user_can_access_chat_file
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -875,7 +875,7 @@ def fetch_chat_file(
     file_id_from_user_file = get_file_id_by_user_file_id(file_id, user.id, db_session)
     if file_id_from_user_file:
         file_id = file_id_from_user_file
-    elif not user_can_access_chat_file(file_id, user.id, db_session):
+    elif not user_can_access_chat_file(file_id, user, db_session):
         # Return 404 (rather than 403) so callers cannot probe for file
         # existence across ownership boundaries.
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")

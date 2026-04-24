@@ -129,7 +129,7 @@
     "@types/jest": "^29.5.14",
     "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.20",
-    "@types/node": "18.15.11",
+    "@types/node": "24.12.2",
     "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
     "@types/stats.js": "^0.17.4",

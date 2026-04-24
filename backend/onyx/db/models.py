@@ -2068,9 +2068,12 @@ class SearchSettings(Base):
         Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
     )
 
-    # allows for quantization -> less memory usage for a small performance hit
+    # allows for quantization -> less memory usage for a small performance hit.
+    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
+    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
     embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False)
+        Enum(EmbeddingPrecision, native_enum=False),
+        default=EmbeddingPrecision.FLOAT,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with

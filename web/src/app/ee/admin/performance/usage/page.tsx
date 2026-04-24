@@ -16,7 +16,7 @@ const route = ADMIN_ROUTES.USAGE;
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();
-  const { personas } = useAdminAgents();
+  const { agents } = useAdminAgents();
 
   return (
     <SettingsLayouts.Root>
@@ -30,7 +30,7 @@ export default function AnalyticsPage() {
         <FeedbackChart timeRange={timeRange} />
         <OnyxBotChart timeRange={timeRange} />
         <PersonaMessagesChart
-          availablePersonas={personas}
+          availablePersonas={agents}
           timeRange={timeRange}
         />
         <Divider />

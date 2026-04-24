@@ -28,8 +28,10 @@ import pytest
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Delta
+from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
@@ -40,6 +42,8 @@ from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.models import UserMessage
 from onyx.llm.tracing_wrap import _ALREADY_WRAPPED_ATTR
 from onyx.llm.tracing_wrap import _extract_prompt
+from onyx.llm.tracing_wrap import _finalize_tool_calls
+from onyx.llm.tracing_wrap import _merge_tool_call_delta
 from onyx.llm.tracing_wrap import _outer_generation_span_active
 from onyx.llm.tracing_wrap import _validate_prompt_param
 from onyx.llm.tracing_wrap import wrap_invoke
@@ -349,3 +353,156 @@ def test_outer_guard_false_for_noop_span_in_contextvar() -> None:
         assert _outer_generation_span_active() is False
     finally:
         noop_span.finish(reset_current=True)
+
+
+# ---------------------------------------------------------------------------
+# Tool-call delta reassembly
+# ---------------------------------------------------------------------------
+
+
+def _delta(
+    index: int,
+    *,
+    id: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+) -> ChatCompletionDeltaToolCall:
+    fn = (
+        DeltaFunctionCall(name=name, arguments=arguments)
+        if (name is not None or arguments is not None)
+        else None
+    )
+    return ChatCompletionDeltaToolCall(id=id, index=index, type="function", function=fn)
+
+
+def test_merge_tool_call_delta_single_call_across_chunks() -> None:
+    buf: dict[int, ChatCompletionDeltaToolCall] = {}
+    # Chunk 1: id + name + arg fragment 1
+    _merge_tool_call_delta(
+        buf, _delta(0, id="call_1", name="search", arguments='{"q":"')
+    )
+    # Chunk 2: arg fragment 2
+    _merge_tool_call_delta(buf, _delta(0, arguments="hello"))
+    # Chunk 3: arg fragment 3
+    _merge_tool_call_delta(buf, _delta(0, arguments='"}'))
+
+    finalized = _finalize_tool_calls(buf)
+    assert finalized is not None
+    assert len(finalized) == 1
+    tc = finalized[0]
+    assert tc.id == "call_1"
+    assert tc.function.name == "search"
+    assert tc.function.arguments == '{"q":"hello"}'
+
+
+def test_merge_tool_call_delta_multiple_calls_by_index() -> None:
+    buf: dict[int, ChatCompletionDeltaToolCall] = {}
+    # Interleaved deltas across two tool calls (indices 0 and 1)
+    _merge_tool_call_delta(buf, _delta(0, id="call_a", name="fn_a", arguments='{"x":'))
+    _merge_tool_call_delta(buf, _delta(1, id="call_b", name="fn_b", arguments='{"y":'))
+    _merge_tool_call_delta(buf, _delta(0, arguments="1}"))
+    _merge_tool_call_delta(buf, _delta(1, arguments="2}"))
+
+    finalized = _finalize_tool_calls(buf)
+    assert finalized is not None
+    assert len(finalized) == 2
+    # Sorted by index
+    assert finalized[0].id == "call_a"
+    assert finalized[0].function.name == "fn_a"
+    assert finalized[0].function.arguments == '{"x":1}'
+    assert finalized[1].id == "call_b"
+    assert finalized[1].function.name == "fn_b"
+    assert finalized[1].function.arguments == '{"y":2}'
+
+
+def test_merge_tool_call_delta_does_not_overwrite_first_id_or_name() -> None:
+    buf: dict[int, ChatCompletionDeltaToolCall] = {}
+    _merge_tool_call_delta(
+        buf, _delta(0, id="call_real", name="real_fn", arguments="{}")
+    )
+    # A later delta that (incorrectly) supplies a different id/name must not
+    # clobber the first-seen values.
+    _merge_tool_call_delta(
+        buf, _delta(0, id="call_ignored", name="ignored_fn", arguments="")
+    )
+    finalized = _finalize_tool_calls(buf)
+    assert finalized is not None
+    assert finalized[0].id == "call_real"
+    assert finalized[0].function.name == "real_fn"
+
+
+def test_finalize_tool_calls_skips_entries_missing_required_fields() -> None:
+    buf: dict[int, ChatCompletionDeltaToolCall] = {}
+    # Complete entry
+    _merge_tool_call_delta(buf, _delta(0, id="call_ok", name="fn_ok", arguments="{}"))
+    # Incomplete entry — never got an id or name
+    _merge_tool_call_delta(buf, _delta(1, arguments='{"partial":true}'))
+    finalized = _finalize_tool_calls(buf)
+    assert finalized is not None
+    assert len(finalized) == 1
+    assert finalized[0].id == "call_ok"
+
+
+def test_finalize_tool_calls_returns_none_for_empty_buffer() -> None:
+    assert _finalize_tool_calls({}) is None
+
+
+class _ToolStreamLLM(LLM):
+    """Test double that streams one tool call split across three chunks."""
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider="test",
+            model_name="test-model",
+            temperature=0.0,
+            max_input_tokens=1000,
+        )
+
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        return _TEST_MODEL_RESPONSE
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        frames = [
+            _delta(0, id="call_1", name="search", arguments='{"q":"'),
+            _delta(0, arguments="hi"),
+            _delta(0, arguments='"}'),
+        ]
+        for delta_tc in frames:
+            yield ModelResponseStream(
+                id="stream-id",
+                created="2026-04-22T00:00:00Z",
+                choice=StreamingChoice(delta=Delta(tool_calls=[delta_tc])),
+            )
+
+
+def test_stream_forwards_every_chunk_unchanged_when_tool_calls_present() -> None:
+    """Regression guard: the wrap must not alter the yielded chunks even
+    while it accumulates tool-call deltas internally."""
+    llm = _ToolStreamLLM()
+    chunks = list(llm.stream(UserMessage(content="hi")))
+    assert len(chunks) == 3
+    # The deltas yielded downstream still look like partial fragments.
+    assert chunks[0].choice.delta.tool_calls[0].id == "call_1"
+    assert chunks[1].choice.delta.tool_calls[0].id is None  # fragment
+    assert chunks[2].choice.delta.tool_calls[0].id is None  # fragment
