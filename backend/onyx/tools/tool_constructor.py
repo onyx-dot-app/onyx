@@ -473,6 +473,8 @@ def _construct_tools_impl(
     # but SearchTool is missing from persona.tools.  The write-time check in
     # upsert_persona should prevent this — repair the persona so this only
     # happens once.
+    # TODO: Remove this after 06/24/2026 once invariant is enforced and
+    # most active personas have been repaired.
     if (
         not added_search_tool
         and search_usage_forcing_setting != SearchToolUsage.DISABLED
