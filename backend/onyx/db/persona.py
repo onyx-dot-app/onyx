@@ -44,6 +44,7 @@ from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -1037,11 +1038,11 @@ def upsert_persona(
     # ensure SearchTool is included in the tools list.
     has_search_knowledge = bool(document_sets or hierarchy_nodes or attached_documents)
     if has_search_knowledge and tools is not None:
-        if not any(t.in_code_tool_id == "SearchTool" for t in tools):
+        if not any(t.in_code_tool_id == SEARCH_TOOL_ID for t in tools):
             from onyx.db.tools import get_tool_by_name
 
             try:
-                tools.append(get_tool_by_name("SearchTool", db_session))
+                tools.append(get_tool_by_name(SEARCH_TOOL_ID, db_session))
             except ValueError:
                 logger.warning(
                     "SearchTool not found in database; cannot auto-add to persona '%s'",
