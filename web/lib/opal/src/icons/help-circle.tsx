@@ -19,7 +19,7 @@ const SvgHelpCircle = ({ size, ...props }: IconProps) => (
     </g>
     <defs>
       <clipPath id="clip0_60_2069">
-        <rect fill="white" />
+        <rect width={16} height={16} fill="white" />
       </clipPath>
     </defs>
   </svg>
