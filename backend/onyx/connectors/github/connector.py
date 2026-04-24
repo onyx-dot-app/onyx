@@ -974,12 +974,14 @@ class GithubConnector(
                     logger.warning(
                         f"Failed to list code files for repo {repo.name}: {e}"
                     )
-                    # Fall through to the next-repo logic below via a single
-                    # reset; return immediately so we don't reset twice when
-                    # control reaches the drained-cache branch.
+                    # Reset + fall through (NOT return!) so control reaches the
+                    # `cached_repo_ids` pop below and we progress to the next
+                    # repo. Returning here leaves the failing repo in
+                    # `cached_repo` and loops PRS→ISSUES→CODE_FILES→fail→…
+                    # forever. The drained-cache branch will run a harmless
+                    # second reset on the way to the next-repo logic.
                     checkpoint.stage = GithubConnectorStage.PRS
                     checkpoint.reset()
-                    return checkpoint
                 else:
                     filtered: list[str] = []
                     for entry in tree.tree:

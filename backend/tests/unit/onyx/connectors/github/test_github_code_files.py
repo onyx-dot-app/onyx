@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from github.GithubException import GithubException
 
 from onyx.connectors.github.connector import _convert_code_file_to_document
 from onyx.connectors.github.connector import _passes_path_filter
@@ -441,3 +442,78 @@ def test_code_files_reachable_when_issues_disabled() -> None:
         doc.id == "https://github.com/test-org/test-repo/blob/main/src/only.py"
         for doc in collected
     ), "code-files-only connector should emit CodeFile docs"
+
+
+def test_code_files_tree_listing_failure_advances_to_next_repo() -> None:
+    """Regression for #10578 review (P1 round 2): when `get_git_tree` raises
+    `GithubException`, the failing repo must be skipped and the connector
+    must progress to the next queued repo. Previously the error-path
+    returned the checkpoint early, leaving the failing repo in place and
+    causing an infinite PRS → ISSUES → CODE_FILES → fail loop.
+    """
+    failing_repo = _mk_repo(name="failing-repo")
+    failing_repo.get_git_tree = MagicMock(
+        side_effect=GithubException(500, {"message": "simulated"}, {})
+    )
+    next_repo = _mk_repo(name="next-repo")
+    next_repo.get_git_tree = MagicMock(
+        return_value=MagicMock(tree=[_mk_tree_entry("src/a.py")])
+    )
+    next_repo.get_contents = MagicMock(return_value=_mk_content_file("ok"))
+
+    connector = GithubConnector(
+        repo_owner="test-org",
+        repositories="failing-repo,next-repo",
+        include_prs=False,
+        include_issues=False,
+        include_code_files=True,
+    )
+    mock_client = MagicMock()
+    mock_client.get_repo = MagicMock(return_value=next_repo)
+    connector.github_client = mock_client
+
+    # Seed checkpoint at CODE_FILES with failing-repo cached and next-repo
+    # queued, cached_code_file_paths=None so tree listing runs.
+    checkpoint = GithubConnectorCheckpoint(
+        stage=GithubConnectorStage.CODE_FILES,
+        curr_page=0,
+        num_retrieved=0,
+        has_more=True,
+        cached_repo_ids=[2],  # id for next-repo
+        cached_repo=SerializedRepository(
+            id=1,
+            headers={"status": "200 OK"},
+            raw_data={
+                "id": 1,
+                "name": "failing-repo",
+                "full_name": "test-org/failing-repo",
+            },
+        ),
+        cached_code_file_paths=None,
+    )
+
+    def _deserialize(cached_repo: Any, _client: Any) -> MagicMock:
+        return (
+            failing_repo
+            if cached_repo.raw_data["name"] == "failing-repo"
+            else next_repo
+        )
+
+    collected: list[Document] = []
+    with patch(
+        "onyx.connectors.github.connector.deserialize_repository",
+        side_effect=_deserialize,
+    ):
+        guard = 0
+        while checkpoint.has_more and guard < 20:
+            guard += 1
+            items, checkpoint = _drain(connector._fetch_from_github(checkpoint))
+            collected.extend(i for i in items if isinstance(i, Document))
+
+    # We must NOT loop forever — the test's guard would otherwise trip.
+    assert guard < 20, "state machine looped instead of advancing past failing repo"
+    # And we should have indexed the next repo's code file.
+    assert any(
+        doc.id == "https://github.com/test-org/next-repo/blob/main/src/a.py"
+        for doc in collected
+    ), "after a failing repo's tree listing, the next repo's code files must be indexed"
