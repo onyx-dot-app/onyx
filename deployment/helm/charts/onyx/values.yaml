@@ -138,7 +138,6 @@ autoscaling:
   engine: hpa
 
 inferenceCapability:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   service:
     portName: modelserver
@@ -194,7 +193,6 @@ inferenceCapability:
 
 
 indexCapability:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   service:
     portName: modelserver
@@ -336,7 +334,6 @@ nginx:
         http: http
 
 webserver:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   image:
@@ -425,7 +422,6 @@ webserver:
   affinity: {}
 
 api:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   image:
@@ -564,7 +560,6 @@ celery_shared:
     runAsUser: 0
 
 celery_beat:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -587,7 +582,6 @@ celery_beat:
   affinity: {}
 
 celery_worker_heavy:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -623,7 +617,6 @@ celery_worker_heavy:
   affinity: {}
 
 celery_worker_docprocessing:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -659,7 +652,6 @@ celery_worker_docprocessing:
   affinity: {}
 
 celery_worker_light:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -695,7 +687,6 @@ celery_worker_light:
   affinity: {}
 
 celery_worker_monitoring:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -731,7 +722,6 @@ celery_worker_monitoring:
   affinity: {}
 
 celery_worker_primary:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -767,7 +757,6 @@ celery_worker_primary:
   affinity: {}
 
 celery_worker_user_file_processing:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
@@ -805,7 +794,6 @@ celery_worker_user_file_processing:
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   enabled: false  # Disabled by default - requires bot token configuration
   # Bot token can be provided directly or via a Kubernetes secret
@@ -842,7 +830,6 @@ discordbot:
   affinity: {}
 
 slackbot:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   enabled: true
   replicaCount: 1
@@ -872,7 +859,6 @@ slackbot:
 # Onyx Model Context Protocol (MCP) Server
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   enabled: false  # Disabled by default
   replicaCount: 1
@@ -920,7 +906,6 @@ mcpServer:
   affinity: {}
 
 celery_worker_docfetching:
-  # Extra env vars to append to the container (e.g. per-service SENTRY_DSN scoping)
   extraEnv: []
   replicaCount: 1
   logLevel: INFO
