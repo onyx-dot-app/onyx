@@ -720,10 +720,15 @@ def get_feedback_visibility() -> FeedbackVisibility:
 
 class TenantSocketModeClient(SocketModeClient):
     def __init__(self, tenant_id: str, slack_bot_id: int, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+        # Set these BEFORE calling super().__init__ — the base class starts
+        # the message_processor IntervalRunner thread during init, which can
+        # race into our overridden process_message/enqueue_message methods
+        # before these attributes exist (ONYX-BACKEND-1: AttributeError on
+        # _tenant_id).
         self._tenant_id = tenant_id
         self.slack_bot_id = slack_bot_id
         self.bot_name: str = "Unnamed"
+        super().__init__(*args, **kwargs)
 
     @contextmanager
     def _set_tenant_context(self) -> Generator[None, None, None]:
