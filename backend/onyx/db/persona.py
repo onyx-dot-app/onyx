@@ -44,7 +44,6 @@ from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
-from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -1141,26 +1140,6 @@ def upsert_persona(
         if user_files:
             _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
         persona = new_persona
-
-    # Enforce invariant: knowledge sources → SearchTool must be in tools.
-    # Operates on the final persona object so it covers both create and
-    # update paths regardless of which fields the caller provided.
-    if (
-        persona.document_sets
-        or persona.hierarchy_nodes
-        or persona.attached_documents
-        or persona.user_files
-    ) and not any(t.in_code_tool_id == SEARCH_TOOL_ID for t in persona.tools):
-        from onyx.db.tools import get_builtin_tool_by_id
-
-        search_tool = get_builtin_tool_by_id(db_session, SEARCH_TOOL_ID)
-        if not search_tool:
-            raise ValueError(
-                "Persona has knowledge sources but SearchTool not found in database."
-                "This should never happen and you may need support to repair the DB."
-            )
-        persona.tools.append(search_tool)
-
     if commit:
         db_session.commit()
     else:

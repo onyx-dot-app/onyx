@@ -469,40 +469,6 @@ def _construct_tools_impl(
             _build_search_tool(search_tool_db_model.id, search_tool_config)
         ]
 
-    # Safety net: inject SearchTool when the persona has knowledge sources
-    # but SearchTool is missing from persona.tools.  The write-time check in
-    # upsert_persona should prevent this — repair the persona so this only
-    # happens once.
-    # TODO: Remove this after 06/24/2026 once invariant is enforced and
-    # most active personas have been repaired.
-    if (
-        not added_search_tool
-        and search_usage_forcing_setting != SearchToolUsage.DISABLED
-        and not DISABLE_VECTOR_DB
-        and (
-            persona.document_sets
-            or persona.attached_documents
-            or persona.hierarchy_nodes
-        )
-    ):
-        search_tool_db_model = get_builtin_tool(db_session, SearchTool)
-
-        logger.warning(
-            "Persona '%s' (id=%d) has knowledge sources but no SearchTool "
-            "— repairing",
-            persona.name,
-            persona.id,
-        )
-        persona.tools.append(search_tool_db_model)
-        db_session.flush()
-
-        if not search_tool_config:
-            search_tool_config = SearchToolConfig()
-
-        tool_dict[search_tool_db_model.id] = [
-            _build_search_tool(search_tool_db_model.id, search_tool_config)
-        ]
-
     # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and allowed_tool_ids filtering
     if user.enable_memory_tool:
