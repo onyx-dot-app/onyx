@@ -435,6 +435,7 @@ def rename_chat_session(
         chat_session_id=chat_session_id,
         user_id=user_id,
         db_session=db_session,
+        eager_load_persona=True,
     )
     session_override = chat_session.llm_override
     if session_override is None and chat_session.current_alternate_model:
