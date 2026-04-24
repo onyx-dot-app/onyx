@@ -269,6 +269,20 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.GOOGLE,
+        model_name: "gemini-embedding-2-preview",
+        description:
+          "Google's newest multimodal embedding model. Onyx uses the default 3072-dimension output for highest-quality retrieval.",
+        pricePerMillion: 0.025,
+        model_dim: 3072,
+        normalize: false,
+        query_prefix: "",
+        passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
+      },
+      {
+        provider_type: EmbeddingProvider.GOOGLE,
         model_name: "gemini-embedding-001",
         description: "Google's Gemini embedding model. Powerful and efficient.",
         pricePerMillion: 0.025,
