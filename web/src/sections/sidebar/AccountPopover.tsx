@@ -95,7 +95,7 @@ function SettingsPopover({
               variant="body"
               prominence="muted"
               icon={SvgUser}
-              title={user?.email ?? ""}
+              title={getUserDisplayName(user)}
             />
           </div>,
           null,
