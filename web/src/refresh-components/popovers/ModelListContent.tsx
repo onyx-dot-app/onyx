@@ -206,6 +206,7 @@ export default function ModelListContent({
                                     />
                                   </Section>
                                 }
+                                center
                               />
                             </div>
                           </Interactive.Container>

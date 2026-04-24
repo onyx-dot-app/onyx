@@ -413,7 +413,10 @@ def get_external_user_group(
             if collab.email:
                 user_emails.add(collab.email)
             else:
-                logger.error(f"Collaborator {collab.login} has no email")
+                # Expected per-user condition (login without a public email);
+                # skip and warn so the login in the message doesn't explode
+                # Sentry fingerprinting.
+                logger.warning(f"Collaborator {collab.login} has no email")
 
         if user_emails:
             collaborators_group = ExternalUserGroup(
@@ -429,7 +432,7 @@ def get_external_user_group(
             if collab.email:
                 user_emails.add(collab.email)
             else:
-                logger.error(f"Outside collaborator {collab.login} has no email")
+                logger.warning(f"Outside collaborator {collab.login} has no email")
 
         if user_emails:
             outside_collaborators_group = ExternalUserGroup(
@@ -448,7 +451,7 @@ def get_external_user_group(
                 if member.email:
                     user_emails.add(member.email)
                 else:
-                    logger.error(f"Team member {member.login} has no email")
+                    logger.warning(f"Team member {member.login} has no email")
 
             if user_emails:
                 team_group = ExternalUserGroup(

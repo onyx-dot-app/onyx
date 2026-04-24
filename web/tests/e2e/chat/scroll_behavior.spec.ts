@@ -9,7 +9,7 @@ import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 async function setAutoScroll(page: Page, enabled: boolean) {
   // Open user dropdown menu (same pattern as other tests)
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").first().click();
+  await page.getByText("Settings").first().click();
   // Wait for dialog to appear
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 

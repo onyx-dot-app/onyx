@@ -2,29 +2,39 @@
 
 import { useState } from "react";
 import { LOGOUT_DISABLED } from "@/lib/constants";
-import { Notification } from "@/interfaces/settings";
-import useSWR, { preload } from "swr";
+import { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import { checkUserIsNoAuthUser, getUserDisplayName, logout } from "@/lib/user";
+import {
+  checkUserIsNoAuthUser,
+  getUserDisplayName,
+  getUserEmail,
+  logout,
+} from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { SidebarTab } from "@opal/components";
+import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
-  SvgExternalLink,
+  SvgHelpCircle,
   SvgLogOut,
+  SvgSliders,
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
+import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import {
+  useVectorDbEnabled,
+  useSettingsContext,
+} from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import useNotifications from "@/hooks/useNotifications";
+import { SvgOnyxLogo } from "@opal/logos";
+import { markdown } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -36,16 +46,11 @@ function SettingsPopover({
   onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const { data: notifications } = useSWR<Notification[]>(
-    SWR_KEYS.notifications,
-    errorHandlingFetcher,
-    { revalidateOnFocus: false }
-  );
+  const { undismissedCount } = useNotifications();
+  const settings = useSettingsContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const undismissedCount =
-    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const isAnonymousUser =
     user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
@@ -84,55 +89,87 @@ function SettingsPopover({
   };
 
   return (
-    <>
-      <PopoverMenu>
-        {[
-          <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem
-              icon={SvgUser}
-              href="/app/settings"
-              onClick={onUserSettingsClick}
-            >
-              User Settings
-            </LineItem>
-          </div>,
-          <LineItem
-            key="notifications"
-            icon={SvgBell}
-            onClick={onOpenNotifications}
-          >
-            {`Notifications${
-              undismissedCount > 0 ? ` (${undismissedCount})` : ""
-            }`}
-          </LineItem>,
-          <LineItem
-            key="help-faq"
-            icon={SvgExternalLink}
-            href="https://docs.onyx.app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Help & FAQ
-          </LineItem>,
-          null,
-          showLogin && (
-            <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
-              Log in
-            </LineItem>
-          ),
-          showLogout && (
-            <LineItem
-              key="log-out"
-              icon={SvgLogOut}
-              danger
-              onClick={handleLogout}
-            >
-              Log out
-            </LineItem>
-          ),
-        ]}
-      </PopoverMenu>
-    </>
+    <PopoverMenu>
+      {[
+        <div key="user-email" className="p-2">
+          <Content sizePreset="main-ui" title={getUserEmail(user)} />
+        </div>,
+        null,
+        <div key="user-settings" data-testid="Settings/user-settings">
+          <LineItemButton
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgSliders}
+            title="Settings"
+            href="/app/settings"
+            onClick={onUserSettingsClick}
+          />
+        </div>,
+        <LineItemButton
+          key="notifications"
+          sizePreset="main-ui"
+          variant="section"
+          rounding="sm"
+          icon={SvgBell}
+          title="Notifications"
+          onClick={onOpenNotifications}
+          rightChildren={
+            !!undismissedCount ? (
+              <SvgNotificationBubble count={undismissedCount} />
+            ) : undefined
+          }
+        />,
+        <LineItemButton
+          key="help-faq"
+          sizePreset="main-ui"
+          variant="section"
+          rounding="sm"
+          icon={SvgHelpCircle}
+          title="Help & FAQ"
+          href="https://docs.onyx.app"
+          target="_blank"
+        />,
+        showLogin && (
+          <LineItemButton
+            key="log-in"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgUser}
+            title="Log in"
+            onClick={handleLogin}
+          />
+        ),
+        // TODO(@raunakab): Add support for custom colour configuration for text
+        showLogout && (
+          <LineItemButton
+            key="log-out"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgLogOut}
+            title="Log Out"
+            onClick={handleLogout}
+          />
+        ),
+        null,
+        <div key="version" className="p-2">
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            prominence="muted"
+            orientation="reverse"
+            icon={SvgOnyxLogo}
+            title={markdown(
+              `[Onyx ${
+                settings?.webVersion ?? "dev"
+              }](https://docs.onyx.app/changelog)`
+            )}
+          />
+        </div>,
+      ]}
+    </PopoverMenu>
   );
 }
 
@@ -151,18 +188,8 @@ export default function AccountPopover({
   const { user } = useUser();
   const appFocus = useAppFocus();
   const vectorDbEnabled = useVectorDbEnabled();
-
-  // Fetch notifications for display
-  // The GET endpoint also triggers a refresh if release notes are stale
-  const { data: notifications } = useSWR<Notification[]>(
-    SWR_KEYS.notifications,
-    errorHandlingFetcher
-  );
-
+  const { undismissedCount } = useNotifications();
   const userDisplayName = getUserDisplayName(user);
-  const undismissedCount =
-    notifications?.filter((n) => !n.dismissed).length ?? 0;
-  const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -184,15 +211,15 @@ export default function AccountPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            icon={() => (
+            icon={(props) => (
               <div className="w-[16px] flex flex-col justify-center items-center">
-                <UserAvatar user={user} size={18} />
+                <UserAvatar user={user} {...props} size={props.size} />
               </div>
             )}
             rightChildren={
-              hasNotifications ? (
+              !!undismissedCount ? (
                 <Section padding={0.5}>
-                  <SvgNotificationBubble size={6} />
+                  <SvgNotificationBubble count={undismissedCount} />
                 </Section>
               ) : undefined
             }
@@ -208,7 +235,7 @@ export default function AccountPopover({
       <Popover.Content
         align="end"
         side="right"
-        width={popupState === "Notifications" ? "xl" : "md"}
+        width={popupState === "Notifications" ? "xl" : "lg"}
       >
         {popupState === "Settings" && (
           <SettingsPopover
