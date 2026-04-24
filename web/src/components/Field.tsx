@@ -25,7 +25,7 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import Checkbox from "@opal/components/checkbox/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { cn, transformLinkUri } from "@/lib/utils";
