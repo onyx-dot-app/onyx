@@ -602,6 +602,19 @@ def _timed_perform_external_group_sync(
                     source=cc_pair.connector.source,
                 )
                 cumulative_upsert_time += time.monotonic() - upsert_start
+        except PermissionError as e:
+            # Credential invalid upstream (e.g. revoked service account,
+            # expired refresh token). Mark the attempt as a clean failure and
+            # log at warning — an admin needs to reconnect the connector, but
+            # it's not an unexpected exception worth a Sentry error event.
+            mark_external_group_sync_attempt_failed(
+                attempt_id, db_session, error_message=str(e)
+            )
+            inc_group_sync_errors(connector_type)
+            logger.warning(
+                f"Credentials invalid for {source_type} cc_pair={cc_pair_id}: {e}"
+            )
+            return connector_type
         except Exception as e:
             format_error_for_logging(e)
 

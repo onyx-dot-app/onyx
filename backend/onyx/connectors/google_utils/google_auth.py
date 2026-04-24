@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -157,7 +158,16 @@ def get_google_creds(
         )
 
         if not service_creds.valid or not service_creds.expired:
-            service_creds.refresh(Request())
+            try:
+                service_creds.refresh(Request())
+            except RefreshError as e:
+                # Service account revoked / deleted upstream. Surface as
+                # PermissionError so callers (e.g. external group sync tasks)
+                # can mark the attempt as a clean failure rather than a crash.
+                raise PermissionError(
+                    f"Unable to refresh {source} service account credentials: {e}. "
+                    "Credentials likely revoked upstream — reconnect the connector."
+                ) from e
 
         if not service_creds.valid:
             raise PermissionError(
