@@ -16,7 +16,7 @@ RUN grep -E '^(torch|nvidia-[a-z0-9-]+|triton)==' /tmp/requirements.txt \
         | uv pip install --system --no-cache-dir -r /dev/stdin && \
     rm -rf ~/.cache/uv
 
-RUN uv pip install --system --no-cache-dir --upgrade \
+RUN uv pip install --system --no-cache-dir \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
