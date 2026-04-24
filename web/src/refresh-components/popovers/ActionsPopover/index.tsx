@@ -257,11 +257,18 @@ export default function ActionsPopover({
     useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  // Reset forced tools when the assistant changes. For agents with knowledge
-  // attached (document sets, hierarchy nodes, user files, attached documents),
-  // pre-force the internal-search tool so the LLM actually uses the configured
-  // corpus instead of silently answering from model priors (#7314, #9303).
-  // User can still unforce via the pill in the input bar.
+  // Reset forced tools when the assistant *identity* changes. For agents with
+  // knowledge attached (document sets, hierarchy nodes, user files, attached
+  // documents), pre-force the internal-search tool so the LLM actually uses
+  // the configured corpus instead of silently answering from model priors
+  // (#7314, #9303). User can still unforce via the pill in the input bar.
+  //
+  // Deps intentionally limited to `selectedAgent.id`: including the full
+  // agent object or `agentPreferences` would re-fire on unrelated updates
+  // (SWR revalidation, a different tool being toggled) and silently clobber
+  // the user's manual unforce. Per-agent tool disables release the force via
+  // `toggleToolForCurrentAgent` below, so this effect doesn't need to react
+  // to preference changes.
   useEffect(() => {
     setForcedToolIds(
       computeInitialForcedToolIds(
@@ -269,7 +276,8 @@ export default function ActionsPopover({
         agentPreferences?.[selectedAgent.id]
       )
     );
-  }, [selectedAgent, agentPreferences, setForcedToolIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
   const vectorDbEnabled = useVectorDbEnabled();
