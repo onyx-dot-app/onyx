@@ -11,7 +11,7 @@ import { Button, LineItemButton, Tag } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
-import Divider from "@/refresh-components/Divider";
+import { Divider } from "@opal/components/divider/components";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -53,7 +53,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
       </Popover.Trigger>
 
       <Popover.Content width="lg" align="end" side="bottom">
-        <Divider showTitle text="Shown Columns" />
+        <Divider title="Shown Columns" />
         <Popover.Menu>
           {dataColumns.map((column) => {
             const canHide = column.getCanHide();
