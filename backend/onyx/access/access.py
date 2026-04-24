@@ -222,7 +222,6 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
     URL carries the access context and one indexed lookup suffices, instead
     of fanning out 4–5 queries across unrelated classes on every request.
-    Persona avatars already moved to `GET /persona/{persona_id}/avatar`.
     """
     owns_user_file = db_session.query(
         select(UserFile.id)

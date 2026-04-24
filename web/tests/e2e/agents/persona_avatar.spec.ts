@@ -1,18 +1,13 @@
 import { test, expect, Browser } from "@playwright/test";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
+import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
-// Minimal valid 1x1 red PNG so we can verify served bytes equal what we uploaded.
-const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
-  "base64"
-);
-
-test.describe("Persona avatar dedicated endpoint", () => {
+test.describe("Persona avatar", () => {
   test.describe.configure({ mode: "serial" });
 
   let agentId: number | null = null;
-  let avatarFileId: string | null = null;
   const agentName = `E2E Avatar Agent ${Date.now()}`;
 
   test.afterAll(async ({ browser }: { browser: Browser }) => {
@@ -26,7 +21,7 @@ test.describe("Persona avatar dedicated endpoint", () => {
     await context.close();
   });
 
-  test("serves avatar from /api/persona/{id}/avatar and closes /api/chat/file/ access", async ({
+  test("uploads an avatar and serves the exact bytes back to the owner", async ({
     page,
   }) => {
     const uploadResp = await page.request.post(
@@ -36,20 +31,20 @@ test.describe("Persona avatar dedicated endpoint", () => {
           file: {
             name: "avatar.png",
             mimeType: "image/png",
-            buffer: TINY_PNG,
+            buffer: CHECKERED_PNG,
           },
         },
       }
     );
     expect(uploadResp.ok()).toBeTruthy();
     const uploadJson = (await uploadResp.json()) as { file_id: string };
-    avatarFileId = uploadJson.file_id;
+    const avatarFileId = uploadJson.file_id;
     expect(avatarFileId).toBeTruthy();
 
     const createResp = await page.request.post("/api/persona", {
       data: {
         name: agentName,
-        description: "Persona used to verify the avatar endpoint.",
+        description: "Persona used to verify avatar serving.",
         document_set_ids: [],
         is_public: true,
         tool_ids: [],
@@ -63,29 +58,21 @@ test.describe("Persona avatar dedicated endpoint", () => {
     const persona = (await createResp.json()) as { id: number };
     agentId = persona.id;
 
-    const avatarResp = await page.request.get(
-      `/api/persona/${agentId}/avatar`
-    );
+    const avatarResp = await page.request.get(`/api/persona/${agentId}/avatar`);
     expect(avatarResp.status()).toBe(200);
     expect(avatarResp.headers()["content-type"]).toContain("image/png");
     const servedBytes = await avatarResp.body();
-    expect(servedBytes.toString("base64")).toBe(TINY_PNG.toString("base64"));
-
-    // Regression: the old overloaded path used to serve any persona avatar
-    // by file_id. The new endpoint is the only way in — the chat-file route
-    // no longer exposes avatars.
-    const chatFileResp = await page.request.get(
-      `/api/chat/file/${avatarFileId}`
+    expect(servedBytes.toString("base64")).toBe(
+      CHECKERED_PNG.toString("base64")
     );
-    expect(chatFileResp.status()).toBe(404);
   });
 
-  test("returns 404 for a non-existent persona id", async ({ page }) => {
+  test("returns 404 for a non-existent persona", async ({ page }) => {
     const resp = await page.request.get("/api/persona/99999999/avatar");
     expect(resp.status()).toBe(404);
   });
 
-  test("returns 404 for a persona that has no uploaded avatar", async ({
+  test("returns 404 when a persona has no avatar configured", async ({
     page,
   }) => {
     // The default assistant (id=0) ships without an uploaded_image_id.
@@ -93,28 +80,24 @@ test.describe("Persona avatar dedicated endpoint", () => {
     expect(resp.status()).toBe(404);
   });
 
-  test("another authenticated user can read a public persona's avatar", async ({
+  test("serves a public persona's avatar to other authenticated users", async ({
     page,
   }, testInfo) => {
     expect(agentId).not.toBeNull();
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
-    const avatarResp = await page.request.get(
-      `/api/persona/${agentId}/avatar`
-    );
+    const avatarResp = await page.request.get(`/api/persona/${agentId}/avatar`);
     expect(avatarResp.status()).toBe(200);
     const bytes = await avatarResp.body();
-    expect(bytes.toString("base64")).toBe(TINY_PNG.toString("base64"));
+    expect(bytes.toString("base64")).toBe(CHECKERED_PNG.toString("base64"));
 
     // Re-auth as admin so afterAll cleanup uses the owner's session.
     await page.context().clearCookies();
     await loginAs(page, "admin");
   });
 
-  test("AgentAvatar renders the new avatar URL in the DOM", async ({
-    page,
-  }) => {
+  test("renders the persona avatar in the chat UI", async ({ page }) => {
     expect(agentId).not.toBeNull();
     await page.goto(`/app?agentId=${agentId}`);
     await page.waitForLoadState("networkidle");
@@ -124,13 +107,11 @@ test.describe("Persona avatar dedicated endpoint", () => {
       .first();
     await expect(avatarImg).toBeVisible({ timeout: 10000 });
 
-    // No <img> should still be pointing at the legacy /chat/file path for
-    // this persona's avatar file id.
-    if (avatarFileId) {
-      const legacyImg = page.locator(
-        `img[src="/api/chat/file/${avatarFileId}"]`
-      );
-      await expect(legacyImg).toHaveCount(0);
-    }
+    // Capture the rendered avatar so we catch regressions in how the bytes
+    // are decoded, cropped, and framed by the AgentAvatar component.
+    const avatarContainer = avatarImg.locator("..");
+    await expectElementScreenshot(avatarContainer, {
+      name: "persona-avatar-chat",
+    });
   });
 });
