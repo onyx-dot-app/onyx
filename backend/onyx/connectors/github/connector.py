@@ -942,14 +942,17 @@ class GithubConnector(
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
                 return checkpoint
 
-            # Issues done — move to code files if enabled, else to the next repo.
+        # Advance out of ISSUES unconditionally — covers both the skipped case
+        # (`include_issues=False`, the default) and the drained case. Without
+        # this, a code-files-only connector would never leave the ISSUES stage
+        # and would silently index nothing.
+        if checkpoint.stage == GithubConnectorStage.ISSUES:
             if self.include_code_files:
                 checkpoint.stage = GithubConnectorStage.CODE_FILES
                 checkpoint.reset()
-                # Save checkpoint at the stage boundary so the next run starts
-                # cleanly in CODE_FILES without re-running the issues pass.
+                # Save at the stage boundary so the next run starts cleanly in
+                # CODE_FILES without replaying the issues pass.
                 return checkpoint
-
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
 
@@ -971,9 +974,12 @@ class GithubConnector(
                     logger.warning(
                         f"Failed to list code files for repo {repo.name}: {e}"
                     )
+                    # Fall through to the next-repo logic below via a single
+                    # reset; return immediately so we don't reset twice when
+                    # control reaches the drained-cache branch.
                     checkpoint.stage = GithubConnectorStage.PRS
                     checkpoint.reset()
-                    # fall through to the next-repo logic below
+                    return checkpoint
                 else:
                     filtered: list[str] = []
                     for entry in tree.tree:

@@ -381,3 +381,63 @@ def test_code_files_slim_yields_stubs_without_fetching_content() -> None:
 
 def doc_text_from(doc: Document) -> str:
     return doc.sections[0].text if doc.sections else ""
+
+
+# ---- Full-state-machine regression: CODE_FILES reachable without issues ----
+
+
+def test_code_files_reachable_when_issues_disabled() -> None:
+    """Regression for #10578 review (P1): code-files-only connector (PRs off,
+    issues off, code files on — which is what most users of this feature
+    want) must actually transition from ISSUES → CODE_FILES and emit docs.
+
+    The original implementation buried the transition inside the
+    ``if self.include_issues`` block, so the default configuration
+    (``include_issues=False``) would silently skip code indexing entirely.
+    """
+    tree_entries = [_mk_tree_entry("src/only.py")]
+    repo = _mk_repo(tree_entries=tree_entries)
+    repo.get_contents = MagicMock(return_value=_mk_content_file("print('hi')"))
+
+    connector = GithubConnector(
+        repo_owner="test-org",
+        repositories="test-repo",
+        include_prs=False,
+        include_issues=False,
+        include_code_files=True,
+    )
+    connector.github_client = MagicMock()
+
+    # Drive the state machine from the start stage (PRS), not pre-seeded.
+    checkpoint = GithubConnectorCheckpoint(
+        stage=GithubConnectorStage.PRS,
+        curr_page=0,
+        num_retrieved=0,
+        has_more=True,
+        cached_repo_ids=[],
+        cached_repo=SerializedRepository(
+            id=1,
+            headers={"status": "200 OK"},
+            raw_data={
+                "id": 1,
+                "name": "test-repo",
+                "full_name": "test-org/test-repo",
+            },
+        ),
+    )
+
+    collected: list[Document] = []
+    with patch(
+        "onyx.connectors.github.connector.deserialize_repository", return_value=repo
+    ):
+        # Step until drained. Each call processes one stage/page.
+        guard = 0
+        while checkpoint.has_more and guard < 20:
+            guard += 1
+            items, checkpoint = _drain(connector._fetch_from_github(checkpoint))
+            collected.extend(i for i in items if isinstance(i, Document))
+
+    assert any(
+        doc.id == "https://github.com/test-org/test-repo/blob/main/src/only.py"
+        for doc in collected
+    ), "code-files-only connector should emit CodeFile docs"
