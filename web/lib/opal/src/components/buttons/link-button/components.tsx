@@ -1,7 +1,6 @@
 import "@opal/components/buttons/link-button/styles.css";
 import type { RichStr } from "@opal/types";
-import { Tooltip } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipSide } from "@opal/components/tooltip/components";
 import SvgExternalLink from "@opal/icons/external-link";
 
 // ---------------------------------------------------------------------------
