@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Checkbox, Text } from "@opal/components";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta = {
   title: "Components/Checkbox",
@@ -9,13 +8,6 @@ const meta = {
   parameters: {
     layout: "centered",
   },
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 } satisfies Meta<typeof Checkbox>;
 
 export default meta;

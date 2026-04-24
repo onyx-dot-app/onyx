@@ -8,20 +8,12 @@ import {
   SvgSettings,
   SvgUnplug,
 } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const meta = {
   title: "Layouts/Card.Header",
   component: Card.Header,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },

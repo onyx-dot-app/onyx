@@ -1,19 +1,11 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { LinkButton } from "@opal/components";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof LinkButton> = {
   title: "opal/components/LinkButton",
   component: LinkButton,
   tags: ["autodocs"],
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 };
 
 export default meta;

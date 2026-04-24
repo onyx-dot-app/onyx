@@ -2,19 +2,11 @@ import React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Button } from "@opal/components";
 import { SvgPlus, SvgArrowRight, SvgSettings } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof Button> = {
   title: "opal/components/Button",
   component: Button,
   tags: ["autodocs"],
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 };
 
 export default meta;

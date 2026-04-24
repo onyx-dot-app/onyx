@@ -8,7 +8,6 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { Button } from "@opal/components";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof SidebarTab> = {
   title: "opal/components/SidebarTab",
@@ -16,11 +15,9 @@ const meta: Meta<typeof SidebarTab> = {
   tags: ["autodocs"],
   decorators: [
     (Story) => (
-      <TooltipPrimitive.Provider>
-        <div style={{ width: 260, background: "var(--background-neutral-01)" }}>
-          <Story />
-        </div>
-      </TooltipPrimitive.Provider>
+      <div style={{ width: 260, background: "var(--background-neutral-01)" }}>
+        <Story />
+      </div>
     ),
   ],
 };
