@@ -68,6 +68,11 @@ class ImageGenerationConfigCreate(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
 
+    # Group access control
+    is_public: bool = True
+    groups: list[int] | None = None
+    personas: list[int] | None = None
+
     is_default: bool = False
 
 
@@ -92,6 +97,11 @@ class ImageGenerationConfigUpdate(BaseModel):
     api_version: str | None = None
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
+
+    # Group access control
+    is_public: bool = True
+    groups: list[int] | None = None
+    personas: list[int] | None = None
 
     # If False and using new credentials mode, preserve existing API key from DB
     api_key_changed: bool = False

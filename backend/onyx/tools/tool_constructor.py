@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.auth.schemas import UserRole
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -16,8 +17,11 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
+from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -240,8 +244,52 @@ def _construct_tools_impl(
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
-                img_generation_llm_config = _get_image_generation_config(
-                    llm, db_session
+                # Fetch the default image generation config
+                img_gen_config = get_default_image_generation_config(db_session)
+                if (
+                    not img_gen_config
+                    or not img_gen_config.model_configuration
+                    or not img_gen_config.model_configuration.llm_provider
+                ):
+                    logger.debug(
+                        "Skipping ImageGenerationTool: no default config found"
+                    )
+                    continue
+
+                # Check group-based access to the underlying LLM provider
+                llm_provider = img_gen_config.model_configuration.llm_provider
+                user_group_ids = fetch_user_group_ids(db_session, user)
+                is_admin = user.role == UserRole.ADMIN
+
+                if not can_user_access_llm_provider(
+                    provider=llm_provider,
+                    user_group_ids=user_group_ids,
+                    persona=persona,
+                    is_admin=is_admin,
+                ):
+                    logger.debug(
+                        "Skipping ImageGenerationTool: user '%s' lacks access "
+                        "to LLM provider '%s'",
+                        user.email,
+                        llm_provider.name,
+                    )
+                    continue
+
+                # Build LLMConfig (same logic as _get_image_generation_config)
+                img_generation_llm_config = LLMConfig(
+                    model_provider=llm_provider.provider,
+                    model_name=img_gen_config.model_configuration.name,
+                    temperature=GEN_AI_TEMPERATURE,
+                    api_key=(
+                        llm_provider.api_key.get_value(apply_mask=False)
+                        if llm_provider.api_key
+                        else None
+                    ),
+                    api_base=llm_provider.api_base,
+                    api_version=llm_provider.api_version,
+                    deployment_name=llm_provider.deployment_name,
+                    max_input_tokens=llm.config.max_input_tokens,
+                    custom_config=llm_provider.custom_config,
                 )
 
                 tool_dict[db_tool_model.id] = [
