@@ -310,14 +310,21 @@ export function Table<TData>(props: DataTableProps<TData>) {
     }
 
     // Summary mode (no-select only)
-    // When pagination is disabled (Infinity), show all items as one page.
-    const summaryPageSize = isFinite(resolvedPageSize)
-      ? resolvedPageSize
-      : totalItems;
+    const rangeStart =
+      totalItems === 0
+        ? 0
+        : !isFinite(resolvedPageSize)
+          ? 1
+          : (currentPage - 1) * resolvedPageSize + 1;
+    const rangeEnd = !isFinite(resolvedPageSize)
+      ? totalItems
+      : Math.min(currentPage * resolvedPageSize, totalItems);
+
     return (
       <Footer
         mode="summary"
-        pageSize={summaryPageSize}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
         totalItems={totalItems}
         currentPage={currentPage}
         totalPages={totalPages}
