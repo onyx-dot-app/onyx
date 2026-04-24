@@ -6,7 +6,6 @@ import {
   SvgCheckSquare,
   SvgGlobe,
   SvgSettings,
-  SvgUnplug,
 } from "@opal/icons";
 
 const meta = {
@@ -30,69 +29,47 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerPadding="sm"
-        children={
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Google Search"
-            description="Web search provider"
-            padding="fit"
-            rightChildren={
-              <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
-                Connect
-              </Button>
-            }
-          />
-        }
-      />
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Google Search"
+          description="Web search provider"
+          padding="fit"
+          rightChildren={
+            <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
+              Connect
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
 
-export const WithBottomRightSlot: Story = {
+export const WithCurrentDefault: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerPadding="sm"
-        children={
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Google Search"
-            description="Currently the default provider."
-            padding="fit"
-            rightChildren={
-              <Button
-                variant="action"
-                prominence="tertiary"
-                icon={SvgCheckSquare}
-              >
-                Current Default
-              </Button>
-            }
-          />
-        }
-        bottomRightChildren={
-          <>
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Google Search"
+          description="Currently the default provider."
+          padding="fit"
+          rightChildren={
             <Button
-              icon={SvgUnplug}
-              tooltip="Disconnect"
+              variant="action"
               prominence="tertiary"
-              size="sm"
-            />
-            <Button
-              icon={SvgSettings}
-              tooltip="Edit"
-              prominence="tertiary"
-              size="sm"
-            />
-          </>
-        }
-      />
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
@@ -100,19 +77,53 @@ export const WithBottomRightSlot: Story = {
 export const NoRightAction: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Section Header"
+          description="No actions on the right."
+          padding="fit"
+        />
+      </Card.Header>
+    </div>
+  ),
+};
+
+export const WithBottomChildren: Story = {
+  render: () => (
+    <div className="w-[28rem] border rounded-16">
       <Card.Header
-        headerPadding="sm"
-        children={
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Section Header"
-            description="No actions on the right."
-            padding="fit"
-          />
+        bottomChildren={
+          <div className="flex gap-1 px-2 pb-2">
+            <Button
+              icon={SvgSettings}
+              tooltip="Edit"
+              prominence="tertiary"
+              size="sm"
+            />
+          </div>
         }
-      />
+      >
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="MCP Server"
+          description="12 tools available"
+          padding="fit"
+          rightChildren={
+            <Button
+              variant="action"
+              prominence="tertiary"
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
@@ -120,44 +131,25 @@ export const NoRightAction: Story = {
 export const LongContent: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerPadding="sm"
-        children={
-          <ContentAction
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Very Long Provider Name That Should Truncate"
-            description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
-            padding="fit"
-            rightChildren={
-              <Button
-                variant="action"
-                prominence="tertiary"
-                icon={SvgCheckSquare}
-              >
-                Current Default
-              </Button>
-            }
-          />
-        }
-        bottomRightChildren={
-          <>
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Very Long Provider Name That Should Truncate"
+          description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
+          padding="fit"
+          rightChildren={
             <Button
-              icon={SvgUnplug}
+              variant="action"
               prominence="tertiary"
-              size="sm"
-              tooltip="Disconnect"
-            />
-            <Button
-              icon={SvgSettings}
-              prominence="tertiary"
-              size="sm"
-              tooltip="Edit"
-            />
-          </>
-        }
-      />
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
