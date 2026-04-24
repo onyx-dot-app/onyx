@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
-import useSWR from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
@@ -74,8 +73,7 @@ import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
-import { Notification, NotificationType } from "@/interfaces/settings";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { NotificationType } from "@/interfaces/settings";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -246,9 +244,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     useState(false);
 
   // Fetch notifications for build mode intro
-  const { data: notifications, mutate: mutateNotifications } = useSWR<
-    Notification[]
-  >(SWR_KEYS.notifications, errorHandlingFetcher);
+  const { notifications, refresh: mutateNotifications } = useNotifications();
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled

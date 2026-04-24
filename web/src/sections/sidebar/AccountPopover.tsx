@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { LOGOUT_DISABLED } from "@/lib/constants";
-import { Notification } from "@/interfaces/settings";
-import useSWR, { preload } from "swr";
+import { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   checkUserIsNoAuthUser,
   getUserDisplayName,
@@ -32,6 +30,7 @@ import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import useNotifications from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
 
@@ -45,16 +44,10 @@ function SettingsPopover({
   onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const { data: notifications } = useSWR<Notification[]>(
-    SWR_KEYS.notifications,
-    errorHandlingFetcher,
-    { revalidateOnFocus: false }
-  );
+  const { undismissedCount } = useNotifications();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const undismissedCount =
-    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const isAnonymousUser =
     user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
@@ -117,8 +110,8 @@ function SettingsPopover({
           rounding="sm"
           icon={SvgBell}
           title="Notifications"
-          suffix={undismissedCount > 0 ? ` (${undismissedCount})` : undefined}
           onClick={onOpenNotifications}
+          rightChildren={<SvgNotificationBubble count={undismissedCount} />}
         />,
         <LineItemButton
           key="help-faq"
@@ -185,17 +178,9 @@ export default function AccountPopover({
   const { user } = useUser();
   const appFocus = useAppFocus();
   const vectorDbEnabled = useVectorDbEnabled();
-
-  // Fetch notifications for display
-  // The GET endpoint also triggers a refresh if release notes are stale
-  const { data: notifications } = useSWR<Notification[]>(
-    SWR_KEYS.notifications,
-    errorHandlingFetcher
-  );
+  const { undismissedCount } = useNotifications();
 
   const userDisplayName = getUserDisplayName(user);
-  const undismissedCount =
-    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
@@ -226,7 +211,7 @@ export default function AccountPopover({
             rightChildren={
               hasNotifications ? (
                 <Section padding={0.5}>
-                  <SvgNotificationBubble size={6} />
+                  <SvgNotificationBubble count={undismissedCount} />
                 </Section>
               ) : undefined
             }
