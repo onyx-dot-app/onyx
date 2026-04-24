@@ -53,8 +53,14 @@ def write_chunks_to_vector_db_with_backoff(
             [],
         )
     except Exception as e:
-        logger.exception(
-            "Failed to write chunk batch to vector db. Trying individual docs."
+        # The batch write failing just means we fall back to the per-doc
+        # retry loop below. It's only a real failure if the per-doc retry
+        # also fails — that path already logs/captures to Sentry per doc.
+        # Use warning here so a transient OpenSearch ReadTimeout on the
+        # batch call doesn't ship an event for every indexing batch.
+        logger.warning(
+            f"Failed to write chunk batch to vector db. Trying individual docs. "
+            f"Batch error: {type(e).__name__}: {e}"
         )
 
         # give some specific logging on this common failure case.
