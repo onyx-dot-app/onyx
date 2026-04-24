@@ -7,11 +7,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests as _requests
+from office365.directory.object_collection import DirectoryObjectCollection  # type: ignore[import-untyped]
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.runtime.client_request import ClientRequestException  # type: ignore
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
+from office365.sharepoint.principal.users.collection import UserCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -301,10 +303,14 @@ def _get_sharepoint_groups(
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
 
-    def process_users(users: list[Any]) -> None:
+    def process_users(users: UserCollection) -> None:
         nonlocal groups, user_emails
 
-        for user in users:
+        # iterate `current_page` (the items just loaded by this page) instead of
+        # `users` directly: iterating the collection itself walks pages via
+        # `_get_next().execute_query()`, which re-fires this `page_loaded` callback
+        # and recurses until Python hits its max recursion depth.
+        for user in users.current_page:
             logger.debug(f"User: {user.to_json()}")
             if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
                 user, "user_principal_name"
@@ -355,10 +361,14 @@ def _get_azuread_groups(
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
 
-    def process_members(members: list[Any]) -> None:
+    def process_members(members: DirectoryObjectCollection) -> None:
         nonlocal groups, user_emails
 
-        for member in members:
+        # iterate `current_page` (the items just loaded by this page) instead of
+        # `members` directly: iterating the collection itself walks pages via
+        # `_get_next().execute_query()`, which re-fires this `page_loaded` callback
+        # and recurses until Python hits its max recursion depth.
+        for member in members.current_page:
             member_data = member.to_json()
             logger.debug(f"Member: {member_data}")
             # Check for user-specific attributes
@@ -519,7 +529,11 @@ def get_external_access_from_sharepoint(
         role_assignments: RoleAssignmentCollection,
     ) -> None:
         nonlocal user_emails, groups
-        for assignment in role_assignments:
+        # iterate `current_page` (the items just loaded by this page) instead of
+        # `role_assignments` directly: iterating the collection itself walks pages
+        # via `_get_next().execute_query()`, which re-fires this `page_loaded`
+        # callback and recurses until Python hits its max recursion depth.
+        for assignment in role_assignments.current_page:
             logger.debug(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
                 is_limited_access = True
@@ -711,7 +725,11 @@ def get_sharepoint_external_groups(
 
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:
         nonlocal groups
-        for assignment in role_assignments:
+        # iterate `current_page` (the items just loaded by this page) instead of
+        # `role_assignments` directly: iterating the collection itself walks pages
+        # via `_get_next().execute_query()`, which re-fires this `page_loaded`
+        # callback and recurses until Python hits its max recursion depth.
+        for assignment in role_assignments.current_page:
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
