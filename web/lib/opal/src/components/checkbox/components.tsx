@@ -3,8 +3,7 @@
 import "@opal/components/checkbox/styles.css";
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@opal/utils";
-import SvgCheck from "@opal/icons/check";
-import SvgMinus from "@opal/icons/minus";
+import { SvgCheck, SvgMinus } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Types
