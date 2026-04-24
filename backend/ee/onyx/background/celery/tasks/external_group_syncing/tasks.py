@@ -10,6 +10,7 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from google.auth.exceptions import RefreshError
 from pydantic import ValidationError
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -602,11 +603,15 @@ def _timed_perform_external_group_sync(
                     source=cc_pair.connector.source,
                 )
                 cumulative_upsert_time += time.monotonic() - upsert_start
-        except PermissionError as e:
-            # Credential invalid upstream (e.g. revoked service account,
-            # expired refresh token). Mark the attempt as a clean failure and
-            # log at warning — an admin needs to reconnect the connector, but
-            # it's not an unexpected exception worth a Sentry error event.
+        except RefreshError as e:
+            # Service-account / OAuth credentials revoked or deleted upstream.
+            # Existing retry paths (see RefreshableDriveObject.make_refreshable_execute
+            # in google_utils/resources.py) will have already tried to refresh
+            # before the error bubbled out here, so reaching this handler means
+            # the credentials are truly unusable. Mark the attempt as a clean
+            # failure and log at warning — an admin needs to reconnect the
+            # connector, but it's not an unexpected exception worth a Sentry
+            # error event.
             mark_external_group_sync_attempt_failed(
                 attempt_id, db_session, error_message=str(e)
             )
