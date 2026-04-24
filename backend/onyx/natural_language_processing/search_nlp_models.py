@@ -515,7 +515,12 @@ class CloudEmbedding:
                 sanitized_api_key=self.sanitized_api_key,
                 status_code=e.response.status_code,
             )
-            logger.error(error_string)
+            # Log at warning because the @retry decorator will re-invoke us
+            # on failure — an ERROR-level log here floods Sentry with up to
+            # _RETRY_TRIES duplicate events per failing batch (rate limits,
+            # transient provider outages). The final failure surfaces via
+            # the RuntimeError below and is logged by the caller.
+            logger.warning(error_string)
             logger.debug(f"Exception texts: {texts}")
 
             raise RuntimeError(error_string)
@@ -530,7 +535,7 @@ class CloudEmbedding:
                 self.provider,
                 sanitized_api_key=self.sanitized_api_key,
             )
-            logger.error(error_string)
+            logger.warning(error_string)
             logger.debug(f"Exception texts: {texts}")
 
             raise RuntimeError(error_string)
