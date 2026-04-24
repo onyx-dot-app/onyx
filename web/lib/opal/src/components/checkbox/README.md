@@ -21,7 +21,15 @@ All remaining props are forwarded to the hidden `<input>` element.
 
 ## Styles
 
-All styles are inline Tailwind classes — no separate CSS file.
+Visual states are driven by `data-*` attributes on the surface element and
+defined in `styles.css`:
+
+| Attribute | Values | Description |
+|---|---|---|
+| `data-state` | `"unchecked"` \| `"checked"` \| `"indeterminate"` | Current checkbox state |
+| `data-disabled` | present / absent | Disables interaction and applies muted colors |
+
+### Color matrix
 
 | State | Background | Border |
 |---|---|---|
@@ -29,6 +37,15 @@ All styles are inline Tailwind classes — no separate CSS file.
 | Checked / Indeterminate | `action-link-05` (hover: `action-link-04`) | — |
 | Disabled unchecked | `background-neutral-03` | `border-02` |
 | Disabled checked | `background-neutral-04` | — |
+
+### CSS classes
+
+| Class | Element | Description |
+|---|---|---|
+| `.opal-checkbox` | Root wrapper | `inline-flex shrink-0` |
+| `.opal-checkbox-surface` | Visual surface | 16x16, rounded, state-driven colors |
+| `.opal-checkbox-input` | Hidden `<input>` | Screen-reader only |
+| `.opal-checkbox-icon` | Check / dash icon | 12x12, `stroke-text-light-05` |
 
 ## Usage Examples
 
