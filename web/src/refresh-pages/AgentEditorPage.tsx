@@ -176,7 +176,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
   const imageSrc = uploadedImagePreview
     ? uploadedImagePreview
-    : values.uploaded_image_id && existingAgent?.id
+    : values.uploaded_image_id && existingAgent?.id != null
       ? buildAgentAvatarUrl(existingAgent.id)
       : values.icon_name
         ? undefined
