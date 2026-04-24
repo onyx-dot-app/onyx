@@ -1441,6 +1441,8 @@ def get_litellm_available_models(
                 LitellmFinalModelResponse(
                     provider_name=model_details.owned_by,
                     model_name=model_details.id,
+                    max_input_tokens=model_details.get_max_input_tokens(),
+                    supports_image_input=model_details.supports_image_input(),
                 )
             )
         except Exception as e:
@@ -1466,6 +1468,8 @@ def get_litellm_available_models(
                 SyncModelEntry(
                     name=r.model_name,
                     display_name=r.model_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
                 )
                 for r in sorted_results
             ],

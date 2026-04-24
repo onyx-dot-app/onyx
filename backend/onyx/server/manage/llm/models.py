@@ -452,11 +452,42 @@ class LitellmModelDetails(BaseModel):
     object: str  # "model"
     created: int  # Unix timestamp in seconds
     owned_by: str  # Provider name (e.g. "openai")
+    # LiteLLM-specific enrichment: capability + context metadata the proxy
+    # publishes for each model. Onyx used to drop this and fall back to
+    # hardcoded defaults (#9959).
+    model_info: dict[str, Any] | None = None
+
+    def get_max_input_tokens(self) -> int | None:
+        """Return the effective input-context size from ``model_info``.
+
+        Prefers the precise ``max_input_tokens`` when set; falls back to
+        ``max_tokens`` for proxy configs that only populate the OpenAI-style
+        field. Returns ``None`` for missing, non-int, or non-positive values
+        so the pipeline uses its own fallback rather than a bogus number.
+        """
+        if not self.model_info:
+            return None
+        for key in ("max_input_tokens", "max_tokens"):
+            value = self.model_info.get(key)
+            if isinstance(value, bool):
+                # bool is a subclass of int — exclude explicitly.
+                continue
+            if isinstance(value, int) and value > 0:
+                return value
+        return None
+
+    def supports_image_input(self) -> bool:
+        """True when the proxy advertises ``supports_vision`` for this model."""
+        if not self.model_info:
+            return False
+        return bool(self.model_info.get("supports_vision"))
 
 
 class LitellmFinalModelResponse(BaseModel):
     provider_name: str  # Provider name (e.g. "openai")
     model_name: str  # Model ID (e.g. "gpt-4o")
+    max_input_tokens: int | None = None
+    supports_image_input: bool = False
 
 
 # Bifrost dynamic models fetch
