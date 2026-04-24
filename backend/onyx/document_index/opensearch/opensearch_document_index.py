@@ -909,10 +909,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         "likely just added to the indexing pipeline and the chunk count will be "
                         "updated shortly."
                     )
-                if doc_chunk_count == 0:
-                    raise ValueError(
-                        f"Bug: Tried to update document {doc_id} but its chunk count was 0."
-                    )
+                # A chunk_count of 0 is a legitimate terminal state for a doc
+                # that had no extractable chunks (empty file, stop-word-only
+                # HTML, filtered content, etc.) — `update_docs_chunk_count`
+                # writes 0 in that case. There are no chunks in OpenSearch to
+                # update, so range(0) below is a clean no-op. See ENG-4076.
 
                 for chunk_index in range(doc_chunk_count):
                     document_chunk_id = get_opensearch_doc_chunk_id(
