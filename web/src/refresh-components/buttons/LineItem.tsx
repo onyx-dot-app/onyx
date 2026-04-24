@@ -6,7 +6,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 const buttonClassNames = {
   main: {

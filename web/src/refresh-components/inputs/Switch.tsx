@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 export interface SwitchProps
   extends WithoutStyles<

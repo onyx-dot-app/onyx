@@ -8,7 +8,7 @@ import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 import useContainerCenter from "@/hooks/useContainerCenter";
 

@@ -1,7 +1,7 @@
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -95,12 +95,11 @@ export default function TableHead({
       <div className="flex items-center gap-1">
         <div className="table-head-label">
           <Text
-            mainUiAction={!isSmall}
-            secondaryAction={isSmall}
-            text04
-            className="truncate"
+            font={isSmall ? "secondary-action" : "main-ui-action"}
+            color="text-04"
+            maxLines={1}
           >
-            {children}
+            {typeof children === "string" ? children : ""}
           </Text>
         </div>
         <div

@@ -113,7 +113,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 const InputComboBox = ({
   value,
