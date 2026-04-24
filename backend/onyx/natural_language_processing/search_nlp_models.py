@@ -935,12 +935,15 @@ class EmbeddingModel:
                 # values are captured for each iteration.
                 futures = [
                     executor.submit(
-                        process_batch,
-                        batch_idx=idx,
-                        num_of_batches=num_of_batches,
-                        text_batch=batch,
-                        tenant_id=tenant_id,
-                        request_id=request_id,
+                        lambda idx, batch: process_batch(
+                            batch_idx=idx,
+                            num_of_batches=num_of_batches,
+                            text_batch=batch,
+                            tenant_id=tenant_id,
+                            request_id=request_id,
+                        ),
+                        idx,
+                        batch,
                     )
                     for idx, batch in enumerate(text_batches)
                 ]

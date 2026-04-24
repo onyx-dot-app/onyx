@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from threading import Lock
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -270,11 +271,13 @@ def test_batch_encode_error_propagates() -> None:
     texts = [_text_for_idx(i) for i in range(8)]
 
     call_count = {"n": 0}
+    call_count_lock = Lock()
 
     def _fail_on_second_call(embed_request: EmbedRequest) -> EmbedResponse:
-        call_count["n"] += 1
-        if call_count["n"] == 2:
-            raise RuntimeError("simulated provider failure")
+        with call_count_lock:
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("simulated provider failure")
         return _fake_direct_api_call(embed_request)
 
     # Under test and postcondition.
