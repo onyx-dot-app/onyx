@@ -490,11 +490,17 @@ def batch_get_user_groups(
     return result
 
 
-def get_user_groups(db_session: Session, user_id: UUID) -> list[UserGroupInfo]:
+def get_user_groups(
+    db_session: Session,
+    user_id: UUID,
+    include_default: bool = False,
+) -> list[UserGroupInfo]:
     """Lightweight group info for a single user."""
     return [
         UserGroupInfo(id=gid, name=gname)
-        for gid, gname in batch_get_user_groups(db_session, [user_id]).get(user_id, [])
+        for gid, gname in batch_get_user_groups(
+            db_session, [user_id], include_default=include_default
+        ).get(user_id, [])
     ]
 
 

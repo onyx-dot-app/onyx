@@ -42,7 +42,9 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
         .all()
     )
     groups_by_user = batch_get_user_groups(
-        db_session, [api_key.user_id for api_key in api_keys]
+        db_session,
+        [api_key.user_id for api_key in api_keys],
+        include_default=True,
     )
     return [
         ApiKeyDescriptor(
@@ -122,7 +124,7 @@ def insert_api_key(
         api_key=api_key,
         api_key_name=api_key_args.name,
         user_id=api_key_user_id,
-        groups=get_user_groups(db_session, api_key_user_id),
+        groups=get_user_groups(db_session, api_key_user_id, include_default=True),
     )
 
 
@@ -153,7 +155,9 @@ def update_api_key(
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
         user_id=existing_api_key.user_id,
-        groups=get_user_groups(db_session, existing_api_key.user_id),
+        groups=get_user_groups(
+            db_session, existing_api_key.user_id, include_default=True
+        ),
     )
 
 
@@ -183,7 +187,9 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
         user_id=existing_api_key.user_id,
-        groups=get_user_groups(db_session, existing_api_key.user_id),
+        groups=get_user_groups(
+            db_session, existing_api_key.user_id, include_default=True
+        ),
     )
 
 
