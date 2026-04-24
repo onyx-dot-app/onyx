@@ -15,7 +15,7 @@ import (
 
 const (
 	tunnelNetwork = "onyx_default"
-	tunnelImage   = "alpine/socat"
+	tunnelImage   = "alpine/socat:1.8.0.3@sha256:76d1e4fc91bdd9d08f2a72a3fde1776798fd00cc00d3bded940dc154cd7ab6fd"
 )
 
 func newDevTunnelCommand() *cobra.Command {
