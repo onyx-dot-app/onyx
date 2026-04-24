@@ -18,6 +18,8 @@ from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.english_stopwords import strip_stopwords
@@ -78,8 +80,9 @@ def _build_index_filters(
             name for name in base_filters.document_set if name not in accessible_names
         )
         if unauthorized:
-            raise ValueError(
-                f"User does not have access to document sets: {unauthorized}"
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                f"User does not have access to document sets: {unauthorized}",
             )
 
     document_set_filter = (

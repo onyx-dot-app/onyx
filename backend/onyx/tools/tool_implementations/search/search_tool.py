@@ -73,6 +73,8 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
@@ -570,8 +572,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     if name not in accessible_names
                 )
                 if unauthorized:
-                    raise ValueError(
-                        f"User does not have access to document sets: {unauthorized}"
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        f"User does not have access to document sets: {unauthorized}",
                     )
 
             # ACL filters
