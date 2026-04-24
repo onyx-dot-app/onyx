@@ -104,8 +104,8 @@ export default function Footer(props: FooterProps) {
       data-size={resolvedSize}
     >
       {/* Left side */}
-      {props.mode === "selection" && (
-        <div className="flex items-center gap-1 px-1">
+      <div className="flex items-center gap-1 px-1">
+        {props.mode === "selection" ? (
           <SelectionLeft
             selectionState={props.selectionState}
             multiSelect={props.multiSelect}
@@ -115,12 +115,10 @@ export default function Footer(props: FooterProps) {
             onClear={props.onClear}
             isSmall={isSmall}
           />
-        </div>
-      )}
-
-      {props.mode === "summary" && props.leftExtra && (
-        <div className="flex items-center gap-1 px-1">{props.leftExtra}</div>
-      )}
+        ) : (
+          props.leftExtra
+        )}
+      </div>
 
       {/* Right side */}
       <div className="flex items-center gap-2 px-1 py-2">
