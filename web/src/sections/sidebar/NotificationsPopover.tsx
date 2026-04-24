@@ -5,8 +5,6 @@ import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { Notification, NotificationType } from "@/interfaces/settings";
 import useNotifications from "@/hooks/useNotifications";
-import Text from "@/refresh-components/texts/Text";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgSparkle,
   SvgRefreshCw,
@@ -17,7 +15,7 @@ import { IconProps } from "@opal/types";
 import { Button, Divider, LineItemButton } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, IllustrationContent } from "@opal/layouts";
+import { ContentAction, IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
 import { markdown } from "@opal/utils";
 
@@ -113,7 +111,18 @@ export default function NotificationsPopover({
         <ContentAction
           title="Notifications"
           sizePreset="main-content"
-          rightChildren={<SvgNotificationBubble count={10} />}
+          tag={{
+            title: `${undismissedCount} unread`,
+            color: "blue",
+          }}
+          rightChildren={
+            <Button
+              icon={SvgX}
+              onClick={onClose}
+              size="sm"
+              prominence="tertiary"
+            />
+          }
           padding="fit"
         />
       </div>
@@ -136,7 +145,7 @@ export default function NotificationsPopover({
           </Section>
         </div>
       ) : (
-        <div className="max-h-[var(--notifications-popover)] overflow-y-auto pt-1 px-1">
+        <div className="max-h-[var(--notifications-popover)] overflow-y-auto pt-1 px-0 flex flex-col gap-1">
           {notifications.map((notification) => (
             <LineItemButton
               key={notification.id}
@@ -146,7 +155,10 @@ export default function NotificationsPopover({
                   ? `~~${notification.title}~~`
                   : notification.title
               )}
+              selectVariant="select-heavy"
               sizePreset="main-ui"
+              rounding="sm"
+              state={notification.dismissed ? undefined : "selected"}
               description={notification.description ?? undefined}
               onClick={() => handleNotificationClick(notification)}
               rightChildren={

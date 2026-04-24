@@ -111,7 +111,11 @@ function SettingsPopover({
           icon={SvgBell}
           title="Notifications"
           onClick={onOpenNotifications}
-          rightChildren={<SvgNotificationBubble count={undismissedCount} />}
+          rightChildren={
+            !!undismissedCount ? (
+              <SvgNotificationBubble count={undismissedCount} />
+            ) : undefined
+          }
         />,
         <LineItemButton
           key="help-faq"
@@ -179,9 +183,7 @@ export default function AccountPopover({
   const appFocus = useAppFocus();
   const vectorDbEnabled = useVectorDbEnabled();
   const { undismissedCount } = useNotifications();
-
   const userDisplayName = getUserDisplayName(user);
-  const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -209,7 +211,7 @@ export default function AccountPopover({
               </div>
             )}
             rightChildren={
-              hasNotifications ? (
+              !!undismissedCount ? (
                 <Section padding={0.5}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>
@@ -227,7 +229,7 @@ export default function AccountPopover({
       <Popover.Content
         align="end"
         side="right"
-        width={popupState === "Notifications" ? "xl" : "md"}
+        width={popupState === "Notifications" ? "xl" : "lg"}
       >
         {popupState === "Settings" && (
           <SettingsPopover

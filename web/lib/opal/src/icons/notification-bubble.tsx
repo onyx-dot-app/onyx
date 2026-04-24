@@ -1,5 +1,7 @@
 import type { IconProps } from "@opal/types";
 
+const MAX_NOTIFICATIONS = 9;
+
 interface NotificationBubbleProps extends IconProps {
   /** Optional count to display inside the bubble. */
   count?: number;
@@ -27,7 +29,8 @@ const SvgNotificationBubble = ({
   }
 
   // With a count, render a badge with the number inside
-  const displayCount = count > 99 ? "99+" : String(count);
+  const displayCount =
+    count > MAX_NOTIFICATIONS ? `${MAX_NOTIFICATIONS}+` : String(count);
 
   return (
     <div
