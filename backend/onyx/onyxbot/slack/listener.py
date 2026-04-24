@@ -14,6 +14,7 @@ from typing import Dict
 import psycopg2.errors
 from prometheus_client import Gauge
 from prometheus_client import start_http_server
+from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
@@ -390,11 +391,15 @@ class SlackbotHandler:
                 if tenant_id in self.redis_locks and not DEV_MODE:
                     try:
                         self.redis_locks[tenant_id].release()
-                        del self.redis_locks[tenant_id]
+                    except LockNotOwnedError:
+                        # Expected: lock expired or was stolen; nothing to release.
+                        pass
                     except Exception as e:
-                        logger.error(
+                        logger.warning(
                             f"Error releasing lock for gated tenant {tenant_id}: {e}"
                         )
+                    finally:
+                        self.redis_locks.pop(tenant_id, None)
                 continue
 
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
@@ -424,12 +429,16 @@ class SlackbotHandler:
                         if tenant_id in self.redis_locks and not DEV_MODE:
                             try:
                                 self.redis_locks[tenant_id].release()
-                                del self.redis_locks[tenant_id]
                                 logger.info(f"Released lock for tenant {tenant_id}")
+                            except LockNotOwnedError:
+                                # Expected: lock expired or was stolen.
+                                pass
                             except Exception as e:
-                                logger.error(
+                                logger.warning(
                                     f"Error releasing lock for tenant {tenant_id}: {e}"
                                 )
+                            finally:
+                                self.redis_locks.pop(tenant_id, None)
                     else:
                         # Manage or reconnect Slack bot sockets
                         for bot in bots:
@@ -573,8 +582,11 @@ class SlackbotHandler:
                 try:
                     self.redis_locks[tenant_id].release()
                     logger.info(f"Released lock for tenant {tenant_id}")
+                except LockNotOwnedError:
+                    # Expected during shutdown: lock expired or was stolen.
+                    pass
                 except Exception as e:
-                    logger.error(f"Error releasing lock for tenant {tenant_id}: {e}")
+                    logger.warning(f"Error releasing lock for tenant {tenant_id}: {e}")
                 finally:
                     del self.redis_locks[tenant_id]
 
