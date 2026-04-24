@@ -39,7 +39,8 @@ async function buildLoginRedirect(): Promise<string> {
     }
     return `/auth/login?next=${encodeURIComponent(safe)}`;
   } catch {
-    // `headers()` throws outside a request context (e.g. tests).
+    // `headers()` is not available during static generation / build-time
+    // prerendering; fall back to a bare login redirect in those cases.
     return "/auth/login";
   }
 }
