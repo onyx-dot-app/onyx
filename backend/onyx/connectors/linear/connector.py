@@ -40,6 +40,7 @@ _LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 _ACCESS_TOKEN = "access_token"
 _EXPIRE_AT = "expire_at"
 _REFRESH_TOKEN = "refresh_token"
+_EXPIRES_IN = "expires_in"
 
 
 def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response:
@@ -137,7 +138,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
 
-        expire_at = time.time() + token_data["expires_in"]
+        expire_at = time.time() + token_data[_EXPIRES_IN]
 
         return {
             _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
@@ -191,7 +192,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
 
-        expire_at = time.time() + token_data["expires_in"]
+        expire_at = time.time() + token_data[_EXPIRES_IN]
 
         return {
             _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
