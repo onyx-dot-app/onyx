@@ -758,7 +758,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             except BulkIndexError as e:
                 # There are several reasons why this might be raised, but the
                 # most likely one is if the deletion has not had enough time to
-                # propogate throughout the index, in which case this would be
+                # propagate throughout the index, in which case this would be
                 # raised with some form of "version_conflict_engine_exception
                 # version conflict, document already exists" messaging.
                 # Refresh the index and try one more time. We do not refresh
