@@ -496,11 +496,20 @@ class SlackbotHandler:
                     #     f"Started socket client for Slackbot with name '{bot_name}' (tenant: {tenant_id}, app: {slack_bot_id})"
                     # )
         except SlackApiError as e:
-            # Only error out if we get a not_authed error
-            if "not_authed" in str(e):
-                # for some reason we want to add the tenant to the list when this happens?
-                logger.error(
-                    f"Authentication error - Invalid or expired credentials: {tenant_id=} {slack_bot_id=}. Error: {e}"
+            # Any auth failure means connect() will also fail — bail early
+            # so slack_sdk's socket_mode client never logs its own error.
+            if any(
+                code in str(e)
+                for code in (
+                    "not_authed",
+                    "invalid_auth",
+                    "token_expired",
+                    "token_revoked",
+                    "account_inactive",
+                )
+            ):
+                logger.warning(
+                    f"Slack auth failed, skipping bot: {tenant_id=} {slack_bot_id=} error={e}"
                 )
                 return None
 
@@ -520,14 +529,19 @@ class SlackbotHandler:
             process_slack_event  # ty: ignore[invalid-argument-type]
         )
 
-        # Establish a WebSocket connection to the Socket Mode servers
-        # logger.debug(
-        #     f"Connecting socket client for tenant: {tenant_id}, app: {slack_bot_id}"
-        # )
-        socket_client.connect()
-        # logger.info(
-        #     f"Started SocketModeClient for tenant: {tenant_id}, app: {slack_bot_id}"
-        # )
+        # Establish a WebSocket connection to the Socket Mode servers.
+        # connect() internally calls apps.connections.open; on auth failure
+        # slack_sdk's socket_mode client logs its own error (shipped to
+        # Sentry as ONYX-BACKEND-4) and re-raises. The common case is
+        # caught above by the auth_test guard — this wrapper covers the
+        # rarer path where bot_token is valid but app_token is not.
+        try:
+            socket_client.connect()
+        except SlackApiError as e:
+            logger.warning(
+                f"Failed to open Slack socket connection: {tenant_id=} {slack_bot_id=} error={e}"
+            )
+            return None
 
         return socket_client
 
