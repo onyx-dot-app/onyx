@@ -37,6 +37,7 @@ import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupRe
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+import { useUser } from "@/providers/UserProvider";
 
 const addModeColumns = memberTableColumns;
 
@@ -51,6 +52,7 @@ interface EditGroupPageProps {
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const { isAdmin } = useUser();
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
@@ -77,10 +79,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     TokenRateLimitDisplay[]
   >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher);
 
-  // Fetch permissions for this group
+  // Fetch permissions for this group (admin only)
   const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
     string[]
-  >(SWR_KEYS.userGroupPermissions(groupId), errorHandlingFetcher);
+  >(
+    isAdmin ? SWR_KEYS.userGroupPermissions(groupId) : null,
+    errorHandlingFetcher
+  );
 
   // Form state
   const [groupName, setGroupName] = useState("");
@@ -254,8 +259,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         selectedDocSetIds
       );
 
-      // Save permissions (bulk desired-state)
-      await saveGroupPermissions(groupId, enabledPermissions);
+      // Save permissions (bulk desired-state, admin only)
+      if (isAdmin) {
+        await saveGroupPermissions(groupId, enabledPermissions);
+      }
 
       // Save token rate limits (create/update/delete)
       await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
@@ -266,7 +273,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
-      mutate(SWR_KEYS.userGroupPermissions(groupId));
+      if (isAdmin) {
+        mutate(SWR_KEYS.userGroupPermissions(groupId));
+      }
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {
@@ -456,10 +465,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 )}
               </Section>
 
-              <GroupPermissionsSection
-                enabledPermissions={enabledPermissions}
-                onPermissionsChange={setEnabledPermissions}
-              />
+              {isAdmin && (
+                <GroupPermissionsSection
+                  enabledPermissions={enabledPermissions}
+                  onPermissionsChange={setEnabledPermissions}
+                />
+              )}
 
               <SharedGroupResources
                 selectedCcPairIds={selectedCcPairIds}

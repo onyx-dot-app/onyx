@@ -86,15 +86,16 @@ def _create_connector_managers_group(
     group_user: DATestUser,
     name: str,
 ) -> None:
-    """Create a non-default group that grants its members manage:connectors."""
+    """Create a non-default group that grants its members manage:connectors.
+
+    User effective permissions are recomputed synchronously when group
+    permissions are set, so this does not need to wait for the slower document
+    index user-group sync marker.
+    """
     group = UserGroupManager.create(
         name=name,
         user_ids=[group_user.id],
         cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[group],
         user_performing_action=admin_user,
     )
     set_perms_response = UserGroupManager.set_permissions(

@@ -138,6 +138,7 @@ export const ConnectorMultiSelect = ({
           }}
           onKeyDown={handleKeyDown}
           className="rounded-12"
+          data-testid="connector-search-input"
         />
 
         {open && (
