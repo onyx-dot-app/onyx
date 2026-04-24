@@ -49,7 +49,16 @@ export async function grantWorkerPermissions(
   const registryRes = await page.request.get(
     "/api/manage/admin/permissions/registry"
   );
-  if (!registryRes.ok()) return undefined;
+  // 404 is the expected CE-mode signal that the permission registry is
+  // disabled; anything else is a real setup failure we want to surface.
+  if (registryRes.status() === 404) return undefined;
+  if (!registryRes.ok()) {
+    const body = await registryRes.text().catch(() => "");
+    throw new Error(
+      `Unexpected /manage/admin/permissions/registry status ` +
+        `${registryRes.status()}: ${body.slice(0, 200)}`
+    );
+  }
 
   const { email } = workerUserCredentials(workerIndex % WORKER_USER_POOL_SIZE);
   const user = await adminClient.getUserByEmail(email);

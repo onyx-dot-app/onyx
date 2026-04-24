@@ -68,3 +68,35 @@ def test_access_matrix(
     headers, cookies = resolve_credentials(user_kind, request)
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
+
+
+# PUT /manage/admin/user-group/{id}/permissions is admin-only (not
+# MANAGE_USER_GROUPS) to prevent privilege escalation — a group manager
+# could otherwise grant their own group any toggleable permission. The
+# endpoint must remain gated on FULL_ADMIN_PANEL_ACCESS, so holders of
+# MANAGE_USER_GROUPS are expected to be denied here.
+_SET_PERMISSIONS_USER_KINDS: list[tuple[str, str]] = [
+    ("admin", "allowed"),
+    ("holder", "denied"),
+    ("service_account_holder", "denied"),
+    ("basic", "denied"),
+    ("service_account", "denied"),
+    ("bot", "denied"),
+    ("ext_perm", "denied"),
+    ("anonymous", "anon_denied"),
+]
+
+
+@pytest.mark.parametrize("user_kind,expected", _SET_PERMISSIONS_USER_KINDS)
+def test_set_permissions_requires_full_admin(
+    user_kind: str,
+    expected: str,
+    request: pytest.FixtureRequest,
+    permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures module_reset ran
+) -> None:
+    method = "PUT"
+    path = "/manage/admin/user-group/999999/permissions"
+    body: dict[str, Any] = {"permissions": []}
+    headers, cookies = resolve_credentials(user_kind, request)
+    resp = call_endpoint(method, path, body, headers, cookies)
+    assert_response(resp, method, path, user_kind, expected)

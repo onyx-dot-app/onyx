@@ -107,7 +107,7 @@ def get_user_group_permissions(
 def set_user_group_permissions(
     user_group_id: int,
     request: BulkSetPermissionsRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[Permission]:
     group = fetch_user_group(db_session, user_group_id)

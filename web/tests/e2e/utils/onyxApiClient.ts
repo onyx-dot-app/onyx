@@ -364,12 +364,16 @@ export class OnyxApiClient {
   }
 
   /**
-   * Deletes a connector-credential pair and waits for deletion to complete.
-   * Fetches the CC pair details to get connector/credential IDs, then initiates deletion
-   * and polls until the deletion is confirmed (waits for 404 response).
+   * Initiates deletion of a connector-credential pair.
+   *
+   * Fetches the CC pair details to get connector/credential IDs, then fires
+   * the deletion-attempt endpoint. Deletion runs asynchronously on a Celery
+   * worker; this method does NOT wait for it to finish, so the pair may
+   * still appear briefly after this resolves. Intended for test-teardown
+   * fire-and-forget cleanup — use `waitForDeletion` directly if a caller
+   * needs to observe the deleted state.
    *
    * @param ccPairId - The connector-credential pair ID to delete
-   * @returns Promise that resolves when deletion is confirmed, or rejects on timeout
    */
   async deleteCCPair(ccPairId: number): Promise<void> {
     // Get CC pair details to extract connector_id and credential_id
