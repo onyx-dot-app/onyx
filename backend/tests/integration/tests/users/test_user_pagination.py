@@ -1,4 +1,8 @@
+import requests
+
+from onyx.db.enums import AccountType
 from onyx.server.models import FullUserSnapshot
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -181,3 +185,74 @@ def test_user_pagination_edge_cases(reset: None) -> None:  # noqa: ARG001
     assert case_insensitive.total_items == 3
     assert len(case_insensitive.items) == 3
     assert all("uniq_search" in u.email for u in case_insensitive.items)
+
+
+def test_user_pagination_account_types_filter(reset: None) -> None:  # noqa: ARG001
+    """The ``account_types`` filter on /manage/users/accepted narrows results to
+    users whose ``account_type`` is in the supplied list, while omitting the
+    filter returns the full accepted-user set.
+
+    This guards against the silent filter removal that shipped in the
+    UserRole-cleanup PR: an endpoint tagged PUBLIC_API_TAGS must not drop
+    filter params without a replacement.
+    """
+    admin: DATestUser = UserManager.create(name="admin_account_types")
+
+    bot_email = "bot_filter@example.com"
+    UserManager.seed_non_web_user(AccountType.BOT, bot_email)
+    # EXT_PERM_USER is excluded by default from accepted-user listings, so
+    # seeding one would not show up — BOT is the only non-STANDARD account
+    # type that does surface in this endpoint.
+
+    # No filter → all accepted users are returned (admin + bot).
+    unfiltered = UserManager.get_user_page(
+        page_num=0,
+        page_size=100,
+        user_performing_action=admin,
+    )
+    assert unfiltered.total_items >= 2
+    returned_emails = {u.email for u in unfiltered.items}
+    assert admin.email in returned_emails
+    assert bot_email in returned_emails
+
+    # Filter to BOT only → just the seeded bot.
+    bots_only = UserManager.get_user_page(
+        page_num=0,
+        page_size=100,
+        account_types=[AccountType.BOT],
+        user_performing_action=admin,
+    )
+    assert bots_only.total_items == 1
+    assert [u.email for u in bots_only.items] == [bot_email]
+    assert all(u.account_type == AccountType.BOT for u in bots_only.items)
+
+    # Filter to STANDARD only → admin is present, bot is absent.
+    standard_only = UserManager.get_user_page(
+        page_num=0,
+        page_size=100,
+        account_types=[AccountType.STANDARD],
+        user_performing_action=admin,
+    )
+    standard_emails = {u.email for u in standard_only.items}
+    assert admin.email in standard_emails
+    assert bot_email not in standard_emails
+    assert all(u.account_type == AccountType.STANDARD for u in standard_only.items)
+
+
+def test_user_pagination_rejects_removed_roles_param(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Callers still passing the removed ``roles`` filter must receive a clear
+    400 pointing at ``account_types`` — silent ignore would return unfiltered
+    results for any external integration that hasn't migrated."""
+    admin: DATestUser = UserManager.create(name="admin_roles_reject")
+
+    response = requests.get(
+        url=f"{API_SERVER_URL}/manage/users/accepted",
+        params={"roles": "admin"},
+        headers=admin.headers,
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error_code"] == "INVALID_INPUT"
+    assert "account_types" in body["detail"]

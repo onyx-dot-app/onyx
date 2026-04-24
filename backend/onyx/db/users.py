@@ -89,6 +89,7 @@ def _get_accepted_user_where_clause(
     email_filter_string: str | None = None,
     include_external: bool = False,
     is_active_filter: bool | None = None,
+    account_type_filter: list[AccountType] | None = None,
 ) -> list[ColumnElement[bool]]:
     """
     Generates a SQLAlchemy where clause for filtering users based on the provided parameters.
@@ -98,6 +99,7 @@ def _get_accepted_user_where_clause(
     - email_filter_string: A substring to filter user emails. Only users whose emails contain this substring will be included.
     - is_active_filter: When True, only active users will be included. When False, only inactive users will be included.
     - include_external: If False, external permissioned users will be excluded.
+    - account_type_filter: If provided and non-empty, only users whose ``account_type`` is in the list will be included.
 
     Returns:
     - list: A list of conditions to be used in a SQLAlchemy query to filter users.
@@ -130,6 +132,9 @@ def _get_accepted_user_where_clause(
     if is_active_filter is not None:
         where_clause.append(is_active_col.is_(is_active_filter))
 
+    if account_type_filter:
+        where_clause.append(User.account_type.in_(account_type_filter))
+
     return where_clause
 
 
@@ -155,6 +160,7 @@ def get_page_of_filtered_users(
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
     include_external: bool = False,
+    account_type_filter: list[AccountType] | None = None,
 ) -> Sequence[User]:
     users_stmt = select(User)
 
@@ -162,6 +168,7 @@ def get_page_of_filtered_users(
         email_filter_string=email_filter_string,
         include_external=include_external,
         is_active_filter=is_active_filter,
+        account_type_filter=account_type_filter,
     )
     # Apply pagination
     users_stmt = users_stmt.offset((page_num) * page_size).limit(page_size)
@@ -176,11 +183,13 @@ def get_total_filtered_users_count(
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
     include_external: bool = False,
+    account_type_filter: list[AccountType] | None = None,
 ) -> int:
     where_clause = _get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
         include_external=include_external,
         is_active_filter=is_active_filter,
+        account_type_filter=account_type_filter,
     )
     total_count_stmt = select(func.count()).select_from(User)
     # Apply filtering

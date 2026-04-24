@@ -15,8 +15,6 @@ import requests
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
-from onyx.db.users import add_slack_user_if_not_exists
-from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.db.users import get_user_by_email
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
@@ -33,17 +31,6 @@ def _simulate_saml_login(email: str, admin_user: DATestUser) -> dict:
     )
     response.raise_for_status()
     return response.json()
-
-
-def _seed_non_web_user(account_type: AccountType, email: str) -> None:
-    """Create a BOT or EXT_PERM_USER directly via the internal DB path."""
-    with get_session_with_current_tenant() as db_session:
-        if account_type == AccountType.BOT:
-            add_slack_user_if_not_exists(db_session, email=email)
-        elif account_type == AccountType.EXT_PERM_USER:
-            batch_add_ext_perm_user_if_not_exists(db_session, emails=[email])
-        else:
-            raise ValueError(f"Unsupported seed account_type: {account_type}")
 
 
 def _get_basic_group_member_emails(admin_user: DATestUser) -> set[str]:
@@ -79,7 +66,7 @@ def test_saml_converts_non_web_user(
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     test_email = f"{seeded_account_type.value}_saml@example.com"
-    _seed_non_web_user(seeded_account_type, test_email)
+    UserManager.seed_non_web_user(seeded_account_type, test_email)
 
     # Pre-condition: non-web users are not in Basic default group
     assert test_email not in _get_basic_group_member_emails(admin_user)
@@ -124,7 +111,7 @@ def test_saml_idempotent_for_converted_user(
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     test_email = "saml_idempotent@example.com"
-    _seed_non_web_user(AccountType.EXT_PERM_USER, test_email)
+    UserManager.seed_non_web_user(AccountType.EXT_PERM_USER, test_email)
 
     first = _simulate_saml_login(test_email, admin_user)
     assert first["account_type"] == AccountType.STANDARD.value

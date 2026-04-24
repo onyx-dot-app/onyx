@@ -10,7 +10,11 @@ from requests import HTTPError
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
+from onyx.db.users import add_slack_user_if_not_exists
+from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import UserInfo
 from onyx.server.models import FullUserSnapshot
@@ -273,6 +277,7 @@ class UserManager:
         page_size: int = 10,
         search_query: str | None = None,
         is_active_filter: bool | None = None,
+        account_types: list[AccountType] | None = None,
     ) -> PaginatedReturn[FullUserSnapshot]:
         query_params: dict[str, str | list[str] | int] = {
             "page_num": page_num,
@@ -282,6 +287,8 @@ class UserManager:
             query_params["q"] = search_query
         if is_active_filter is not None:
             query_params["is_active"] = is_active_filter
+        if account_types:
+            query_params["account_types"] = [at.value for at in account_types]
 
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
@@ -295,6 +302,21 @@ class UserManager:
             total_items=data["total_items"],
         )
         return paginated_result
+
+    @staticmethod
+    def seed_non_web_user(account_type: AccountType, email: str) -> None:
+        """Seed a BOT or EXT_PERM_USER account directly via the internal DB
+        helpers. Emails are lowercased to match the ``User`` model's
+        normalization validator — assertions that reuse the seeded email will
+        otherwise miss the DB row."""
+        email = email.lower()
+        with get_session_with_current_tenant() as db_session:
+            if account_type == AccountType.BOT:
+                add_slack_user_if_not_exists(db_session, email=email)
+            elif account_type == AccountType.EXT_PERM_USER:
+                batch_add_ext_perm_user_if_not_exists(db_session, emails=[email])
+            else:
+                raise ValueError(f"Unsupported seed account_type: {account_type}")
 
     @staticmethod
     def invite_user(

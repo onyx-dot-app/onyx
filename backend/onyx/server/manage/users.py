@@ -77,6 +77,8 @@ from onyx.db.users import get_page_of_filtered_users
 from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_account_type_and_status
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
@@ -149,21 +151,37 @@ def list_accepted_users(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
     is_active: bool | None = Query(default=None),
+    account_types: list[AccountType] = Query(default=[]),
+    # Accepted only to raise a clear error for callers still sending the
+    # removed ``roles`` filter; would otherwise be silently ignored by FastAPI
+    # and return unfiltered results.
+    roles: list[str] = Query(default=[], deprecated=True, include_in_schema=False),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
+    if roles:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The 'roles' query parameter has been removed. Use 'account_types' "
+            "(values: standard, bot, ext_perm_user, service_account, anonymous) "
+            "instead. Admin status is no longer a user role — it derives from "
+            "group membership and is returned on each user as 'is_admin'.",
+        )
+
     filtered_accepted_users = get_page_of_filtered_users(
         db_session=db_session,
         page_size=page_size,
         page_num=page_num,
         email_filter_string=q,
         is_active_filter=is_active,
+        account_type_filter=account_types or None,
     )
 
     total_accepted_users_count = get_total_filtered_users_count(
         db_session=db_session,
         email_filter_string=q,
         is_active_filter=is_active,
+        account_type_filter=account_types or None,
     )
 
     if not filtered_accepted_users:

@@ -12,24 +12,10 @@ since no admin-facing downgrade API exists any more.
 
 import pytest
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
-from onyx.db.users import add_slack_user_if_not_exists
-from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
-
-
-def _seed_non_web_user(account_type: AccountType, email: str) -> None:
-    """Seed a BOT or EXT_PERM_USER account directly via the db helpers."""
-    with get_session_with_current_tenant() as db_session:
-        if account_type == AccountType.BOT:
-            add_slack_user_if_not_exists(db_session, email=email)
-        elif account_type == AccountType.EXT_PERM_USER:
-            batch_add_ext_perm_user_if_not_exists(db_session, emails=[email])
-        else:
-            raise ValueError(f"Unsupported seed account_type: {account_type}")
 
 
 def _get_default_group_member_emails(
@@ -57,7 +43,7 @@ def test_password_signup_upgrade(
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     test_email = f"{seeded_account_type.value}_upgrade@example.com"
-    _seed_non_web_user(seeded_account_type, test_email)
+    UserManager.seed_non_web_user(seeded_account_type, test_email)
 
     # Non-web users should not be in the Basic default group before upgrade
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
@@ -96,7 +82,7 @@ def test_password_signup_upgrade_propagates_permissions(
 
     # --- EXT_PERM_USER path ---
     ext_email = "ext_perms_check@example.com"
-    _seed_non_web_user(AccountType.EXT_PERM_USER, ext_email)
+    UserManager.seed_non_web_user(AccountType.EXT_PERM_USER, ext_email)
 
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
     assert ext_email not in basic_emails
@@ -111,7 +97,7 @@ def test_password_signup_upgrade_propagates_permissions(
 
     # --- BOT (Slack) path ---
     slack_email = "slack_perms_check@example.com"
-    _seed_non_web_user(AccountType.BOT, slack_email)
+    UserManager.seed_non_web_user(AccountType.BOT, slack_email)
 
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
     assert slack_email not in basic_emails
