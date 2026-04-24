@@ -8,7 +8,7 @@ import Popover from "@/refresh-components/Popover";
 import { Divider } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { ResourcePopoverProps } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";
 
 function ResourcePopover({

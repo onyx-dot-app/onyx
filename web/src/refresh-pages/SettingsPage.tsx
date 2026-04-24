@@ -61,7 +61,7 @@ import {
   CHAT_BACKGROUND_NONE,
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";

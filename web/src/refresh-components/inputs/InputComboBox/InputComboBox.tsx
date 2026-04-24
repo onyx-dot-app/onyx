@@ -91,7 +91,8 @@ import {
   shift,
   size,
 } from "@floating-ui/react-dom";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";

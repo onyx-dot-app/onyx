@@ -2,7 +2,7 @@
 
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";

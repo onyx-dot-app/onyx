@@ -2,7 +2,7 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import type { WithoutStyles } from "@opal/types";

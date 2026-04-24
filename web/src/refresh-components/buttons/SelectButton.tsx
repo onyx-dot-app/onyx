@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronDownSmall } from "@opal/icons";

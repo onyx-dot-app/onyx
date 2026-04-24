@@ -1,6 +1,7 @@
 "use client";
 
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";

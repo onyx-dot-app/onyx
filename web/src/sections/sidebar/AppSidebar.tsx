@@ -43,7 +43,7 @@ import type { Project } from "@/app/app/projects/projectsService";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
 import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { Button as OpalButton } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,

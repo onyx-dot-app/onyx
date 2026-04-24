@@ -5,7 +5,7 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import {

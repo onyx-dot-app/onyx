@@ -4,7 +4,7 @@ import React, { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { TextProps } from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 /**
  * Hook to detect if text is truncated by comparing visible width vs full width

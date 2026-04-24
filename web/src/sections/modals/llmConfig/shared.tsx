@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";

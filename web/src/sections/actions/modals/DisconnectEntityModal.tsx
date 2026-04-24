@@ -4,7 +4,7 @@ import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { SvgUnplug } from "@opal/icons";
 interface DisconnectEntityModalProps {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import "./loading.css";
 import { ThreeDots } from "react-loader-spinner";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface LoadingAnimationProps {
   text?: string;

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useField } from "formik";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
 import { Checkbox } from "@opal/components";
 

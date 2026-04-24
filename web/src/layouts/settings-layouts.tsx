@@ -34,7 +34,7 @@
  */
 
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Divider } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import { IconFunctionComponent } from "@opal/types";
