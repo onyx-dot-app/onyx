@@ -19,6 +19,7 @@ import {
   SvgLogOut,
   SvgUser,
   SvgNotificationBubble,
+  SvgInfo,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
@@ -38,6 +39,11 @@ function SettingsPopover({
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     SWR_KEYS.notifications,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+  const { data: versionData } = useSWR<{ backend_version: string }>(
+    SWR_KEYS.version,
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
@@ -128,6 +134,12 @@ function SettingsPopover({
               onClick={handleLogout}
             >
               Log out
+            </LineItem>
+          ),
+          versionData && null,
+          versionData && (
+            <LineItem key="version" icon={SvgInfo} muted interactive={false}>
+              {versionData.backend_version}
             </LineItem>
           ),
         ]}
