@@ -16,7 +16,7 @@ import {
   ContentMd,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps } from "@opal/components/tag/components";
+import type { TagProps } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";

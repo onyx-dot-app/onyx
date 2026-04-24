@@ -1,9 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import type { Decorator } from "@storybook/react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { Tooltip } from "@opal/components/tooltip/components";
-import { Button } from "@opal/components/buttons/button/components";
-import { Card } from "@opal/components";
+import { Tooltip, Button, Card } from "@opal/components";
 
 const withTooltipProvider: Decorator = (Story) => (
   <TooltipPrimitive.Provider>

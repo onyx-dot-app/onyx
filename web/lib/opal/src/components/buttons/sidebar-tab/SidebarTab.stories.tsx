@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { SidebarTab } from "@opal/components/buttons/sidebar-tab/components";
+import { SidebarTab } from "@opal/components";
 import {
   SvgSettings,
   SvgUsers,

@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Checkbox } from "@opal/components/checkbox/components";
-import { Text } from "@opal/components/text/components";
+import { Checkbox, Text } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta = {

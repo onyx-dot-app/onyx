@@ -1,4 +1,4 @@
-import { Card } from "@opal/components/cards/card/components";
+import { Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
 import type {

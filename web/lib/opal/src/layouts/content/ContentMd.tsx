@@ -1,14 +1,13 @@
 "use client";
 
-import { Button } from "@opal/components/buttons/button/components";
-import { Tag, type TagProps } from "@opal/components/tag/components";
+import { Button, Tag, Text } from "@opal/components";
+import type { TagProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text, type TextFont } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
