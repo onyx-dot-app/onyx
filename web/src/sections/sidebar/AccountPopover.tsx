@@ -25,10 +25,12 @@ import {
 } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import packageJson from "../../../package.json";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import {
+  useVectorDbEnabled,
+  useSettingsContext,
+} from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import useNotifications from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -45,6 +47,7 @@ function SettingsPopover({
 }: SettingsPopoverProps) {
   const { user } = useUser();
   const { undismissedCount } = useNotifications();
+  const settings = useSettingsContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -159,7 +162,9 @@ function SettingsPopover({
             orientation="reverse"
             icon={SvgOnyxLogo}
             title={markdown(
-              `[Onyx v${packageJson.version}](https://docs.onyx.app/changelog)`
+              `[Onyx ${
+                settings?.webVersion ?? "dev"
+              }](https://docs.onyx.app/changelog)`
             )}
           />
         </div>,
