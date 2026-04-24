@@ -58,7 +58,7 @@ spec:
         env:
           {{- include "onyx.envSecrets" . | nindent 12}}
           {{- with .Values.inferenceCapability.extraEnv }}
-          {{- toYaml . | nindent 10 }}
+          {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- if .Values.inferenceCapability.securityContext }}
         securityContext:
