@@ -207,6 +207,18 @@ def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
                 db_session.flush()
 
 
+def get_builtin_tool_by_id(
+    db_session: Session,
+    in_code_tool_id: str,
+) -> Tool | None:
+    """Look up a built-in tool by its ``in_code_tool_id`` column.
+
+    Returns ``None`` when no matching row exists."""
+    return db_session.execute(
+        select(Tool).where(Tool.in_code_tool_id == in_code_tool_id)
+    ).scalar_one_or_none()
+
+
 def get_builtin_tool(
     db_session: Session,
     tool_type: Type[BUILT_IN_TOOL_TYPES],
@@ -231,9 +243,7 @@ def get_builtin_tool(
             f"Tool type {tool_type.__name__} not found in the BUILT_IN_TOOLS list."
         )
 
-    db_tool = db_session.execute(
-        select(Tool).where(Tool.in_code_tool_id == tool_id)
-    ).scalar_one_or_none()
+    db_tool = get_builtin_tool_by_id(db_session, tool_id)
 
     if not db_tool:
         raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")

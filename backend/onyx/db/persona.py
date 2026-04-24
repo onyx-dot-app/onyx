@@ -1034,21 +1034,6 @@ def upsert_persona(
         if not attached_documents and document_ids:
             raise ValueError("documents not found or not accessible")
 
-    # If the persona will have knowledge sources that require search,
-    # ensure SearchTool is included in the tools list.
-    has_search_knowledge = bool(document_sets or hierarchy_nodes or attached_documents)
-    if has_search_knowledge and tools is not None:
-        if not any(t.in_code_tool_id == SEARCH_TOOL_ID for t in tools):
-            from onyx.db.tools import get_tool_by_name
-
-            try:
-                tools.append(get_tool_by_name(SEARCH_TOOL_ID, db_session))
-            except ValueError:
-                logger.warning(
-                    "SearchTool not found in database; cannot auto-add to persona '%s'",
-                    name,
-                )
-
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools, db_session)
@@ -1156,6 +1141,27 @@ def upsert_persona(
         if user_files:
             _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
         persona = new_persona
+
+    # Enforce invariant: knowledge sources → SearchTool must be in tools.
+    # Operates on the final persona object so it covers both create and
+    # update paths regardless of which fields the caller provided.
+    if (
+        persona.document_sets
+        or persona.hierarchy_nodes
+        or persona.attached_documents
+        or persona.user_files
+    ) and not any(t.in_code_tool_id == SEARCH_TOOL_ID for t in persona.tools):
+        from onyx.db.tools import get_builtin_tool_by_id
+
+        search_tool = get_builtin_tool_by_id(db_session, SEARCH_TOOL_ID)
+        if search_tool:
+            persona.tools.append(search_tool)
+        else:
+            logger.warning(
+                "SearchTool not found in database; cannot auto-add to persona '%s'",
+                persona.name,
+            )
+
     if commit:
         db_session.commit()
     else:
