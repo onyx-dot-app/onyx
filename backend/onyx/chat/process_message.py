@@ -639,7 +639,7 @@ def build_chat_turn(
             raise RuntimeError("Must specify a chat session id or chat session info")
         chat_session = create_chat_session_from_request(
             chat_session_request=new_msg_req.chat_session_info,
-            user_id=user_id,
+            user=user,
             db_session=db_session,
         )
         yield CreateChatSessionID(chat_session_id=chat_session.id)
