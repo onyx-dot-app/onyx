@@ -8,10 +8,9 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { checkUserIsNoAuthUser, getUserDisplayName, logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { SidebarTab } from "@opal/components";
+import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
@@ -91,46 +90,53 @@ function SettingsPopover({
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              variant="section"
               icon={SvgSliders}
+              title="Settings"
               href="/app/settings"
               onClick={onUserSettingsClick}
-            >
-              Settings
-            </LineItem>
+            />
           </div>,
-          <LineItem
+          <LineItemButton
             key="notifications"
+            sizePreset="main-ui"
+            variant="section"
             icon={SvgBell}
-            onClick={onOpenNotifications}
-          >
-            {`Notifications${
+            title={`Notifications${
               undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
-          </LineItem>,
-          <LineItem
+            onClick={onOpenNotifications}
+          />,
+          <LineItemButton
             key="help-faq"
+            sizePreset="main-ui"
+            variant="section"
             icon={SvgHelpCircle}
+            title="Help & FAQ"
             href="https://docs.onyx.app"
             target="_blank"
-            rel="noopener noreferrer"
-          >
-            Help & FAQ
-          </LineItem>,
+          />,
           showLogin && (
-            <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
-              Log in
-            </LineItem>
+            <LineItemButton
+              key="log-in"
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgUser}
+              title="Log in"
+              onClick={handleLogin}
+            />
           ),
           showLogout && (
-            <LineItem
+            <LineItemButton
               key="log-out"
+              sizePreset="main-ui"
+              variant="section"
               icon={SvgLogOut}
-              danger
+              title="Log Out"
               onClick={handleLogout}
-            >
-              Log Out
-            </LineItem>
+            />
           ),
           null,
           <div key="version" className="p-2">
