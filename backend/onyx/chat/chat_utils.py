@@ -113,7 +113,7 @@ def build_file_context(
 
 def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> ChatSession:
     """Create a chat session from a ChatSessionCreationRequest.
@@ -122,7 +122,10 @@ def create_chat_session_from_request(
 
     Args:
         chat_session_request: The request containing persona_id, description, and project_id
-        user: The user creating the session (can be None for system-initiated sessions)
+        user: The user creating the session. Anonymous users are represented as a
+            User with is_anonymous=True (never None); the access-check helpers
+            handle that case. A real User is required so the persona access check
+            always runs — do not introduce a None-tolerant caller.
         db_session: The database session
 
     Returns:
@@ -132,15 +135,13 @@ def create_chat_session_from_request(
         ValueError: If user lacks access to the specified project or persona
         Exception: If the persona is invalid
     """
-    user_id = user.id if user is not None else None
-
     project_id = chat_session_request.project_id
     if project_id:
-        if not check_project_ownership(project_id, user_id, db_session):
+        if not check_project_ownership(project_id, user.id, db_session):
             raise ValueError("User does not have access to project")
 
     persona_id = chat_session_request.persona_id
-    if persona_id != DEFAULT_PERSONA_ID and user is not None:
+    if persona_id != DEFAULT_PERSONA_ID:
         if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
@@ -152,7 +153,7 @@ def create_chat_session_from_request(
     return create_chat_session(
         db_session=db_session,
         description=chat_session_request.description or "",
-        user_id=user_id,
+        user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
     )

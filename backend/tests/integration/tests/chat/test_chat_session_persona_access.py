@@ -16,6 +16,11 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
+# The fix in `create_chat_session_from_request` runs unconditionally, including
+# on CE. Group-restricted personas only exist under EE, though — on CE every
+# non-admin sees public personas and admins see everything, so no CE user is
+# ever locked out by the access check. These tests therefore only exercise the
+# EE code path where a meaningful block can occur.
 pytestmark = pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Persona group restrictions are enterprise only",
