@@ -14,8 +14,8 @@ import {
   ConnectorStatus,
   DocumentSetSummary,
   UserGroup,
-  UserRole,
   FederatedConnectorConfig,
+  Permission,
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -23,6 +23,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
 import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
@@ -44,7 +45,7 @@ export const DocumentSetCreationForm = ({
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
-  const { user } = useUser();
+  const { user, permissions } = useUser();
   const { data: federatedConnectors } = useFederatedConnectors();
 
   useEffect(() => {
@@ -137,34 +138,35 @@ export const DocumentSetCreationForm = ({
         }}
       >
         {(props) => {
-          // Filter visible cc pairs for curator role
-          const visibleCcPairs =
-            user?.role === UserRole.CURATOR
-              ? localCcPairs.filter(
-                  (ccPair) =>
-                    ccPair.access_type === "public" ||
-                    (ccPair.groups.length > 0 &&
-                      props.values.groups.every((group) =>
-                        ccPair.groups.includes(group)
-                      ))
-                )
-              : localCcPairs;
+          // Filter visible cc pairs for curator (non-admin with manage:document_sets)
+          const isCuratorOnly =
+            hasPermission(permissions, Permission.MANAGE_DOCUMENT_SETS) &&
+            !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS);
+          const visibleCcPairs = isCuratorOnly
+            ? localCcPairs.filter(
+                (ccPair) =>
+                  ccPair.access_type === "public" ||
+                  (ccPair.groups.length > 0 &&
+                    props.values.groups.every((group) =>
+                      ccPair.groups.includes(group)
+                    ))
+              )
+            : localCcPairs;
 
-          // Filter non-visible cc pairs for curator role
-          const nonVisibleCcPairs =
-            user?.role === UserRole.CURATOR
-              ? localCcPairs.filter(
-                  (ccPair) =>
-                    !(ccPair.access_type === "public") &&
-                    (ccPair.groups.length === 0 ||
-                      !props.values.groups.every((group) =>
-                        ccPair.groups.includes(group)
-                      ))
-                )
-              : [];
+          // Filter non-visible cc pairs for curator
+          const nonVisibleCcPairs = isCuratorOnly
+            ? localCcPairs.filter(
+                (ccPair) =>
+                  !(ccPair.access_type === "public") &&
+                  (ccPair.groups.length === 0 ||
+                    !props.values.groups.every((group) =>
+                      ccPair.groups.includes(group)
+                    ))
+              )
+            : [];
 
           // Deselect filtered out cc pairs
-          if (user?.role === UserRole.CURATOR) {
+          if (isCuratorOnly) {
             const visibleCcPairIds = visibleCcPairs.map(
               (ccPair) => ccPair.cc_pair_id
             );
@@ -199,7 +201,7 @@ export const DocumentSetCreationForm = ({
               <div className="my-6 border-t border-border-02" />
 
               <div className="space-y-6">
-                {user?.role === UserRole.CURATOR ? (
+                {isCuratorOnly ? (
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"

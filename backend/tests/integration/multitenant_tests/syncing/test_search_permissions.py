@@ -1,7 +1,6 @@
 from typing import Any
 from uuid import uuid4
 
-from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -22,13 +21,13 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG0
     admin_user1: DATestUser = UserManager.create(
         email=f"admin_{unique}@example.com",
     )
-    assert UserManager.is_role(admin_user1, UserRole.ADMIN)
+    assert UserManager.is_admin(admin_user1)
 
     # Create Tenant 2 and its Admin User
     admin_user2: DATestUser = UserManager.create(
         email=f"admin2_{unique}@example.com",
     )
-    assert UserManager.is_role(admin_user2, UserRole.ADMIN)
+    assert UserManager.is_admin(admin_user2)
 
     # Create connectors for Tenant 1
     cc_pair_1: DATestCCPair = CCPairManager.create_from_scratch(

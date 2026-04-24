@@ -1,5 +1,3 @@
-import { UserRole } from "@/lib/types";
-
 async function parseErrorDetail(
   res: Response,
   fallback: string
@@ -42,20 +40,6 @@ export async function deleteUser(email: string): Promise<void> {
   });
   if (!res.ok) {
     throw new Error(await parseErrorDetail(res, "Failed to delete user"));
-  }
-}
-
-export async function setUserRole(
-  email: string,
-  newRole: UserRole
-): Promise<void> {
-  const res = await fetch("/api/manage/set-user-role", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_email: email, new_role: newRole }),
-  });
-  if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to update user role"));
   }
 }
 

@@ -19,7 +19,6 @@ from fastapi.testclient import TestClient
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import UserRole
 from onyx.main import get_application
 from onyx.utils.logger import setup_logger
 
@@ -44,7 +43,6 @@ def mock_get_session() -> Generator[MagicMock, None, None]:
 def mock_current_user() -> MagicMock:
     """Mock admin user for endpoints protected by require_permission."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     mock_admin.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
     return mock_admin
 

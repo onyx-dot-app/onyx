@@ -25,7 +25,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { MemoryItem, ThemePreference } from "@/lib/types";
+import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
@@ -1068,7 +1068,10 @@ function AccountsAccessSettings() {
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const canCreateTokens = useCloudSubscription();
-  const canCreatePAT = hasPermission(permissions, "create:user_api_keys");
+  const canCreatePAT = hasPermission(
+    permissions,
+    Permission.CREATE_USER_API_KEYS
+  );
 
   const showPasswordSection = Boolean(user?.password_configured);
 

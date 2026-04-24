@@ -14,12 +14,12 @@ from fastapi import Depends
 from pydantic import BaseModel
 from pydantic import field_validator
 
-from onyx.auth.users import current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
@@ -36,6 +36,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_DOCUMENT_SETS.value: {
         Permission.READ_DOCUMENT_SETS.value,
         Permission.READ_CONNECTORS.value,
+        Permission.READ_USER_GROUPS.value,
     },
     Permission.MANAGE_CONNECTORS.value: {
         Permission.READ_CONNECTORS.value,
@@ -50,6 +51,10 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_LLMS.value: {
         Permission.READ_USER_GROUPS.value,
         Permission.READ_AGENTS.value,
+        Permission.READ_USERS.value,
+    },
+    Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS.value: {
+        Permission.READ_USER_GROUPS.value,
     },
 }
 
@@ -65,6 +70,16 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.READ_AGENTS,
         Permission.READ_USERS,
         Permission.READ_USER_GROUPS,
+    }
+)
+
+# Permissions auto-granted to all users in Community Edition.
+# In CE there is no group-permission UI, so these capabilities must be
+# available without explicit grants.  In EE they are controlled normally
+# via group permissions.
+CE_UNGATED_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.ADD_AGENTS,
     }
 )
 
@@ -222,6 +237,10 @@ def get_effective_permissions(user: User) -> set[Permission]:
             logger.warning(f"Skipping unknown permission '{p}' for user {user.id}")
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
+
+    if not global_version.is_ee_version():
+        granted |= CE_UNGATED_PERMISSIONS
+
     expanded = resolve_effective_permissions({p.value for p in granted})
     return {Permission(p) for p in expanded}
 
@@ -229,6 +248,13 @@ def get_effective_permissions(user: User) -> set[Permission]:
 def has_permission(user: User, permission: Permission) -> bool:
     """Check whether *user* holds *permission* (directly or via implication/admin override)."""
     return permission in get_effective_permissions(user)
+
+
+def _get_current_user() -> Any:
+    """Lazy import to break circular dependency between permissions and users modules."""
+    from onyx.auth.users import current_user
+
+    return current_user
 
 
 def require_permission(
@@ -242,7 +268,9 @@ def require_permission(
             ...
     """
 
-    async def dependency(user: User = Depends(current_user)) -> User:
+    async def dependency(
+        user: User = Depends(_get_current_user()),
+    ) -> User:
         effective = get_effective_permissions(user)
 
         if Permission.FULL_ADMIN_PANEL_ACCESS in effective:

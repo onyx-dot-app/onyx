@@ -513,7 +513,6 @@ def add_credential_to_connector(
             credential_id,
             user,
             db_session,
-            get_editable=False,
         )
 
     if connector is None:
@@ -596,7 +595,6 @@ def remove_credential_from_connector(
         credential_id,
         user,
         db_session,
-        get_editable=False,
     )
 
     if connector is None:
