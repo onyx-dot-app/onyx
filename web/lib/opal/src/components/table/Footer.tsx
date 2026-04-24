@@ -46,15 +46,12 @@ interface FooterSelectionModeProps {
 
 /**
  * Footer mode for read-only tables (no row selection).
- * Displays "Showing X~Y of Z" on the left and a `list`-type pagination
- * on the right.
+ * Displays a `count`-type pagination showing "X~Y of Z [units]".
  */
 interface FooterSummaryModeProps {
   mode: "summary";
-  /** First item number in the current page (e.g. `1`). */
-  rangeStart: number;
-  /** Last item number in the current page (e.g. `25`). */
-  rangeEnd: number;
+  /** Number of items displayed per page. */
+  pageSize: number;
   /** Total number of items across all pages. */
   totalItems: number;
   /** The 1-based current page number. */
@@ -63,7 +60,7 @@ interface FooterSummaryModeProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
-  /** Optional extra element rendered after the summary text (e.g. a download icon). */
+  /** Optional extra element rendered after the pagination (e.g. a download icon). */
   leftExtra?: ReactNode;
   /** Unit label for the summary text, e.g. "users". */
   units?: string;
@@ -107,8 +104,8 @@ export default function Footer(props: FooterProps) {
       data-size={resolvedSize}
     >
       {/* Left side */}
-      <div className="flex items-center gap-1 px-1">
-        {props.mode === "selection" ? (
+      {props.mode === "selection" && (
+        <div className="flex items-center gap-1 px-1">
           <SelectionLeft
             selectionState={props.selectionState}
             multiSelect={props.multiSelect}
@@ -118,41 +115,25 @@ export default function Footer(props: FooterProps) {
             onClear={props.onClear}
             isSmall={isSmall}
           />
-        ) : (
-          <>
-            <SummaryLeft
-              rangeStart={props.rangeStart}
-              rangeEnd={props.rangeEnd}
-              totalItems={props.totalItems}
-              units={props.units}
-              isSmall={isSmall}
-            />
-            {props.leftExtra}
-          </>
-        )}
-      </div>
+        </div>
+      )}
+
+      {props.mode === "summary" && props.leftExtra && (
+        <div className="flex items-center gap-1 px-1">{props.leftExtra}</div>
+      )}
 
       {/* Right side */}
       <div className="flex items-center gap-2 px-1 py-2">
-        {props.mode === "selection" ? (
-          <Pagination
-            variant="count"
-            pageSize={props.pageSize}
-            totalItems={props.totalItems}
-            currentPage={props.currentPage}
-            totalPages={props.totalPages}
-            onChange={props.onPageChange}
-            units={props.units}
-            size={isSmall ? "sm" : "md"}
-          />
-        ) : (
-          <Pagination
-            currentPage={props.currentPage}
-            totalPages={props.totalPages}
-            onChange={props.onPageChange}
-            size={isSmall ? "md" : "lg"}
-          />
-        )}
+        <Pagination
+          variant="count"
+          pageSize={props.pageSize}
+          totalItems={props.totalItems}
+          currentPage={props.currentPage}
+          totalPages={props.totalPages}
+          onChange={props.onPageChange}
+          units={props.units}
+          size={isSmall ? "sm" : "md"}
+        />
       </div>
     </div>
   );
@@ -231,42 +212,6 @@ function SelectionLeft({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-interface SummaryLeftProps {
-  rangeStart: number;
-  rangeEnd: number;
-  totalItems: number;
-  units?: string;
-  isSmall: boolean;
-}
-
-function SummaryLeft({
-  rangeStart,
-  rangeEnd,
-  totalItems,
-  units,
-  isSmall,
-}: SummaryLeftProps) {
-  const suffix = units ? ` ${units}` : "";
-  const bodyFont = isSmall ? "secondary-body" : "main-ui-muted";
-  const monoFont = isSmall ? "secondary-mono" : "main-ui-mono";
-  return (
-    <div className="flex flex-row items-center w-fit h-fit px-1">
-      <Text font={bodyFont} color="text-03">
-        {`Showing `}
-      </Text>
-      <Text font={monoFont} color="text-03">
-        {`${rangeStart}~${rangeEnd}`}
-      </Text>
-      <Text font={bodyFont} color="text-03">
-        {` of `}
-      </Text>
-      <Text font={monoFont} color="text-03">
-        {`${totalItems}${suffix}`}
-      </Text>
     </div>
   );
 }

@@ -310,21 +310,10 @@ export function Table<TData>(props: DataTableProps<TData>) {
     }
 
     // Summary mode (no-select only)
-    const rangeStart =
-      totalItems === 0
-        ? 0
-        : !isFinite(resolvedPageSize)
-          ? 1
-          : (currentPage - 1) * resolvedPageSize + 1;
-    const rangeEnd = !isFinite(resolvedPageSize)
-      ? totalItems
-      : Math.min(currentPage * resolvedPageSize, totalItems);
-
     return (
       <Footer
         mode="summary"
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
+        pageSize={resolvedPageSize}
         totalItems={totalItems}
         currentPage={currentPage}
         totalPages={totalPages}
