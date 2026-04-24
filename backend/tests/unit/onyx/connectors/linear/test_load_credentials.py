@@ -68,6 +68,27 @@ def test_refresh_token_returns_new_credentials(
     assert call_kwargs["data"]["refresh_token"] == _REFRESH_TOKEN_VALUE
 
 
+@patch("onyx.connectors.linear.connector.request_with_retries")
+def test_refresh_token_keeps_existing_refresh_token_when_omitted(
+    mock_request: MagicMock,
+) -> None:
+    """Per RFC 6749 §6, refresh responses MAY omit refresh_token; the existing
+    one should be preserved instead of raising."""
+    mock_request.return_value = _make_mock_response(
+        ok=True,
+        json_data={
+            "access_token": _FRESH_ACCESS_TOKEN,
+            "expires_in": _EXPIRES_IN_SECONDS,
+        },
+    )
+    connector = LinearConnector()
+
+    new_credentials = connector.refresh_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+
+    assert new_credentials["access_token"] == _FRESH_ACCESS_TOKEN
+    assert new_credentials["refresh_token"] == _REFRESH_TOKEN_VALUE
+
+
 def test_refresh_token_missing_refresh_token_raises() -> None:
     """refresh_token should raise if no refresh_token is present in credentials."""
     connector = LinearConnector()

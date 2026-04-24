@@ -194,10 +194,14 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         expire_at = time.time() + token_data[_EXPIRES_IN]
 
+        # Per RFC 6749 §6, the refresh response MAY omit refresh_token, in
+        # which case the existing one remains valid. Linear currently rotates
+        # refresh tokens on every refresh, but fall back defensively so a
+        # missing field doesn't force a full re-OAuth.
         return {
             _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
             _EXPIRE_AT: int(expire_at),
-            _REFRESH_TOKEN: token_data[_REFRESH_TOKEN],
+            _REFRESH_TOKEN: token_data.get(_REFRESH_TOKEN, credentials[_REFRESH_TOKEN]),
         }
 
     def _process_issues(
