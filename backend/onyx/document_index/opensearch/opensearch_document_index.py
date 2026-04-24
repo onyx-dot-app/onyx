@@ -88,6 +88,15 @@ class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
 
 
+class ChunkCountZeroError(ValueError):
+    """Raised when a document update is requested but its chunk count is 0.
+
+    This typically indicates a race between document deletion and a concurrent
+    metadata sync: the row still exists in the relational DB with
+    ``chunk_count=0`` while cleanup is in flight.
+    """
+
+
 def generate_opensearch_filtered_access_control_list(
     access: DocumentAccess,
 ) -> list[str]:
@@ -477,6 +486,12 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
                 f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
                 "but this will not be an acceptable state once OpenSearch is the primary document index and the "
                 "indexing/updating race condition is fixed."
+            )
+            return
+        except ChunkCountZeroError:
+            logger.warning(
+                f"Tried to update document {doc_id} but its chunk count is 0. "
+                "Likely a race between delete and metadata sync; skipping update."
             )
             return
 
@@ -910,8 +925,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         "updated shortly."
                     )
                 if doc_chunk_count == 0:
-                    raise ValueError(
-                        f"Bug: Tried to update document {doc_id} but its chunk count was 0."
+                    raise ChunkCountZeroError(
+                        f"Tried to update document {doc_id} but its chunk count was 0. "
+                        "This typically indicates a race between a concurrent delete "
+                        "and metadata sync — the DB row exists with chunk_count=0 "
+                        "while cleanup is in flight."
                     )
 
                 for chunk_index in range(doc_chunk_count):
