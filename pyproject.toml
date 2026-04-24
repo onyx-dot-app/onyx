@@ -146,7 +146,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.7.5",
+    "onyx-devtools==0.7.6",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
