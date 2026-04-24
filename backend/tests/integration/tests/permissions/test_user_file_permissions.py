@@ -5,6 +5,11 @@ This file tests user file permissions in different scenarios:
 3. Image-generation tool outputs - files persisted on `ToolCall.generated_images`
    must be downloadable by the chat session owner (and by anyone if the session
    is publicly shared), but not by other users on private sessions.
+4. Connector-ingested files (File-connector only on v3.1) - files whose
+   `file_id` appears in a File-connector's
+   `connector_specific_config['file_locations']` must be fetchable via
+   `GET /chat/file/{file_id}` by any user whose ACL covers at least one
+   `Document` under that cc_pair, and must be denied otherwise.
 """
 
 import io
@@ -16,18 +21,25 @@ import pytest
 import requests
 
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.api_key import APIKeyManager
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
@@ -301,3 +313,128 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
         f"got {response.status_code}: {response.text}"
     )
     assert response.content == _IMAGE_GEN_PNG_BYTES
+
+
+_CONNECTOR_FILE_BYTES = b"connector-ingested document contents"
+
+
+# File-connector uploads (txt/pdf/docx/...) leave no direct linkage from
+# `file_id` to a Document on this release branch (`Document.file_id` ships
+# in #10299, not backported here), so access falls back to matching
+# against `Connector.connector_specific_config['file_locations']`. These
+# tests pin that fallback. `FileOrigin.CONNECTOR` is the stamp in prod;
+# `FileOrigin.OTHER` is the legacy stamp used by pre-#10484 uploads and is
+# kept here to guard against a regression that re-introduces an origin
+# filter on the access check.
+_FILE_CONNECTOR_ORIGINS = [
+    FileOrigin.CONNECTOR,
+    FileOrigin.OTHER,
+]
+
+
+def _seed_file_connector_cc_pair(
+    *,
+    admin_user: DATestUser,
+    file_id: str,
+    access_type: AccessType,
+    groups: list[int] | None = None,
+) -> DATestCCPair:
+    """Build a File-source cc_pair pointing at `file_id`."""
+    return CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+        source=DocumentSource.FILE,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={
+            "file_locations": [file_id],
+            "file_names": ["connector_upload.txt"],
+            "zip_metadata_file_id": None,
+        },
+        access_type=access_type,
+        groups=groups,
+    )
+
+
+def _save_file_connector_bytes(file_id: str, file_origin: FileOrigin) -> None:
+    """Save bytes under the exact `file_id` listed in the cc_pair's
+    `file_locations`."""
+    file_store = get_default_file_store()
+    file_store.save_file(
+        content=io.BytesIO(_CONNECTOR_FILE_BYTES),
+        display_name="connector_upload.txt",
+        file_origin=file_origin,
+        file_type="text/plain",
+        file_id=file_id,
+    )
+
+
+@pytest.mark.parametrize("file_origin", _FILE_CONNECTOR_ORIGINS)
+def test_file_connector_file_is_accessible_via_chat_file_endpoint(
+    reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
+) -> None:
+    """PUBLIC File-connector upload: the JSONB fallback in
+    `_user_can_access_connector_file` lets any user fetch it."""
+    admin_user: DATestUser = UserManager.create(name="file_connector_admin")
+    basic_user: DATestUser = UserManager.create(name="file_connector_basic")
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+
+    file_id = str(uuid4())
+    public_cc_pair = _seed_file_connector_cc_pair(
+        admin_user=admin_user,
+        file_id=file_id,
+        access_type=AccessType.PUBLIC,
+    )
+    DocumentManager.seed_doc_with_content(
+        cc_pair=public_cc_pair,
+        content="file connector body text",
+        api_key=api_key,
+    )
+    _save_file_connector_bytes(file_id, file_origin)
+
+    for user in (admin_user, basic_user):
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=user.headers,
+        )
+        assert response.status_code == 200, (
+            f"User {user.email} must access a PUBLIC File-connector file "
+            f"(origin={file_origin}), got {response.status_code}: "
+            f"{response.text}"
+        )
+        assert response.content == _CONNECTOR_FILE_BYTES
+
+
+@pytest.mark.parametrize("file_origin", _FILE_CONNECTOR_ORIGINS)
+def test_file_connector_file_denied_for_users_without_access(
+    reset: None,  # noqa: ARG001
+    file_origin: FileOrigin,
+) -> None:
+    """PRIVATE File-connector upload: ACL still gates access even though
+    the JSONB fallback locates the file."""
+    admin_user: DATestUser = UserManager.create(name="file_connector_priv_admin")
+    basic_user: DATestUser = UserManager.create(name="file_connector_priv_basic")
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+
+    file_id = str(uuid4())
+    private_cc_pair = _seed_file_connector_cc_pair(
+        admin_user=admin_user,
+        file_id=file_id,
+        access_type=AccessType.PRIVATE,
+    )
+    DocumentManager.seed_doc_with_content(
+        cc_pair=private_cc_pair,
+        content="file connector private content",
+        api_key=api_key,
+    )
+    _save_file_connector_bytes(file_id, file_origin)
+
+    basic_response = requests.get(
+        f"{API_SERVER_URL}/chat/file/{file_id}",
+        headers=basic_user.headers,
+    )
+    assert basic_response.status_code in (403, 404), (
+        f"Non-member should be denied on PRIVATE File-connector file "
+        f"(origin={file_origin}), got {basic_response.status_code}: "
+        f"{basic_response.text}"
+    )
+    assert basic_response.content != _CONNECTOR_FILE_BYTES
