@@ -62,6 +62,7 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
+from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
@@ -546,6 +547,33 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
+            # Enforce document-set access before any search runs. _build_index_filters
+            # has a matching guard, but it is only reached when a db_session is passed
+            # through — this path closes the session before calling search_pipeline,
+            # so the check has to happen here (see PR discussion on #10602).
+            # Skipped for project-mode searches (user_selected_filters are dropped
+            # downstream) and for bypass_acl system callers.
+            if (
+                not self.bypass_acl
+                and self.project_id_filter is None
+                and self.user_selected_filters is not None
+                and self.user_selected_filters.document_set is not None
+            ):
+                accessible_names = filter_document_set_names_by_user_access(
+                    db_session=db_session,
+                    document_set_names=self.user_selected_filters.document_set,
+                    user=self.user,
+                )
+                unauthorized = sorted(
+                    name
+                    for name in self.user_selected_filters.document_set
+                    if name not in accessible_names
+                )
+                if unauthorized:
+                    raise ValueError(
+                        f"User does not have access to document sets: {unauthorized}"
+                    )
+
             # ACL filters
             acl_filters: list[str] | None = (
                 None
