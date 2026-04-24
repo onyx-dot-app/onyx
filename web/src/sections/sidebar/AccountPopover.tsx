@@ -89,10 +89,21 @@ function SettingsPopover({
     <>
       <PopoverMenu>
         {[
+          <div key="user-email" className="p-2">
+            <Content
+              sizePreset="secondary"
+              variant="body"
+              prominence="muted"
+              icon={SvgUser}
+              title={user?.email ?? ""}
+            />
+          </div>,
+          null,
           <div key="user-settings" data-testid="Settings/user-settings">
             <LineItemButton
               sizePreset="main-ui"
               variant="section"
+              rounding="sm"
               icon={SvgSliders}
               title="Settings"
               href="/app/settings"
@@ -103,6 +114,7 @@ function SettingsPopover({
             key="notifications"
             sizePreset="main-ui"
             variant="section"
+            rounding="sm"
             icon={SvgBell}
             title={`Notifications${
               undismissedCount > 0 ? ` (${undismissedCount})` : ""
@@ -113,6 +125,7 @@ function SettingsPopover({
             key="help-faq"
             sizePreset="main-ui"
             variant="section"
+            rounding="sm"
             icon={SvgHelpCircle}
             title="Help & FAQ"
             href="https://docs.onyx.app"
@@ -123,6 +136,7 @@ function SettingsPopover({
               key="log-in"
               sizePreset="main-ui"
               variant="section"
+              rounding="sm"
               icon={SvgUser}
               title="Log in"
               onClick={handleLogin}
@@ -133,6 +147,7 @@ function SettingsPopover({
               key="log-out"
               sizePreset="main-ui"
               variant="section"
+              rounding="sm"
               icon={SvgLogOut}
               title="Log Out"
               onClick={handleLogout}
@@ -201,9 +216,9 @@ export default function AccountPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            icon={() => (
+            icon={(props) => (
               <div className="w-[16px] flex flex-col justify-center items-center">
-                <UserAvatar user={user} size={18} />
+                <UserAvatar user={user} {...props} size={props.size} />
               </div>
             )}
             rightChildren={
