@@ -1154,13 +1154,12 @@ def upsert_persona(
         from onyx.db.tools import get_builtin_tool_by_id
 
         search_tool = get_builtin_tool_by_id(db_session, SEARCH_TOOL_ID)
-        if search_tool:
-            persona.tools.append(search_tool)
-        else:
-            logger.warning(
-                "SearchTool not found in database; cannot auto-add to persona '%s'",
-                persona.name,
+        if not search_tool:
+            raise ValueError(
+                "Persona has knowledge sources but SearchTool not found in database."
+                "This should never happen and you may need support to repair the DB."
             )
+        persona.tools.append(search_tool)
 
     if commit:
         db_session.commit()
