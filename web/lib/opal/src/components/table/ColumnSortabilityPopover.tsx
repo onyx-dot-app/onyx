@@ -11,8 +11,8 @@ import { Button, LineItemButton } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgArrowUpDown, SvgSortOrder, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
-import { Divider } from "@opal/components/divider/components";
-import { Text } from "@opal/components/text/components";
+import Divider from "@/refresh-components/Divider";
+import Text from "@/refresh-components/texts/Text";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -58,14 +58,14 @@ function SortingPopover<TData extends RowData>({
           footer={
             footerText ? (
               <div className="px-2 py-1">
-                <Text font="secondary-body" color="text-03">
+                <Text secondaryBody text03>
                   {footerText}
                 </Text>
               </div>
             ) : undefined
           }
         >
-          <Divider title="Sort by" />
+          <Divider showTitle text="Sort by" />
 
           <LineItemButton
             selectVariant="select-heavy"
@@ -114,7 +114,7 @@ function SortingPopover<TData extends RowData>({
 
           {currentSort !== null && (
             <>
-              <Divider title="Sorting Order" />
+              <Divider showTitle text="Sorting Order" />
 
               <LineItemButton
                 selectVariant="select-heavy"

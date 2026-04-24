@@ -11,6 +11,7 @@ import { Text, Divider } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
+import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ interface InputLayoutProps {
   withLabel?: boolean | string;
 
   disabled?: boolean;
-  /** Ref forwarded to the inner content wrapper. */
+  /** Ref forwarded to the inner content `Section`. */
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   title: string | RichStr;
@@ -90,7 +91,7 @@ function Vertical({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <div ref={ref} className="flex flex-col items-start gap-1">
+    <Section ref={ref} gap={0.25} alignItems="start">
       <Content
         title={title}
         description={description}
@@ -106,7 +107,7 @@ function Vertical({
           {subDescription}
         </Text>
       )}
-    </div>
+    </Section>
   );
 
   if (!withLabelProp) return content;
@@ -144,7 +145,7 @@ function Horizontal({
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <div ref={ref} className="flex flex-col items-start gap-1">
+    <Section ref={ref} gap={0.25} alignItems="start">
       <ContentAction
         icon={icon}
         title={title}
@@ -159,7 +160,7 @@ function Horizontal({
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}
-    </div>
+    </Section>
   );
 
   if (!withLabelProp) return content;
@@ -232,7 +233,7 @@ function InputErrorText({
   return (
     <div ref={ref} className="px-1">
       {/* TODO(@raunakab): update this with `Content` when it supports custom colours */}
-      <div className="flex flex-row items-center justify-start gap-1">
+      <Section flexDirection="row" justifyContent="start" gap={0.25}>
         <Icon size={12} className={strokeClass} />
         <span className={colorClass} role="alert">
           {typeof children === "string" ? (
@@ -243,7 +244,7 @@ function InputErrorText({
             children
           )}
         </span>
-      </div>
+      </Section>
     </div>
   );
 }

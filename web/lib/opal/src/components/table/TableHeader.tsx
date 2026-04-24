@@ -1,4 +1,4 @@
-import type { WithoutStyles } from "@opal/types";
+import type { WithoutStyles } from "@/types";
 
 interface TableHeaderProps
   extends WithoutStyles<React.HTMLAttributes<HTMLTableSectionElement>> {
