@@ -564,6 +564,25 @@ class LitellmLLM(LLM):
             with env_ctx:
                 messages = _prompt_to_dicts(prompt)
 
+                # Avian: prune oldest non-system messages when estimated token
+                # count exceeds the configured context limit so we never send
+                # a request that Avian's API will reject for being too long.
+                # Estimate ~4 chars per token (rough but consistent with
+                # LiteLLM's internal heuristic for unknown models).
+                if is_avian and len(messages) > 1:
+                    _CHARS_PER_TOKEN = 4
+                    _budget = self._max_input_tokens * _CHARS_PER_TOKEN
+                    _total = sum(
+                        len(str(m.get("content") or "")) for m in messages
+                    )
+                    # Drop oldest non-system messages until we fit
+                    while _total > _budget and len(messages) > 1:
+                        for i, m in enumerate(messages):
+                            if m.get("role") != "system":
+                                _total -= len(str(m.get("content") or ""))
+                                messages.pop(i)
+                                break
+
                 # Bedrock's Converse API requires toolConfig when messages
                 # contain toolUse/toolResult content blocks. When no tools are
                 # provided for this request but the history contains tool
