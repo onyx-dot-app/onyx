@@ -51,6 +51,27 @@ def _get_user_groups(db_session: Session, user_id: uuid.UUID) -> list[UserGroupI
     return [UserGroupInfo(id=g.id, name=g.name) for g in groups]
 
 
+def _get_user_groups_by_user_ids(
+    db_session: Session, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[UserGroupInfo]]:
+    """Batch-fetch group memberships for multiple users in a single query."""
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(User__UserGroup.user_id, UserGroup.id, UserGroup.name)
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(User__UserGroup.user_id.in_(user_ids))
+    ).all()
+
+    groups_by_user: dict[uuid.UUID, list[UserGroupInfo]] = {}
+    for user_id, group_id, group_name in rows:
+        groups_by_user.setdefault(user_id, []).append(
+            UserGroupInfo(id=group_id, name=group_name)
+        )
+    return groups_by_user
+
+
 def _set_user_groups__no_commit(
     db_session: Session,
     user_id: uuid.UUID,
@@ -94,13 +115,16 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
         .unique()
         .all()
     )
+    groups_by_user = _get_user_groups_by_user_ids(
+        db_session, [api_key.user_id for api_key in api_keys]
+    )
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
-            groups=_get_user_groups(db_session, api_key.user_id),
+            groups=groups_by_user.get(api_key.user_id, []),
         )
         for api_key in api_keys
     ]

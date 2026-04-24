@@ -15,18 +15,12 @@ def _get_default_group_ids(
     admin_user: DATestUser,
 ) -> tuple[int, int]:
     """Return (admin_group_id, basic_group_id) from default groups."""
-    all_groups = UserGroupManager.get_all(
-        user_performing_action=admin_user,
-        include_default=True,
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
     )
-    admin_group = next(
-        (g for g in all_groups if g.name == "Admin" and g.is_default), None
+    basic_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Basic"
     )
-    basic_group = next(
-        (g for g in all_groups if g.name == "Basic" and g.is_default), None
-    )
-    assert admin_group is not None, "Admin default group not found"
-    assert basic_group is not None, "Basic default group not found"
     return admin_group.id, basic_group.id
 
 
@@ -55,19 +49,12 @@ def _get_default_group_user_ids(
     admin_user: DATestUser,
 ) -> tuple[set[str], set[str]]:
     """Return (admin_group_user_ids, basic_group_user_ids) from default groups."""
-    all_groups = UserGroupManager.get_all(
-        user_performing_action=admin_user,
-        include_default=True,
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
     )
-    admin_group = next(
-        (g for g in all_groups if g.name == "Admin" and g.is_default), None
+    basic_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Basic"
     )
-    basic_group = next(
-        (g for g in all_groups if g.name == "Basic" and g.is_default), None
-    )
-    assert admin_group is not None, "Admin default group not found"
-    assert basic_group is not None, "Basic default group not found"
-
     admin_ids = {str(u.id) for u in admin_group.users}
     basic_ids = {str(u.id) for u in basic_group.users}
     return admin_ids, basic_ids

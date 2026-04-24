@@ -22,6 +22,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -195,8 +196,12 @@ def image_generation_config(
 
 @pytest.fixture
 def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connector

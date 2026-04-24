@@ -913,7 +913,7 @@ export default function ActionsPopover({
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
             const canAdminConfigure = hasPermission(
               permissions,
-              Permission.MANAGE_AGENTS
+              Permission.MANAGE_ACTIONS
             );
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
@@ -995,7 +995,7 @@ export default function ActionsPopover({
 
         null,
 
-        hasPermission(permissions, Permission.MANAGE_AGENTS) && (
+        hasPermission(permissions, Permission.MANAGE_ACTIONS) && (
           <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
             More Actions
           </LineItem>

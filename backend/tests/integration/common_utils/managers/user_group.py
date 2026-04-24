@@ -128,6 +128,23 @@ class UserGroupManager:
         return [UserGroup(**ug) for ug in response.json()]
 
     @staticmethod
+    def get_default(
+        user_performing_action: DATestUser,
+        name: str,
+    ) -> UserGroup:
+        """Fetch a seeded default group ("Admin" or "Basic") by name."""
+        all_groups = UserGroupManager.get_all(
+            user_performing_action=user_performing_action,
+            include_default=True,
+        )
+        match = next((g for g in all_groups if g.name == name and g.is_default), None)
+        assert match is not None, (
+            f"Default group {name!r} not found. "
+            "Ensure the seed_default_groups migration has run."
+        )
+        return match
+
+    @staticmethod
     def verify(
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
