@@ -23,6 +23,7 @@ from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.http_retry import RetryHandler
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEV_MODE
@@ -350,10 +351,19 @@ class SlackbotHandler:
                     except KvKeyNotFoundError:
                         # No Slackbot tokens, pass
                         pass
-                    except psycopg2.errors.UndefinedTable:
-                        logger.error(
-                            "Undefined table error in fetch_slack_bots. Tenant schema may need fixing."
-                        )
+                    except ProgrammingError as e:
+                        # SQLAlchemy wraps psycopg2 errors; UndefinedTable is
+                        # expected when a pre-provisioned tenant's slack_bot
+                        # migration has not completed yet.
+                        if isinstance(e.orig, psycopg2.errors.UndefinedTable):
+                            logger.warning(
+                                f"Tenant {tenant_id} missing slack_bot table "
+                                "(likely mid-provisioning); will retry next cycle."
+                            )
+                        else:
+                            logger.exception(
+                                f"Error fetching Slack bots for tenant {tenant_id}: {e}"
+                            )
                     except Exception as e:
                         logger.exception(
                             f"Error fetching Slack bots for tenant {tenant_id}: {e}"
@@ -409,6 +419,15 @@ class SlackbotHandler:
                         bots = list(fetch_slack_bots(db_session=db_session))
                     except KvKeyNotFoundError:
                         # No Slackbot tokens, pass (and remove below)
+                        bots = []
+                    except ProgrammingError as e:
+                        if isinstance(e.orig, psycopg2.errors.UndefinedTable):
+                            logger.warning(
+                                f"Tenant {tenant_id} missing slack_bot table "
+                                "(likely mid-provisioning); will retry next cycle."
+                            )
+                        else:
+                            logger.exception(f"Error handling tenant {tenant_id}: {e}")
                         bots = []
                     except Exception as e:
                         logger.exception(f"Error handling tenant {tenant_id}: {e}")
