@@ -194,7 +194,7 @@ def _get_drive_members(
         # (primary admin is not an admin, or delegation isn't granted).
         # Raise PermissionError so the caller marks the sync attempt as a
         # clean failure instead of treating this as an unhandled crash.
-        if e.resp.status == 403:
+        if e.status_code == 403:
             raise PermissionError(
                 f"Primary admin {google_drive_connector.primary_admin_email} "
                 "is not authorized on the Google Workspace directory API. "
