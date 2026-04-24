@@ -446,14 +446,7 @@ def monitor_document_set_taskset(
     rds.reset()
 
 
-@shared_task(
-    name=OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
-    bind=True,
-    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
-    time_limit=LIGHT_TIME_LIMIT,
-    max_retries=3,
-)
-def document_index_metadata_sync_task(
+def _run_document_index_metadata_sync(
     self: Task, document_id: str, *, tenant_id: str
 ) -> bool:
     start = time.monotonic()
@@ -571,3 +564,30 @@ def document_index_metadata_sync_task(
         )
 
     return completion_status == OnyxCeleryTaskCompletionStatus.SUCCEEDED
+
+
+@shared_task(
+    name=OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
+    bind=True,
+    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
+    time_limit=LIGHT_TIME_LIMIT,
+    max_retries=3,
+)
+def document_index_metadata_sync_task(
+    self: Task, document_id: str, *, tenant_id: str
+) -> bool:
+    return _run_document_index_metadata_sync(self, document_id, tenant_id=tenant_id)
+
+
+# Legacy wire-name alias. Older releases enqueue this task under the
+# previous name; keep it registered so in-flight items from those releases
+# still route to the same handler across the rename rollout.
+@shared_task(
+    name="vespa_metadata_sync_task",
+    bind=True,
+    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
+    time_limit=LIGHT_TIME_LIMIT,
+    max_retries=3,
+)
+def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) -> bool:
+    return _run_document_index_metadata_sync(self, document_id, tenant_id=tenant_id)
