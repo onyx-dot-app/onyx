@@ -189,6 +189,20 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.COHERE,
+        model_name: "embed-v4.0",
+        description:
+          "Cohere's latest embedding model. Onyx uses the default 1536-dimension output for stronger retrieval quality.",
+        pricePerMillion: 0.1,
+        model_dim: 1536,
+        normalize: false,
+        query_prefix: "",
+        passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
+      },
+      {
+        provider_type: EmbeddingProvider.COHERE,
         model_name: "embed-english-v3.0",
         description:
           "Cohere's English embedding model. Good performance for English-language tasks.",
