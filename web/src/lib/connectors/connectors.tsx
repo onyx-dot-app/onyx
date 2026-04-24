@@ -243,6 +243,24 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include code files?",
+        description:
+          "Also index repository source/docs files from the default branch. Binaries, lock files, and common build artifacts are skipped automatically.",
+        name: "include_code_files",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Code files path filter",
+        label: "Code files path filter",
+        name: "code_files_path_filter",
+        optional: true,
+        description:
+          "Optional path prefix to restrict code indexing to (e.g., `docs/`, `src/`). Leave empty to index the whole repo.",
+      },
     ],
     advanced_values: [],
   },
@@ -1921,6 +1939,8 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+  include_code_files?: boolean;
+  code_files_path_filter?: string | null;
 }
 
 export interface GitlabConfig {
