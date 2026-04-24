@@ -37,6 +37,9 @@ logger = setup_logger()
 _NUM_RETRIES = 5
 _TIMEOUT = 60
 _LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
+_ACCESS_TOKEN = "access_token"
+_EXPIRE_AT = "expire_at"
+_REFRESH_TOKEN = "refresh_token"
 
 
 def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response:
@@ -137,9 +140,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         expire_at = time.time() + token_data["expires_in"]
 
         return {
-            "access_token": token_data["access_token"],
-            "expire_at": int(expire_at),
-            "refresh_token": token_data["refresh_token"],
+            _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
+            _EXPIRE_AT: int(expire_at),
+            _REFRESH_TOKEN: token_data[_REFRESH_TOKEN],
         }
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -147,21 +150,16 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         if "linear_api_key" in credentials:
             self.linear_api_key = cast(str, credentials["linear_api_key"])
-        elif "access_token" in credentials and "expire_at" not in credentials:
-            self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
-        elif (
-            "access_token" in credentials
-            and "expire_at" in credentials
-            and credentials["expire_at"] < time.time() + 300  # 5-minute buffer
-        ):
-            new_credentials = self.refresh_token(credentials)
-            self.linear_api_key = "Bearer " + cast(str, new_credentials["access_token"])
-        elif (
-            "access_token" in credentials
-            and "expire_at" in credentials
-            and credentials["expire_at"] >= time.time()
-        ):
-            self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
+        elif _ACCESS_TOKEN in credentials:
+            if _EXPIRE_AT not in credentials:
+                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
+            elif credentials[_EXPIRE_AT] < time.time() + 300:  # 5-minute buffer
+                new_credentials = self.refresh_token(credentials)
+                self.linear_api_key = "Bearer " + cast(
+                    str, new_credentials[_ACCESS_TOKEN]
+                )
+            elif credentials[_EXPIRE_AT] >= time.time():
+                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
         else:
             # May need to handle case in the future if the OAuth flow expires
             raise ConnectorMissingCredentialError("Linear")
@@ -169,14 +167,14 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         return new_credentials
 
     def refresh_token(self, credentials: dict[str, Any]) -> dict[str, Any]:
-        if "refresh_token" not in credentials:
+        if _REFRESH_TOKEN not in credentials:
             raise ConnectorMissingCredentialError("Linear")
 
         data = {
-            "refresh_token": credentials["refresh_token"],
+            _REFRESH_TOKEN: credentials[_REFRESH_TOKEN],
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
-            "grant_type": "refresh_token",
+            "grant_type": _REFRESH_TOKEN,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -196,9 +194,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         expire_at = time.time() + token_data["expires_in"]
 
         return {
-            "access_token": token_data["access_token"],
-            "expire_at": int(expire_at),
-            "refresh_token": token_data["refresh_token"],
+            _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
+            _EXPIRE_AT: int(expire_at),
+            _REFRESH_TOKEN: token_data[_REFRESH_TOKEN],
         }
 
     def _process_issues(
