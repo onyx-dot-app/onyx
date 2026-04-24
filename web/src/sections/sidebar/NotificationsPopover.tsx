@@ -146,6 +146,7 @@ export default function NotificationsPopover({
         </div>
       ) : (
         <div className="max-h-[var(--notifications-popover)] overflow-y-auto pt-1 px-0 flex flex-col gap-1">
+          {/* TODO(@raunakab): make dismissed notifications have greyed out text */}
           {notifications.map((notification) => (
             <LineItemButton
               key={notification.id}
