@@ -251,28 +251,22 @@ function SummaryLeft({
   isSmall,
 }: SummaryLeftProps) {
   const suffix = units ? ` ${units}` : "";
+  const bodyFont = isSmall ? "secondary-body" : "main-ui-muted";
+  const monoFont = isSmall ? "secondary-mono" : "main-ui-mono";
   return (
-    <div className="flex flex-row gap-1 items-center w-fit h-fit px-1">
-      <Text font={isSmall ? "secondary-body" : "main-ui-muted"} color="text-03">
-        {"Showing "}
+    <div className="flex flex-row items-center w-fit h-fit px-1">
+      <Text font={bodyFont} color="text-03">
+        {`Showing `}
       </Text>
-      <Text font={isSmall ? "secondary-mono" : "main-ui-mono"} color="text-03">
+      <Text font={monoFont} color="text-03">
         {`${rangeStart}~${rangeEnd}`}
       </Text>
-      <Text font={isSmall ? "secondary-body" : "main-ui-muted"} color="text-03">
-        {" of "}
+      <Text font={bodyFont} color="text-03">
+        {` of `}
       </Text>
-      <Text font={isSmall ? "secondary-mono" : "main-ui-mono"} color="text-03">
-        {`${totalItems}`}
+      <Text font={monoFont} color="text-03">
+        {`${totalItems}${suffix}`}
       </Text>
-      {suffix && (
-        <Text
-          font={isSmall ? "secondary-body" : "main-ui-muted"}
-          color="text-03"
-        >
-          {suffix}
-        </Text>
-      )}
     </div>
   );
 }

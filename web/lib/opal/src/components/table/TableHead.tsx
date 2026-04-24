@@ -64,12 +64,6 @@ const alignmentThClass = {
   right: "text-right",
 } as const;
 
-const alignmentFlexClass = {
-  left: "justify-start",
-  center: "justify-center",
-  right: "justify-end",
-} as const;
-
 export default function TableHead({
   children,
   sorted,
@@ -99,7 +93,7 @@ export default function TableHead({
             color="text-04"
             maxLines={1}
           >
-            {typeof children === "string" ? children : ""}
+            {children ? String(children) : undefined}
           </Text>
         </div>
         <div

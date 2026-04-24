@@ -1,5 +1,5 @@
 import "@opal/layouts/content-action/styles.css";
-import { Content, type ContentProps } from "@opal/layouts";
+import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
   containerSizeVariants,
   type ContainerSizeVariants,
