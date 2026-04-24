@@ -1,9 +1,14 @@
 import json
 from typing import Any
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
@@ -25,6 +30,25 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+@retry(
+    retry=retry_if_exception_type(RefreshError),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+def _refresh_service_account_creds(
+    service_creds: ServiceAccountCredentials,
+) -> None:
+    """Refresh service-account credentials with bounded retry.
+
+    Transient issues (network blips, upstream 503s) clear within a couple
+    attempts. After the final retry the original ``RefreshError`` is
+    re-raised so the caller can treat it as "truly given up" and convert it
+    to a credential-invalid signal rather than retrying indefinitely.
+    """
+    service_creds.refresh(Request())
 
 
 def sanitize_oauth_credentials(oauth_creds: OAuthCredentials) -> str:
@@ -157,7 +181,19 @@ def get_google_creds(
         )
 
         if not service_creds.valid or not service_creds.expired:
-            service_creds.refresh(Request())
+            try:
+                _refresh_service_account_creds(service_creds)
+            except RefreshError as e:
+                # Retry exhausted — credentials are unusable (revoked, deleted,
+                # or upstream persistently unavailable). Convert to
+                # PermissionError so callers can distinguish this "truly given
+                # up" state from a transient RefreshError that would otherwise
+                # still be worth retrying higher up the stack.
+                raise PermissionError(
+                    f"Unable to refresh {source} service account credentials "
+                    f"after retries: {e}. Credentials likely revoked — "
+                    "reconnect the connector."
+                ) from e
 
         if not service_creds.valid:
             raise PermissionError(
