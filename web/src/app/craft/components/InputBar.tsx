@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -172,8 +173,16 @@ const InputBar = memo(
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
-        insertTextAtCursor,
+        pasteText,
+        handleCopy,
+        handleCut,
         setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
       });
@@ -227,9 +236,10 @@ const InputBar = memo(
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
-          insertTextAtCursor(text);
+
+          pasteText(text);
         },
-        [disabled, uploadFiles, insertTextAtCursor]
+        [disabled, uploadFiles, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -261,6 +271,8 @@ const InputBar = memo(
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
+          if (handleTileKeyDown(event)) return;
+
           // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
@@ -271,7 +283,7 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit]
+        [handleSubmit, handleTileKeyDown]
       );
 
       const canSubmit =
@@ -282,6 +294,7 @@ const InputBar = memo(
         !sandboxInitializing;
 
       return (
+        <>
         <Disabled disabled={disabled}>
           <div
             ref={containerRef}
@@ -350,6 +363,10 @@ const InputBar = memo(
                 aria-placeholder={placeholder}
                 data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
               />
             </div>
 
@@ -407,6 +424,16 @@ const InputBar = memo(
             </div>
           </div>
         </Disabled>
+
+        {tilePopover && (
+          <PasteTilePopover
+            text={tilePopover.text}
+            rect={tilePopover.rect}
+            onDismiss={dismissTilePopover}
+            onTextChange={updateTileText}
+          />
+        )}
+      </>
       );
     }
   )
