@@ -890,7 +890,7 @@ class EmbeddingModel:
                     asyncio.get_running_loop()
                 except RuntimeError:
                     # This code is being called synchronously, safe to use
-                    # asyncio.run.
+                    # run_until_complete.
                     # Use thread-local event loop to prevent memory leaks
                     # from creating thousands of event loops during batch
                     # processing.
