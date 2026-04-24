@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { User, UserRole } from "@/lib/types";
 import {
   AuthTypeMetadata,
@@ -5,6 +6,7 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { AuthType } from "@/lib/constants";
+import { validateInternalRedirect } from "./redirectValidation";
 
 /**
  * Result of an authentication check.
@@ -14,6 +16,32 @@ export interface AuthCheckResult {
   user: User | null;
   authTypeMetadata: AuthTypeMetadata | null;
   redirect?: string;
+}
+
+/**
+ * Build the login redirect target, preserving the current pathname as a
+ * `?next=…` query param so the user can be returned to the original page
+ * after SSO. The `x-pathname` request header is injected by `middleware.ts`.
+ *
+ * The rest of the `next=` plumbing already works — the login page reads
+ * `searchParams.next`, the SSO handoff threads it into OAuth/OIDC/SAML
+ * state, and the backend restores it on callback — but nothing populated
+ * the param at this (layout-level) redirect before (#7520).
+ */
+async function buildLoginRedirect(): Promise<string> {
+  try {
+    const pathname = (await headers()).get("x-pathname");
+    const safe = validateInternalRedirect(pathname);
+    // Skip when the header is missing, the path failed validation, or we're
+    // already on the login page (avoids ?next=/auth/login recursion).
+    if (!safe || safe.startsWith("/auth/login")) {
+      return "/auth/login";
+    }
+    return `/auth/login?next=${encodeURIComponent(safe)}`;
+  } catch {
+    // `headers()` throws outside a request context (e.g. tests).
+    return "/auth/login";
+  }
 }
 
 /**
@@ -47,12 +75,13 @@ export async function requireAuth(): Promise<AuthCheckResult> {
     console.log(`Failed to fetch auth information - ${e}`);
   }
 
-  // If user is not logged in, redirect to login
+  // If user is not logged in, redirect to login (preserving the intended
+  // destination as ?next=… so SSO can return the user to it).
   if (!user) {
     return {
       user,
       authTypeMetadata,
-      redirect: "/auth/login",
+      redirect: await buildLoginRedirect(),
     };
   }
 
