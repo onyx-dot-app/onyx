@@ -170,6 +170,7 @@ export default function ApiKeyFormModal({
                         <Popover.Trigger asChild>
                           <div>
                             <InputTypeIn
+                              data-testid="groups-search-input"
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
                               placeholder="Search groups..."

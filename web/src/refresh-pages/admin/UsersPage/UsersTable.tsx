@@ -131,14 +131,14 @@ const PAGE_SIZE = 8;
 interface UsersTableProps {
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
 }
 
 export default function UsersTable({
   selectedStatuses,
   onStatusesChange,
-  roleCounts,
+  accountTypeCounts,
   statusCounts,
 }: UsersTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -220,7 +220,7 @@ export default function UsersTable({
         groups={groupOptions}
         selectedStatuses={selectedStatuses}
         onStatusesChange={onStatusesChange}
-        accountTypeCounts={roleCounts}
+        accountTypeCounts={accountTypeCounts}
         statusCounts={statusCounts}
       />
       <Table

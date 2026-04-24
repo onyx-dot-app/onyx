@@ -27,7 +27,6 @@ from onyx.db.models import DocumentRetrievalFeedback
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -73,14 +72,11 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     )
 
     """
-    Filter Documents by:
-    - if the user is in the user_group that owns the object
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out objects that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all objects in the groups the user is a curator
-    for (as well as public objects as well)
+    Filter Documents by group membership:
+    - if get_editable, the document's CCPair must be owned exclusively by
+      groups the user belongs to (prevents mutating docs that are also
+      visible to groups outside the user's reach)
+    - otherwise, show docs in any group the user belongs to plus public docs
     """
 
     # Anonymous users only see public documents
@@ -89,8 +85,6 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         return stmt.where(where_clause)
 
     where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
     if get_editable:
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         where_clause &= (

@@ -26,6 +26,7 @@ import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupRe
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
   const router = useRouter();
@@ -43,6 +44,7 @@ function CreateGroupPage() {
     { tokenBudget: null, periodHours: null },
   ]);
 
+  const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
 
   async function handleCreate() {
@@ -59,7 +61,9 @@ function CreateGroupPage() {
         selectedUserIds,
         selectedCcPairIds
       );
-      await saveGroupPermissions(groupId, enabledPermissions);
+      if (isAdmin) {
+        await saveGroupPermissions(groupId, enabledPermissions);
+      }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
@@ -159,10 +163,12 @@ function CreateGroupPage() {
             />
           </Section>
         )}
-        <GroupPermissionsSection
-          enabledPermissions={enabledPermissions}
-          onPermissionsChange={setEnabledPermissions}
-        />
+        {isAdmin && (
+          <GroupPermissionsSection
+            enabledPermissions={enabledPermissions}
+            onPermissionsChange={setEnabledPermissions}
+          />
+        )}
 
         <SharedGroupResources
           selectedCcPairIds={selectedCcPairIds}

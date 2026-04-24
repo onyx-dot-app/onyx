@@ -222,7 +222,6 @@ def fetch_user_groups(
 def fetch_user_groups_for_user(
     db_session: Session,
     user_id: UUID,
-    only_curator_groups: bool = False,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
 ) -> Sequence[UserGroup]:
@@ -232,8 +231,6 @@ def fetch_user_groups_for_user(
         .join(User, User.id == User__UserGroup.user_id)  # type: ignore
         .where(User.id == user_id)  # type: ignore
     )
-    if only_curator_groups:
-        stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:

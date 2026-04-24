@@ -12,7 +12,6 @@ from onyx.auth.api_key import ApiKeyDescriptor
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
@@ -146,7 +145,6 @@ def insert_api_key(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.BASIC,
         account_type=AccountType.SERVICE_ACCOUNT,
     )
     db_session.add(api_key_user_row)

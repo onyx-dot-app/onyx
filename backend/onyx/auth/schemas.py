@@ -42,7 +42,6 @@ class UserRead(schemas.BaseUser[uuid.UUID]):
 
 
 class UserCreate(schemas.BaseUserCreate):
-    role: UserRole = UserRole.BASIC
     account_type: AccountType = AccountType.STANDARD
     tenant_id: str | None = None
     # Captcha token for cloud signup protection (optional, only used when captcha is enabled)
@@ -67,10 +66,8 @@ class UserCreate(schemas.BaseUserCreate):
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    """
-    Role updates are not allowed through the user update endpoint for security reasons
-    Role changes should be handled through a separate, admin-only process
-    """
+    """Intentionally empty: keeps account_type and permissions out of the
+    fastapi-users PATCH endpoints."""
 
 
 class AuthBackend(str, Enum):

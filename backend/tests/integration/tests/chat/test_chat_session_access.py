@@ -4,7 +4,6 @@ import pytest
 import requests
 from requests import HTTPError
 
-from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -46,7 +45,7 @@ def second_user(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
                 email=build_email("second_basic_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )

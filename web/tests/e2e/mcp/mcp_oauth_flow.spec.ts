@@ -1734,11 +1734,6 @@ test.describe("MCP OAuth flows", () => {
       `Playwright Curator Group ${Date.now()}`,
       [curatorRecord.id]
     );
-    await adminClient.setCuratorStatus(
-      String(curatorGroupId),
-      curatorRecord.id,
-      true
-    );
     curatorTwoCredentials = {
       email: `pw-curator-${Date.now()}-b@example.com`,
       password: basePassword,
@@ -1754,11 +1749,6 @@ test.describe("MCP OAuth flows", () => {
     curatorTwoGroupId = await adminClient.createUserGroup(
       `Playwright Curator Group ${Date.now()}-2`,
       [curatorTwoRecord.id]
-    );
-    await adminClient.setCuratorStatus(
-      String(curatorTwoGroupId),
-      curatorTwoRecord.id,
-      true
     );
 
     await adminContext.close();

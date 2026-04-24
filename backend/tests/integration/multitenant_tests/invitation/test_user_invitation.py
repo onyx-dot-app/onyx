@@ -1,6 +1,7 @@
 from uuid import uuid4
 
-from onyx.db.models import UserRole
+from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -13,11 +14,11 @@ def test_admin_can_invite_users(reset_multitenant: None) -> None:  # noqa: ARG00
     # Create first user (admin)
     unique = uuid4().hex
     admin_user: DATestUser = UserManager.create(name=f"admin_{unique}")
-    assert UserManager.is_role(admin_user, UserRole.ADMIN)
+    assert UserManager.is_admin(admin_user)
 
-    # Create second user
+    # Second registered user in a fresh tenant is also admin (first user of their tenant)
     invited_user: DATestUser = UserManager.create(name=f"admin_invited_{unique}")
-    assert UserManager.is_role(invited_user, UserRole.ADMIN)
+    assert UserManager.is_admin(invited_user)
 
     # Admin user invites the previously registered and non-registered user
     UserManager.invite_user(invited_user.email, admin_user)
@@ -37,7 +38,7 @@ def test_non_registered_user_gets_basic_role(
     # Create admin user
     unique = uuid4().hex
     admin_user: DATestUser = UserManager.create(name=f"admin_{unique}")
-    assert UserManager.is_role(admin_user, UserRole.ADMIN)
+    assert UserManager.is_admin(admin_user)
 
     # Admin user invites a non-registered user
     invited_email = f"{INVITED_BASIC_USER}_{unique}@example.com"
@@ -47,7 +48,7 @@ def test_non_registered_user_gets_basic_role(
     invited_basic_user: DATestUser = UserManager.create(
         name=f"{INVITED_BASIC_USER}_{unique}", email=invited_email
     )
-    assert UserManager.is_role(invited_basic_user, UserRole.BASIC)
+    assert not UserManager.is_admin(invited_basic_user)
 
 
 def test_user_can_accept_invitation(
@@ -57,7 +58,7 @@ def test_user_can_accept_invitation(
     # Create admin user
     unique = uuid4().hex
     admin_user: DATestUser = UserManager.create(name=f"admin_{unique}")
-    assert UserManager.is_role(admin_user, UserRole.ADMIN)
+    assert UserManager.is_admin(admin_user)
 
     # Create a user to be invited
     invited_user_email = f"invited_user_{unique}@example.com"
@@ -92,21 +93,19 @@ def test_user_can_accept_invitation(
     # Get updated user info after accepting invitation and reauthenticating
     updated_user_info = UserManager.get_user_info(authenticated_user)
 
-    # Verify the user has BASIC role in the organization
-    assert (
-        updated_user_info.role == UserRole.BASIC
-    ), f"Expected user to have BASIC role, but got {updated_user_info.role}"
-
-    # Verify user is in the organization
-    user_page = UserManager.get_user_page(
-        user_performing_action=admin_user, role_filter=[UserRole.BASIC]
+    # Verify the user lands with a STANDARD account and without admin privileges
+    assert updated_user_info.account_type == AccountType.STANDARD
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in (
+        updated_user_info.effective_permissions or []
     )
 
-    # Check if the invited user is in the list of users with BASIC role
+    # Verify user is visible in the admin users listing for the tenant
+    user_page = UserManager.get_user_page(user_performing_action=admin_user)
+
     invited_user_emails = [user.email for user in user_page.items]
     assert invited_user_email in invited_user_emails, (
-        f"User {invited_user_email} not found in the list of basic users "
-        f"in the organization. Available users: {invited_user_emails}"
+        f"User {invited_user_email} not found in the organization listing. "
+        f"Available users: {invited_user_emails}"
     )
 
     invited_users = UserManager.get_invited_users(admin_user)
