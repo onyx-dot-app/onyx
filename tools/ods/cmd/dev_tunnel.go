@@ -13,19 +13,17 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
-const (
-	tunnelNetwork = "onyx_default"
-	tunnelImage   = "alpine/socat:1.8.0.3@sha256:76d1e4fc91bdd9d08f2a72a3fde1776798fd00cc00d3bded940dc154cd7ab6fd"
-)
-
 func newDevTunnelCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tunnel <port|host:container>",
 		Short: "Tunnel a devcontainer port to the host",
 		Long: `Forward a TCP port from the running devcontainer to the host.
 
-Launches a short-lived socat sidecar on the devcontainer's docker network that
-publishes the chosen host port and proxies connections into the devcontainer.
+Runs socat on the host and forwards each accepted connection into the
+devcontainer via ` + "`docker exec socat`" + `, which connects to
+127.0.0.1:<container-port> inside the container.  Routing via loopback
+sidesteps the devcontainer's default-deny inbound firewall.
+
 Runs in the foreground — Ctrl-C tears the tunnel down.
 
 Examples:
@@ -100,21 +98,17 @@ func runDevTunnel(hostPort, containerPort int) {
 	log.Infof("Tunneling host :%d -> devcontainer :%d (Ctrl-C to stop)", hostPort, containerPort)
 
 	socatArgs := []string{
-		"run", "--rm", "-i",
-		"--network", tunnelNetwork,
-		"-p", fmt.Sprintf("%d:%d", hostPort, containerPort),
-		tunnelImage,
-		fmt.Sprintf("TCP-LISTEN:%d,fork,reuseaddr", containerPort),
-		fmt.Sprintf("TCP:%s:%d", containerID, containerPort),
+		fmt.Sprintf("TCP-LISTEN:%d,fork,reuseaddr", hostPort),
+		fmt.Sprintf("SYSTEM:docker exec -i %s socat - TCP\\:127.0.0.1\\:%d", containerID, containerPort),
 	}
 
-	log.Debugf("Running: docker %v", socatArgs)
+	log.Debugf("Running: socat %v", socatArgs)
 
-	c := exec.Command("docker", socatArgs...)
+	c := exec.Command("socat", socatArgs...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 
 	if err := c.Run(); err != nil {
-		log.Fatalf("docker run failed: %v", err)
+		log.Fatalf("socat failed: %v", err)
 	}
 }
