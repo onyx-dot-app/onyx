@@ -69,6 +69,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import reserve_multi_model_message_ids
+from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.enums import HookPoint
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
@@ -1431,6 +1432,31 @@ def _stream_chat_turn(
     setup: ChatTurnSetup | None = None
 
     try:
+        # Enforce document-set access on any user-supplied filters before setup
+        # or any tool invocation. Running here (rather than inside SearchTool.run())
+        # means the OnyxError propagates to the StreamingError handler below
+        # instead of being swallowed by the tool runner's catch-all.
+        if (
+            not bypass_acl
+            and new_msg_req.internal_search_filters is not None
+            and new_msg_req.internal_search_filters.document_set is not None
+        ):
+            accessible_names = filter_document_set_names_by_user_access(
+                db_session=db_session,
+                document_set_names=new_msg_req.internal_search_filters.document_set,
+                user=user,
+            )
+            unauthorized = sorted(
+                name
+                for name in new_msg_req.internal_search_filters.document_set
+                if name not in accessible_names
+            )
+            if unauthorized:
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    f"User does not have access to document sets: {unauthorized}",
+                )
+
         setup = yield from build_chat_turn(
             new_msg_req=new_msg_req,
             user=user,
