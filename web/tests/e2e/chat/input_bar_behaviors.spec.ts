@@ -461,8 +461,7 @@ test.describe("Auto-Resize", () => {
     await page.waitForTimeout(200);
     const isScrollable = await page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
-      const wrapper = el.parentElement!;
-      return wrapper.scrollHeight > wrapper.clientHeight;
+      return el.scrollHeight > el.clientHeight;
     });
     expect(isScrollable).toBe(true);
   });
@@ -543,9 +542,9 @@ test.describe("Focus Management", () => {
     await input.focus();
     await expect(input).toBeFocused();
 
-    const button = page.locator("[data-main-container] button").first();
-    await button.waitFor({ state: "visible", timeout: 5000 });
-    await button.click();
+    await page
+      .locator("[data-main-container]")
+      .click({ position: { x: 5, y: 5 } });
     await expect(input).not.toBeFocused();
 
     await input.click();
