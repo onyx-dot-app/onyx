@@ -15,13 +15,15 @@ import { SidebarTab } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
-  SvgExternalLink,
+  SvgHelpCircle,
   SvgLogOut,
+  SvgSliders,
   SvgUser,
   SvgNotificationBubble,
-  SvgInfo,
 } from "@opal/icons";
+import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
+import packageJson from "../../../package.json";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
@@ -39,11 +41,6 @@ function SettingsPopover({
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     SWR_KEYS.notifications,
-    errorHandlingFetcher,
-    { revalidateOnFocus: false }
-  );
-  const { data: versionData } = useSWR<{ backend_version: string }>(
-    SWR_KEYS.version,
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
@@ -95,11 +92,11 @@ function SettingsPopover({
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
             <LineItem
-              icon={SvgUser}
+              icon={SvgSliders}
               href="/app/settings"
               onClick={onUserSettingsClick}
             >
-              User Settings
+              Settings
             </LineItem>
           </div>,
           <LineItem
@@ -113,14 +110,13 @@ function SettingsPopover({
           </LineItem>,
           <LineItem
             key="help-faq"
-            icon={SvgExternalLink}
+            icon={SvgHelpCircle}
             href="https://docs.onyx.app"
             target="_blank"
             rel="noopener noreferrer"
           >
             Help & FAQ
           </LineItem>,
-          null,
           showLogin && (
             <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
               Log in
@@ -133,15 +129,18 @@ function SettingsPopover({
               danger
               onClick={handleLogout}
             >
-              Log out
+              Log Out
             </LineItem>
           ),
-          versionData && null,
-          versionData && (
-            <LineItem key="version" icon={SvgInfo} muted interactive={false}>
-              {versionData.backend_version}
-            </LineItem>
-          ),
+          null,
+          <div key="version" className="p-2">
+            <Content
+              sizePreset="secondary"
+              variant="body"
+              prominence="muted"
+              title={`${packageJson.name} v${packageJson.version}`}
+            />
+          </div>,
         ]}
       </PopoverMenu>
     </>
