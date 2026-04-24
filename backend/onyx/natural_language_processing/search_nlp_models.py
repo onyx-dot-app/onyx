@@ -889,7 +889,7 @@ class EmbeddingModel:
                     # or not.
                     asyncio.get_running_loop()
                 except RuntimeError:
-                    # This code is being called synchonously, safe to use
+                    # This code is being called synchronously, safe to use
                     # asyncio.run.
                     # Use thread-local event loop to prevent memory leaks
                     # from creating thousands of event loops during batch
@@ -902,9 +902,7 @@ class EmbeddingModel:
                     # This code is being called from an event loop, can't
                     # block on it from the same thread without deadlocking.
                     # Run in a separate thread with its own loop.
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    with ThreadPoolExecutor(max_workers=1) as pool:
                         response = cast(
                             EmbedResponse,
                             pool.submit(
@@ -931,15 +929,18 @@ class EmbeddingModel:
         #  3. there is more than 1 batch (no point in threading if only 1).
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                # NOTE: We explicitly do not use a lambda here because a lambda
+                # would close idx and batch by reference not value. By
+                # submitting directly to .submit we lose typing but the correct
+                # values are captured for each iteration.
                 futures = [
                     executor.submit(
-                        lambda: process_batch(
-                            batch_idx=idx,
-                            num_of_batches=num_of_batches,
-                            text_batch=batch,
-                            tenant_id=tenant_id,
-                            request_id=request_id,
-                        )
+                        process_batch,
+                        batch_idx=idx,
+                        num_of_batches=num_of_batches,
+                        text_batch=batch,
+                        tenant_id=tenant_id,
+                        request_id=request_id,
                     )
                     for idx, batch in enumerate(text_batches)
                 ]
