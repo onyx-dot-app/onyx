@@ -194,11 +194,18 @@ function GeneralSettings() {
   const { theme, setTheme, systemTheme } = useTheme();
 
   const applyBackground = useCallback(
-    (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
-      updateUserChatBackground(bg.id === CHAT_BACKGROUND_NONE ? null : bg.id);
-      if (bg.theme) {
-        setTheme(bg.theme);
-        updateUserThemePreference(bg.theme);
+    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
+      try {
+        await updateUserChatBackground(
+          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+        );
+        if (bg.theme) {
+          setTheme(bg.theme);
+          await updateUserThemePreference(bg.theme);
+        }
+      } catch {
+        // errors are already logged and state is rolled back via refreshUser
+        // inside the update functions
       }
     },
     [updateUserChatBackground, setTheme, updateUserThemePreference]

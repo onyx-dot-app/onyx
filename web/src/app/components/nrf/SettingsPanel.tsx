@@ -106,11 +106,18 @@ export const SettingsPanel = ({
     setTheme(isDark ? "light" : "dark");
   };
 
-  const handleBackgroundChange = (bg: ChatBackgroundOption) => {
-    updateUserChatBackground(bg.id === CHAT_BACKGROUND_NONE ? null : bg.id);
-    if (bg.theme) {
-      setTheme(bg.theme);
-      updateUserThemePreference(bg.theme);
+  const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
+    try {
+      await updateUserChatBackground(
+        bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+      );
+      if (bg.theme) {
+        setTheme(bg.theme);
+        await updateUserThemePreference(bg.theme);
+      }
+    } catch {
+      // errors are already logged and state is rolled back via refreshUser
+      // inside the update functions
     }
   };
 
