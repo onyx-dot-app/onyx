@@ -182,11 +182,26 @@ def _get_drive_members(
         google_drive_connector.primary_admin_email,
     )
 
-    admin_user_info = (
-        admin_service.users()  # ty: ignore[unresolved-attribute]
-        .get(userKey=google_drive_connector.primary_admin_email)
-        .execute()
-    )
+    try:
+        admin_user_info = (
+            admin_service.users()  # ty: ignore[unresolved-attribute]
+            .get(userKey=google_drive_connector.primary_admin_email)
+            .execute()
+        )
+    except HttpError as e:
+        # A 403 here means the configured primary admin lacks authority on
+        # the Google Workspace directory — the connector is misconfigured
+        # (primary admin is not an admin, or delegation isn't granted).
+        # Raise PermissionError so the caller marks the sync attempt as a
+        # clean failure instead of treating this as an unhandled crash.
+        if e.status_code == 403:
+            raise PermissionError(
+                f"Primary admin {google_drive_connector.primary_admin_email} "
+                "is not authorized on the Google Workspace directory API. "
+                "Reconnect the connector with an account that has admin "
+                "directory access."
+            ) from e
+        raise
     is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
         "isDelegatedAdmin", False
     )
@@ -213,11 +228,12 @@ def _get_drive_members(
                 elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except HttpError as e:
-            if e.status_code == 404:
+            if e.status_code in (403, 404):
                 logger.warning(
                     f"Error getting permissions for drive id {drive_id}. "
                     f"User '{google_drive_connector.primary_admin_email}' likely "
-                    f"does not have access to this drive. Exception: {e}"
+                    f"does not have access to this drive (status={e.status_code}). "
+                    f"Exception: {e}"
                 )
             else:
                 raise e
