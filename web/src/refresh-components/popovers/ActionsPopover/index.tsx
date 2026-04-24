@@ -18,6 +18,7 @@ import {
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
+import { computeInitialForcedToolIds } from "@/lib/hooks/computeInitialForcedToolIds";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useUser } from "@/providers/UserProvider";
@@ -256,10 +257,19 @@ export default function ActionsPopover({
     useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  // Reset state when assistant changes
+  // Reset forced tools when the assistant changes. For agents with knowledge
+  // attached (document sets, hierarchy nodes, user files, attached documents),
+  // pre-force the internal-search tool so the LLM actually uses the configured
+  // corpus instead of silently answering from model priors (#7314, #9303).
+  // User can still unforce via the pill in the input bar.
   useEffect(() => {
-    setForcedToolIds([]);
-  }, [selectedAgent.id, setForcedToolIds]);
+    setForcedToolIds(
+      computeInitialForcedToolIds(
+        selectedAgent,
+        agentPreferences?.[selectedAgent.id]
+      )
+    );
+  }, [selectedAgent, agentPreferences, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
   const vectorDbEnabled = useVectorDbEnabled();
