@@ -32,7 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Tooltip } from "@opal/components";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import Checkbox from "@opal/components/checkbox/components";
+import { Checkbox } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {

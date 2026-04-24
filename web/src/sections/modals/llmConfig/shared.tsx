@@ -10,7 +10,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
-import Checkbox from "@opal/components/checkbox/components";
+import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";

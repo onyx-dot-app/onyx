@@ -16,7 +16,7 @@ import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Switch from "@/refresh-components/inputs/Switch";
-import Checkbox from "@opal/components/checkbox/components";
+import { Checkbox } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import {
   SvgPlusCircle,

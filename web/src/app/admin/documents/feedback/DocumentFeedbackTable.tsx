@@ -15,7 +15,7 @@ import { numToDisplay } from "./constants";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
-import Checkbox from "@opal/components/checkbox/components";
+import { Checkbox } from "@opal/components";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
 

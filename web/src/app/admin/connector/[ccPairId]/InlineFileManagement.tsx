@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Checkbox from "@opal/components/checkbox/components";
+import { Checkbox } from "@opal/components";
 import {
   updateConnectorFiles,
   type ConnectorFileInfo,
