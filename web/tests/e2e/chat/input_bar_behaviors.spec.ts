@@ -542,9 +542,9 @@ test.describe("Focus Management", () => {
     await input.focus();
     await expect(input).toBeFocused();
 
-    await page
-      .locator("[data-main-container]")
-      .click({ position: { x: 5, y: 5 } });
+    const button = page.locator("[data-main-container] button").first();
+    await button.waitFor({ state: "visible", timeout: 5000 });
+    await button.click();
     await expect(input).not.toBeFocused();
 
     await page.keyboard.press("Escape");
