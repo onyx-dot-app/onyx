@@ -505,7 +505,9 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                 )
                 doc_chunk_count = doc.chunk_count
 
-        if fields is not None and doc_chunk_count is not None:
+        # fields is only assigned when we successfully read the document;
+        # doc_chunk_count may legitimately be None and must not gate the sync
+        if fields is not None:
             for retry_document_index in retry_document_indices:
                 # TODO(andrei): Previously there was a comment here saying
                 # it was ok if a doc did not exist in the document index. I

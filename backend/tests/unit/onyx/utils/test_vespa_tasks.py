@@ -169,3 +169,65 @@ def test_vespa_metadata_sync_releases_session_before_http_calls(
     assert events.count("session_close") == 2
     mark_idx = events.index("mark_document_as_synced")
     assert first_http < mark_idx, events
+
+
+def test_vespa_metadata_sync_handles_doc_with_none_chunk_count(
+    monkeypatch: Any,
+) -> None:
+    """A valid doc with `chunk_count = None` (a legitimate model state) must
+    still be pushed to Vespa and marked synced — not silently skipped."""
+
+    events: list[str] = []
+
+    @contextmanager
+    def _fake_session() -> Any:
+        events.append("session_open")
+        try:
+            yield SimpleNamespace()
+        finally:
+            events.append("session_close")
+
+    monkeypatch.setattr(vespa_tasks, "get_session_with_current_tenant", _fake_session)
+    monkeypatch.setattr(
+        vespa_tasks,
+        "get_active_search_settings",
+        lambda *_a, **_kw: SimpleNamespace(primary=object(), secondary=None),
+    )
+    monkeypatch.setattr(
+        vespa_tasks, "get_all_document_indices", lambda *_a, **_kw: [object()]
+    )
+
+    fake_doc = SimpleNamespace(boost=0, hidden=False, chunk_count=None)
+    monkeypatch.setattr(vespa_tasks, "get_document", lambda *_a, **_kw: fake_doc)
+    monkeypatch.setattr(
+        vespa_tasks, "fetch_document_sets_for_document", lambda *_a, **_kw: []
+    )
+    monkeypatch.setattr(
+        vespa_tasks, "get_access_for_document", lambda *_a, **_kw: SimpleNamespace()
+    )
+
+    received_chunk_counts: list[int | None] = []
+
+    class _FakeRetryDocumentIndex:
+        def __init__(self, document_index: Any) -> None:
+            pass
+
+        def update_single(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+            received_chunk_counts.append(kwargs["chunk_count"])
+            events.append("vespa_update_single")
+
+    monkeypatch.setattr(vespa_tasks, "RetryDocumentIndex", _FakeRetryDocumentIndex)
+
+    def _mark(*_a: Any, **_kw: Any) -> None:
+        events.append("mark_document_as_synced")
+
+    monkeypatch.setattr(vespa_tasks, "mark_document_as_synced", _mark)
+
+    result = vespa_tasks.vespa_metadata_sync_task.__wrapped__(  # ty: ignore[unresolved-attribute]
+        "doc-2", tenant_id="tenant-2"
+    )
+
+    assert result is True
+    assert received_chunk_counts == [None]
+    assert "vespa_update_single" in events
+    assert "mark_document_as_synced" in events
