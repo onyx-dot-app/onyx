@@ -8,6 +8,8 @@ import {
   getAdjacentPasteTile,
   getTextContent,
   shouldCreatePasteTile,
+  getPasteTilePreview,
+  getPasteTileMeta,
 } from "@/lib/contentEditable";
 
 export interface UseContentEditableOptions {
@@ -15,6 +17,7 @@ export interface UseContentEditableOptions {
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   minHeight?: number;
   maxHeight?: number;
+  pasteTilesEnabled?: boolean;
   onContentChange?: (text: string) => void;
   disabled?: boolean;
 }
@@ -47,6 +50,7 @@ export function useContentEditable({
   wrapperRef,
   minHeight = 44,
   maxHeight = 200,
+  pasteTilesEnabled = false,
   onContentChange,
   disabled = false,
 }: UseContentEditableOptions): UseContentEditableReturn {
@@ -207,7 +211,7 @@ export function useContentEditable({
         }
       });
     },
-    [resize]
+    [resize, clearTileSelection]
   );
 
   const clearMessage = useCallback(() => {
@@ -221,7 +225,6 @@ export function useContentEditable({
     setMessageState("");
     resize();
     onContentChangeRef.current?.("");
-<<<<<<< HEAD
   }, [resize, clearTileSelection]);
 
   const insertTextAtCursor = useCallback(
@@ -252,13 +255,13 @@ export function useContentEditable({
 
   const pasteText = useCallback(
     (text: string) => {
-      if (shouldCreatePasteTile(text)) {
+      if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
         insertTileAtCursor(text);
       } else {
         insertTextAtCursor(text);
       }
     },
-    [insertTileAtCursor, insertTextAtCursor]
+    [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor]
   );
 
   const handleTileMouseDown = useCallback(
@@ -293,15 +296,19 @@ export function useContentEditable({
         setTilePopover({ text, rect, tile });
       } else {
         setTilePopover(null);
+        clearTileSelection();
       }
     },
-    []
+    [clearTileSelection]
   );
 
   const dismissTilePopover = useCallback(() => {
     setTilePopover(null);
     ref.current?.focus();
-    if (selectedTileRef.current) {
+    if (
+      selectedTileRef.current &&
+      ref.current?.contains(selectedTileRef.current)
+    ) {
       const s = window.getSelection();
       if (s) {
         const r = document.createRange();
@@ -322,17 +329,11 @@ export function useContentEditable({
 
       const preview = tile.querySelector(".rich-input-tile-preview");
       if (preview) {
-        const firstLine = newText.split("\n")[0]?.trim() ?? "";
-        preview.textContent =
-          firstLine.length > 20 ? firstLine.slice(0, 20) + "…" : firstLine;
+        preview.textContent = getPasteTilePreview(newText);
       }
       const meta = tile.querySelector(".rich-input-tile-meta");
       if (meta) {
-        const lines = newText.split("\n");
-        meta.textContent =
-          lines.length > 1
-            ? `${lines.length} lines`
-            : `${newText.length} chars`;
+        meta.textContent = getPasteTileMeta(newText);
       }
 
       syncFromDOM();
@@ -392,20 +393,12 @@ export function useContentEditable({
         }
 
         if (isDelete) {
-          const direction = event.key === "Backspace" ? "before" : "after";
-          const adjacent = getAdjacentPasteTile(
-            window.getSelection()!.getRangeAt(0),
-            direction
-          );
-          if (adjacent === selected) {
-            // Second delete press on same tile → remove it
-            event.preventDefault();
-            selected.remove();
-            selectedTileRef.current = null;
-            syncFromDOM();
-            resize();
-            return true;
-          }
+          event.preventDefault();
+          selected.remove();
+          selectedTileRef.current = null;
+          syncFromDOM();
+          resize();
+          return true;
         }
 
         clearTileSelection();

@@ -185,6 +185,7 @@ const InputBar = memo(
         updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        pasteTilesEnabled: true,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);

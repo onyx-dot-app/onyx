@@ -670,10 +670,22 @@ test.describe("Paste Tiles", () => {
     await loginAsWorkerUser(page, testInfo.workerIndex);
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
+    // Enable paste tiles for this test suite
+    await page.evaluate(() =>
+      fetch("/api/paste-as-tile?paste_as_tile=true", { method: "PATCH" })
+    );
+    await page.reload();
+    await page.waitForLoadState("networkidle");
     await page
       .locator(INPUT_SELECTOR)
       .waitFor({ state: "visible", timeout: 10000 });
     await mockChatEndpoint(page, buildMockStream("Mock response"));
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(() =>
+      fetch("/api/paste-as-tile?paste_as_tile=false", { method: "PATCH" })
+    );
   });
 
   test("pasting large text creates a tile instead of inline text", async ({
@@ -958,6 +970,60 @@ test.describe("Paste Tiles", () => {
       return sel?.isCollapsed;
     });
     expect(selectionCollapsed).toBe(false);
+  });
+});
+
+test.describe("Paste Tiles — User Setting", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    resetTurnCounter();
+    await page.context().clearCookies();
+    await loginAsWorkerUser(page, testInfo.workerIndex);
+  });
+
+  test("paste tiles are disabled by default (paste_as_tile = false)", async ({
+    page,
+  }) => {
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    await page
+      .locator(INPUT_SELECTOR)
+      .waitFor({ state: "visible", timeout: 10000 });
+
+    await pasteLargeText(page);
+    await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
+    await expect(page.locator(INPUT_SELECTOR)).toContainText(
+      "function fibonacci"
+    );
+  });
+
+  test("paste tiles are created when user enables paste_as_tile", async ({
+    page,
+  }) => {
+    // Enable the setting via API before navigating
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() =>
+      fetch("/api/paste-as-tile?paste_as_tile=true", { method: "PATCH" })
+    );
+
+    // Reload to pick up the new preference
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page
+      .locator(INPUT_SELECTOR)
+      .waitFor({ state: "visible", timeout: 10000 });
+
+    await pasteLargeText(page);
+    await expect(page.locator(TILE_SELECTOR)).toHaveCount(1);
+    await expect(page.locator(TILE_SELECTOR)).toHaveAttribute(
+      "data-text",
+      LARGE_TEXT
+    );
+
+    // Clean up: disable the setting
+    await page.evaluate(() =>
+      fetch("/api/paste-as-tile?paste_as_tile=false", { method: "PATCH" })
+    );
   });
 });
 

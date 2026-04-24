@@ -32,6 +32,8 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Input preferences
+  paste_as_tile?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;

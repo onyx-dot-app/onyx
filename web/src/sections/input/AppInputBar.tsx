@@ -142,6 +142,7 @@ const AppInputBar = React.memo(
     const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
       number | null
     >(null);
+    const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
     const inputWrapperRef = useRef<HTMLDivElement>(null);
     const {
@@ -165,12 +166,12 @@ const AppInputBar = React.memo(
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
+      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
     });
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { user, isAdmin } = useUser();
     const { state } = useQueryController();
     const isClassifying = state.phase === "classifying";
     const isSearchActive =
