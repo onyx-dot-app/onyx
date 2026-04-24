@@ -57,15 +57,23 @@ function Print-Step {
 }
 
 function Test-Interactive {
-    return -not $NoPrompt
+    if ($NoPrompt) { return $false }
+    # Detect piped stdin (e.g. `irm ... | iex`): Read-Host fails when stdin is redirected
+    try { if ([Console]::IsInputRedirected) { return $false } } catch {}
+    return $true
 }
 
 function Prompt-OrDefault {
     param([string]$PromptText, [string]$DefaultValue)
     if (-not (Test-Interactive)) { return $DefaultValue }
-    $reply = Read-Host $PromptText
-    if ([string]::IsNullOrWhiteSpace($reply)) { return $DefaultValue }
-    return $reply
+    try {
+        # Read-Host with an empty prompt throws "name cannot be null or empty" on some systems
+        $reply = if ([string]::IsNullOrEmpty($PromptText)) { Read-Host } else { Read-Host -Prompt $PromptText }
+        if ([string]::IsNullOrWhiteSpace($reply)) { return $DefaultValue }
+        return $reply
+    } catch {
+        return $DefaultValue
+    }
 }
 
 function Confirm-Action {
