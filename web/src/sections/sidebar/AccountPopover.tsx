@@ -6,7 +6,12 @@ import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { checkUserIsNoAuthUser, getUserDisplayName, logout } from "@/lib/user";
+import {
+  checkUserIsNoAuthUser,
+  getUserDisplayName,
+  getUserEmail,
+  logout,
+} from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -27,6 +32,8 @@ import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import { SvgOnyxLogo } from "@opal/logos";
+import { markdown } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -86,85 +93,80 @@ function SettingsPopover({
   };
 
   return (
-    <>
-      <PopoverMenu>
-        {[
-          <div key="user-email" className="p-2">
-            <Content
-              sizePreset="secondary"
-              variant="body"
-              prominence="muted"
-              icon={SvgUser}
-              title={getUserDisplayName(user)}
-            />
-          </div>,
-          null,
-          <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItemButton
-              sizePreset="main-ui"
-              variant="section"
-              rounding="sm"
-              icon={SvgSliders}
-              title="Settings"
-              href="/app/settings"
-              onClick={onUserSettingsClick}
-            />
-          </div>,
+    <PopoverMenu>
+      {[
+        <div key="user-email" className="p-2">
+          <Content sizePreset="main-ui" title={getUserEmail(user)} />
+        </div>,
+        null,
+        <div key="user-settings" data-testid="Settings/user-settings">
           <LineItemButton
-            key="notifications"
             sizePreset="main-ui"
             variant="section"
             rounding="sm"
-            icon={SvgBell}
-            title={`Notifications${
-              undismissedCount > 0 ? ` (${undismissedCount})` : ""
-            }`}
-            onClick={onOpenNotifications}
-          />,
+            icon={SvgSliders}
+            title="Settings"
+            href="/app/settings"
+            onClick={onUserSettingsClick}
+          />
+        </div>,
+        <LineItemButton
+          key="notifications"
+          sizePreset="main-ui"
+          variant="section"
+          rounding="sm"
+          icon={SvgBell}
+          title="Notifications"
+          suffix={undismissedCount > 0 ? ` (${undismissedCount})` : undefined}
+          onClick={onOpenNotifications}
+        />,
+        <LineItemButton
+          key="help-faq"
+          sizePreset="main-ui"
+          variant="section"
+          rounding="sm"
+          icon={SvgHelpCircle}
+          title="Help & FAQ"
+          href="https://docs.onyx.app"
+          target="_blank"
+        />,
+        showLogin && (
           <LineItemButton
-            key="help-faq"
+            key="log-in"
             sizePreset="main-ui"
             variant="section"
             rounding="sm"
-            icon={SvgHelpCircle}
-            title="Help & FAQ"
-            href="https://docs.onyx.app"
-            target="_blank"
-          />,
-          showLogin && (
-            <LineItemButton
-              key="log-in"
-              sizePreset="main-ui"
-              variant="section"
-              rounding="sm"
-              icon={SvgUser}
-              title="Log in"
-              onClick={handleLogin}
-            />
-          ),
-          showLogout && (
-            <LineItemButton
-              key="log-out"
-              sizePreset="main-ui"
-              variant="section"
-              rounding="sm"
-              icon={SvgLogOut}
-              title="Log Out"
-              onClick={handleLogout}
-            />
-          ),
-          null,
-          <div key="version" className="p-2">
-            <Content
-              sizePreset="secondary"
-              variant="body"
-              prominence="muted"
-              title={`${packageJson.name} v${packageJson.version}`}
-            />
-          </div>,
-        ]}
-      </PopoverMenu>
-    </>
+            icon={SvgUser}
+            title="Log in"
+            onClick={handleLogin}
+          />
+        ),
+        showLogout && (
+          <LineItemButton
+            key="log-out"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgLogOut}
+            title="Log Out"
+            onClick={handleLogout}
+          />
+        ),
+        null,
+        <div key="version" className="p-2">
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            prominence="muted"
+            orientation="reverse"
+            icon={SvgOnyxLogo}
+            title={markdown(
+              `[Onyx v${packageJson.version}](https://docs.onyx.app/changelog)`
+            )}
+          />
+        </div>,
+      ]}
+    </PopoverMenu>
   );
 }
 
