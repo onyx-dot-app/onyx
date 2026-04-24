@@ -285,10 +285,13 @@ def sleep_and_retry(
                 continue
 
             # Non-retryable error or retries exhausted — log details and raise.
+            # 404 means the requested resource is gone (e.g. an Azure AD group
+            # deleted while still referenced by SharePoint). Callers commonly
+            # handle this case; log at warning to avoid Sentry noise while
+            # still keeping the event visible.
             if e.response is not None:
-                logger.error(
-                    f"SharePoint request failed for {method_name}: status={status}, "
-                )
+                log = logger.warning if status == 404 else logger.error
+                log(f"SharePoint request failed for {method_name}: status={status}, ")
             raise e
 
 
@@ -535,7 +538,6 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
-
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -2206,7 +2208,6 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
