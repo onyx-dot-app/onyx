@@ -53,7 +53,6 @@ class AsanaAPI:
         self.api_error_count = 0
         self.configuration.access_token = api_token
         self.task_count = 0
-        self.duplicate_task_count = 0
 
     def get_tasks(
         self, project_gids: list[str] | None, start_date: str
@@ -91,11 +90,7 @@ class AsanaAPI:
                 project_gid, start_date, start_seconds, seen_task_gids
             ):
                 yield task
-        logger.info(
-            f"Completed fetching {self.task_count} tasks from Asana "
-            f"(skipped {self.duplicate_task_count} duplicate task occurrences "
-            f"across projects)"
-        )
+        logger.info(f"Completed fetching {self.task_count} tasks from Asana")
         if self.api_error_count > 0:
             logger.warning(
                 f"Encountered {self.api_error_count} API errors during task fetching"
@@ -147,7 +142,6 @@ class AsanaAPI:
         for data in tasks_from_api:
             gid = data["gid"]
             if gid in seen_task_gids:
-                self.duplicate_task_count += 1
                 logger.debug(
                     f"Skipping duplicate Asana task {gid} "
                     f"(already yielded for another project)"

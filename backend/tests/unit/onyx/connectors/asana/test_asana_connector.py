@@ -131,7 +131,6 @@ def test_get_tasks_dedupes_task_appearing_in_multiple_projects() -> None:
     )
 
     assert [t.id for t in yielded] == ["X", "Y", "Z"]
-    assert setup.api.duplicate_task_count == 1
     assert setup.api.task_count == 3
     # Comments fetched only for unique tasks; the duplicate X is skipped before
     # `_fetch_and_add_comments` runs.
@@ -157,6 +156,5 @@ def test_get_tasks_no_duplicates_unchanged() -> None:
     )
 
     assert [t.id for t in yielded] == ["A", "B", "C"]
-    assert setup.api.duplicate_task_count == 0
     assert setup.api.task_count == 3
     assert setup.stories_api.get_stories_for_task.call_count == 3
