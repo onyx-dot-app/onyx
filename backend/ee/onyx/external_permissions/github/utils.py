@@ -481,7 +481,7 @@ def get_external_user_group(
             if member.email:
                 user_emails.add(member.email)
             else:
-                logger.error(f"Org member {member.login} has no email")
+                logger.warning(f"Org member {member.login} has no email")
 
         org_group = ExternalUserGroup(
             id=org_group_id,
