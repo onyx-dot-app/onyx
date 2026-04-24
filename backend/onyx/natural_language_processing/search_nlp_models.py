@@ -929,10 +929,11 @@ class EmbeddingModel:
         #  3. there is more than 1 batch (no point in threading if only 1).
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                # NOTE: We explicitly do not use a lambda here because a lambda
-                # would close idx and batch by reference not value. By
-                # submitting directly to .submit we lose typing but the correct
-                # values are captured for each iteration.
+                # NOTE: Be careful with closures, we explicitly pass in idx and
+                # batch here because if we were to pass them in via enclosing
+                # scope, they would be passed in as references not values and
+                # would be evaluated at lambda execution time, in which case
+                # every lambda would point to the same values for idx and batch.
                 futures = [
                     executor.submit(
                         lambda idx, batch: process_batch(
