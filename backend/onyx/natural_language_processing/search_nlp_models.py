@@ -917,7 +917,7 @@ class EmbeddingModel:
 
             processing_time = time.monotonic() - start_time
             logger.debug(
-                f"process_batch: Batch {batch_idx}/{num_of_batches}, processing time: {processing_time:.2f}s."
+                f"process_batch: Batch idx {batch_idx}, total num {num_of_batches}, processing time: {processing_time:.2f}s."
             )
 
             return batch_idx, response.embeddings
