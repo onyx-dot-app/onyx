@@ -459,6 +459,12 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
 
     try:
+        # No DB session may be held during the Vespa writes below. They can
+        # run for seconds/minutes and the pooler/Postgres may drop an idle
+        # connection, producing `server closed the connection unexpectedly`
+        # on the next query.
+        fields: VespaDocumentFields | None = None
+        doc_chunk_count: int | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             # This flow is for updates so we get all indices.
@@ -497,27 +503,30 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     hidden=doc.hidden,
                     # aggregated_boost_factor=doc.aggregated_boost_factor,
                 )
+                doc_chunk_count = doc.chunk_count
 
-                for retry_document_index in retry_document_indices:
-                    # TODO(andrei): Previously there was a comment here saying
-                    # it was ok if a doc did not exist in the document index. I
-                    # don't agree with that claim, so keep an eye on this task
-                    # to see if this raises.
-                    retry_document_index.update_single(
-                        document_id,
-                        tenant_id=tenant_id,
-                        chunk_count=doc.chunk_count,
-                        fields=fields,
-                        user_fields=None,
-                    )
+        if fields is not None and doc_chunk_count is not None:
+            for retry_document_index in retry_document_indices:
+                # TODO(andrei): Previously there was a comment here saying
+                # it was ok if a doc did not exist in the document index. I
+                # don't agree with that claim, so keep an eye on this task
+                # to see if this raises.
+                retry_document_index.update_single(
+                    document_id,
+                    tenant_id=tenant_id,
+                    chunk_count=doc_chunk_count,
+                    fields=fields,
+                    user_fields=None,
+                )
 
-                # update db last. Worst case = we crash right before this and
-                # the sync might repeat again later
+            # short-lived session; worst case we crash right before this
+            # and the sync repeats
+            with get_session_with_current_tenant() as db_session:
                 mark_document_as_synced(document_id, db_session)
 
-                elapsed = time.monotonic() - start
-                task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
-                completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
+            elapsed = time.monotonic() - start
+            task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
+            completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT

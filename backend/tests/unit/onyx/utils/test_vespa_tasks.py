@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -100,3 +101,71 @@ def test_monitor_deletes_document_set_with_no_connectors(monkeypatch: Any) -> No
 
     assert calls["deleted"] is True
     assert calls["synced"] is False
+
+
+def test_vespa_metadata_sync_releases_session_before_http_calls(
+    monkeypatch: Any,
+) -> None:
+    """Session must be closed before Vespa HTTP writes to avoid pooler drops
+    mid-session. A second short-lived session is opened for the terminal
+    mark_document_as_synced write."""
+
+    events: list[str] = []
+
+    @contextmanager
+    def _fake_session() -> Any:
+        events.append("session_open")
+        try:
+            yield SimpleNamespace()
+        finally:
+            events.append("session_close")
+
+    monkeypatch.setattr(vespa_tasks, "get_session_with_current_tenant", _fake_session)
+    monkeypatch.setattr(
+        vespa_tasks,
+        "get_active_search_settings",
+        lambda *_a, **_kw: SimpleNamespace(primary=object(), secondary=None),
+    )
+    monkeypatch.setattr(
+        vespa_tasks,
+        "get_all_document_indices",
+        lambda *_a, **_kw: [object()],
+    )
+
+    fake_doc = SimpleNamespace(boost=0, hidden=False, chunk_count=3)
+    monkeypatch.setattr(vespa_tasks, "get_document", lambda *_a, **_kw: fake_doc)
+    monkeypatch.setattr(
+        vespa_tasks, "fetch_document_sets_for_document", lambda *_a, **_kw: []
+    )
+    monkeypatch.setattr(
+        vespa_tasks, "get_access_for_document", lambda *_a, **_kw: SimpleNamespace()
+    )
+
+    class _FakeRetryDocumentIndex:
+        def __init__(self, document_index: Any) -> None:
+            pass
+
+        def update_single(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+            events.append("vespa_update_single")
+
+    monkeypatch.setattr(vespa_tasks, "RetryDocumentIndex", _FakeRetryDocumentIndex)
+
+    def _mark(*_a: Any, **_kw: Any) -> None:
+        events.append("mark_document_as_synced")
+
+    monkeypatch.setattr(vespa_tasks, "mark_document_as_synced", _mark)
+
+    result = vespa_tasks.vespa_metadata_sync_task.__wrapped__(  # ty: ignore[unresolved-attribute]
+        "doc-1", tenant_id="tenant-1"
+    )
+
+    assert result is True
+    # First session is fully closed before any Vespa HTTP call
+    first_close = events.index("session_close")
+    first_http = events.index("vespa_update_single")
+    assert first_close < first_http, events
+    # A second session is opened for the terminal sync marker
+    assert events.count("session_open") == 2
+    assert events.count("session_close") == 2
+    mark_idx = events.index("mark_document_as_synced")
+    assert first_http < mark_idx, events
