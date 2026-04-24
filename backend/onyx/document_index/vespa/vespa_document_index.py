@@ -481,8 +481,8 @@ class VespaDocumentIndex(DocumentIndex):
         self,
         update_requests: list[MetadataUpdateRequest],
     ) -> None:
-        # WARNING: This method can be called by vespa_metadata_sync_task, which
-        # is kicked off by check_for_vespa_sync_task, notably before a document
+        # WARNING: This method can be called by document_index_metadata_sync_task,
+        # which is kicked off by check_for_vespa_sync_task, notably before a document
         # has finished indexing. In this way, chunk_count below could be unknown
         # even for chunks not on the "old" chunk ID system; i.e. there could be
         # a race condition. Passing in None to _enrich_basic_chunk_info should
