@@ -107,9 +107,11 @@ def _add_user_filters(
     - if we are not editing, we return all Personas directly connected to the user
     """
 
-    # Anonymous users only see public Personas
+    # Anonymous users only see public, listed Personas
     if user.is_anonymous:
-        where_clause = Persona.is_public == True  # noqa: E712
+        where_clause = (Persona.is_public == True) & (  # noqa: E712
+            Persona.is_listed == True  # noqa: E712
+        )
         return stmt.where(where_clause)
 
     # If curator ownership restriction is enabled, curators can only access their own assistants
