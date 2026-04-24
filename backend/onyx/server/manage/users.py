@@ -77,6 +77,7 @@ from onyx.db.users import get_page_of_filtered_users
 from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_account_type_and_status
+from onyx.db.users import user_is_admin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
@@ -135,10 +136,7 @@ async def test_upsert_user(
     return (
         FullUserSnapshot.from_user_model(
             user,
-            is_admin=(
-                Permission.FULL_ADMIN_PANEL_ACCESS.value
-                in (user.effective_permissions or [])
-            ),
+            is_admin=user_is_admin(user),
         )
         if user
         else None
@@ -218,10 +216,7 @@ def list_accepted_users(
                     for gid, gname in groups_by_user.get(user.id, [])
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
-                is_admin=(
-                    Permission.FULL_ADMIN_PANEL_ACCESS.value
-                    in (user.effective_permissions or [])
-                ),
+                is_admin=user_is_admin(user),
             )
             for user in filtered_accepted_users
         ],
@@ -267,10 +262,7 @@ def list_all_accepted_users(
                 for gid, gname in groups_by_user.get(user.id, [])
             ],
             is_scim_synced=user.id in scim_synced_ids,
-            is_admin=(
-                Permission.FULL_ADMIN_PANEL_ACCESS.value
-                in (user.effective_permissions or [])
-            ),
+            is_admin=user_is_admin(user),
         )
         for user in users
     ]
@@ -344,20 +336,14 @@ def list_all_users(
             accepted=[
                 FullUserSnapshot.from_user_model(
                     user,
-                    is_admin=(
-                        Permission.FULL_ADMIN_PANEL_ACCESS.value
-                        in (user.effective_permissions or [])
-                    ),
+                    is_admin=user_is_admin(user),
                 )
                 for user in accepted_users
             ],
             slack_users=[
                 FullUserSnapshot.from_user_model(
                     user,
-                    is_admin=(
-                        Permission.FULL_ADMIN_PANEL_ACCESS.value
-                        in (user.effective_permissions or [])
-                    ),
+                    is_admin=user_is_admin(user),
                 )
                 for user in slack_users
             ],
@@ -372,20 +358,14 @@ def list_all_users(
         accepted=[
             FullUserSnapshot.from_user_model(
                 user,
-                is_admin=(
-                    Permission.FULL_ADMIN_PANEL_ACCESS.value
-                    in (user.effective_permissions or [])
-                ),
+                is_admin=user_is_admin(user),
             )
             for user in accepted_users
         ][accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE],
         slack_users=[
             FullUserSnapshot.from_user_model(
                 user,
-                is_admin=(
-                    Permission.FULL_ADMIN_PANEL_ACCESS.value
-                    in (user.effective_permissions or [])
-                ),
+                is_admin=user_is_admin(user),
             )
             for user in slack_users
         ][

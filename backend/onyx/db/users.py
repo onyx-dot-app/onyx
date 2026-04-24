@@ -4,8 +4,10 @@ from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import case
+from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
@@ -27,6 +29,8 @@ from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -484,3 +488,45 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def get_user_groups(db_session: Session, user_id: UUID) -> list[UserGroupInfo]:
+    """Lightweight group info for a single user."""
+    return [
+        UserGroupInfo(id=gid, name=gname)
+        for gid, gname in batch_get_user_groups(db_session, [user_id]).get(user_id, [])
+    ]
+
+
+def set_user_groups__no_commit(
+    db_session: Session,
+    user_id: UUID,
+    group_ids: list[int],
+) -> None:
+    """Replace all group memberships for a user with the given group_ids.
+    Does NOT commit."""
+    if group_ids:
+        existing_ids = set(
+            db_session.scalars(
+                select(UserGroup.id).where(UserGroup.id.in_(group_ids))
+            ).all()
+        )
+        missing = set(group_ids) - existing_ids
+        if missing:
+            raise ValueError(f"Group IDs do not exist: {sorted(missing)}")
+
+    db_session.execute(
+        delete(User__UserGroup).where(User__UserGroup.user_id == user_id)
+    )
+
+    if group_ids:
+        insert_stmt = (
+            pg_insert(User__UserGroup)
+            .values([{"user_id": user_id, "user_group_id": gid} for gid in group_ids])
+            .on_conflict_do_nothing(
+                index_elements=[User__UserGroup.user_group_id, User__UserGroup.user_id]
+            )
+        )
+        db_session.execute(insert_stmt)
+
+    recompute_user_permissions__no_commit(user_id, db_session)

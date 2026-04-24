@@ -59,7 +59,7 @@ def test_me_endpoint_returns_authenticated_user_info(
     data = response.json()
     assert data.get("is_anonymous_user") is not True
     assert data["email"] == admin_user.email
-    assert "FULL_ADMIN_PANEL_ACCESS" in data["effective_permissions"]
+    assert "admin" in data["effective_permissions"]
 
 
 def test_anonymous_user_can_access_persona_when_enabled(
