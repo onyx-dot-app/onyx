@@ -1,3 +1,4 @@
+import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
@@ -27,6 +28,8 @@ _FIREFLIES_ID_PREFIX = "FIREFLIES_"
 _FIREFLIES_API_URL = "https://api.fireflies.ai/graphql"
 
 _FIREFLIES_TRANSCRIPT_QUERY_SIZE = 50  # Max page size is 50
+_FIREFLIES_MAX_RETRIES = 3
+_FIREFLIES_RETRY_BASE_DELAY_SECONDS = 2
 
 _FIREFLIES_API_QUERY = """
     query Transcripts($fromDate: DateTime, $toDate: DateTime, $limit: Int!, $skip: Int!) {
@@ -169,12 +172,28 @@ class FirefliesConnector(PollConnector, LoadConnector):
 
         while True:
             variables["skip"] = skip
-            response = requests.post(
-                _FIREFLIES_API_URL,
-                headers=headers,
-                json={"query": _FIREFLIES_API_QUERY, "variables": variables},
-            )
+            # Retry 5xx with exponential backoff — Fireflies occasionally
+            # returns 500 / 504 for transient errors (ONYX-BACKEND-H6FJ/H6FH).
+            # 4xx still raises immediately because those are not retryable.
+            response: requests.Response | None = None
+            for attempt in range(_FIREFLIES_MAX_RETRIES):
+                response = requests.post(
+                    _FIREFLIES_API_URL,
+                    headers=headers,
+                    json={
+                        "query": _FIREFLIES_API_QUERY,
+                        "variables": variables,
+                    },
+                )
+                if response.status_code < 500 or attempt == _FIREFLIES_MAX_RETRIES - 1:
+                    break
+                logger.warning(
+                    f"Fireflies returned {response.status_code} on attempt "
+                    f"{attempt + 1}/{_FIREFLIES_MAX_RETRIES}, retrying"
+                )
+                time.sleep(_FIREFLIES_RETRY_BASE_DELAY_SECONDS * (2**attempt))
 
+            assert response is not None  # loop always runs at least once
             response.raise_for_status()
 
             if response.status_code == 204:
