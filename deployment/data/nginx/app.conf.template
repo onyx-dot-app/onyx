@@ -33,6 +33,7 @@ server {
     listen 80 default_server;
 
     client_max_body_size 5G;    # Maximum upload size
+    large_client_header_buffers 4 32k;  # Increase header buffer size for large cookies/headers
 
     access_log /var/log/nginx/access.log custom_main;
 

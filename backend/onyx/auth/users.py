@@ -2088,6 +2088,7 @@ def get_oauth_router(
         response: Response,
         redirect: bool = Query(False),
         scopes: List[str] = Query(None),
+        prompt: str | None = Query(None),
     ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
@@ -2133,6 +2134,13 @@ def get_oauth_router(
         if oauth_client.name == "google":
             authorization_url = add_url_params(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
+            )
+
+
+        # For OIDC, support the prompt parameter for re-authentication
+        if oauth_client.name == "openid" and prompt:
+            authorization_url = add_url_params(
+                authorization_url, {"prompt": prompt}
             )
 
         def set_oauth_cookie(
