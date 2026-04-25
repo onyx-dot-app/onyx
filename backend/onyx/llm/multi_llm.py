@@ -651,22 +651,25 @@ class LitellmLLM(LLM):
                 if tools and tool_choice is not None:
                     optional_kwargs["tool_choice"] = tool_choice
 
-                response = litellm.completion(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=self._api_version or None,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    tools=tools,
-                    stream=stream,
-                    temperature=temperature,
-                    timeout=timeout_override or self._timeout,
-                    max_tokens=max_tokens,
-                    client=client,
+                completion_kwargs = {
+                    "mock_response": get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                    "model": model,
+                    "base_url": self._api_base or None,
+                    "api_version": self._api_version or None,
+                    "custom_llm_provider": self._custom_llm_provider or None,
+                    "messages": messages,
+                    "stream": stream,
+                    "temperature": temperature,
+                    "timeout": timeout_override or self._timeout,
+                    "max_tokens": max_tokens,
+                    "client": client,
                     **optional_kwargs,
                     **passthrough_kwargs,
-                )
+                }
+                if tools:
+                    completion_kwargs["tools"] = tools
+
+                response = litellm.completion(**completion_kwargs)
             return response
         except Exception as e:
             # for break pointing

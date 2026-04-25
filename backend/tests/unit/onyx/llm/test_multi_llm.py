@@ -1466,6 +1466,37 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         ), "tool_choice must not be sent to providers when no tools are provided"
 
 
+def test_empty_tools_are_omitted_from_completion_request(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Regression test for providers like Dashscope that reject tools=[]."""
+    messages: LanguageModelInput = [UserMessage(content="Plan a deep research run")]
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="gpt-3.5-turbo",
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        list(default_multi_llm.stream(messages, tools=[]))
+
+        _, kwargs = mock_completion.call_args
+        assert (
+            "tools" not in kwargs
+        ), "empty tool definitions must not be sent to providers"
+
+
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     llm = LitellmLLM(
         api_key="test_key",
