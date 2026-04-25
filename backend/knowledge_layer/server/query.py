@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant as get_session
 from knowledge_layer.db.models import TopicExt, WikiPage
 from knowledge_layer.providers.base import WikiPageDraft
 from knowledge_layer.providers.claude import ClaudeProvider

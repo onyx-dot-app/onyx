@@ -65,6 +65,7 @@ def _upsert_wiki_page(db: Session, topic_id: int, draft: WikiPageDraft) -> WikiP
             .count()
         ) + 1
 
+    # TODO(phase-2): add retention policy — unbounded version rows accumulate indefinitely.
     db.add(WikiPageVersion(
         page_id=page.id,
         version_num=version_num,
@@ -99,7 +100,7 @@ def ingest_file(
         source_doc_id=doc_id,
         source_content_hash=content_hash,
         status=IngestStatus.RUNNING,
-        started_at=datetime.datetime.utcnow(),
+        started_at=datetime.datetime.now(datetime.timezone.utc),
     )
     db.add(run)
     db.commit()
@@ -128,13 +129,13 @@ def ingest_file(
                 ))
 
         run.status = IngestStatus.SUCCESS
-        run.completed_at = datetime.datetime.utcnow()
+        run.completed_at = datetime.datetime.now(datetime.timezone.utc)
         db.commit()
 
     except Exception as exc:
         run.status = IngestStatus.FAILED
         run.error_msg = str(exc)
-        run.completed_at = datetime.datetime.utcnow()
+        run.completed_at = datetime.datetime.now(datetime.timezone.utc)
         db.commit()
         raise
 

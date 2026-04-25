@@ -391,6 +391,7 @@ if not MULTI_TENANT:
                 "options": {
                     "priority": OnyxCeleryPriority.LOW,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 },
             },
         ]
