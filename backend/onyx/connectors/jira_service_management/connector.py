@@ -153,8 +153,7 @@ class JiraServiceManagementConnector(JiraConnector):
         base_jql = super()._get_jql_query(start, end)
 
         # If the caller already provided a custom JQL or project key, the parent
-        # already scoped it — just add the project type filter so we only pull
-        # from service desk projects without double-applying time filters.
+        # already scoped it — return as-is (caller has already constrained the query).
         if self.jql_query or self.jira_project:
             return base_jql
 
@@ -168,10 +167,23 @@ class JiraServiceManagementConnector(JiraConnector):
         checkpoint: JiraConnectorCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        """Wrap the parent generator to set JSM source and enrich with JSM metadata."""
+        """Wrap the parent generator to set JSM source and enrich with JSM metadata.
+
+        Intercepts each Document yielded by the parent implementation to:
+        1. Override document.source to DocumentSource.JIRA_SERVICE_MANAGEMENT.
+        2. Enrich with JSM-specific metadata (request type, SLA, customer reporter)
+           fetched from the JSM Service Desk REST API.
+
+        Non-Document items (HierarchyNode, ConnectorFailure, checkpoint objects)
+        pass through unchanged.
+        """
         for item in super()._load_from_checkpoint(jql, checkpoint, include_permissions):
             if isinstance(item, Document):
+                # Override the source type to differentiate JSM from plain Jira
                 item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+                # Derive the Jira issue key from the document's metadata.
+                # The parent connector always stores the issue key under "key".
                 if self._jira_client is not None:
                     issue_key = item.metadata.get("key") if item.metadata else None
                     if issue_key:
