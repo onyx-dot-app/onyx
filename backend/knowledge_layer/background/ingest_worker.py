@@ -173,6 +173,8 @@ def ingest_file(
         for draft in result.wiki_pages:
             _upsert_wiki_page(db, topic.id, draft)
 
+        # TODO(phase2a-task6): replace this block with _resolve_cross_refs() call
+        # and idempotent upsert — see Task 6 in the Phase 2a plan.
         for ref in result.cross_refs:
             from_page = db.query(WikiPage).filter(
                 WikiPage.topic_id == topic.id,
