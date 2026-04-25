@@ -13,10 +13,17 @@ class WikiPageDraft:
 
 
 @dataclass
+class TopicSummary:
+    name: str
+    page_slugs: list[str]  # slug list for cross-ref hint matching
+
+
+@dataclass
 class CrossRefProposal:
     from_slug: str
     to_slug: str
     link_type: str  # "extends" | "contradicts" | "see-also" | "prerequisite"
+    to_topic: str | None = None  # hint: which topic contains to_slug (if cross-topic)
 
 
 @dataclass
@@ -38,6 +45,7 @@ class LLMProvider(abc.ABC):
         raw_content: str,
         existing_pages: list[WikiPageDraft],
         topic_name: str,
+        sibling_topics: list[TopicSummary] | None = None,
     ) -> IngestResult:
         """Synthesise wiki pages from a raw document."""
 

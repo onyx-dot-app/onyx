@@ -164,3 +164,19 @@ def test_ingest_call_raises_on_malformed_json():
         provider = ClaudeProvider()
         with pytest.raises(ValueError, match="Failed to parse"):
             provider.ingest_call(raw_content="x", existing_pages=[], topic_name="t")
+
+
+def test_cross_ref_proposal_has_optional_to_topic():
+    from knowledge_layer.providers.base import CrossRefProposal
+    ref = CrossRefProposal(from_slug="a", to_slug="b", link_type="see-also")
+    assert ref.to_topic is None  # defaults to None
+
+    ref_cross = CrossRefProposal(from_slug="a", to_slug="b", link_type="extends", to_topic="trading")
+    assert ref_cross.to_topic == "trading"
+
+
+def test_topic_summary_dataclass():
+    from knowledge_layer.providers.base import TopicSummary
+    ts = TopicSummary(name="trading", page_slugs=["signals", "execution"])
+    assert ts.name == "trading"
+    assert len(ts.page_slugs) == 2
