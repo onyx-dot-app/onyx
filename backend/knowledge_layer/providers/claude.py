@@ -11,6 +11,7 @@ from knowledge_layer.providers.base import (
     IngestResult,
     LLMProvider,
     QueryResult,
+    TopicSummary,
     WikiPageDraft,
 )
 
@@ -89,7 +90,7 @@ class ClaudeProvider(LLMProvider):
         raw_content: str,
         existing_pages: list[WikiPageDraft],
         topic_name: str,
-        sibling_topics=None,  # list[TopicSummary] | None
+        sibling_topics: list[TopicSummary] | None = None,
     ) -> IngestResult:
         existing_summary = "\n\n".join(
             f"# {p.title} ({p.slug})\n{p.content[:500]}" for p in existing_pages
