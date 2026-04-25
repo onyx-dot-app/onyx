@@ -34,6 +34,7 @@ from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import DOC_SUMMARY
+from onyx.document_index.vespa_constants import DOC_TYPE
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
@@ -63,8 +64,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 
 logger = setup_logger()
-
-DOC_TYPE = "doc_type"
 
 # Retry configuration constants
 INDEXING_MAX_RETRIES = 5
