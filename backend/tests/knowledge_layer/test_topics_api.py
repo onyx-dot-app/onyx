@@ -89,3 +89,35 @@ def test_list_topics_returns_200():
         resp = client.get("/topics")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_delete_topic_returns_204():
+    with patch("knowledge_layer.server.topics.get_session") as mock_session_ctx:
+        existing = MagicMock()
+        existing.id = 1
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = existing
+        mock_session_ctx.return_value.__enter__ = lambda s: mock_db
+        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.delete("/topics/1")
+
+    assert resp.status_code == 204
+    mock_db.delete.assert_called_once_with(existing)
+    mock_db.commit.assert_called()
+
+
+def test_delete_topic_404_for_missing():
+    with patch("knowledge_layer.server.topics.get_session") as mock_session_ctx:
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_session_ctx.return_value.__enter__ = lambda s: mock_db
+        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.delete("/topics/999")
+
+    assert resp.status_code == 404

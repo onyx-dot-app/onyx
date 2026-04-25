@@ -97,3 +97,19 @@ def get_topic(topic_id: int, _: User = Depends(require_user)) -> TopicResponse:
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found.")
         return TopicResponse.model_validate(topic)
+
+
+@router.delete("/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_topic(
+    topic_id: int,
+    _: User = Depends(require_user),
+) -> None:
+    with get_session() as db:
+        topic = db.query(TopicExt).filter(TopicExt.id == topic_id).first()
+        if not topic:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Topic not found.",
+            )
+        db.delete(topic)
+        db.commit()
