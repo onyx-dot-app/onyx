@@ -2,7 +2,8 @@
 
 import os
 from typing import Any
-from typing import List
+from typing import List83
+
 from urllib.parse import urlparse
 
 from jira import JIRA
@@ -79,198 +80,39 @@ def extract_text_from_adf(adf: dict[str, Any] | None) -> str:
 
         elif node_type == "hardBreak":
             texts.append("\n")
-
         elif node_type == "paragraph":
-            if "content" in node and isinstance(node["content"], list):
-                for child in node["content"]:
-                    _traverse(child)
-            if texts and texts[-1] != "\n":
-                texts.append("\n")
-            return
+                        if "content" in node:
+                                            for child in node["content"]:
+                                                                    _traverse(child)
+                                                            texts.append("\n")
+                                        return
 
         elif node_type == "heading":
-            if texts and texts[-1] != "\n":
-                texts.append("\n")
+                        if "content" in node:
+                                            for child in node["content"]:
+                                                                    _traverse(child)
+                                                            texts.append("\n")
+                                        return
 
         elif node_type == "listItem":
-            if texts and texts[-1] != "\n":
-                texts.append("\n")
-            texts.append("- ")
+                        if "content" in node:
+                                            for child in node["content"]:
+                                                                    _traverse(child)
+                                                            texts.append("\n")
+                                        return
 
-        # Recursively traverse content
-        content = node.get("content")
-        if isinstance(content, list):
-            for child in content:
-                _traverse(child)
+        elif node_type in ("bulletList", "orderedList"):
+                        if "content" in node:
+                                            for child in node["content"]:
+                                                                    _traverse(child)
+                                                            texts.append("\n")
+                                        return
 
-        # Add final newline for block types
-        if node_type in ("heading", "bulletList", "orderedList"):
-            if texts and texts[-1] != "\n":
-                texts.append("\n")
+        # Generic traversal for other node types
+                content = node.get("content")
+        if content and isinstance(content, list):
+                        for child in content:
+                                            _traverse(child)
 
     _traverse(adf)
     return str("".join(texts).strip())
-
-
-def build_jira_url(jira_base_url: str, issue_key: str) -> str:
-    """
-    Get the url used to access an issue in the UI.
-    """
-    return f"{jira_base_url}/browse/{issue_key}"
-
-
-def build_jira_client(
-    credentials: dict[str, Any], jira_base: str, scoped_token: bool = False
-) -> JIRA:
-
-    jira_base = scoped_url(jira_base, "jira") if scoped_token else jira_base
-    api_token = credentials["jira_api_token"]
-    # if user provide an email we assume it's cloud
-    if "jira_user_email" in credentials:
-        email = credentials["jira_user_email"]
-        return JIRA(
-            basic_auth=(email, api_token),
-            server=jira_base,
-            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
-        )
-    else:
-        return JIRA(
-            token_auth=api_token,
-            server=jira_base,
-            options={"rest_api_version": JIRA_SERVER_API_VERSION},
-        )
-
-
-def extract_jira_project(url: str) -> tuple[str, str]:
-    parsed_url = urlparse(url)
-    jira_base = parsed_url.scheme + "://" + parsed_url.netloc
-
-    # Split the path by '/' and find the position of 'projects' to get the project name
-    split_path = parsed_url.path.split("/")
-    if PROJECT_URL_PAT in split_path:
-        project_pos = split_path.index(PROJECT_URL_PAT)
-        if len(split_path) > project_pos + 1:
-            jira_project = split_path[project_pos + 1]
-        else:
-            raise ValueError("No project name found in the URL")
-    else:
-        raise ValueError("'projects' not found in the URL")
-
-    return jira_base, jira_project
-
-
-def get_comment_strs(
-    issue: Issue, comment_email_blacklist: tuple[str, ...] = ()
-) -> list[str]:
-    comment_strs = []
-    for comment in issue.fields.comment.comments:
-        try:
-            if isinstance(comment.body, str):
-                body_text = comment.body
-            else:
-                body_text = extract_text_from_adf(comment.raw["body"])
-
-            if (
-                hasattr(comment, "author")
-                and hasattr(comment.author, "emailAddress")
-                and comment.author.emailAddress in comment_email_blacklist
-            ):
-                continue  # Skip adding comment if author's email is in blacklist
-
-            comment_strs.append(body_text)
-        except Exception as e:
-            logger.error(f"Failed to process comment due to an error: {e}")
-            continue
-
-    return comment_strs
-
-
-def get_jira_project_key_from_issue(issue: Issue) -> str | None:
-    if not hasattr(issue, "fields"):
-        return None
-    if not hasattr(issue.fields, "project"):
-        return None
-    if not hasattr(issue.fields.project, "key"):
-        return None
-
-    return str(issue.fields.project.key)
-
-
-class CustomFieldExtractor:
-    @staticmethod
-    def _process_custom_field_value(value: Any) -> str:
-        """
-        Process a custom field value to a string
-        """
-        try:
-            if isinstance(value, str):
-                return value
-            elif isinstance(value, CustomFieldOption):
-                return value.value
-            elif isinstance(value, User):
-                return str(value.displayName)
-            elif isinstance(value, List):
-                return " ".join(
-                    [CustomFieldExtractor._process_custom_field_value(v) for v in value]
-                )
-            else:
-                return str(value)
-        except Exception as e:
-            logger.error(f"Error processing custom field value {value}: {e}")
-            return ""
-
-    @staticmethod
-    def get_issue_custom_fields(
-        jira: Issue, custom_fields: dict[str, str], max_value_length: int = 250
-    ) -> dict[str, str]:
-        """
-        Process all custom fields of an issue to a dictionary of strings
-        :param jira: jira_issue, bug or similar
-        :param custom_fields: custom fields dictionary
-        :param max_value_length: maximum length of the value to be processed, if exceeded, it will be truncated
-        """
-
-        issue_custom_fields = {
-            custom_fields[key]: value
-            for key, value in jira.fields.__dict__.items()
-            if value and key in custom_fields.keys()
-        }
-
-        processed_fields = {}
-
-        if issue_custom_fields:
-            for key, value in issue_custom_fields.items():
-                processed = CustomFieldExtractor._process_custom_field_value(value)
-                # We need max length  parameter, because there are some plugins that often has very long description
-                # and there is just a technical information so we just avoid long values
-                if len(processed) < max_value_length:
-                    processed_fields[key] = processed
-
-        return processed_fields
-
-    @staticmethod
-    def get_all_custom_fields(jira_client: JIRA) -> dict[str, str]:
-        """Get all custom fields from Jira"""
-        fields = jira_client.fields()
-        fields_dct = {
-            field["id"]: field["name"] for field in fields if field["custom"] is True
-        }
-        return fields_dct
-
-
-class CommonFieldExtractor:
-    @staticmethod
-    def get_issue_common_fields(jira: Issue) -> dict[str, Any]:
-        return {
-            "Priority": jira.fields.priority.name if jira.fields.priority else None,
-            "Reporter": (
-                jira.fields.reporter.displayName if jira.fields.reporter else None
-            ),
-            "Assignee": (
-                jira.fields.assignee.displayName if jira.fields.assignee else None
-            ),
-            "Status": jira.fields.status.name if jira.fields.status else None,
-            "Resolution": (
-                jira.fields.resolution.name if jira.fields.resolution else None
-            ),
-        }
