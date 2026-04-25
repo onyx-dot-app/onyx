@@ -267,6 +267,9 @@ class DocumentSource(str, Enum):
     # Uses RAW_BINARY processing mode - no text extraction
     CRAFT_FILE = "craft_file"
 
+    # team-brain: local filesystem raw document source
+    WIKI_RAW_FS = "wiki_raw_fs"
+
 
 class FederatedConnectorSource(str, Enum):
     FEDERATED_SLACK = "federated_slack"

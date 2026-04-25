@@ -147,6 +147,7 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
+from knowledge_layer.server.topics import router as knowledge_topics_router
 from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
@@ -523,6 +524,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
+    application.include_router(knowledge_topics_router, prefix="/api/knowledge")
 
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
         include_auth_router_with_prefix(
