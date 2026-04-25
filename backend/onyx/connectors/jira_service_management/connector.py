@@ -1,0 +1,219 @@
+"""
+Jira Service Management (JSM) Connector for Onyx.
+
+Indexes tickets from Jira Service Management (service desk) projects, including
+service requests, incidents, problems, and change requests. Extends the base
+Jira connector with JSM-specific fields: request type, SLA status, and
+customer reporter information fetched from the JSM REST API.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import requests
+from jira.resources import Issue
+from typing_extensions import override
+
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.connector import process_jira_issue
+from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# JSM-specific field names for metadata
+_FIELD_REQUEST_TYPE = "request_type"
+_FIELD_SLA_BREACHED = "sla_breached"
+_FIELD_SLA_NAME = "sla_name"
+_FIELD_SLA_REMAINING_SECONDS = "sla_remaining_seconds"
+_FIELD_CUSTOMER_REPORTER = "customer_reporter"
+
+
+def _get_jsm_request_details(
+    jira_base: str,
+    issue_key: str,
+    session: Any,
+) -> dict[str, Any]:
+    """Fetch JSM-specific fields for a ticket via the Service Desk API.
+
+    Returns a dict with keys: request_type, sla_breached, sla_name,
+    sla_remaining_seconds, customer_reporter. Missing fields are omitted.
+    """
+    result: dict[str, Any] = {}
+    try:
+        url = f"{jira_base}/rest/servicedeskapi/request/{issue_key}"
+        resp = session.get(url, headers={"X-ExperimentalApi": "opt-in"})
+        if resp.status_code != 200:
+            return result
+        data = resp.json()
+
+        # Request type (e.g., "Get IT help", "Incident")
+        rt = data.get("requestType")
+        if rt and isinstance(rt, dict):
+            rt_name = rt.get("name")
+            if rt_name:
+                result[_FIELD_REQUEST_TYPE] = rt_name
+
+        # Customer reporter (the end-user who raised the request)
+        reporter = data.get("reporter")
+        if reporter and isinstance(reporter, dict):
+            display_name = reporter.get("displayName")
+            if display_name:
+                result[_FIELD_CUSTOMER_REPORTER] = display_name
+
+        # SLA information — iterate over SLA fields
+        sla_list = data.get("sla", {}).get("values", [])
+        for sla in sla_list:
+            if not isinstance(sla, dict):
+                continue
+            # Only report the first SLA that is currently active or breached
+            completed_cycles = sla.get("completedCycles", [])
+            ongoing_cycle = sla.get("ongoingCycle")
+            if ongoing_cycle and isinstance(ongoing_cycle, dict):
+                breached = ongoing_cycle.get("breached", False)
+                remaining = ongoing_cycle.get("remainingTime", {})
+                remaining_secs = (
+                    remaining.get("millis", 0) // 1000 if remaining else 0
+                )
+                sla_name = sla.get("name", "")
+                result[_FIELD_SLA_NAME] = sla_name
+                result[_FIELD_SLA_BREACHED] = str(breached).lower()
+                result[_FIELD_SLA_REMAINING_SECONDS] = str(remaining_secs)
+                break  # report first active SLA only
+            elif completed_cycles:
+                # Closed ticket — report last completed cycle breach status
+                last = completed_cycles[-1]
+                if isinstance(last, dict):
+                    result[_FIELD_SLA_NAME] = sla.get("name", "")
+                    result[_FIELD_SLA_BREACHED] = str(
+                        last.get("breached", False)
+                    ).lower()
+                    break
+    except Exception:
+        logger.debug(
+            f"Could not fetch JSM request details for {issue_key} — "
+            "skipping JSM-specific metadata."
+        )
+    return result
+
+
+def _enrich_document_with_jsm_fields(
+    document: Document,
+    issue_key: str,
+    jira_base: str,
+    session: Any,
+) -> Document:
+    """Add JSM-specific metadata fields to an already-processed Document."""
+    jsm_data = _get_jsm_request_details(jira_base, issue_key, session)
+    if jsm_data:
+        if document.metadata is None:
+            document.metadata = {}
+        document.metadata.update(jsm_data)
+    return document
+
+
+class JiraServiceManagementConnector(JiraConnector):
+    """Connector for Jira Service Management (JSM) service desk projects.
+
+    Behaves like the standard Jira connector but:
+    - Restricts indexing to service desk project types by default.
+    - Enriches each document with JSM-specific metadata: request type,
+      SLA status, and customer reporter.
+    - Reports source as DocumentSource.JIRA_SERVICE_MANAGEMENT.
+    """
+
+    def __init__(
+        self,
+        jira_base_url: str,
+        project_key: str | None = None,
+        comment_email_blacklist: list[str] | None = None,
+        batch_size: int = INDEX_BATCH_SIZE,
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
+        jql_query: str | None = None,
+        scoped_token: bool = False,
+    ) -> None:
+        super().__init__(
+            jira_base_url=jira_base_url,
+            project_key=project_key,
+            comment_email_blacklist=comment_email_blacklist,
+            batch_size=batch_size,
+            labels_to_skip=labels_to_skip,
+            jql_query=jql_query,
+            scoped_token=scoped_token,
+        )
+
+    @override
+    def _get_jql_query(
+        self, start: float, end: float
+    ) -> str:
+        """Override base JQL to scope to service_desk project types by default."""
+        base_jql = super()._get_jql_query(start, end)
+
+        # If the caller already provided a custom JQL or project key, the parent
+        # already scoped it — just add the project type filter so we only pull
+        # from service desk projects without double-applying time filters.
+        if self.jql_query or self.jira_project:
+            return base_jql
+
+        # No scoping — add service_desk project type filter
+        return f"project type = service_desk AND {base_jql}"
+
+    def _process_issue_with_jsm_fields(
+        self, issue: Issue, include_permissions: bool
+    ) -> Document | None:
+        """Process an issue and enrich with JSM metadata."""
+        from onyx.connectors.jira.connector import _FIELD_PROJECT
+
+        from onyx.connectors.jira.utils import best_effort_get_field_from_issue
+
+        project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+        project_key = project.key if project else None
+        parent_hierarchy_raw_node_id = (
+            self._get_parent_hierarchy_raw_node_id(issue, project_key)
+            if project_key
+            else None
+        )
+
+        document = process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+        )
+
+        if document is None:
+            return None
+
+        # Override source to JSM
+        document.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+        # Add permissions if requested
+        if include_permissions and project_key:
+            document.external_access = self._get_project_permissions(
+                project_key, add_prefix=True
+            )
+
+        # Enrich with JSM-specific metadata via Service Desk API
+        if self._jira_client is not None:
+            document = _enrich_document_with_jsm_fields(
+                document=document,
+                issue_key=issue.key,
+                jira_base=self.jira_base,
+                session=self._jira_client._session,  # type: ignore[union-attr]
+            )
+
+        return document
+
+    @override
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        result = super().load_credentials(credentials)
+        return result
