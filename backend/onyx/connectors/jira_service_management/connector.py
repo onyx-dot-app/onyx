@@ -217,3 +217,31 @@ class JiraServiceManagementConnector(JiraConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         result = super().load_credentials(credentials)
         return result
+
+
+if __name__ == "__main__":
+    import os
+
+    from tests.daily.connectors.utils import load_all_from_connector
+
+    connector = JiraServiceManagementConnector(
+        jira_base_url=os.environ["JSM_BASE_URL"],
+        project_key=os.environ.get("JSM_PROJECT_KEY"),
+        comment_email_blacklist=[],
+    )
+
+    connector.load_credentials(
+        {
+            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
+            "jira_api_token": os.environ["JIRA_API_TOKEN"],
+        }
+    )
+
+    start = 0
+    end = __import__("datetime").datetime.now().timestamp()
+
+    result = load_all_from_connector(connector=connector, start=start, end=end)
+    for doc in result.documents:
+        print(f"[{doc.source}] {doc.id} — {doc.semantic_identifier}")
+        print(f"  metadata: {doc.metadata}")
+        print()
