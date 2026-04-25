@@ -42,6 +42,8 @@ from onyx.natural_language_processing.exceptions import CohereBillingLimitError
 from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
+from onyx.server.metrics.embedding import observe_embedding_client
+from onyx.server.metrics.embedding import track_embedding_in_progress
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -879,43 +881,60 @@ class EmbeddingModel:
                 reduced_dimension=self.reduced_dimension,
             )
 
+            num_texts = len(text_batch)
+            num_chars = sum(len(t) for t in text_batch)
             start_time = time.monotonic()
             response: EmbedResponse
-            # Route between direct API calls and model server calls.
-            if self.provider_type is not None:
-                # For API providers, make direct API call.
-                try:
-                    # Detect if this code is being called from an event loop
-                    # or not.
-                    asyncio.get_running_loop()
-                except RuntimeError:
-                    # This code is being called synchronously, safe to use
-                    # run_until_complete.
-                    # Use thread-local event loop to prevent memory leaks
-                    # from creating thousands of event loops during batch
-                    # processing.
-                    loop = _get_or_create_event_loop()
-                    response = loop.run_until_complete(
-                        self._make_direct_api_call(embed_request)
-                    )
-                else:
-                    # This code is being called from an event loop, can't
-                    # block on it from the same thread without deadlocking.
-                    # Run in a separate thread with its own loop.
-                    with ThreadPoolExecutor(max_workers=1) as pool:
-                        response = cast(
-                            EmbedResponse,
-                            pool.submit(
-                                asyncio.run, self._make_direct_api_call(embed_request)
-                            ).result(),
+            success = False
+            try:
+                with track_embedding_in_progress(self.provider_type, text_type):
+                    # Route between direct API calls and model server calls.
+                    if self.provider_type is not None:
+                        # For API providers, make direct API call.
+                        try:
+                            # Detect if this code is being called from an event
+                            # loop or not.
+                            asyncio.get_running_loop()
+                        except RuntimeError:
+                            # This code is being called synchronously, safe to
+                            # use run_until_complete.
+                            # Use thread-local event loop to prevent memory
+                            # leaks from creating thousands of event loops
+                            # during batch processing.
+                            loop = _get_or_create_event_loop()
+                            response = loop.run_until_complete(
+                                self._make_direct_api_call(embed_request)
+                            )
+                        else:
+                            # This code is being called from an event loop,
+                            # can't block on it from the same thread without
+                            # deadlocking. Run in a separate thread with its
+                            # own loop.
+                            with ThreadPoolExecutor(max_workers=1) as pool:
+                                response = cast(
+                                    EmbedResponse,
+                                    pool.submit(
+                                        asyncio.run,
+                                        self._make_direct_api_call(embed_request),
+                                    ).result(),
+                                )
+                    else:
+                        # For local models, use model server.
+                        response = self._make_model_server_request(
+                            embed_request, tenant_id=tenant_id, request_id=request_id
                         )
-            else:
-                # For local models, use model server.
-                response = self._make_model_server_request(
-                    embed_request, tenant_id=tenant_id, request_id=request_id
+                success = True
+            finally:
+                processing_time = time.monotonic() - start_time
+                observe_embedding_client(
+                    provider=self.provider_type,
+                    text_type=text_type,
+                    duration_s=processing_time,
+                    num_texts=num_texts,
+                    num_chars=num_chars,
+                    success=success,
                 )
 
-            processing_time = time.monotonic() - start_time
             logger.debug(
                 f"process_batch: Batch idx {batch_idx}, total num {num_of_batches}, processing time: {processing_time:.2f}s."
             )
