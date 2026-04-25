@@ -50,6 +50,17 @@ Respond ONLY with valid JSON in this exact shape:
 """
 
 
+def _extract_text(response: object) -> str:
+    """Return text from the first text-type content block, or raise ValueError."""
+    for block in response.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    raise ValueError(
+        f"No text block in Claude response. "
+        f"Block types: {[getattr(b, 'type', '?') for b in response.content]}"
+    )
+
+
 def _strip_code_fence(text: str) -> str:
     """Strip markdown code fences (```json ... ```) if present."""
     stripped = text.strip()
@@ -104,7 +115,10 @@ class ClaudeProvider(LLMProvider):
             ],
         )
 
-        data = json.loads(_strip_code_fence(response.content[0].text))
+        try:
+            data = json.loads(_strip_code_fence(_extract_text(response)))
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError(f"Failed to parse Claude response: {exc}") from exc
         return IngestResult(
             wiki_pages=[WikiPageDraft(**p) for p in data["wiki_pages"]],
             cross_refs=[CrossRefProposal(**r) for r in data.get("cross_refs", [])],
@@ -139,5 +153,8 @@ class ClaudeProvider(LLMProvider):
             ],
         )
 
-        data = json.loads(_strip_code_fence(response.content[0].text))
+        try:
+            data = json.loads(_strip_code_fence(_extract_text(response)))
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError(f"Failed to parse Claude response: {exc}") from exc
         return QueryResult(answer=data["answer"], citations=data.get("citations", []))

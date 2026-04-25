@@ -32,7 +32,7 @@ def test_claude_provider_ingest_call_parses_response():
         "cross_refs": []
     })
     mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=mock_response_content)]
+    mock_message.content = [MagicMock(type="text", text=mock_response_content)]
 
     with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
         mock_client = MagicMock()
@@ -57,7 +57,7 @@ def test_claude_provider_query_call_parses_response():
         "citations": ["trading-signals"]
     })
     mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=mock_response_content)]
+    mock_message.content = [MagicMock(type="text", text=mock_response_content)]
 
     with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
         mock_client = MagicMock()
@@ -82,7 +82,7 @@ def test_ingest_call_wraps_content_in_delimiters():
         "cross_refs": []
     })
     mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=mock_response_content)]
+    mock_message.content = [MagicMock(type="text", text=mock_response_content)]
 
     with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
         mock_client = MagicMock()
@@ -109,7 +109,7 @@ def test_query_call_wraps_content_in_delimiters():
     import json
     mock_response_content = json.dumps({"answer": "A", "citations": []})
     mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=mock_response_content)]
+    mock_message.content = [MagicMock(type="text", text=mock_response_content)]
 
     with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
         mock_client = MagicMock()
@@ -126,3 +126,41 @@ def test_query_call_wraps_content_in_delimiters():
     user_content = call_args.kwargs["messages"][0]["content"]
     assert "<question>" in user_content
     assert "<wiki_pages>" in user_content
+
+
+def test_ingest_call_raises_on_non_text_response():
+    """Raises ValueError with context if Claude returns a non-text block."""
+    mock_block = MagicMock()
+    mock_block.type = "tool_use"
+    del mock_block.text  # ensure .text doesn't exist
+
+    mock_message = MagicMock()
+    mock_message.content = [mock_block]
+
+    with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.messages.create.return_value = mock_message
+
+        provider = ClaudeProvider()
+        with pytest.raises(ValueError, match="No text block"):
+            provider.ingest_call(raw_content="x", existing_pages=[], topic_name="t")
+
+
+def test_ingest_call_raises_on_malformed_json():
+    """Raises ValueError with context on malformed JSON response."""
+    mock_block = MagicMock()
+    mock_block.type = "text"
+    mock_block.text = "this is not json at all"
+
+    mock_message = MagicMock()
+    mock_message.content = [mock_block]
+
+    with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.messages.create.return_value = mock_message
+
+        provider = ClaudeProvider()
+        with pytest.raises(ValueError, match="Failed to parse"):
+            provider.ingest_call(raw_content="x", existing_pages=[], topic_name="t")
