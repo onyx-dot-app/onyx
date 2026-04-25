@@ -3,24 +3,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 from onyx.connectors.models import Document, TextSection
-
-if TYPE_CHECKING:
-    from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 
 _SUPPORTED_EXTENSIONS = {".md", ".txt", ".rst"}
 
 
-class FilesystemConnector:
-    """Local-filesystem raw document connector for team-brain.
-
-    Implements the LoadConnector duck-type interface without inheriting
-    from it directly, to avoid the heavy file_store import chain in
-    environments where the full Onyx stack is not installed.
-    """
+class FilesystemConnector(LoadConnector):
+    """Local-filesystem raw document connector for team-brain."""
 
     SOURCE = DocumentSource.WIKI_RAW_FS
 
