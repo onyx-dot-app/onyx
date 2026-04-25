@@ -5,9 +5,11 @@ from unittest.mock import patch, MagicMock
 
 def _make_app():
     from fastapi import FastAPI
-    from knowledge_layer.server.topics import router
+    from unittest.mock import MagicMock
+    from knowledge_layer.server.topics import router, require_user
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[require_user] = lambda: MagicMock()
     return app
 
 

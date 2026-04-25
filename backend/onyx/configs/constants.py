@@ -725,4 +725,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.WIKI_RAW_FS: "team-brain raw filesystem documents",
 }

@@ -1,7 +1,6 @@
 # knowledge_layer/connectors/filesystem.py
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -23,13 +22,13 @@ class FilesystemConnector(LoadConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
-    def load_from_state(self) -> Iterator[list[Document]]:
+    def load_from_state(self) -> GenerateDocumentsOutput:
         root = Path(self.watch_path)
         if not root.exists():
             return
 
         batch: list[Document] = []
-        for entry in sorted(root.iterdir()):
+        for entry in sorted(root.rglob("*")):
             if not entry.is_file():
                 continue
             if entry.suffix.lower() not in _SUPPORTED_EXTENSIONS:
@@ -41,7 +40,7 @@ class FilesystemConnector(LoadConnector):
                 sections=[TextSection(link=str(entry), text=text)],
                 source=self.SOURCE,
                 semantic_identifier=entry.name,
-                metadata={"doc_type": "raw_doc", "watch_path": self.watch_path},
+                metadata={"doc_type": "raw_doc", "watch_path": str(root.resolve())},
                 doc_updated_at=None,
             )
             batch.append(doc)

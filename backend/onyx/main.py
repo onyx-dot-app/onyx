@@ -148,6 +148,7 @@ from onyx.server.token_rate_limits.api import router as token_rate_limit_setting
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from knowledge_layer.server.topics import router as knowledge_topics_router
+from knowledge_layer.server.topics import require_user as knowledge_require_user
 from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
@@ -524,7 +525,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
-    application.include_router(knowledge_topics_router, prefix="/api/knowledge")
+    include_router_with_global_prefix_prepended(application, knowledge_topics_router, prefix="/api/knowledge")
+
+    # Wire the knowledge-layer auth stub to the real Onyx auth dependency.
+    # Done here (rather than at import time in topics.py) to avoid pulling the
+    # full onyx.auth.users transitive dep chain into the lean test environment.
+    from onyx.auth.users import current_user as _current_user  # noqa: PLC0415
+    application.dependency_overrides[knowledge_require_user] = _current_user
 
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
         include_auth_router_with_prefix(

@@ -18,7 +18,7 @@ def test_load_from_state_yields_documents(tmp_path):
 
     docs = []
     for batch in conn.load_from_state():
-        docs.extend([d for d in batch if not hasattr(d, "parent_id")])
+        docs.extend(batch)
 
     assert len(docs) == 2
     slugs = {d.semantic_identifier for d in docs}
@@ -35,7 +35,7 @@ def test_load_from_state_skips_unsupported_extensions(tmp_path):
 
     docs = []
     for batch in conn.load_from_state():
-        docs.extend([d for d in batch if not hasattr(d, "parent_id")])
+        docs.extend(batch)
 
     assert len(docs) == 1
     assert docs[0].semantic_identifier == "doc.md"
