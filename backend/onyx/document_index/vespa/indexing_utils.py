@@ -64,6 +64,8 @@ from onyx.utils.text_processing import remove_invalid_unicode_chars
 
 logger = setup_logger()
 
+DOC_TYPE = "doc_type"
+
 # Retry configuration constants
 INDEXING_MAX_RETRIES = 5
 INDEXING_BASE_DELAY = 1.0
@@ -194,6 +196,7 @@ def _index_vespa_chunk(
         # which contains the title prefix and metadata suffix
         CONTENT_SUMMARY: remove_invalid_unicode_chars(chunk.content),
         SOURCE_TYPE: str(document.source.value),
+        DOC_TYPE: document.metadata.get("doc_type", "raw_doc"),
         SOURCE_LINKS: json.dumps(chunk.source_links),
         SEMANTIC_IDENTIFIER: remove_invalid_unicode_chars(document.semantic_identifier),
         SECTION_CONTINUATION: chunk.section_continuation,
