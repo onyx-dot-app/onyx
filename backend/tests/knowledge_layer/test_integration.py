@@ -21,10 +21,14 @@ def db_session():
 def cleanup_topics(db_session):
     yield
     from knowledge_layer.db.models import TopicExt
-    db_session.query(TopicExt).filter(
-        TopicExt.name.in_(["integ-topic-alpha", "integ-topic-beta"])
-    ).delete(synchronize_session=False)
-    db_session.commit()
+    try:
+        db_session.rollback()  # clear any failed transaction before cleanup
+        db_session.query(TopicExt).filter(
+            TopicExt.name.in_(["integ-topic-alpha", "integ-topic-beta"])
+        ).delete(synchronize_session=False)
+        db_session.commit()
+    except Exception:
+        pass  # best-effort cleanup; don't mask the original test failure
 
 
 def test_ingest_and_query_single_topic(db_session, tmp_path):
