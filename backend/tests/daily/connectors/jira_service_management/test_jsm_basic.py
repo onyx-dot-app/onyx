@@ -159,12 +159,22 @@ def test_jsm_connector_service_desk_scope(
     entirely) so that ``_get_jql_query`` appends the service-desk scope clause.
 
     Assertions:
+    - The generated JQL contains ``project type = service_desk``, verifying
+      the scope clause is injected when neither project_key nor jql_query is set.
     - At least one document is returned.
     - Every document carries ``source == JIRA_SERVICE_MANAGEMENT``.
-    - If ``JSM_PROJECT_KEY`` is provided we additionally assert that the expected
-      project appears in the results, confirming the scope filter returned
-      service-desk tickets rather than an empty set or software-project tickets.
+    - No document comes from a non-service-desk project key (if ``JSM_PROJECT_KEY``
+      is provided, *all* returned project keys must match it or be absent — the
+      service_desk JQL filter must not admit software/business-project tickets).
     """
+    # --- Static assertion: verify the JQL clause before executing the connector ---
+    generated_jql = jsm_connector_no_scope._get_jql_query(start=0, end=time.time())
+    assert "project type = service_desk" in generated_jql, (
+        f"Expected 'project type = service_desk' in generated JQL, got: {generated_jql!r}. "
+        "The default scope clause is not being injected correctly."
+    )
+
+    # --- Live assertions ---
     docs = load_all_from_connector(
         connector=jsm_connector_no_scope,
         start=0,
@@ -181,11 +191,25 @@ def test_jsm_connector_service_desk_scope(
             f"Expected JIRA_SERVICE_MANAGEMENT source, got {doc.source} for {doc.id}"
         )
 
-    # Best-effort: if a reference project is configured, confirm it appears in
-    # the result set — this validates that the scope filter is not excluding all
-    # service-desk tickets.
+    # Exclusivity check: if a reference project is provided, every returned document
+    # must belong to that project (no software/business-project tickets should slip
+    # through the service_desk filter).
     project_key = os.environ.get("JSM_PROJECT_KEY")
     if project_key:
+        wrong_project_docs = [
+            doc
+            for doc in docs
+            if doc.metadata.get("project") not in (project_key, None)
+        ]
+        assert not wrong_project_docs, (
+            f"Found {len(wrong_project_docs)} document(s) from unexpected projects: "
+            + ", ".join(
+                f"{d.id} (project={d.metadata.get('project')})"
+                for d in wrong_project_docs[:5]
+            )
+            + ". The service_desk scope filter may not be restricting results correctly."
+        )
+        # Also ensure the expected project IS present
         returned_projects = {doc.metadata.get("project") for doc in docs}
         assert project_key in returned_projects, (
             f"JSM_PROJECT_KEY '{project_key}' not found in returned projects {returned_projects}. "
