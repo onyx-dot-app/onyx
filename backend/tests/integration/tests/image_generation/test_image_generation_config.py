@@ -489,3 +489,112 @@ def test_create_config_source_provider_not_found(
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
+
+
+def test_create_config_with_group_access_control(
+    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+) -> None:
+    """Test creating an image generation config with group-scoped access control.
+
+    Regression test for EVA-16: Verifies that group-scoped configs can be created
+    without returning a 404 error.
+    """
+    admin_user, _ = setup_image_generation_tests
+
+    # Create a config with private access (non-public)
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="test-group-scoped",
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-test-key-group",
+        is_public=False,  # Private access
+        groups=[],  # No specific groups (admins only)
+        is_default=False,
+        user_performing_action=admin_user,
+    )
+
+    assert config.image_provider_id == "test-group-scoped"
+    assert config.model_name == "dall-e-3"
+    assert config.is_default is False
+
+    # Verify it exists in the list
+    ImageGenerationConfigManager.verify(
+        config=config,
+        user_performing_action=admin_user,
+    )
+
+
+def test_update_config_with_group_access_control(
+    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+) -> None:
+    """Test updating an image generation config with group-scoped access control.
+
+    Regression test for EVA-16: Verifies that group-scoped configs can be updated
+    without returning a 404 error.
+    """
+    admin_user, _ = setup_image_generation_tests
+
+    # Create initial config with public access
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="test-update-group-scope",
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-test-key-update",
+        is_public=True,
+        is_default=False,
+        user_performing_action=admin_user,
+    )
+
+    assert config.model_name == "dall-e-3"
+
+    # Update to private access with group scoping
+    updated_config = ImageGenerationConfigManager.update(
+        image_provider_id=config.image_provider_id,
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-test-key-update",
+        is_public=False,  # Change to private
+        groups=[],  # No specific groups
+        user_performing_action=admin_user,
+    )
+
+    assert updated_config.image_provider_id == config.image_provider_id
+    assert updated_config.model_name == "dall-e-3"
+
+    # Verify config still exists after update
+    ImageGenerationConfigManager.verify(
+        config=updated_config,
+        user_performing_action=admin_user,
+    )
+
+
+def test_create_from_provider_with_group_access_control(
+    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+) -> None:
+    """Test creating a config from provider with group-scoped access control.
+
+    Regression test for EVA-16: Verifies that group-scoped configs created via
+    clone mode (from existing provider) work correctly.
+    """
+    admin_user, llm_provider = setup_image_generation_tests
+
+    # Create image generation config from the provider with private access
+    config = ImageGenerationConfigManager.create_from_provider(
+        source_llm_provider_id=llm_provider.id,
+        image_provider_id="test-clone-group-scope",
+        model_name="gpt-image-1",
+        is_public=False,  # Private access
+        personas=[],  # No specific personas
+        is_default=True,
+        user_performing_action=admin_user,
+    )
+
+    assert config.image_provider_id == "test-clone-group-scope"
+    assert config.model_name == "gpt-image-1"
+    assert config.is_default is True
+
+    # Verify it exists
+    ImageGenerationConfigManager.verify(
+        config=config,
+        user_performing_action=admin_user,
+    )

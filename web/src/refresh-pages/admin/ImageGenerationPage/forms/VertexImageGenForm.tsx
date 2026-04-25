@@ -14,6 +14,7 @@ import {
 } from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
 import { ImageProvider } from "@/refresh-pages/admin/ImageGenerationPage/constants";
 import { ImageGenerationCredentials } from "@/refresh-pages/admin/ImageGenerationPage/svc";
+import { ModelAccessField } from "@/sections/modals/llmConfig/shared";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DEFAULT_LOCATION = "global";
@@ -24,6 +25,9 @@ interface VertexImageGenFormValues {
     vertex_credentials: string;
     vertex_location: string;
   };
+  is_public: boolean;
+  groups: number[];
+  personas: number[];
 }
 
 const initialValues: VertexImageGenFormValues = {
@@ -31,6 +35,9 @@ const initialValues: VertexImageGenFormValues = {
     vertex_credentials: "",
     vertex_location: VERTEXAI_DEFAULT_LOCATION,
   },
+  is_public: true,
+  groups: [],
+  personas: [],
 };
 
 const validationSchema = Yup.object().shape({
@@ -50,6 +57,11 @@ function getInitialValuesFromCredentials(
       vertex_location:
         credentials.custom_config?.vertex_location || VERTEXAI_DEFAULT_LOCATION,
     },
+    // Note: Access control fields are not returned by the credentials endpoint
+    // Use defaults when editing - user can adjust via ModelAccessField
+    is_public: true,
+    groups: [],
+    personas: [],
   };
 }
 
@@ -65,6 +77,9 @@ function transformValues(
       vertex_credentials: values.custom_config.vertex_credentials,
       vertex_location: values.custom_config.vertex_location,
     },
+    isPublic: values.is_public,
+    groups: values.groups,
+    personas: values.personas,
   };
 }
 
@@ -163,6 +178,7 @@ function VertexFormFields(
           </FormField>
         )}
       />
+      <ModelAccessField />
     </>
   );
 }

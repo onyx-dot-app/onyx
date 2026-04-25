@@ -35,6 +35,9 @@ class ImageGenerationConfigManager:
         deployment_name: str | None = None,
         custom_config: dict[str, Any] | None = None,
         is_default: bool = False,
+        is_public: bool = True,
+        groups: list[int] | None = None,
+        personas: list[int] | None = None,
     ) -> DATestImageGenerationConfig:
         """Create a new image generation config with new credentials."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
@@ -51,6 +54,9 @@ class ImageGenerationConfigManager:
                 "deployment_name": deployment_name,
                 "custom_config": _serialize_custom_config(custom_config),
                 "is_default": is_default,
+                "is_public": is_public,
+                "groups": groups if groups is not None else [],
+                "personas": personas if personas is not None else [],
             },
             headers=user_performing_action.headers,
         )
@@ -76,6 +82,9 @@ class ImageGenerationConfigManager:
         api_version: str | None = None,
         deployment_name: str | None = None,
         is_default: bool = False,
+        is_public: bool = True,
+        groups: list[int] | None = None,
+        personas: list[int] | None = None,
     ) -> DATestImageGenerationConfig:
         """Create a new image generation config by cloning from an existing LLM provider."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
@@ -90,6 +99,9 @@ class ImageGenerationConfigManager:
                 "api_version": api_version,
                 "deployment_name": deployment_name,
                 "is_default": is_default,
+                "is_public": is_public,
+                "groups": groups if groups is not None else [],
+                "personas": personas if personas is not None else [],
             },
             headers=user_performing_action.headers,
         )
@@ -141,6 +153,9 @@ class ImageGenerationConfigManager:
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
+        is_public: bool = True,
+        groups: list[int] | None = None,
+        personas: list[int] | None = None,
     ) -> DATestImageGenerationConfig:
         """Update an existing image generation config."""
         payload: dict = {
@@ -148,6 +163,9 @@ class ImageGenerationConfigManager:
             "api_base": api_base,
             "api_version": api_version,
             "deployment_name": deployment_name,
+            "is_public": is_public,
+            "groups": groups if groups is not None else [],
+            "personas": personas if personas is not None else [],
         }
 
         if source_llm_provider_id is not None:
