@@ -19,7 +19,7 @@ from knowledge_layer.db.models import (
     WikiPageVersion,
 )
 from knowledge_layer.connectors.filesystem import _SUPPORTED_EXTENSIONS
-from knowledge_layer.providers.base import LLMProvider, WikiPageDraft
+from knowledge_layer.providers.base import LLMProvider, TopicSummary, WikiPageDraft
 from knowledge_layer.providers.claude import ClaudeProvider
 
 
@@ -34,8 +34,45 @@ def _should_skip(content_hash: str, last_run: IngestRun | None) -> bool:
 
 
 def _get_existing_pages(db: Session, topic_id: int) -> list[WikiPageDraft]:
-    pages = db.query(WikiPage).filter(WikiPage.topic_id == topic_id).all()
+    pages = db.query(WikiPage).filter(
+        WikiPage.topic_id == topic_id,
+        WikiPage.is_index_page.is_(False),
+    ).all()
     return [WikiPageDraft(slug=p.slug, title=p.title, content=p.content) for p in pages]
+
+
+def _build_index_content(topic_name: str, pages: list) -> str:
+    lines = [f"# {topic_name} Index"]
+    for page in sorted(pages, key=lambda p: p.slug):
+        lines.append(f"- [{page.title}]({page.slug})")
+    return "\n".join(lines)
+
+
+def _regenerate_index_page(db: Session, topic: TopicExt, pages: list) -> None:
+    content = _build_index_content(topic.name, pages)
+    content_hash = _sha256(content)
+
+    existing = (
+        db.query(WikiPage)
+        .filter(WikiPage.topic_id == topic.id, WikiPage.slug == "index")
+        .first()
+    )
+
+    if existing is None:
+        page = WikiPage(
+            topic_id=topic.id,
+            slug="index",
+            title=f"{topic.name} Index",
+            content=content,
+            content_hash=content_hash,
+            is_index_page=True,
+        )
+        db.add(page)
+        db.flush()
+    else:
+        if existing.content_hash != content_hash:
+            existing.content = content
+            existing.content_hash = content_hash
 
 
 @dataclass
@@ -163,29 +200,59 @@ def ingest_file(
     db.commit()
 
     try:
+        # Build sibling context for cross-topic cross-ref hints
+        sibling_topics = [
+            TopicSummary(
+                name=t.name,
+                page_slugs=[
+                    p.slug for p in db.query(WikiPage).filter(
+                        WikiPage.topic_id == t.id,
+                        WikiPage.is_index_page.is_(False),
+                    ).all()
+                ],
+            )
+            for t in db.query(TopicExt).filter(TopicExt.id != topic.id).all()
+        ]
+
         existing = _get_existing_pages(db, topic.id)
         result = provider.ingest_call(
             raw_content=file_content,
             existing_pages=existing,
             topic_name=topic.name,
+            sibling_topics=sibling_topics,
         )
 
         for draft in result.wiki_pages:
             _upsert_wiki_page(db, topic.id, draft)
 
-        # TODO(phase2a-task6): replace this block with _resolve_cross_refs() call
-        # and idempotent upsert — see Task 6 in the Phase 2a plan.
-        for ref in result.cross_refs:
-            from_page = db.query(WikiPage).filter(
-                WikiPage.topic_id == topic.id,
-                WikiPage.slug == ref.from_slug,
-            ).first()
-            if from_page:
-                db.add(CrossRef(
-                    from_page_id=from_page.id,
-                    to_slug=ref.to_slug,
-                    link_type=ref.link_type,
-                ))
+        # Get all non-index pages after upserts for resolver + index generation
+        all_current_pages = db.query(WikiPage).filter(
+            WikiPage.topic_id == topic.id,
+            WikiPage.is_index_page.is_(False),
+        ).all()
+
+        # Idempotent cross-ref upsert: delete old refs from this topic, reinsert resolved
+        from_page_ids = {p.id for p in all_current_pages}
+        if from_page_ids:
+            db.query(CrossRef).filter(
+                CrossRef.from_page_id.in_(from_page_ids)
+            ).delete(synchronize_session=False)
+
+        resolved_refs = _resolve_cross_refs(
+            db=db,
+            current_topic_id=topic.id,
+            proposals=result.cross_refs,
+            all_pages=all_current_pages,
+        )
+        for ref in resolved_refs:
+            db.add(CrossRef(
+                from_page_id=ref.from_page_id,
+                to_slug=ref.to_slug,
+                link_type=ref.link_type,
+                to_topic_id=ref.to_topic_id,
+            ))
+
+        _regenerate_index_page(db, topic, all_current_pages)
 
         run.status = IngestStatus.SUCCESS
         run.completed_at = datetime.datetime.now(datetime.timezone.utc)
