@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { refreshTopics } from "../hooks";
 import { createTopic } from "../lib";
 
 export default function NewTopicPage() {
@@ -24,6 +25,7 @@ export default function NewTopicPage() {
       const res = await createTopic({ name, description, watch_path: watchPath });
       if (res.ok) {
         toast.success("Topic created");
+        refreshTopics();
         router.push("/admin/topics");
       } else {
         const err = await res.json().catch(() => ({}));
@@ -40,7 +42,6 @@ export default function NewTopicPage() {
         icon={ADMIN_ROUTES.TOPICS.icon}
         title="New Topic"
         backButton
-        onBack={() => router.push("/admin/topics")}
         divider
       />
       <SettingsLayouts.Body>

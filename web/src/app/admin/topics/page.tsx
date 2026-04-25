@@ -48,11 +48,11 @@ function TopicsTable() {
                     const res = await deleteTopic(topic.id);
                     if (res.ok) {
                       toast.success(`Topic "${topic.name}" deleted`);
+                      refreshTopics();
                     } else {
                       const err = await res.json().catch(() => ({}));
                       toast.error(`Delete failed: ${err.detail ?? res.status}`);
                     }
-                    refreshTopics();
                   }}
                 />
               </TableCell>
