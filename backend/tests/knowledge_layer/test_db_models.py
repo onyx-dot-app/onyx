@@ -58,3 +58,15 @@ def test_nullable_settings():
     run_cols = {c.name: c for c in IngestRun.__table__.columns}
     assert run_cols["source_doc_id"].nullable is False
     assert run_cols["source_content_hash"].nullable is False
+
+
+def test_wiki_page_has_is_index_page():
+    cols = {c.name: c for c in WikiPage.__table__.columns}
+    assert "is_index_page" in cols
+    assert cols["is_index_page"].nullable is False
+
+
+def test_cross_ref_has_to_topic_id():
+    cols = {c.name: c for c in CrossRef.__table__.columns}
+    assert "to_topic_id" in cols
+    assert cols["to_topic_id"].nullable is True

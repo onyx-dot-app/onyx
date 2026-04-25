@@ -58,6 +58,9 @@ class WikiPage(Base):
     title: Mapped[str] = mapped_column(sa.String, nullable=False)
     content: Mapped[str] = mapped_column(sa.Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    is_index_page: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
+    )
     vespa_doc_id: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.text("now()")
@@ -111,6 +114,11 @@ class CrossRef(Base):
     )
     to_slug: Mapped[str] = mapped_column(sa.String, nullable=False)
     # Intentionally a slug string, not a FK — supports cross-topic refs and eventual-consistency linking.
+    to_topic_id: Mapped[int | None] = mapped_column(
+        sa.Integer,
+        sa.ForeignKey("kl_topic_ext.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     link_type: Mapped[str] = mapped_column(sa.String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.text("now()")
@@ -118,6 +126,10 @@ class CrossRef(Base):
 
     from_page: Mapped[WikiPage] = relationship(
         "WikiPage", foreign_keys=[from_page_id], back_populates="outgoing_refs"
+    )
+    to_topic: Mapped[TopicExt | None] = relationship(
+        "TopicExt",
+        foreign_keys="[CrossRef.to_topic_id]",
     )
 
 
