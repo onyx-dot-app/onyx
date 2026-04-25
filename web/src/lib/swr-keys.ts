@@ -41,6 +41,9 @@ export const SWR_KEYS = {
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
 
+  // ── Knowledge Topics ──────────────────────────────────────────────────────
+  topics: "/api/knowledge/topics",
+
   // ── Documents ─────────────────────────────────────────────────────────────
   documentSets: "/api/manage/document-set",
   documentSetsEditable: "/api/manage/document-set?get_editable=true",

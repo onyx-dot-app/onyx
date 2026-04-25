@@ -65,6 +65,12 @@ export const ADMIN_ROUTES = {
     title: "Document Sets",
     sidebarLabel: "Document Sets",
   },
+  TOPICS: {
+    path: "/admin/topics",
+    icon: SvgBookOpen,
+    title: "Topics",
+    sidebarLabel: "Topics",
+  },
   DOCUMENT_EXPLORER: {
     path: "/admin/documents/explorer",
     icon: SvgZoomIn,
