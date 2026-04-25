@@ -71,17 +71,17 @@ class ClaudeProvider(LLMProvider):
         response = self._client.messages.create(
             model=self.MODEL,
             max_tokens=4096,
-            system=_INGEST_SYSTEM,
+            system=[
+                {
+                    "type": "text",
+                    "text": _INGEST_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": user_msg,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ],
+                    "content": user_msg,
                 }
             ],
         )
@@ -106,17 +106,17 @@ class ClaudeProvider(LLMProvider):
         response = self._client.messages.create(
             model=self.MODEL,
             max_tokens=2048,
-            system=_QUERY_SYSTEM,
+            system=[
+                {
+                    "type": "text",
+                    "text": _QUERY_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": user_msg,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ],
+                    "content": user_msg,
                 }
             ],
         )
