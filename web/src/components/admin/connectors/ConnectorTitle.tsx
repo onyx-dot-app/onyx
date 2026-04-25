@@ -71,6 +71,12 @@ export const ConnectorTitle = ({
       "Jira Project URL",
       typedConnector.connector_specific_config.jira_project_url
     );
+  } else if (connector.source === "jira_service_management") {
+    const typedConnector = connector as Connector<JiraConfig>;
+    additionalMetadata.set(
+      "JSM Base URL",
+      typedConnector.connector_specific_config.jira_project_url
+    );
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
     if (
