@@ -26,6 +26,7 @@ class FilesystemConnector(LoadConnector):
         root = Path(self.watch_path)
         if not root.exists():
             return
+        root_resolved = root.resolve()
 
         batch: list[Document] = []
         for entry in sorted(root.rglob("*")):
@@ -33,6 +34,10 @@ class FilesystemConnector(LoadConnector):
                 continue
             if entry.suffix.lower() not in _SUPPORTED_EXTENSIONS:
                 continue
+            try:
+                entry.resolve().relative_to(root_resolved)
+            except ValueError:
+                continue  # symlink escape — skip
 
             text = entry.read_text(encoding="utf-8", errors="replace")
             doc = Document(

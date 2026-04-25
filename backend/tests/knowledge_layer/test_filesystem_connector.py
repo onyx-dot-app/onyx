@@ -41,6 +41,30 @@ def test_load_from_state_skips_unsupported_extensions(tmp_path):
     assert docs[0].semantic_identifier == "doc.md"
 
 
+def test_connector_skips_symlink_escape(tmp_path):
+    """Files reachable only via symlink escape are skipped."""
+    import os
+    # Create a file outside tmp_path
+    outside = tmp_path.parent / "outside.md"
+    outside.write_text("# Secret")
+    # Create a symlink inside tmp_path pointing outside
+    link = tmp_path / "escape.md"
+    link.symlink_to(outside)
+
+    conn = FilesystemConnector(watch_path=str(tmp_path))
+    conn.load_credentials({})
+
+    docs = []
+    for batch in conn.load_from_state():
+        docs.extend(batch)
+
+    # The symlink target resolves outside tmp_path and must be skipped
+    assert all(d.semantic_identifier != "escape.md" for d in docs)
+
+    # Cleanup
+    outside.unlink()
+
+
 def test_document_has_doc_type_raw_doc(tmp_path):
     (tmp_path / "test.md").write_text("Content")
     conn = FilesystemConnector(watch_path=str(tmp_path))

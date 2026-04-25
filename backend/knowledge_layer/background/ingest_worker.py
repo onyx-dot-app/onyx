@@ -151,12 +151,17 @@ def run_ingest_worker() -> None:
             root = Path(topic.watch_path)
             if not root.exists():
                 continue
+            root_resolved = root.resolve()
 
             for entry in sorted(root.rglob("*")):
                 if not entry.is_file():
                     continue
                 if entry.suffix.lower() not in _SUPPORTED_EXTENSIONS:
                     continue
+                try:
+                    entry.resolve().relative_to(root_resolved)
+                except ValueError:
+                    continue  # symlink escape — skip
 
                 try:
                     content = entry.read_text(encoding="utf-8", errors="replace")

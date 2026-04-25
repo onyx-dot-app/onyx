@@ -52,6 +52,31 @@ def test_create_topic_duplicate_name_returns_409():
     assert resp.status_code == 409
 
 
+def test_create_topic_rejects_path_traversal():
+    """watch_path outside TEAM_BRAIN_RAW_ROOT returns 422."""
+    import os
+    with patch("knowledge_layer.server.topics.get_session") as mock_session_ctx, \
+         patch.dict(os.environ, {"TEAM_BRAIN_RAW_ROOT": "/raw"}):
+        # Force re-evaluation of the module-level _RAW_ROOT
+        import knowledge_layer.server.topics as topics_module
+        from pathlib import Path
+        topics_module._RAW_ROOT = Path("/raw").resolve()
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_session_ctx.return_value.__enter__ = lambda s: mock_db
+        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.post("/topics", json={
+            "name": "evil",
+            "description": "attacker",
+            "watch_path": "../../etc"
+        })
+    assert resp.status_code == 422
+
+
 def test_list_topics_returns_200():
     with patch("knowledge_layer.server.topics.get_session") as mock_session_ctx:
         mock_db = MagicMock()

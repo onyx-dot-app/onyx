@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -8,6 +11,24 @@ from onyx.db.models import User
 from knowledge_layer.db.models import TopicExt
 
 router = APIRouter(tags=["knowledge-layer"])
+
+_RAW_ROOT = Path(os.environ.get("TEAM_BRAIN_RAW_ROOT", "/raw")).resolve()
+
+
+def _validate_watch_path(raw: str) -> str:
+    """Resolve and validate that watch_path stays under TEAM_BRAIN_RAW_ROOT."""
+    try:
+        resolved = Path(raw).resolve()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid watch_path: {exc}")
+    try:
+        resolved.relative_to(_RAW_ROOT)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"watch_path must be inside {_RAW_ROOT}. Got: {resolved}",
+        )
+    return str(resolved)
 
 
 async def require_user() -> User:
@@ -54,7 +75,7 @@ def create_topic(body: TopicCreate, _: User = Depends(require_user)) -> TopicRes
         topic = TopicExt(
             name=body.name,
             description=body.description,
-            watch_path=body.watch_path,
+            watch_path=_validate_watch_path(body.watch_path),
         )
         db.add(topic)
         db.commit()
