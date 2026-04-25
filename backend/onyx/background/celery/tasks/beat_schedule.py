@@ -382,6 +382,16 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
+            # team-brain: wiki ingest worker — scans all topic watch_paths every 30s
+            {
+                "name": "knowledge-layer-ingest-worker",
+                "task": "knowledge_layer.ingest_worker",
+                "schedule": timedelta(seconds=30),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            },
         ]
     )
 
