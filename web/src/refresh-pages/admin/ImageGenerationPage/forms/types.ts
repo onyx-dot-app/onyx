@@ -71,4 +71,9 @@ export interface ImageGenSubmitPayload {
   apiVersion?: string;
   deploymentName?: string;
   customConfig?: Record<string, string>;
+
+  // Access control
+  isPublic?: boolean;
+  groups?: number[];
+  personas?: number[];
 }

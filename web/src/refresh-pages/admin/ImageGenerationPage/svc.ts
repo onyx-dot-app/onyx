@@ -42,6 +42,11 @@ export interface ImageGenerationConfigCreateOptions {
   apiVersion?: string;
   deploymentName?: string;
   customConfig?: Record<string, string>;
+
+  // Access control
+  isPublic?: boolean;
+  groups?: number[];
+  personas?: number[];
 }
 
 // API Endpoints
@@ -155,6 +160,10 @@ export async function createImageGenerationConfig(
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
       custom_config: options.customConfig,
+      // Access control
+      is_public: options.isPublic ?? true,
+      groups: options.groups ?? [],
+      personas: options.personas ?? [],
     }),
   });
 
@@ -183,6 +192,11 @@ export interface ImageGenerationConfigUpdateOptions {
 
   // If true, apiKey was changed by user; if false, backend preserves existing key
   apiKeyChanged?: boolean;
+
+  // Access control
+  isPublic?: boolean;
+  groups?: number[];
+  personas?: number[];
 }
 
 /**
@@ -209,6 +223,10 @@ export async function updateImageGenerationConfig(
       custom_config: options.customConfig,
       // If false, backend preserves existing API key
       api_key_changed: options.apiKeyChanged ?? false,
+      // Access control
+      is_public: options.isPublic ?? true,
+      groups: options.groups ?? [],
+      personas: options.personas ?? [],
     }),
   });
 
