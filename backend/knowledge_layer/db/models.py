@@ -30,13 +30,13 @@ class TopicExt(Base):
 
     id: Mapped[int] = mapped_column(sa.Integer, primary_key=True)
     name: Mapped[str] = mapped_column(sa.String, nullable=False, unique=True)
-    description: Mapped[str] = mapped_column(sa.Text, nullable=False, default="")
+    description: Mapped[str] = mapped_column(sa.Text, nullable=False, default="", server_default=sa.text("''"))
     watch_path: Mapped[str] = mapped_column(sa.String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()"), onupdate=sa.func.now()
     )
 
     wiki_pages: Mapped[list[WikiPage]] = relationship(
@@ -60,10 +60,10 @@ class WikiPage(Base):
     content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     vespa_doc_id: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()"), onupdate=sa.func.now()
     )
 
     topic: Mapped[TopicExt] = relationship("TopicExt", back_populates="wiki_pages")
@@ -92,7 +92,7 @@ class WikiPageVersion(Base):
     content: Mapped[str] = mapped_column(sa.Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
 
     page: Mapped[WikiPage] = relationship("WikiPage", back_populates="versions")
@@ -110,9 +110,10 @@ class CrossRef(Base):
         sa.Integer, sa.ForeignKey("kl_wiki_page.id", ondelete="CASCADE"), nullable=False
     )
     to_slug: Mapped[str] = mapped_column(sa.String, nullable=False)
+    # Intentionally a slug string, not a FK — supports cross-topic refs and eventual-consistency linking.
     link_type: Mapped[str] = mapped_column(sa.String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
 
     from_page: Mapped[WikiPage] = relationship(
@@ -140,7 +141,7 @@ class IngestRun(Base):
         sa.DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        sa.DateTime(timezone=True), server_default=sa.func.now()
+        sa.DateTime(timezone=True), server_default=sa.text("now()")
     )
 
     topic: Mapped[TopicExt] = relationship("TopicExt", back_populates="ingest_runs")
