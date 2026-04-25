@@ -30,10 +30,16 @@ from tests.daily.connectors.utils import load_all_from_connector
 def _make_connector(
     project_key: str | None = None,
     jql_query: str | None = None,
+    use_env_project_key: bool = True,
 ) -> JiraServiceManagementConnector:
+    resolved_project_key = (
+        project_key or os.environ.get("JSM_PROJECT_KEY")
+        if use_env_project_key
+        else project_key
+    )
     connector = JiraServiceManagementConnector(
         jira_base_url=os.environ["JSM_BASE_URL"],
-        project_key=project_key or os.environ.get("JSM_PROJECT_KEY"),
+        project_key=resolved_project_key,
         jql_query=jql_query,
         comment_email_blacklist=[],
     )
@@ -49,6 +55,12 @@ def _make_connector(
 @pytest.fixture
 def jsm_connector() -> JiraServiceManagementConnector:
     return _make_connector()
+
+
+@pytest.fixture
+def jsm_connector_no_scope() -> JiraServiceManagementConnector:
+    """Connector with no project_key or JQL — exercises the default service_desk scope path."""
+    return _make_connector(project_key=None, jql_query=None, use_env_project_key=False)
 
 
 @pytest.fixture
@@ -134,11 +146,13 @@ def test_jsm_connector_jsm_metadata(
 )
 def test_jsm_connector_service_desk_scope(
     reset: None,  # noqa: ARG001
-    jsm_connector: JiraServiceManagementConnector,
+    jsm_connector_no_scope: JiraServiceManagementConnector,
 ) -> None:
     """Verify that without an explicit project key or JQL, the connector scopes to service_desk
     project types by checking that all returned ticket projects are service desk projects.
 
+    Uses a connector with no project_key and no JQL so the default
+    ``project type = service_desk`` filter in ``_get_jql_query`` is exercised.
     This test is best-effort: it passes if all documents come from a known service desk project
     (i.e., the project key matches JSM_PROJECT_KEY if set).
     """
@@ -147,7 +161,7 @@ def test_jsm_connector_service_desk_scope(
         pytest.skip("JSM_PROJECT_KEY not set — skipping scope test")
 
     docs = load_all_from_connector(
-        connector=jsm_connector,
+        connector=jsm_connector_no_scope,
         start=0,
         end=time.time(),
     ).documents
