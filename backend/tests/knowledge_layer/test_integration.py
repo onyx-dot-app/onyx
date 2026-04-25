@@ -125,3 +125,78 @@ def test_two_topics_do_not_bleed(db_session, tmp_path):
     # Topic A pages must not contain topic B's exclusive concept and vice versa
     assert "accordion" not in content_a
     assert "xylophone" not in content_b
+
+
+def test_cross_ref_idempotency(db_session, tmp_path):
+    """Ingesting the same file twice must not duplicate cross-ref rows."""
+    from knowledge_layer.db.models import TopicExt, WikiPage, CrossRef
+    from knowledge_layer.background.ingest_worker import ingest_file
+    from knowledge_layer.providers.claude import ClaudeProvider
+
+    topic = TopicExt(name="integ-topic-alpha", description="", watch_path=str(tmp_path))
+    db_session.add(topic)
+    db_session.commit()
+    db_session.refresh(topic)
+
+    raw_file = tmp_path / "idem.md"
+    raw_file.write_text(
+        "# VWAP Strategy\n\n"
+        "VWAP is used for execution timing. "
+        "It relates to risk management and signal generation."
+    )
+
+    provider = ClaudeProvider()
+    # Ingest twice — second run should detect SUCCESS + same hash and skip
+    ingest_file(db=db_session, topic=topic, file_path=str(raw_file),
+                file_content=raw_file.read_text(), provider=provider)
+    ingest_file(db=db_session, topic=topic, file_path=str(raw_file),
+                file_content=raw_file.read_text(), provider=provider)
+
+    pages = db_session.query(WikiPage).filter(
+        WikiPage.topic_id == topic.id,
+        WikiPage.is_index_page.is_(False),
+    ).all()
+    page_ids = [p.id for p in pages]
+    assert len(page_ids) >= 1, "ingest produced no non-index pages"
+
+    cross_refs = db_session.query(CrossRef).filter(
+            CrossRef.from_page_id.in_(page_ids)
+        ).all()
+    seen = set()
+    for ref in cross_refs:
+        key = (ref.from_page_id, ref.to_slug, ref.link_type)
+        assert key not in seen, f"Duplicate cross-ref: {key}"
+        seen.add(key)
+
+
+def test_index_page_created_after_ingest(db_session, tmp_path):
+    """After ingesting a doc, the topic's index page must exist and list the page."""
+    from knowledge_layer.db.models import TopicExt, WikiPage
+    from knowledge_layer.background.ingest_worker import ingest_file
+    from knowledge_layer.providers.claude import ClaudeProvider
+
+    topic = TopicExt(name="integ-topic-alpha", description="", watch_path=str(tmp_path))
+    db_session.add(topic)
+    db_session.commit()
+    db_session.refresh(topic)
+
+    (tmp_path / "note.md").write_text(
+        "# Widgets\nThis is a test document about the widget manufacturing process."
+    )
+    provider = ClaudeProvider()
+    ingest_file(
+        db=db_session,
+        topic=topic,
+        file_path=str(tmp_path / "note.md"),
+        file_content=(tmp_path / "note.md").read_text(),
+        provider=provider,
+    )
+
+    index_page = db_session.query(WikiPage).filter(
+        WikiPage.topic_id == topic.id,
+        WikiPage.is_index_page.is_(True),
+        WikiPage.slug == "index",
+    ).first()
+
+    assert index_page is not None
+    assert topic.name in index_page.content
