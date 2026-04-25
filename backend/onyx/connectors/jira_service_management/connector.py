@@ -11,19 +11,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
-from jira.resources import Issue
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
-from onyx.connectors.jira.connector import process_jira_issue
-from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.utils.logger import setup_logger
 
@@ -166,57 +161,27 @@ class JiraServiceManagementConnector(JiraConnector):
         # No scoping — add service_desk project type filter
         return f"project type = service_desk AND {base_jql}"
 
-    def _process_issue_with_jsm_fields(
-        self, issue: Issue, include_permissions: bool
-    ) -> Document | None:
-        """Process an issue and enrich with JSM metadata."""
-        from onyx.connectors.jira.connector import _FIELD_PROJECT
-
-        from onyx.connectors.jira.utils import best_effort_get_field_from_issue
-
-        project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
-        project_key = project.key if project else None
-        parent_hierarchy_raw_node_id = (
-            self._get_parent_hierarchy_raw_node_id(issue, project_key)
-            if project_key
-            else None
-        )
-
-        document = process_jira_issue(
-            jira_base_url=self.jira_base,
-            issue=issue,
-            comment_email_blacklist=self.comment_email_blacklist,
-            labels_to_skip=self.labels_to_skip,
-            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-        )
-
-        if document is None:
-            return None
-
-        # Override source to JSM
-        document.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
-
-        # Add permissions if requested
-        if include_permissions and project_key:
-            document.external_access = self._get_project_permissions(
-                project_key, add_prefix=True
-            )
-
-        # Enrich with JSM-specific metadata via Service Desk API
-        if self._jira_client is not None:
-            document = _enrich_document_with_jsm_fields(
-                document=document,
-                issue_key=issue.key,
-                jira_base=self.jira_base,
-                session=self._jira_client._session,  # type: ignore[union-attr]
-            )
-
-        return document
-
     @override
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        result = super().load_credentials(credentials)
-        return result
+    def _load_from_checkpoint(
+        self,
+        jql: str,
+        checkpoint: JiraConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        """Wrap the parent generator to set JSM source and enrich with JSM metadata."""
+        for item in super()._load_from_checkpoint(jql, checkpoint, include_permissions):
+            if isinstance(item, Document):
+                item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+                if self._jira_client is not None:
+                    issue_key = item.metadata.get("key") if item.metadata else None
+                    if issue_key:
+                        item = _enrich_document_with_jsm_fields(
+                            document=item,
+                            issue_key=issue_key,
+                            jira_base=self.jira_base,
+                            session=self._jira_client._session,  # type: ignore[union-attr]
+                        )
+            yield item
 
 
 if __name__ == "__main__":
