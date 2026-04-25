@@ -21,7 +21,7 @@ import QualifierContainer from "@opal/components/table/QualifierContainer";
 import ActionsContainer from "@opal/components/table/ActionsContainer";
 import DragOverlayRow from "@opal/components/table/DragOverlayRow";
 import Footer from "@opal/components/table/Footer";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { TableSizeProvider } from "@opal/components/table/TableSizeContext";
 import { ColumnVisibilityPopover } from "@opal/components/table/ColumnVisibilityPopover";
 import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover";

@@ -50,10 +50,10 @@ async function navigateToUserSettings(page: Page) {
   await page.locator("#onyx-user-dropdown").click();
 
   // Click on settings option
-  await page.getByText("User Settings").click();
+  await page.getByText("Settings").click();
 
   // Wait for settings modal to appear
-  await expect(page.locator("h2", { hasText: "User Settings" })).toBeVisible();
+  await expect(page.locator("h2", { hasText: "Settings" })).toBeVisible();
 }
 
 async function openConnectorsTab(page: Page) {

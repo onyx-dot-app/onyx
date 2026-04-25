@@ -1,19 +1,59 @@
 import type { IconProps } from "@opal/types";
 
-const SvgNotificationBubble = ({ size, ...props }: IconProps) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 6 6"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={props.className}
-    {...props}
-  >
-    <path
-      d="M0 3C0 1.34315 1.34315 0 3 0C4.65685 0 6 1.34315 6 3C6 4.65685 4.65685 6 3 6C1.34315 6 0 4.65685 0 3Z"
-      fill="#DC2626"
-    />
-  </svg>
-);
+const MAX_NOTIFICATIONS = 9;
+
+interface NotificationBubbleProps extends IconProps {
+  /** Optional count to display inside the bubble. */
+  count?: number;
+}
+
+const SvgNotificationBubble = ({
+  size,
+  count,
+  ...props
+}: NotificationBubbleProps) => {
+  // When no count is provided, render a simple dot
+  if (count === undefined) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 6 6"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        {...props}
+      >
+        <circle cx={3} cy={3} r={3} fill="var(--action-link-05)" />
+      </svg>
+    );
+  }
+
+  // With a count, render a badge with the number inside
+  const displayCount =
+    count > MAX_NOTIFICATIONS ? `${MAX_NOTIFICATIONS}+` : String(count);
+
+  return (
+    <div
+      className="relative inline-flex items-center justify-center"
+      style={{ minWidth: size, minHeight: size }}
+    >
+      <div
+        className="flex items-center justify-center rounded-full px-1"
+        style={{
+          backgroundColor: "var(--action-link-05)",
+          minWidth: 16,
+          height: 16,
+        }}
+      >
+        <span
+          className="text-text-inverted-05 font-medium leading-none"
+          style={{ fontSize: 10 }}
+        >
+          {displayCount}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 export default SvgNotificationBubble;

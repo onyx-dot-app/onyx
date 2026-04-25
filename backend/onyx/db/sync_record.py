@@ -129,16 +129,20 @@ def update_sync_record_status(
     """
     sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
     if sync_record is None:
-        raise ValueError(
-            f"No sync record found for entity_id={entity_id} sync_type={sync_type}"
+        logger.warning(
+            f"No sync record found for entity_id={entity_id} "
+            f"sync_type={sync_type} — skipping status update. "
+            f"This typically means the record was never created "
+            f"(insert_sync_record failed silently) or was cleaned up."
         )
+        return
 
     sync_record.sync_status = sync_status
     if num_docs_synced is not None:
         sync_record.num_docs_synced = num_docs_synced
 
     if sync_status.is_terminal():
-        sync_record.sync_end_time = func.now()  # type: ignore
+        sync_record.sync_end_time = func.now()
 
     db_session.commit()
 

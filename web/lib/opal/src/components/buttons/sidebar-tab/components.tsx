@@ -93,12 +93,7 @@ function SidebarTab({
         type="button"
         group="group/SidebarTab"
       >
-        <Interactive.Container
-          roundingVariant="sm"
-          heightVariant="lg"
-          widthVariant="full"
-          type={type}
-        >
+        <Interactive.Container rounding="sm" size="lg" width="full" type={type}>
           {href && !disabled && (
             <Link
               href={href as Route}
@@ -120,8 +115,8 @@ function SidebarTab({
               title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
-              widthVariant="full"
-              paddingVariant="fit"
+              width="full"
+              padding="fit"
               rightChildren={truncationSpacer}
             />
           ) : (

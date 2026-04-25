@@ -5,6 +5,7 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
+from onyx.utils.platform import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import LOG_FILE_NAME
@@ -15,7 +16,6 @@ from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
-
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
@@ -169,13 +169,6 @@ def get_standard_formatter() -> ColoredFormatter:
     )
 
 
-DANSWER_DOCKER_ENV_STR = "DANSWER_RUNNING_IN_DOCKER"
-
-
-def is_running_in_container() -> bool:
-    return os.getenv(DANSWER_DOCKER_ENV_STR) == "true"
-
-
 def setup_logger(
     name: str = __name__,
     log_level: int = get_log_level_from_str(),
@@ -228,7 +221,11 @@ def setup_logger(
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
-    logger.notice = lambda msg, *args, **kwargs: logger.log(logging.getLevelName("NOTICE"), msg, *args, **kwargs)  # type: ignore
+    logger.notice = (  # type: ignore
+        lambda msg, *args, **kwargs: logger.log(
+            logging.getLevelName("NOTICE"), msg, *args, **kwargs
+        )
+    )
 
     # After handler configuration, disable propagation to avoid duplicate logs
     # Prevent messages from propagating to the root logger which can cause

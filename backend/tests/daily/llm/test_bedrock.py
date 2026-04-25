@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from onyx.llm.constants import LlmProviderNames
 
-
 _DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 

@@ -25,9 +25,7 @@ from onyx.auth.email_utils import send_email
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
+from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
@@ -41,34 +39,16 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.connectors.google_utils.google_auth import (
-    get_google_oauth_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    build_service_account_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_service_account_key,
-)
+from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_kv import build_service_account_creds
+from onyx.connectors.google_utils.google_kv import delete_google_app_cred
+from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import (
-    get_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    get_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import (
-    update_credential_access_tokens,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_service_account_key,
-)
+from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.google_kv import get_service_account_key
+from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
+from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
+from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -110,9 +90,7 @@ from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
-from onyx.db.index_attempt import (
-    get_latest_successful_index_attempts_parallel,
-)
+from onyx.db.index_attempt import get_latest_successful_index_attempts_parallel
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
@@ -125,6 +103,7 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorBase
@@ -641,7 +620,7 @@ def upload_files_api(
     unzip: bool = True,
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files, FileOrigin.OTHER, unzip=unzip)
+    return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
@@ -1155,14 +1134,14 @@ def get_connector_indexing_status(
         # Get most recent index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, False
+                request.secondary_index, False, False
             ),
             (),
         ),
         # Get most recent finished index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, True
+                request.secondary_index, False, True
             ),
             (),
         ),
@@ -1621,7 +1600,7 @@ def create_connector_with_mock_credential(
         )
 
         # Store the created connector and credential IDs
-        connector_id = cast(int, connector_response.id)
+        connector_id = connector_response.id
         credential_id = credential.id
 
         validate_ccpair_for_user(
@@ -1639,6 +1618,10 @@ def create_connector_with_mock_credential(
             cc_pair_name=connector_data.name,
             groups=connector_data.groups,
         )
+
+        # Tenant-work-gating lifecycle hook: keep new-tenant latency to
+        # seconds instead of one full-fanout interval.
+        maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
 
         # trigger indexing immediately
         client_app.send_task(

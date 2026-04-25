@@ -11,9 +11,7 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_DICT_TOKEN_KEY,
-)
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
@@ -21,7 +19,6 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from tests.load_env_vars import load_env_vars
-
 
 # Load environment variables at the module level
 load_env_vars()

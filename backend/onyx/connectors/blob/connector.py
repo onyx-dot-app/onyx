@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import time
 from collections.abc import Mapping
@@ -25,6 +26,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
+)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
@@ -76,7 +80,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
 
-    def set_allow_images(self, allow_images: bool) -> None:
+    def set_allow_images(  # ty: ignore[invalid-method-override]
+        self, allow_images: bool
+    ) -> None:
         """Set whether to process images in this connector."""
         logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
@@ -195,7 +201,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     method="sts-assume-role",
                 )
                 botocore_session = get_session()
-                botocore_session._credentials = refreshable  # type: ignore[attr-defined]
+                botocore_session._credentials = (  # ty: ignore[unresolved-attribute]
+                    refreshable
+                )
                 session = boto3.Session(botocore_session=botocore_session)
                 self.s3_client = session.client("s3")
             elif authentication_method == "assume_role":
@@ -464,11 +472,25 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         downloaded_file = self._download_object(key)
                         if downloaded_file is None:
                             continue
-                        tabular_sections = tabular_file_to_sections(
-                            BytesIO(downloaded_file),
-                            file_name=file_name,
-                            link=link,
-                        )
+                        tabular_sections: list[TabularSection] = []
+                        staged_file_id: str | None = None
+                        if self.raw_file_callback is not None:
+                            content_type, _ = mimetypes.guess_type(file_name)
+                            result = extract_and_stage_tabular_file(
+                                file=BytesIO(downloaded_file),
+                                file_name=file_name,
+                                content_type=content_type or "application/octet-stream",
+                                raw_file_callback=self.raw_file_callback,
+                                link=link,
+                            )
+                            tabular_sections = result.sections
+                            staged_file_id = result.staged_file_id
+                        else:
+                            tabular_sections = tabular_file_to_sections(
+                                BytesIO(downloaded_file),
+                                file_name=file_name,
+                                link=link,
+                            )
                         batch.append(
                             Document(
                                 id=f"{self.bucket_type}:{self.bucket_name}:{key}",
@@ -481,6 +503,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                                 semantic_identifier=file_name,
                                 doc_updated_at=last_modified,
                                 metadata={},
+                                file_id=staged_file_id,
                             )
                         )
                         if len(batch) == self.batch_size:

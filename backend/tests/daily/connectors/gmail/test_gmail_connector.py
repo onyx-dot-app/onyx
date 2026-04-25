@@ -10,7 +10,6 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
-
 _THREAD_1_START_TIME = 1730568700
 _THREAD_1_END_TIME = 1730569000
 

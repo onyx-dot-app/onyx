@@ -138,6 +138,7 @@ autoscaling:
   engine: hpa
 
 inferenceCapability:
+  extraEnv: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -192,6 +193,7 @@ inferenceCapability:
 
 
 indexCapability:
+  extraEnv: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -284,10 +286,13 @@ serviceAccount:
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
+  # These apply to both the internal nginx proxy AND the ingress-nginx annotations.
+  # Must be high enough to cover deep research (30+ min sessions) and LLM TTFT
+  # for large prompts (70K+ tokens). 900s matches the craft/build timeout in production.
   timeouts:
     connect: 300  # Time to establish connection with upstream server
-    send: 300     # Time to send request to upstream server
-    read: 300     # Time to read response from upstream server
+    send: 900     # Time to send request to upstream server
+    read: 900     # Time to read response from upstream server
   controller:
     containerPort:
       http: 1024
@@ -329,6 +334,7 @@ nginx:
         http: http
 
 webserver:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-web-server
@@ -416,6 +422,7 @@ webserver:
   affinity: {}
 
 api:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -553,6 +560,7 @@ celery_shared:
     runAsUser: 0
 
 celery_beat:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   podAnnotations: {}
@@ -574,6 +582,7 @@ celery_beat:
   affinity: {}
 
 celery_worker_heavy:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -608,6 +617,7 @@ celery_worker_heavy:
   affinity: {}
 
 celery_worker_docprocessing:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -642,6 +652,7 @@ celery_worker_docprocessing:
   affinity: {}
 
 celery_worker_light:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -676,6 +687,7 @@ celery_worker_light:
   affinity: {}
 
 celery_worker_monitoring:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -710,6 +722,7 @@ celery_worker_monitoring:
   affinity: {}
 
 celery_worker_primary:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -744,6 +757,7 @@ celery_worker_primary:
   affinity: {}
 
 celery_worker_user_file_processing:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -780,6 +794,7 @@ celery_worker_user_file_processing:
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
+  extraEnv: []
   enabled: false  # Disabled by default - requires bot token configuration
   # Bot token can be provided directly or via a Kubernetes secret
   # Option 1: Direct token (not recommended for production)
@@ -815,6 +830,7 @@ discordbot:
   affinity: {}
 
 slackbot:
+  extraEnv: []
   enabled: true
   replicaCount: 1
   image:
@@ -843,6 +859,7 @@ slackbot:
 # Onyx Model Context Protocol (MCP) Server
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
+  extraEnv: []
   enabled: false  # Disabled by default
   replicaCount: 1
   image:
@@ -889,6 +906,7 @@ mcpServer:
   affinity: {}
 
 celery_worker_docfetching:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -1313,3 +1331,26 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+
+# -- Additional arbitrary manifests to render as part of the release. Each entry
+# may be either a YAML mapping (a single Kubernetes object) or a multi-line
+# string that will be passed through `tpl` so it can reference release values.
+# Useful for injecting resources not covered by the chart (e.g. NetworkPolicies,
+# ExternalSecrets, custom CRs) without forking the chart.
+extraManifests: []
+# extraManifests:
+#   - apiVersion: v1
+#     kind: ConfigMap
+#     metadata:
+#       name: my-extra-config
+#     data:
+#       key: value
+#   - |
+#     apiVersion: networking.k8s.io/v1
+#     kind: NetworkPolicy
+#     metadata:
+#       name: {{ include "onyx.fullname" . }}-extra
+#     spec:
+#       podSelector: {}
+#       policyTypes:
+#         - Ingress

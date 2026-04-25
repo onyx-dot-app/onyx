@@ -5,7 +5,7 @@ import { FileDescriptor } from "@/app/app/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
@@ -198,7 +198,7 @@ const HumanMessage = React.memo(function HumanMessage({
   );
 
   return (
-    <Hoverable.Root group="humanMessage" widthVariant="full">
+    <Hoverable.Root group="humanMessage" width="full">
       <div
         id="onyx-human-message"
         className="flex flex-col justify-end w-full relative"

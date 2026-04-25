@@ -4,6 +4,17 @@ set -euo pipefail
 
 echo "Setting up firewall..."
 
+# Reset default policies to ACCEPT before flushing rules.  On re-runs the
+# previous invocation's DROP policies are still in effect; flushing rules while
+# the default is DROP would block the DNS lookups below.  Register a trap so
+# that if the script exits before the DROP policies are re-applied at the end,
+# we fail closed instead of leaving the container with an unrestricted
+# firewall.
+trap 'iptables -P INPUT DROP; iptables -P OUTPUT DROP; iptables -P FORWARD DROP' EXIT
+iptables -P INPUT ACCEPT
+iptables -P OUTPUT ACCEPT
+iptables -P FORWARD ACCEPT
+
 # Only flush the filter table.  The nat and mangle tables are managed by Docker
 # (DNS DNAT to 127.0.0.11, container networking, etc.) and must not be touched —
 # flushing them breaks Docker's embedded DNS resolver.
@@ -29,13 +40,22 @@ ALLOWED_DOMAINS=(
     "api.anthropic.com"
     "api-staging.anthropic.com"
     "files.anthropic.com"
+    "huggingface.co"
     "sentry.io"
     "update.code.visualstudio.com"
     "pypi.org"
     "files.pythonhosted.org"
     "go.dev"
+    "proxy.golang.org"
+    "sum.golang.org"
     "storage.googleapis.com"
+    "dl.google.com"
     "static.rust-lang.org"
+    "index.crates.io"
+    "static.crates.io"
+    "archive.ubuntu.com"
+    "security.ubuntu.com"
+    "deb.nodesource.com"
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
@@ -100,5 +120,17 @@ done
 if ! timeout 5 curl -s https://api.github.com/meta > /dev/null; then
     echo "Warning: GitHub API is not accessible"
 fi
+
+# Start dnsmasq and point the container resolver at it.  dnsmasq's ipset=
+# directives add every resolved A record for allowlisted domains into the
+# `allowed-domains` ipset at resolve time, keeping the firewall in step with
+# CDN IP rotation.
+pkill -x dnsmasq 2>/dev/null || true
+dnsmasq -C /workspace/.devcontainer/dnsmasq.conf
+
+cat > /etc/resolv.conf <<EOF
+nameserver 127.0.0.1
+options edns0 trust-ad
+EOF
 
 echo "Firewall setup complete"

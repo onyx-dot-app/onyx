@@ -32,9 +32,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.user_file_processing.tasks import (
-    _user_file_lock_key,
-)
+from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_lock_key
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_queued_key,
 )
@@ -194,7 +192,7 @@ class TestPerFileGuardKey:
             assert redis_client.exists(
                 guard_key
             ), "Guard key should be set in Redis after enqueue"
-            ttl = int(redis_client.ttl(guard_key))  # type: ignore[arg-type]
+            ttl = int(redis_client.ttl(guard_key))  # ty: ignore[invalid-argument-type]
             assert (
                 0 < ttl <= CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
             ), f"Guard key TTL {ttl}s is outside the expected range (0, {CELERY_USER_FILE_PROCESSING_TASK_EXPIRES}]"

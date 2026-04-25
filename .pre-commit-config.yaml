@@ -67,12 +67,12 @@ repos:
         args: ["--active", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
-      # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
-      # - id: uv-run
-      #   name: mypy
-      #   args: ["--all-extras", "mypy"]
-      #   pass_filenames: true
-      #   files: ^backend/.*\.py$
+      - id: uv-run
+        alias: ty
+        name: ty
+        args: ["ty", "check"]
+        pass_filenames: true
+        types_or: [python]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
@@ -86,36 +86,22 @@ repos:
     hooks:
       - id: actionlint
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        exclude: >-
+          (?x)^(
+            backend/scripts/setup_craft_templates\.sh|
+            deployment/docker_compose/init-letsencrypt\.sh|
+            deployment/docker_compose/install\.sh
+          )$
+
   - repo: https://github.com/psf/black
     rev: 8a737e727ac5ab2f1d4cf5876720ed276dc8dc4b # frozen: 25.1.0
     hooks:
       - id: black
         language_version: python3.11
-
-  # this is a fork which keeps compatibility with black
-  - repo: https://github.com/wimglenn/reorder-python-imports-black
-    rev: f55cd27f90f0cf0ee775002c2383ce1c7820013d # frozen: v3.14.0
-    hooks:
-      - id: reorder-python-imports
-        args: ["--py311-plus", "--application-directories=backend/"]
-        # need to ignore alembic files, since reorder-python-imports gets confused
-        # and thinks that alembic is a local package since there is a folder
-        # in the backend directory called `alembic`
-        exclude: ^backend/alembic/
-
-  # These settings will remove unused imports with side effects
-  # Note: The repo currently does not and should not have imports with side effects
-  - repo: https://github.com/PyCQA/autoflake
-    rev: 0544741e2b4a22b472d9d93e37d4ea9153820bb1 # frozen: v2.3.1
-    hooks:
-      - id: autoflake
-        args:
-          [
-            "--remove-all-unused-imports",
-            "--remove-unused-variables",
-            "--in-place",
-            "--recursive",
-          ]
 
   - repo: https://github.com/golangci/golangci-lint
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
@@ -129,6 +115,7 @@ repos:
     rev: 971923581912ef60a6b70dbf0c3e9a39563c9d47 # frozen: v0.11.4
     hooks:
       - id: ruff
+        args: ["--fix"]
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: ffb6a759a979008c0e6dff86e39f4745a2d9eac4 # frozen: v3.1.0
@@ -142,6 +129,7 @@ repos:
     hooks:
       - id: ripsecrets
         args:
+          - --strict-ignore
           - --additional-pattern
           - ^sk-[A-Za-z0-9_\-]{20,}$
 

@@ -46,9 +46,9 @@ export function convertMarkdownTablesToTsv(content: string): string {
     // Check if line is a markdown table row (starts and ends with |)
     const trimmed = line.trim();
     if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      // Check if it's a separator row (contains only |, -, :, and spaces)
+      // Check if it's a divider row (contains only |, -, :, and spaces)
       if (/^\|[\s\-:|\s]+\|$/.test(trimmed)) {
-        // Skip separator rows
+        // Skip divider rows
         continue;
       }
       // Convert table row: split by |, trim cells, join with tabs

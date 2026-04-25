@@ -50,7 +50,7 @@ import {
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 // Context for sharing state between compound components
 interface SimpleCollapsibleContextValue {

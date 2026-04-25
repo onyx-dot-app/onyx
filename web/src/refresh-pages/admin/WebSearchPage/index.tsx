@@ -1,32 +1,23 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
-import { InfoIcon } from "@/components/icons/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content, Card } from "@opal/layouts";
+import { Content } from "@opal/layouts";
+import ProviderCard from "@/sections/admin/ProviderCard";
 import { markdown } from "@opal/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
-import {
-  SvgArrowExchange,
-  SvgArrowRightCircle,
-  SvgCheckSquare,
-  SvgGlobe,
-  SvgSettings,
-  SvgSlash,
-  SvgUnplug,
-} from "@opal/icons";
+import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Button, SelectCard } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import { Button, MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -222,141 +213,6 @@ function WebSearchDisconnectModal({
 }
 
 // ---------------------------------------------------------------------------
-// ProviderCard — uses SelectCard for stateful interactive provider cards
-// ---------------------------------------------------------------------------
-
-type ProviderStatus = "disconnected" | "connected" | "selected";
-
-interface ProviderCardProps {
-  icon: React.FunctionComponent<{ size?: number; className?: string }>;
-  title: string;
-  description: string;
-  status: ProviderStatus;
-  onConnect?: () => void;
-  onSelect?: () => void;
-  onDeselect?: () => void;
-  onEdit?: () => void;
-  onDisconnect?: () => void;
-  selectedLabel?: string;
-}
-
-const STATUS_TO_STATE = {
-  disconnected: "empty",
-  connected: "filled",
-  selected: "selected",
-} as const;
-
-function ProviderCard({
-  icon,
-  title,
-  description,
-  status,
-  onConnect,
-  onSelect,
-  onDeselect,
-  onEdit,
-  onDisconnect,
-  selectedLabel = "Current Default",
-}: ProviderCardProps) {
-  const isDisconnected = status === "disconnected";
-  const isConnected = status === "connected";
-  const isSelected = status === "selected";
-
-  return (
-    <Hoverable.Root group="web-search/ProviderCard">
-      <SelectCard
-        state={STATUS_TO_STATE[status]}
-        padding="sm"
-        rounding="lg"
-        onClick={
-          isDisconnected && onConnect
-            ? onConnect
-            : isSelected && onDeselect
-              ? onDeselect
-              : undefined
-        }
-      >
-        <Card.Header
-          sizePreset="main-ui"
-          variant="section"
-          icon={icon}
-          title={title}
-          description={description}
-          rightChildren={
-            isDisconnected && onConnect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowExchange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConnect();
-                }}
-              >
-                Connect
-              </Button>
-            ) : isConnected && onSelect ? (
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgArrowRightCircle}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect();
-                }}
-              >
-                Set as Default
-              </Button>
-            ) : isSelected ? (
-              <div className="p-2">
-                <Content
-                  title={selectedLabel}
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgCheckSquare}
-                />
-              </div>
-            ) : undefined
-          }
-          bottomRightChildren={
-            !isDisconnected ? (
-              <div className="flex flex-row px-1 pb-1">
-                {onDisconnect && (
-                  <Hoverable.Item group="web-search/ProviderCard">
-                    <Button
-                      icon={SvgUnplug}
-                      tooltip="Disconnect"
-                      aria-label={`Disconnect ${title}`}
-                      prominence="tertiary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDisconnect();
-                      }}
-                      size="md"
-                    />
-                  </Hoverable.Item>
-                )}
-                {onEdit && (
-                  <Button
-                    icon={SvgSettings}
-                    tooltip="Edit"
-                    aria-label={`Edit ${title}`}
-                    prominence="tertiary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit();
-                    }}
-                    size="md"
-                  />
-                )}
-              </div>
-            ) : undefined
-          }
-        />
-      </SelectCard>
-    </Hoverable.Root>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -491,7 +347,7 @@ export default function WebSearchPage() {
         providerType,
         label: getSearchProviderDisplayLabel(providerType, provider?.name),
         subtitle: details.subtitle,
-        logoSrc: details.logoSrc,
+        logo: details.logo,
         provider,
       };
     });
@@ -506,7 +362,7 @@ export default function WebSearchPage() {
           provider.name
         ),
         subtitle: "Custom integration",
-        logoSrc: undefined,
+        logo: undefined,
         provider,
       }));
 
@@ -555,14 +411,12 @@ export default function WebSearchPage() {
     );
 
   const renderLogo = ({
-    logoSrc,
-    alt,
+    logo: Logo,
     fallback,
     size = 16,
     containerSize,
   }: {
-    logoSrc?: string;
-    alt: string;
+    logo?: IconFunctionComponent;
     fallback?: React.ReactNode;
     size?: number;
     containerSize?: number;
@@ -577,8 +431,8 @@ export default function WebSearchPage() {
           containerSizeClass
         )}
       >
-        {logoSrc ? (
-          <Image src={logoSrc} alt={alt} width={size} height={size} />
+        {Logo ? (
+          <Logo size={size} />
         ) : fallback ? (
           fallback
         ) : (
@@ -667,7 +521,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <Callout type="danger" title="Failed to load web search settings">
@@ -690,7 +544,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <ThreeDotsLoader />
@@ -976,7 +830,7 @@ export default function WebSearchPage() {
           icon={route.icon}
           title={route.title}
           description="Search settings for external search across the internet."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>
@@ -995,36 +849,26 @@ export default function WebSearchPage() {
             )}
 
             {!hasActiveSearchProvider && (
-              <div
-                className="flex items-start rounded-16 border p-1"
-                style={{
-                  backgroundColor: "var(--status-info-00)",
-                  borderColor: "var(--status-info-02)",
-                }}
-              >
-                <div className="flex items-start gap-1 p-2">
-                  <div
-                    className="flex size-5 items-center justify-center rounded-full p-0.5"
-                    style={{
-                      backgroundColor: "var(--status-info-01)",
-                    }}
-                  >
-                    <div style={{ color: "var(--status-text-info-05)" }}>
-                      <InfoIcon size={16} />
-                    </div>
-                  </div>
-                  <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
-                    {hasConfiguredSearchProvider
-                      ? "Select a search engine to enable web search."
-                      : "Connect a search engine to set up web search."}
-                  </Text>
-                </div>
-              </div>
+              <MessageCard
+                variant="info"
+                title={
+                  hasConfiguredSearchProvider
+                    ? "Select a search engine to enable web search."
+                    : "Connect a search engine to set up web search."
+                }
+              />
             )}
 
             <div className="flex flex-col gap-2">
               {combinedSearchProviders.map(
-                ({ key, providerType, label, subtitle, logoSrc, provider }) => {
+                ({
+                  key,
+                  providerType,
+                  label,
+                  subtitle,
+                  logo: Logo,
+                  provider,
+                }) => {
                   const isConfigured = isSearchProviderConfigured(
                     providerType,
                     provider
@@ -1045,16 +889,7 @@ export default function WebSearchPage() {
                     <ProviderCard
                       key={`${key}-${providerType}`}
                       icon={() =>
-                        logoSrc ? (
-                          <Image
-                            src={logoSrc}
-                            alt={`${label} logo`}
-                            width={16}
-                            height={16}
-                          />
-                        ) : (
-                          <SvgGlobe size={16} />
-                        )
+                        Logo ? <Logo size={16} /> : <SvgGlobe size={16} />
                       }
                       title={label}
                       description={subtitle}
@@ -1069,16 +904,13 @@ export default function WebSearchPage() {
                       }
                       onSelect={
                         providerId
-                          ? () => {
-                              void handleActivateSearchProvider(providerId);
-                            }
+                          ? () => void handleActivateSearchProvider(providerId)
                           : undefined
                       }
                       onDeselect={
                         providerId
-                          ? () => {
-                              void handleDeactivateSearchProvider(providerId);
-                            }
+                          ? () =>
+                              void handleDeactivateSearchProvider(providerId)
                           : undefined
                       }
                       onEdit={
@@ -1101,6 +933,10 @@ export default function WebSearchPage() {
                                 providerType,
                               })
                           : undefined
+                      }
+                      disconnectModalOpen={
+                        disconnectTarget?.id === providerId &&
+                        disconnectTarget?.category === "search"
                       }
                     />
                   );
@@ -1154,20 +990,15 @@ export default function WebSearchPage() {
                   provider.provider_type === "onyx_web_crawler" ||
                   isConfigured;
 
-                const contentLogoSrc =
-                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logoSrc;
+                const ContentLogo =
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logo;
 
                 return (
                   <ProviderCard
                     key={`${provider.provider_type}-${provider.id}`}
                     icon={() =>
-                      contentLogoSrc ? (
-                        <Image
-                          src={contentLogoSrc}
-                          alt={`${label} logo`}
-                          width={16}
-                          height={16}
-                        />
+                      ContentLogo ? (
+                        <ContentLogo size={16} />
                       ) : provider.provider_type === "onyx_web_crawler" ? (
                         <SvgOnyxLogo size={16} />
                       ) : (
@@ -1184,17 +1015,15 @@ export default function WebSearchPage() {
                     }}
                     onSelect={
                       canActivate
-                        ? () => {
-                            void handleActivateContentProvider(provider);
-                          }
+                        ? () => void handleActivateContentProvider(provider)
                         : undefined
                     }
-                    onDeselect={() => {
+                    onDeselect={() =>
                       void handleDeactivateContentProvider(
                         providerId,
                         provider.provider_type
-                      );
-                    }}
+                      )
+                    }
                     onEdit={
                       provider.provider_type !== "onyx_web_crawler" &&
                       isConfigured
@@ -1215,6 +1044,10 @@ export default function WebSearchPage() {
                               providerType: provider.provider_type,
                             })
                         : undefined
+                    }
+                    disconnectModalOpen={
+                      disconnectTarget?.id === providerId &&
+                      disconnectTarget?.category === "content"
                     }
                   />
                 );
@@ -1246,10 +1079,9 @@ export default function WebSearchPage() {
         }}
         providerLabel={providerLabel}
         providerLogo={renderLogo({
-          logoSrc: selectedProviderType
-            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc
+          logo: selectedProviderType
+            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logo
             : undefined,
-          alt: `${providerLabel} logo`,
           size: 24,
           containerSize: 28,
         })}
@@ -1365,12 +1197,9 @@ export default function WebSearchPage() {
         }}
         providerLabel={contentProviderLabel}
         providerLogo={renderLogo({
-          logoSrc: selectedContentProviderType
-            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logoSrc
+          logo: selectedContentProviderType
+            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logo
             : undefined,
-          alt: `${
-            contentProviderLabel || selectedContentProviderType || "provider"
-          } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
               <SvgOnyxLogo size={24} />

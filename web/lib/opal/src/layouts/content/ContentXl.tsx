@@ -1,10 +1,10 @@
 "use client";
 
-import { Button } from "@opal/components/buttons/button/components";
+import { Button, Text } from "@opal/components";
+import type { TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text, type TextFont } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";

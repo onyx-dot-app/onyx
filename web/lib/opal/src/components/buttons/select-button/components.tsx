@@ -96,9 +96,9 @@ function SelectButton({
     <Interactive.Stateful disabled={disabled} {...statefulProps}>
       <Interactive.Container
         type={type}
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        size={size}
+        width={width}
+        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div
           className={cn(

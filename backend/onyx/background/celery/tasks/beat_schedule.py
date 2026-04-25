@@ -6,9 +6,11 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
@@ -66,6 +68,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -99,6 +102,7 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Gated tenants may still have connectors awaiting deletion.
             "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -108,6 +112,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -117,6 +122,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -154,6 +160,7 @@ beat_task_templates: list[dict] = [
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.SANDBOX,
+            "work_gated": True,
         },
     },
     {
@@ -178,6 +185,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
             {
@@ -187,6 +195,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
         ]
@@ -226,7 +235,11 @@ if SCHEDULED_EVAL_DATASET_NAMES:
     )
 
 # Add OpenSearch migration task if enabled.
-if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+if (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and not DISABLE_OPENSEARCH_MIGRATION_TASK
+    and not ONYX_DISABLE_VESPA
+):
     beat_task_templates.append(
         {
             "name": "migrate-chunks-from-vespa-to-opensearch",
@@ -279,7 +292,7 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task["kwargs"] = {}
     cloud_task["kwargs"]["task_name"] = task["task"]
 
-    optional_fields = ["queue", "priority", "expires", "skip_gated"]
+    optional_fields = ["queue", "priority", "expires", "skip_gated", "work_gated"]
     for field in optional_fields:
         if field in task["options"]:
             cloud_task["kwargs"][field] = task["options"][field]
@@ -372,12 +385,14 @@ if not MULTI_TENANT:
         ]
     )
 
-    # `skip_gated` is a cloud-only hint consumed by `cloud_beat_task_generator`. Strip
-    # it before extending the self-hosted schedule so it doesn't leak into apply_async
-    # as an unrecognised option on every fired task message.
+    # `skip_gated` and `work_gated` are cloud-only hints consumed by
+    # `cloud_beat_task_generator`. Strip them before extending the self-hosted
+    # schedule so they don't leak into apply_async as unrecognised options on
+    # every fired task message.
     for _template in beat_task_templates:
         _self_hosted_template = copy.deepcopy(_template)
         _self_hosted_template["options"].pop("skip_gated", None)
+        _self_hosted_template["options"].pop("work_gated", None)
         tasks_to_schedule.append(_self_hosted_template)
 
 

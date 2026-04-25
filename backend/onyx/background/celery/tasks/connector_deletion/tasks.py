@@ -59,6 +59,7 @@ from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.metrics.deletion_metrics import inc_deletion_blocked
 from onyx.server.metrics.deletion_metrics import inc_deletion_completed
 from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
@@ -165,12 +166,22 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
 
             r.set(OnyxRedisSignals.BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES, 1, ex=300)
 
-        # collect cc_pair_ids
+        # collect cc_pair_ids and note whether any are in DELETING status
         cc_pair_ids: list[int] = []
+        has_deleting_cc_pair = False
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_connector_credential_pairs(db_session)
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
+                if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+                    has_deleting_cc_pair = True
+
+        # Tenant-work-gating hook: mark only when at least one cc_pair is in
+        # DELETING status. Marking on bare cc_pair existence would keep
+        # nearly every tenant in the active set since most have cc_pairs
+        # but almost none are actively being deleted on any given cycle.
+        if has_deleting_cc_pair:
+            maybe_mark_tenant_active(tenant_id, caller="connector_deletion")
 
         # try running cleanup on the cc_pair_ids
         for cc_pair_id in cc_pair_ids:

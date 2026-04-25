@@ -9,7 +9,7 @@ import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -74,7 +74,7 @@ export default function NonAdminStep() {
             sizePreset="main-ui"
             variant="body"
             prominence="muted"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <Button
                 prominence="tertiary"
@@ -99,7 +99,7 @@ export default function NonAdminStep() {
             description="We will display this name in the app."
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <div className="flex items-center justify-end gap-2">
                 <InputTypeIn
@@ -125,7 +125,7 @@ export default function NonAdminStep() {
           />
         </div>
       ) : (
-        <Hoverable.Root group="nonAdminName" widthVariant="full">
+        <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
             aria-label="Edit display name"

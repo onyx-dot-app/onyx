@@ -6,7 +6,7 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
-from atlassian.errors import ApiError  # type: ignore
+from atlassian.errors import ApiError
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
@@ -1054,6 +1054,7 @@ class ConfluenceConnector(
 
 if __name__ == "__main__":
     import os
+
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
 

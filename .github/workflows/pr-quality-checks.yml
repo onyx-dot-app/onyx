@@ -32,13 +32,15 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v6
         with: # zizmor: ignore[cache-poisoning]
-          node-version: 22
+          node-version: 24
           cache: "npm"
           cache-dependency-path: ./web/package-lock.json
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
       - uses: j178/prek-action@cbc2f23eb5539cf20d82d1aabd0d0ecbcc56f4e3
+        env:
+          SKIP: ty
         with:
           prek-version: '0.3.4'
           extra-args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.event_name == 'merge_group' && format('--from-ref {0} --to-ref {1}', github.event.merge_group.base_sha, github.event.merge_group.head_sha) || github.ref_name == 'main' && '--all-files' || '' }}

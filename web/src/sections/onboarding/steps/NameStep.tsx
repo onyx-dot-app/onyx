@@ -9,7 +9,7 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -52,7 +52,7 @@ const NameStep = React.memo(
           description="We will display this name in the app."
           sizePreset="main-ui"
           variant="section"
-          paddingVariant="fit"
+          padding="fit"
           rightChildren={
             <InputTypeIn
               ref={inputRef}
@@ -66,7 +66,7 @@ const NameStep = React.memo(
         />
       </div>
     ) : (
-      <Hoverable.Root group="nameStep" widthVariant="full">
+      <Hoverable.Root group="nameStep" width="full">
         <div
           className={containerClasses}
           onClick={() => {

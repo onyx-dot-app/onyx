@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import { cn, isImageFile } from "@/lib/utils";
+import { isImageFile } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
@@ -21,7 +22,7 @@ function Removable({ onRemove, children }: RemovableProps) {
   }
 
   return (
-    <Hoverable.Root group="fileCard" widthVariant="fit">
+    <Hoverable.Root group="fileCard" width="fit">
       <div className="relative">
         <div
           className={cn(
@@ -184,7 +185,7 @@ export function FileCard({
       }
     >
       <div className="min-w-0 max-w-[12rem]">
-        <Interactive.Container border heightVariant="fit" widthVariant="full">
+        <Interactive.Container border size="fit" width="full">
           <AttachmentItemLayout
             icon={isProcessing ? SimpleLoader : SvgFileText}
             title={file.name}

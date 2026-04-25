@@ -46,9 +46,10 @@ def get_query_analytics(
     daily_query_usage_info = fetch_query_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
     return [
@@ -77,9 +78,10 @@ def get_user_analytics(
     daily_query_usage_info_per_user = fetch_per_user_query_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
 
@@ -111,9 +113,10 @@ def get_onyxbot_analytics(
     daily_onyxbot_info = fetch_onyxbot_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
 
@@ -146,9 +149,10 @@ def get_persona_messages(
 ) -> list[PersonaMessageAnalyticsResponse]:
     """Fetch daily message counts for a single persona within the given time range."""
     start = start or (
-        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        datetime.datetime.now(tz=datetime.timezone.utc)
+        - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     )
-    end = end or datetime.datetime.utcnow()
+    end = end or datetime.datetime.now(tz=datetime.timezone.utc)
 
     persona_message_counts = []
     for count, date in fetch_persona_message_analytics(
@@ -226,9 +230,10 @@ def get_assistant_stats(
     along with the overall total messages and total distinct users.
     """
     start = start or (
-        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        datetime.datetime.now(tz=datetime.timezone.utc)
+        - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     )
-    end = end or datetime.datetime.utcnow()
+    end = end or datetime.datetime.now(tz=datetime.timezone.utc)
 
     if not user_can_view_assistant_stats(db_session, user, assistant_id):
         raise HTTPException(

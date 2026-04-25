@@ -34,3 +34,15 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:9093']
+
+  - job_name: 'onyx-heavy-worker'
+    scrape_interval: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9094']
+
+  - job_name: 'onyx-light-worker'
+    scrape_interval: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9095']

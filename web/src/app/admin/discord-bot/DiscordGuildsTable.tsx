@@ -15,7 +15,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { Button } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgEdit, SvgServer } from "@opal/icons";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import { DiscordGuildConfig } from "@/app/admin/discord-bot/types";
 import {
   deleteGuildConfig,
@@ -81,7 +81,8 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
 
   if (guilds.length === 0) {
     return (
-      <EmptyMessage
+      <EmptyMessageCard
+        sizePreset="main-ui"
         icon={SvgServer}
         title="No Discord servers configured yet"
         description="Create a server configuration to get started."

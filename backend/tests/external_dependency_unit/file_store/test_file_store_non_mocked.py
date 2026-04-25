@@ -57,10 +57,8 @@ class WorkerResult(TypedDict):
 
 def _get_all_backend_configs() -> List[BackendConfig]:
     """Get configurations for all available backends"""
-    from onyx.configs.app_configs import (
-        S3_ENDPOINT_URL,
-        AWS_REGION_NAME,
-    )
+    from onyx.configs.app_configs import AWS_REGION_NAME
+    from onyx.configs.app_configs import S3_ENDPOINT_URL
 
     s3_aws_access_key_id = os.environ.get("S3_AWS_ACCESS_KEY_ID_FOR_TEST")
     s3_aws_secret_access_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY_FOR_TEST")
@@ -149,7 +147,7 @@ def file_store(
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             s3_client.delete_objects(
                 Bucket=actual_bucket_name,
-                Delete={"Objects": objects_to_delete},  # type: ignore[typeddict-item]
+                Delete={"Objects": objects_to_delete},
             )
             logger.info(
                 f"Cleaned up {len(objects_to_delete)} test objects from {backend_config['backend_name']}"

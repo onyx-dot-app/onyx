@@ -180,6 +180,13 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
     "https://disposable.github.io/disposable-email-domains/domains.json",
 )
 
+# Captcha cookie TTL — how long a verified captcha token remains valid in
+# the browser cookie before the user has to solve another challenge. Sized
+# to comfortably cover one Google OAuth round-trip (typically <10s) while
+# keeping the replay window tight. 120s also matches Google's own v3 token
+# lifetime, so a paired-up cookie + token never outlive each other.
+CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -192,6 +199,28 @@ OAUTH_CLIENT_SECRET = (
 
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
+# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
+# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
+# minimum required to identify the user via OpenID Connect.
+GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
+
+# Applicable for Google OAuth login, allows you to override the scopes that
+# are requested from Google. Mirrors OIDC_SCOPE_OVERRIDE; useful when the
+# access token needs to be passed through to tool calls that require
+# additional Google API scopes.
+GOOGLE_OAUTH_SCOPE_OVERRIDE: list[str] | None = None
+_GOOGLE_OAUTH_SCOPE_OVERRIDE = os.environ.get("GOOGLE_OAUTH_SCOPE_OVERRIDE")
+
+if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
+    try:
+        GOOGLE_OAUTH_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _GOOGLE_OAUTH_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        logger.exception(
+            f"Error configuring Google OAuth login scopes: {_GOOGLE_OAUTH_SCOPE_OVERRIDE}"
+        )
 
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
@@ -282,6 +311,7 @@ OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
+OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -324,6 +354,10 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
     ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
+DISABLE_OPENSEARCH_MIGRATION_TASK = (
+    os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
+)
+ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
@@ -406,8 +440,13 @@ POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
 
-# defaults to False
-POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
+# defaults to True — pre-pings pooled connections with SELECT 1 at checkout
+# to avoid `psycopg2.OperationalError: server closed the connection
+# unexpectedly` when PgBouncer / Postgres drops an idle connection that's
+# still in the pool. Set POSTGRES_POOL_PRE_PING=false to opt out.
+POSTGRES_POOL_PRE_PING = (
+    os.environ.get("POSTGRES_POOL_PRE_PING", "true").lower() == "true"
+)
 
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes
@@ -763,7 +802,7 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     == "true"
 )
 
-DEFAULT_PRUNING_FREQ = 60 * 60 * 24  # Once a day
+DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 25  # 25 days
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
@@ -839,6 +878,38 @@ MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
+
+# Maximum embedded images allowed in a single file. PDFs (and other formats)
+# with thousands of embedded images can OOM the user-file-processing worker
+# because every image is decoded with PIL and then sent to the vision LLM.
+# Enforced both at upload time (rejects the file) and during extraction
+# (defense-in-depth: caps the number of images materialized).
+#
+# Clamped to >= 0; a negative env value would turn upload validation into
+# always-fail and extraction into always-stop, which is never desired. 0
+# disables image extraction entirely, which is a valid (if aggressive) setting.
+MAX_EMBEDDED_IMAGES_PER_FILE = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Maximum embedded images allowed across all files in a single upload batch.
+# Protects against the scenario where a user uploads many files that each
+# fall under MAX_EMBEDDED_IMAGES_PER_FILE but aggregate to enough work
+# (serial-ish celery fan-out plus per-image vision-LLM calls) to OOM the
+# worker under concurrency or run up surprise latency/cost. Also clamped
+# to >= 0.
+MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
+    0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_UPLOAD") or 1000)
+)
+
+# Maximum non-empty cells to extract from a single xlsx worksheet. Protects
+# from OOM on honestly-huge spreadsheets: memory cost in the extractor is
+# roughly proportional to this count. Once exceeded, the scan stops and a
+# truncation marker row is appended to the sheet's CSV.
+# Peak Memory ~= 100 B * MAX_CELLS
+MAX_XLSX_CELLS_PER_SHEET = max(
+    0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
 
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
@@ -1032,6 +1103,12 @@ MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
+# When true, GET /users is restricted to callers with READ_USERS so non-admins
+# cannot enumerate the tenant directory. Off by default to preserve sharing UX.
+USER_DIRECTORY_ADMIN_ONLY = (
+    os.environ.get("USER_DIRECTORY_ADMIN_ONLY", "").lower() == "true"
+)
+
 # Limit on number of users a free trial tenant can invite (cloud only)
 NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
 
@@ -1105,12 +1182,25 @@ INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() ==
 # Enable captcha verification for new user registration
 CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "").lower() == "true"
 
-# Google reCAPTCHA secret key (server-side validation)
-RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
-
-# Minimum score threshold for reCAPTCHA v3 (0.0-1.0, higher = more likely human)
-# 0.5 is the recommended default
+RECAPTCHA_ENTERPRISE_PROJECT_ID = os.environ.get("RECAPTCHA_ENTERPRISE_PROJECT_ID", "")
+RECAPTCHA_ENTERPRISE_API_KEY = os.environ.get("RECAPTCHA_ENTERPRISE_API_KEY", "")
+RECAPTCHA_SITE_KEY = os.environ.get("RECAPTCHA_SITE_KEY", "")
+RECAPTCHA_HOSTNAME_ALLOWLIST = frozenset(
+    h.strip()
+    for h in os.environ.get("RECAPTCHA_HOSTNAME_ALLOWLIST", "").split(",")
+    if h.strip()
+)
 RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
+
+# Shared secret for automated health-check clients (e.g. BetterStack Playwright)
+# to bypass login captcha. Empty value = bypass disabled (fail-closed). Sent by
+# the client as the `X-Healthcheck-Token` header and compared constant-time.
+HEALTH_CHECK_BYPASS_TOKEN = os.environ.get("HEALTH_CHECK_BYPASS_TOKEN", "")
+
+# Opt-in per-IP rate limit on /auth/register.
+SIGNUP_RATE_LIMIT_ENABLED = (
+    os.environ.get("SIGNUP_RATE_LIMIT_ENABLED", "").lower() == "true"
+)
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 

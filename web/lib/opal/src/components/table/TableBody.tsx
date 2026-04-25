@@ -15,7 +15,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types

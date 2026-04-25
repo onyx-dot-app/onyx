@@ -1,81 +1,84 @@
-import { Content, type ContentProps } from "@opal/layouts/content/components";
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type CardHeaderProps = ContentProps & {
-  /** Content rendered to the right of the Content block. */
-  rightChildren?: React.ReactNode;
+interface CardHeaderProps {
+  /** Content rendered in the header slot — typically a {@link ContentAction} block. */
+  children?: React.ReactNode;
 
-  /** Content rendered below `rightChildren` in the same column. */
+  /** Content rendered below `children`, in a right-aligned column. */
   bottomRightChildren?: React.ReactNode;
 
   /**
-   * Content rendered below the header row, full-width.
-   * Use for expandable sections, search bars, or any content
-   * that should appear beneath the icon/title/actions row.
+   * Content rendered below the entire header (left + right columns),
+   * spanning the full width. Use for expandable sections, search bars, or
+   * any content that should appear beneath the icon/title/actions row.
    */
-  children?: React.ReactNode;
-};
+  bottomChildren?: React.ReactNode;
+}
 
 // ---------------------------------------------------------------------------
 // Card.Header
 // ---------------------------------------------------------------------------
 
 /**
- * A card header layout that pairs a {@link Content} block (with `p-2`)
- * with a right-side column.
+ * A card header layout with a main content slot, an optional right-aligned
+ * column below, and a full-width `bottomChildren` slot.
  *
- * The right column contains two vertically stacked slots —
- * `rightChildren` on top, `bottomRightChildren` below — with no
- * padding or gap between them.
+ * ```
+ * +-----------------------------------+
+ * | children                    |
+ * +                  +----------------+
+ * |                  | bottomRight    |
+ * +------------------+----------------+
+ * | bottomChildren (full width)       |
+ * +-----------------------------------+
+ * ```
  *
- * The optional `children` slot renders below the full header row,
- * spanning the entire width.
+ * For the typical icon/title/description + right-action pattern, pass a
+ * {@link ContentAction} into `children` with `rightChildren` for
+ * the action button.
  *
  * @example
  * ```tsx
  * <Card.Header
- *   icon={SvgGlobe}
- *   title="Google"
- *   description="Search engine"
- *   sizePreset="main-ui"
- *   variant="section"
- *   rightChildren={<Button>Connect</Button>}
  *   bottomRightChildren={
  *     <>
  *       <Button icon={SvgUnplug} size="sm" prominence="tertiary" />
  *       <Button icon={SvgSettings} size="sm" prominence="tertiary" />
  *     </>
  *   }
- * />
+ * >
+ *   <ContentAction
+ *     icon={SvgGlobe}
+ *     title="Google"
+ *     description="Search engine"
+ *     sizePreset="main-ui"
+ *     variant="section"
+ *     padding="lg"
+ *     rightChildren={<Button>Connect</Button>}
+ *   />
+ * </Card.Header>
  * ```
  */
 function Header({
-  rightChildren,
-  bottomRightChildren,
   children,
-  ...contentProps
+  bottomRightChildren,
+  bottomChildren,
 }: CardHeaderProps) {
-  const hasRight = rightChildren || bottomRightChildren;
-
   return (
     <div className="flex flex-col w-full">
-      <div className="flex flex-row items-stretch w-full">
-        <div className="flex-1 min-w-0 self-start p-2">
-          <Content {...contentProps} />
-        </div>
-        {hasRight && (
+      <div className="flex flex-row items-start w-full">
+        {children != null && (
+          <div className="self-start grow min-w-0">{children}</div>
+        )}
+        {bottomRightChildren != null && (
           <div className="flex flex-col items-end shrink-0">
-            {rightChildren && <div className="flex-1">{rightChildren}</div>}
-            {bottomRightChildren && (
-              <div className="flex flex-row">{bottomRightChildren}</div>
-            )}
+            <div className="flex flex-row">{bottomRightChildren}</div>
           </div>
         )}
       </div>
-      {children && <div className="w-full">{children}</div>}
+      {bottomChildren != null && <div className="w-full">{bottomChildren}</div>}
     </div>
   );
 }

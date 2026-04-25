@@ -1,6 +1,7 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 from uuid import UUID
 
@@ -139,7 +140,7 @@ def update_session_activity(
         .one_or_none()
     )
     if session:
-        session.last_activity_at = datetime.utcnow()
+        session.last_activity_at = datetime.now(tz=timezone.utc)
         db_session.commit()
 
 
@@ -217,7 +218,7 @@ def update_sandbox_status(
         sandbox.status = status
         if container_id is not None:
             sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.utcnow()
+        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
         logger.info(f"Updated sandbox {sandbox_id} status to {status}")
 
@@ -229,7 +230,7 @@ def update_sandbox_heartbeat(
     """Update the heartbeat timestamp for a sandbox."""
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
     if sandbox:
-        sandbox.last_heartbeat = datetime.utcnow()
+        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
 
 
@@ -284,7 +285,7 @@ def update_artifact(
             artifact.path = path
         if name is not None:
             artifact.name = name
-        artifact.updated_at = datetime.utcnow()
+        artifact.updated_at = datetime.now(tz=timezone.utc)
         db_session.commit()
         logger.info(f"Updated artifact {artifact_id}")
 

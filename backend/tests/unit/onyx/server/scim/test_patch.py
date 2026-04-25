@@ -223,14 +223,22 @@ class TestApplyUserPatch:
     def test_entra_capitalized_replace_op(self) -> None:
         """Entra ID sends ``"Replace"`` instead of ``"replace"``."""
         user = _make_user()
-        op = ScimPatchOperation(op="Replace", path="active", value=False)  # type: ignore[arg-type]
+        op = ScimPatchOperation(
+            op="Replace",  # ty: ignore[invalid-argument-type]
+            path="active",
+            value=False,
+        )
         result, _ = apply_user_patch([op], user)
         assert result.active is False
 
     def test_entra_capitalized_add_op(self) -> None:
         """Entra ID sends ``"Add"`` instead of ``"add"``."""
         user = _make_user()
-        op = ScimPatchOperation(op="Add", path="externalId", value="ext-999")  # type: ignore[arg-type]
+        op = ScimPatchOperation(
+            op="Add",  # ty: ignore[invalid-argument-type]
+            path="externalId",
+            value="ext-999",
+        )
         result, _ = apply_user_patch([op], user)
         assert result.externalId == "ext-999"
 

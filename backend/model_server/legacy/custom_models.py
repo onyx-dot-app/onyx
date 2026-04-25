@@ -23,7 +23,7 @@
 # from shared_configs.model_server_models import IntentResponse
 
 # if TYPE_CHECKING:
-#     from setfit import SetFitModel  # type: ignore[import-untyped]
+#     from setfit import SetFitModel
 #     from transformers import PreTrainedTokenizer, BatchEncoding
 
 
@@ -423,7 +423,7 @@
 # def map_keywords(
 #     input_ids: torch.Tensor, tokenizer: "PreTrainedTokenizer", is_keyword: list[bool]
 # ) -> list[str]:
-#     tokens = tokenizer.convert_ids_to_tokens(input_ids)  # type: ignore
+#     tokens = tokenizer.convert_ids_to_tokens(input_ids)
 
 #     if not len(tokens) == len(is_keyword):
 #         raise ValueError("Length of tokens and keyword predictions must match")

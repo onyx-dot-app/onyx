@@ -8,13 +8,9 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    process_in_batches,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import process_in_batches
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -24,7 +20,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-
 
 logger = setup_logger()
 
@@ -290,8 +285,8 @@ class AxeroConnector(PollConnector):
         if not self.axero_key or not self.base_url:
             raise ConnectorMissingCredentialError("Axero")
 
-        start_datetime = datetime.utcfromtimestamp(start).replace(tzinfo=timezone.utc)
-        end_datetime = datetime.utcfromtimestamp(end).replace(tzinfo=timezone.utc)
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
         entity_types = []
         if self.include_article:
@@ -327,7 +322,7 @@ class AxeroConnector(PollConnector):
                 )
 
                 all_axero_forums = _map_post_to_parent(
-                    posts=forums_posts,
+                    posts=forums_posts,  # ty: ignore[invalid-argument-type]
                     api_key=self.axero_key,
                     axero_base_url=self.base_url,
                 )

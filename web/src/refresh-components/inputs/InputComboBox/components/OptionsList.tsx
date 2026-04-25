@@ -2,7 +2,7 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "../utils/aria";
 
@@ -30,7 +30,7 @@ interface OptionsListProps {
 
 /**
  * Renders the list of options with matched/unmatched sections
- * Includes separator between sections when filtering
+ * Includes divider between sections when filtering
  */
 export const OptionsList: React.FC<OptionsListProps> = ({
   matchedOptions,

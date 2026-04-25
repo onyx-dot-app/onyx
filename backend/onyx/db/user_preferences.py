@@ -25,7 +25,6 @@ from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -121,7 +120,7 @@ def get_latest_access_token_for_user(
     try:
         result = db_session.execute(
             select(AccessToken)
-            .where(AccessToken.user_id == user_id)  # type: ignore
+            .where(AccessToken.user_id == user_id)  # ty: ignore[invalid-argument-type]
             .order_by(desc(Column("created_at")))
             .limit(1)
         )
@@ -139,7 +138,7 @@ def update_user_temperature_override_enabled(
     """Update user's temperature override enabled setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(temperature_override_enabled=temperature_override_enabled)
     )
     db_session.commit()
@@ -153,7 +152,7 @@ def update_user_shortcut_enabled(
     """Update user's shortcut enabled setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(shortcut_enabled=shortcut_enabled)
     )
     db_session.commit()
@@ -167,7 +166,7 @@ def update_user_auto_scroll(
     """Update user's auto scroll setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(auto_scroll=auto_scroll)
     )
     db_session.commit()
@@ -181,7 +180,7 @@ def update_user_default_model(
     """Update user's default model setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(default_model=default_model)
     )
     db_session.commit()
@@ -195,7 +194,7 @@ def update_user_theme_preference(
     """Update user's theme preference setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(theme_preference=theme_preference)
     )
     db_session.commit()
@@ -209,7 +208,7 @@ def update_user_chat_background(
     """Update user's chat background setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(chat_background=chat_background)
     )
     db_session.commit()
@@ -223,7 +222,7 @@ def update_user_default_app_mode(
     """Update user's default app mode setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(default_app_mode=default_app_mode)
     )
     db_session.commit()
@@ -242,7 +241,7 @@ def update_user_personalization(
 ) -> None:
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(
             personal_name=personal_name,
             personal_role=personal_role,
@@ -302,7 +301,7 @@ def update_user_pinned_assistants(
     """Update user's pinned assistants list."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(pinned_assistants=pinned_assistants)
     )
     db_session.commit()
@@ -318,7 +317,7 @@ def update_user_assistant_visibility(
     """Update user's assistant visibility settings."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(
             hidden_assistants=hidden_assistants,
             visible_assistants=visible_assistants,

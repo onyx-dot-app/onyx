@@ -342,22 +342,19 @@ test.describe("Default Agent MCP Integration", () => {
     // Scroll to the Actions & Tools section (open by default)
     await scrollToBottom(page);
 
-    // Find the MCP server card by name text
-    // The server name appears inside a label within the ActionsLayouts.Header
-    const serverLabel = page
-      .locator("label")
-      .filter({ has: page.getByText(serverName, { exact: true }) });
-    await expect(serverLabel.first()).toBeVisible({ timeout: 10000 });
+    // Find the MCP server card by name text (expandable card)
+    const serverCard = page
+      .locator(".opal-card-expandable")
+      .filter({ hasText: serverName })
+      .first();
+    await expect(serverCard).toBeVisible({ timeout: 10000 });
     console.log(`[test] MCP server card found for server: ${serverName}`);
 
     // Scroll server card into view
-    await serverLabel.first().scrollIntoViewIfNeeded();
+    await serverCard.scrollIntoViewIfNeeded();
 
     // The server-level Switch in the header toggles ALL tools
-    const serverSwitch = serverLabel
-      .first()
-      .locator('button[role="switch"]')
-      .first();
+    const serverSwitch = serverCard.getByRole("switch").first();
     await expect(serverSwitch).toBeVisible({ timeout: 5000 });
 
     // Enable all tools by toggling the server switch ON
@@ -643,12 +640,13 @@ test.describe("Default Agent MCP Integration", () => {
     // Scroll to Actions & Tools section
     await scrollToBottom(page);
 
-    // Find the MCP server card by name
-    const serverLabel = page
-      .locator("label")
-      .filter({ has: page.getByText(serverName, { exact: true }) });
-    await expect(serverLabel.first()).toBeVisible({ timeout: 10000 });
-    await serverLabel.first().scrollIntoViewIfNeeded();
+    // Find the MCP server card by name (expandable card)
+    const serverCard = page
+      .locator(".opal-card-expandable")
+      .filter({ hasText: serverName })
+      .first();
+    await expect(serverCard).toBeVisible({ timeout: 10000 });
+    await serverCard.scrollIntoViewIfNeeded();
 
     // Click "Expand" to reveal individual tools
     const expandButton = page.getByRole("button", { name: "Expand" }).first();
@@ -660,14 +658,11 @@ test.describe("Default Agent MCP Integration", () => {
     }
 
     // Find a specific tool by name inside the expanded card content
-    // Individual tools are rendered as ActionsLayouts.Tool with their own Card > Label
-    const toolLabel = page
-      .locator("label")
-      .filter({ has: page.getByText("tool_0", { exact: true }) });
-    const firstToolSwitch = toolLabel
-      .first()
-      .locator('button[role="switch"]')
+    const toolCard = page
+      .locator(".opal-card")
+      .filter({ hasText: "tool_0" })
       .first();
+    const firstToolSwitch = toolCard.getByRole("switch").first();
 
     await expect(firstToolSwitch).toBeVisible({ timeout: 5000 });
     await firstToolSwitch.scrollIntoViewIfNeeded();
@@ -688,12 +683,13 @@ test.describe("Default Agent MCP Integration", () => {
     await page.waitForURL("**/admin/configuration/chat-preferences**");
     await scrollToBottom(page);
 
-    // Re-find the server card
-    const serverLabelAfter = page
-      .locator("label")
-      .filter({ has: page.getByText(serverName, { exact: true }) });
-    await expect(serverLabelAfter.first()).toBeVisible({ timeout: 10000 });
-    await serverLabelAfter.first().scrollIntoViewIfNeeded();
+    // Re-find the server card (expandable card)
+    const serverCardAfter = page
+      .locator(".opal-card-expandable")
+      .filter({ hasText: serverName })
+      .first();
+    await expect(serverCardAfter).toBeVisible({ timeout: 10000 });
+    await serverCardAfter.scrollIntoViewIfNeeded();
 
     // Re-expand the card
     const expandButtonAfter = page
@@ -708,13 +704,11 @@ test.describe("Default Agent MCP Integration", () => {
     }
 
     // Verify the tool state persisted
-    const toolLabelAfter = page
-      .locator("label")
-      .filter({ has: page.getByText("tool_0", { exact: true }) });
-    const firstToolSwitchAfter = toolLabelAfter
-      .first()
-      .locator('button[role="switch"]')
+    const toolCardAfter = page
+      .locator(".opal-card")
+      .filter({ hasText: "tool_0" })
       .first();
+    const firstToolSwitchAfter = toolCardAfter.getByRole("switch").first();
     await expect(firstToolSwitchAfter).toBeVisible({ timeout: 5000 });
     const finalChecked =
       await firstToolSwitchAfter.getAttribute("aria-checked");

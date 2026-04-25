@@ -170,10 +170,10 @@ def _make_json_serializable(obj: object) -> object:
     """
     if hasattr(obj, "model_dump"):
         # Pydantic v2 model
-        return obj.model_dump(mode="json")
+        return obj.model_dump(mode="json")  # ty: ignore[call-non-callable]
     elif hasattr(obj, "dict"):
         # Pydantic v1 model or similar
-        return _make_json_serializable(obj.dict())
+        return _make_json_serializable(obj.dict())  # ty: ignore[call-non-callable]
     elif isinstance(obj, dict):
         return {k: _make_json_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):

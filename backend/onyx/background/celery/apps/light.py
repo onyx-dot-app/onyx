@@ -29,7 +29,7 @@ logger = setup_logger()
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.light")
-celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
+celery_app.Task = app_base.TenantAwareTask  # ty: ignore[invalid-assignment]
 
 
 @signals.task_prerun.connect
@@ -95,23 +95,30 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     logger.info("worker_init signal received.")
 
-    logger.info(f"Concurrency: {sender.concurrency}")  # type: ignore
+    logger.info(
+        f"Concurrency: {sender.concurrency}"  # ty: ignore[unresolved-attribute]
+    )
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
+    SqlEngine.init_engine(
+        pool_size=sender.concurrency,  # ty: ignore[unresolved-attribute]
+        max_overflow=EXTRA_CONCURRENCY,
+    )
 
     if MANAGED_VESPA:
         httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY,  # type: ignore
+            sender.concurrency + EXTRA_CONCURRENCY,  # ty: ignore[unresolved-attribute]
             ssl_cert=VESPA_CLOUD_CERT_PATH,
             ssl_key=VESPA_CLOUD_KEY_PATH,
         )
     else:
-        httpx_init_vespa_pool(sender.concurrency + EXTRA_CONCURRENCY)  # type: ignore
+        httpx_init_vespa_pool(
+            sender.concurrency + EXTRA_CONCURRENCY  # ty: ignore[unresolved-attribute]
+        )
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
-    app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
+    app_base.wait_for_document_index_or_shutdown()
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:

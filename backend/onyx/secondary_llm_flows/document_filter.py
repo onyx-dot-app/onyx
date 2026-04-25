@@ -10,9 +10,7 @@ from onyx.llm.models import UserMessage
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
-from onyx.tools.tool_implementations.search.constants import (
-    MAX_CHUNKS_FOR_RELEVANCE,
-)
+from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger

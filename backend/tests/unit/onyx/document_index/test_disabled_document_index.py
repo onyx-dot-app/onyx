@@ -61,7 +61,8 @@ def test_register_multitenant_indices_raises() -> None:
 
 
 def test_index_raises(disabled_index: DisabledDocumentIndex) -> None:
-    from dataclasses import dataclass, field
+    from dataclasses import dataclass
+    from dataclasses import field
 
     # We only need a stub — the method raises before inspecting arguments.
     @dataclass
@@ -74,7 +75,7 @@ def test_index_raises(disabled_index: DisabledDocumentIndex) -> None:
     with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
         disabled_index.index(
             chunks=[],
-            index_batch_params=_StubBatchParams(),  # type: ignore
+            index_batch_params=_StubBatchParams(),  # ty: ignore[invalid-argument-type]
         )
 
 

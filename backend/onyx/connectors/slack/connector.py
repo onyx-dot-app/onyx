@@ -61,9 +61,7 @@ from onyx.connectors.slack.models import MessageType
 from onyx.connectors.slack.models import ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
-from onyx.connectors.slack.utils import (
-    expert_info_from_slack_id,
-)
+from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 from onyx.connectors.slack.utils import SlackTextCleaner
@@ -225,7 +223,7 @@ def thread_to_doc(
         ]
         valid_experts = [expert for expert in experts if expert]
 
-    first_message = slack_cleaner.index_clean(cast(str, thread[0]["text"]))
+    first_message = slack_cleaner.index_clean(thread[0]["text"])
     snippet = (
         first_message[:50].rstrip() + "..."
         if len(first_message) > 50
@@ -243,7 +241,7 @@ def thread_to_doc(
         sections=[
             TextSection(
                 link=get_message_link(event=m, client=client, channel_id=channel_id),
-                text=slack_cleaner.index_clean(cast(str, m["text"])),
+                text=slack_cleaner.index_clean(m["text"]),
             )
             for m in thread
         ],
@@ -893,7 +891,7 @@ class SlackConnector(
         if self.client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
 
-        checkpoint = cast(SlackCheckpoint, copy.deepcopy(checkpoint))
+        checkpoint = copy.deepcopy(checkpoint)
 
         # if this is the very first time we've called this, need to
         # get all relevant channels and save them into the checkpoint
@@ -995,7 +993,7 @@ class SlackConnector(
                     # Capture the current context so that the thread gets the current tenant ID
                     current_context = contextvars.copy_context()
                     futures.append(
-                        executor.submit(
+                        executor.submit(  # ty: ignore[invalid-argument-type]
                             current_context.run,
                             _process_message,
                             message=message,
@@ -1274,6 +1272,7 @@ class SlackConnector(
 if __name__ == "__main__":
     import os
     import time
+
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
     from shared_configs.contextvars import get_current_tenant_id
 
@@ -1299,7 +1298,7 @@ if __name__ == "__main__":
     gen = connector.load_from_checkpoint(
         one_day_ago,
         current,
-        cast(SlackCheckpoint, checkpoint),
+        checkpoint,
     )
     try:
         for document_or_failure in gen:

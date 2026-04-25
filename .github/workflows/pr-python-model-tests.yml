@@ -17,8 +17,6 @@ env:
 
   # API keys for testing
   COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-  LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
-  LITELLM_API_URL: ${{ secrets.LITELLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
   AZURE_API_URL: ${{ vars.AZURE_API_URL }}
@@ -71,7 +69,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and load
         uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # ratchet:docker/bake-action@v7.0.0
@@ -123,7 +121,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log

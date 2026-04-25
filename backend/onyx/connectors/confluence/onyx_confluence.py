@@ -26,7 +26,7 @@ from typing import TypeVar
 from urllib.parse import quote
 
 import bs4
-from atlassian import Confluence  # type:ignore
+from atlassian import Confluence
 from redis import Redis
 from requests import HTTPError
 
@@ -971,7 +971,7 @@ class OnyxConfluence:
         :return: Returns the user details
         """
 
-        from atlassian.errors import ApiPermissionError  # type:ignore
+        from atlassian.errors import ApiPermissionError
 
         url = "rest/api/user/current"
         params = {}
@@ -1071,6 +1071,9 @@ def extract_text_from_confluence_html(
     soup = bs4.BeautifulSoup(object_html, "html.parser")
 
     _remove_macro_stylings(soup=soup)
+
+    for date_span in soup.findAll("span", {"class": "date-lozenger-container"}):
+        date_span.replaceWith(date_span.get_text())
 
     for user in soup.findAll("ri:user"):
         user_id = (

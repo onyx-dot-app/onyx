@@ -1,12 +1,11 @@
 import io
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
-from onyx.file_processing.extract_file_text import _clean_worksheet_matrix
-from onyx.file_processing.extract_file_text import _worksheet_to_matrix
+from onyx.file_processing.extract_file_text import _sheet_to_csv
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.extract_file_text import xlsx_to_text
 
@@ -202,50 +201,179 @@ class TestXlsxToText:
         assert "r3c1" in lines[2] and "r3c2" in lines[2]
 
 
-class TestWorksheetToMatrixJaggedRows:
-    """openpyxl read_only mode can yield rows of differing widths when
-    trailing cells are empty. The matrix must be padded to a rectangle
-    so downstream column cleanup can index safely."""
+class TestSheetToCsvJaggedRows:
+    """openpyxl's read-only mode yields rows of differing widths when
+    trailing cells are empty. These tests exercise ``_sheet_to_csv``
+    directly because ``_make_xlsx`` (via ``ws.append``) normalizes row
+    widths, so jagged input can only be produced in-memory."""
 
-    def test_pads_shorter_trailing_rows(self) -> None:
-        ws = MagicMock()
-        ws.iter_rows.return_value = iter(
-            [
-                ("A", "B", "C"),
-                ("X", "Y"),
-                ("P",),
-            ]
+    def test_shorter_trailing_rows_padded_in_output(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "B", "C"),
+                    ("X", "Y"),
+                    ("P",),
+                ]
+            )
         )
-        matrix = _worksheet_to_matrix(ws)
-        assert matrix == [["A", "B", "C"], ["X", "Y", ""], ["P", "", ""]]
+        assert csv_text.split("\n") == ["A,B,C", "X,Y,", "P,,"]
 
-    def test_pads_when_first_row_is_shorter(self) -> None:
-        ws = MagicMock()
-        ws.iter_rows.return_value = iter(
-            [
-                ("A",),
-                ("X", "Y", "Z"),
-            ]
+    def test_shorter_leading_row_padded_in_output(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A",),
+                    ("X", "Y", "Z"),
+                ]
+            )
         )
-        matrix = _worksheet_to_matrix(ws)
-        assert matrix == [["A", "", ""], ["X", "Y", "Z"]]
+        assert csv_text.split("\n") == ["A,,", "X,Y,Z"]
 
-    def test_clean_worksheet_matrix_no_index_error_on_jagged_rows(self) -> None:
-        """Regression: previously raised IndexError when a later row was
-        shorter than the first row and the out-of-range column on the
-        first row was empty (so the short-circuit in `all()` did not
-        save us)."""
-        ws = MagicMock()
-        ws.iter_rows.return_value = iter(
-            [
-                ("A", "", "", "B"),
-                ("X", "Y"),
-            ]
+    def test_no_index_error_on_jagged_rows(self) -> None:
+        """Regression: the original dense-matrix version raised IndexError
+        when a later row was shorter than an earlier row whose out-of-range
+        columns happened to be empty."""
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "", "", "B"),
+                    ("X", "Y"),
+                ]
+            )
         )
-        matrix = _worksheet_to_matrix(ws)
-        # Must not raise.
-        cleaned = _clean_worksheet_matrix(matrix)
-        assert cleaned == [["A", "", "", "B"], ["X", "Y", "", ""]]
+        assert csv_text.split("\n") == ["A,,,B", "X,Y,,"]
+
+
+class TestSheetToCsvStreaming:
+    """Pin the memory-safe streaming contract: empty rows are skipped
+    cheaply, empty-row/column runs are collapsed to at most 2, and sheets
+    with no data return the empty string."""
+
+    def test_empty_rows_between_data_capped_at_two(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "B"),
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    ("C", "D"),
+                ]
+            )
+        )
+        # 5 empty rows collapsed to 2
+        assert csv_text.split("\n") == ["A,B", ",", ",", "C,D"]
+
+    def test_empty_rows_at_or_below_cap_preserved(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "B"),
+                    (None, None),
+                    (None, None),
+                    ("C", "D"),
+                ]
+            )
+        )
+        assert csv_text.split("\n") == ["A,B", ",", ",", "C,D"]
+
+    def test_empty_column_run_capped_at_two(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", None, None, None, None, "B"),
+                    ("C", None, None, None, None, "D"),
+                ]
+            )
+        )
+        # 4 empty cols between A and B collapsed to 2
+        assert csv_text.split("\n") == ["A,,,B", "C,,,D"]
+
+    def test_completely_empty_stream_returns_empty_string(self) -> None:
+        assert _sheet_to_csv(iter([])) == ""
+
+    def test_all_rows_empty_returns_empty_string(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    (None, None),
+                    ("", ""),
+                    (None,),
+                ]
+            )
+        )
+        assert csv_text == ""
+
+    def test_trailing_empty_rows_dropped(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A",),
+                    ("B",),
+                    (None,),
+                    (None,),
+                    (None,),
+                ]
+            )
+        )
+        # Trailing empties are never emitted (no subsequent non-empty row
+        # to flush them against).
+        assert csv_text.split("\n") == ["A", "B"]
+
+    def test_leading_empty_rows_capped_at_two(self) -> None:
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    (None, None),
+                    ("A", "B"),
+                ]
+            )
+        )
+        # 5 leading empty rows collapsed to 2
+        assert csv_text.split("\n") == [",", ",", "A,B"]
+
+    def test_cell_cap_truncates_and_appends_marker(self) -> None:
+        """When total non-empty cells exceeds the cap, scanning stops and
+        a truncation marker row is appended so downstream indexing sees
+        the sheet was cut off."""
+        with patch(
+            "onyx.file_processing.extract_file_text.MAX_XLSX_CELLS_PER_SHEET", 5
+        ):
+            csv_text = _sheet_to_csv(
+                iter(
+                    [
+                        ("A", "B", "C"),
+                        ("D", "E", "F"),
+                        ("G", "H", "I"),
+                        ("J", "K", "L"),
+                    ]
+                )
+            )
+        lines = csv_text.split("\n")
+        assert lines[-1] == "[truncated: sheet exceeded cell limit]"
+        # First two rows (6 cells) trip the cap=5 check after row 2; the
+        # third and fourth rows are never scanned.
+        assert "G" not in csv_text
+        assert "J" not in csv_text
+
+    def test_cell_cap_not_hit_no_marker(self) -> None:
+        """Under the cap, no truncation marker is appended."""
+        csv_text = _sheet_to_csv(
+            iter(
+                [
+                    ("A", "B"),
+                    ("C", "D"),
+                ]
+            )
+        )
+        assert "[truncated" not in csv_text
 
 
 class TestXlsxSheetExtraction:
@@ -280,10 +408,9 @@ class TestXlsxSheetExtraction:
         assert "a" in csv_text
         assert "b" in csv_text
 
-    def test_empty_sheet_is_skipped(self) -> None:
-        """A sheet whose CSV output is empty/whitespace-only should NOT
-        appear in the result — the `if csv_text.strip():` guard filters
-        it out."""
+    def test_empty_sheet_included_with_empty_csv(self) -> None:
+        """Every sheet in the workbook appears in the result; an empty
+        sheet contributes an empty csv_text alongside its title."""
         xlsx = _make_xlsx(
             {
                 "Data": [["a", "b"]],
@@ -291,14 +418,17 @@ class TestXlsxSheetExtraction:
             }
         )
         sheets = xlsx_sheet_extraction(xlsx)
-        assert len(sheets) == 1
-        assert sheets[0][1] == "Data"
+        assert len(sheets) == 2
+        titles = [title for _csv, title in sheets]
+        assert titles == ["Data", "Empty"]
+        empty_csv = next(csv_text for csv_text, title in sheets if title == "Empty")
+        assert empty_csv == ""
 
-    def test_empty_workbook_returns_empty_list(self) -> None:
-        """All sheets empty → empty list (not a list of empty tuples)."""
+    def test_empty_workbook_returns_one_tuple_per_sheet(self) -> None:
+        """All sheets empty → one empty-csv tuple per sheet."""
         xlsx = _make_xlsx({"Sheet1": [], "Sheet2": []})
         sheets = xlsx_sheet_extraction(xlsx)
-        assert sheets == []
+        assert sheets == [("", "Sheet1"), ("", "Sheet2")]
 
     def test_single_sheet(self) -> None:
         xlsx = _make_xlsx({"Only": [["x", "y"], ["1", "2"]]})
@@ -319,6 +449,17 @@ class TestXlsxSheetExtraction:
         at debug (not warning) and still return []."""
         bad_file = io.BytesIO(b"not a zip file")
         sheets = xlsx_sheet_extraction(bad_file, file_name="~$temp.xlsx")
+        assert sheets == []
+
+    def test_known_openpyxl_bug_max_value_returns_empty(self) -> None:
+        """openpyxl's strict descriptor validation rejects font family
+        values >14 with 'Max value is 14'. Treat as a known openpyxl bug
+        and skip the file rather than fail the whole connector batch."""
+        with patch(
+            "onyx.file_processing.extract_file_text.openpyxl.load_workbook",
+            side_effect=ValueError("Max value is 14"),
+        ):
+            sheets = xlsx_sheet_extraction(io.BytesIO(b""), file_name="bad_font.xlsx")
         assert sheets == []
 
     def test_csv_content_matches_xlsx_to_text_per_sheet(self) -> None:

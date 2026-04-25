@@ -5,8 +5,8 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
-from collections.abc import Awaitable
 from collections.abc import Callable
+from collections.abc import Coroutine
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -31,7 +31,7 @@ logger = setup_logger()
 
 T = TypeVar("T", covariant=True)
 
-MCPClientFunction = Callable[[ClientSession], Awaitable[T]]
+MCPClientFunction = Callable[[ClientSession], Coroutine[Any, Any, T]]
 
 
 class MCPMessageType(str, Enum):
@@ -120,13 +120,13 @@ class MCPMessage(BaseModel):
 
 
 def _create_mcp_client_function_runner(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
     **kwargs: Any,
-) -> Callable[[], Awaitable[T]]:
+) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}
     # WARNING: httpx.Auth with requires_response_body=True (as in the MCP OAuth
     # provider) forces httpx to fully read the response body. That is incompatible
@@ -148,7 +148,7 @@ def _create_mcp_client_function_runner(
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
                 assert isinstance(client_tuple, tuple)  # mypy
-                read, write = client_tuple
+                read, write = client_tuple  # ty: ignore[invalid-assignment]
             else:
                 raise ValueError(
                     f"Unexpected number of client tuple elements: {len(client_tuple)}"
@@ -177,7 +177,7 @@ def log_exception_group(e: ExceptionGroup) -> Exception | None:
 
 
 def _call_mcp_client_function_sync(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
@@ -201,7 +201,7 @@ def _call_mcp_client_function_sync(
 
 
 async def _call_mcp_client_function_async(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
@@ -220,14 +220,20 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
     parts = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
-            parts.append(content_block.text or "")
+            parts.append(content_block.text or "")  # ty: ignore[unresolved-attribute]
         if content_block.type == ContentBlockTypes.RESOURCE.value:
-            if isinstance(content_block.resource, TextResourceContents):
-                parts.append(content_block.resource.text or "")
+            if isinstance(
+                content_block.resource,  # ty: ignore[unresolved-attribute]
+                TextResourceContents,
+            ):
+                parts.append(
+                    content_block.resource.text  # ty: ignore[unresolved-attribute]
+                    or ""
+                )
             # TODO: handle blob resource content
         if content_block.type == ContentBlockTypes.RESOURCE_LINK.value:
             parts.append(
-                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
+                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"  # ty: ignore[unresolved-attribute]
             )
         # TODO: handle other content block types
 

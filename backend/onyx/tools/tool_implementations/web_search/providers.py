@@ -3,9 +3,7 @@ from onyx.db.models import InternetSearchProvider
 from onyx.db.web_search import fetch_active_web_content_provider
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.tools.tool_implementations.open_url.firecrawl import FirecrawlClient
-from onyx.tools.tool_implementations.open_url.models import (
-    WebContentProvider,
-)
+from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_HTML_SIZE_BYTES,
 )
@@ -13,12 +11,8 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
-from onyx.tools.tool_implementations.web_search.clients.brave_client import (
-    BraveClient,
-)
-from onyx.tools.tool_implementations.web_search.clients.exa_client import (
-    ExaClient,
-)
+from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
+from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaClient
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )

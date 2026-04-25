@@ -40,7 +40,7 @@ def test_nonexistent_project_error_during_indexing(
     # Mock search_issues to raise this error
     jira_client = jira_connector_with_invalid_project._jira_client
     assert jira_client is not None
-    jira_client.search_issues.side_effect = error  # type: ignore
+    jira_client.search_issues.side_effect = error  # ty: ignore[unresolved-attribute]
 
     # Attempt to load from checkpoint - should raise ConnectorValidationError
     end_time = time.time()
@@ -70,7 +70,7 @@ def test_invalid_jql_error_during_indexing(
     # Mock search_issues to raise this error
     jira_client = jira_connector_with_invalid_project._jira_client
     assert jira_client is not None
-    jira_client.search_issues.side_effect = error  # type: ignore
+    jira_client.search_issues.side_effect = error  # ty: ignore[unresolved-attribute]
 
     # Attempt to load from checkpoint - should raise ConnectorValidationError
     end_time = time.time()
@@ -96,7 +96,7 @@ def test_credential_expired_error_during_indexing(
     # Mock search_issues to raise this error
     jira_client = jira_connector_with_invalid_project._jira_client
     assert jira_client is not None
-    jira_client.search_issues.side_effect = error  # type: ignore
+    jira_client.search_issues.side_effect = error  # ty: ignore[unresolved-attribute]
 
     # Attempt to load from checkpoint - should raise CredentialExpiredError
     end_time = time.time()
@@ -122,7 +122,7 @@ def test_insufficient_permissions_error_during_indexing(
     # Mock search_issues to raise this error
     jira_client = jira_connector_with_invalid_project._jira_client
     assert jira_client is not None
-    jira_client.search_issues.side_effect = error  # type: ignore
+    jira_client.search_issues.side_effect = error  # ty: ignore[unresolved-attribute]
 
     # Attempt to load from checkpoint - should raise InsufficientPermissionsError
     end_time = time.time()

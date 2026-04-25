@@ -9,7 +9,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -22,19 +21,24 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
-  SvgAlertCircle,
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
+import {
+  Card as CardLayout,
+  Content,
+  ContentAction,
+  InputHorizontal,
+  InputVertical,
+} from "@opal/layouts";
 import {
   useSettingsContext,
   useVectorDbEnabled,
 } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
-import { Settings } from "@/interfaces/settings";
+import { EmptyMessageCard } from "@opal/components";
+import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -44,13 +48,11 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card as OpalCard } from "@opal/components";
+import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -103,52 +105,27 @@ function MCPServerCard({
     ? "Authenticate this MCP server before enabling its tools."
     : undefined;
 
+  const expanded = !isFolded;
+  const hasContent = tools.length > 0 && filteredTools.length > 0;
+
   return (
-    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description}
-        icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={
-          <Tooltip tooltip={authTooltip} side="top">
-            <Switch
-              checked={serverEnabled}
-              onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
-              disabled={needsAuth}
-            />
-          </Tooltip>
-        }
-      >
-        {tools.length > 0 && (
-          <Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Button
-              rightIcon={isFolded ? SvgExpand : SvgFold}
-              onClick={() => setIsFolded((prev) => !prev)}
-              prominence="internal"
-              size="lg"
-            >
-              {isFolded ? "Expand" : "Fold"}
-            </Button>
-          </Section>
-        )}
-      </ActionsLayouts.Header>
-      {tools.length > 0 && filteredTools.length > 0 && (
-        <ActionsLayouts.Content>
-          <div className="flex flex-col gap-2">
+    <Card
+      expandable
+      expanded={expanded}
+      border="solid"
+      rounding="lg"
+      padding="sm"
+      expandedContent={
+        hasContent ? (
+          <Section gap={0.5} padding={0.5}>
             {filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon}
-                rightChildren={
+              <Card key={tool.id} border="solid" rounding="md">
+                <InputHorizontal
+                  icon={tool.icon}
+                  title={tool.name}
+                  description={tool.description}
+                  withLabel
+                >
                   <Tooltip tooltip={authTooltip} side="top">
                     <Switch
                       checked={isToolEnabled(tool.id)}
@@ -158,13 +135,59 @@ function MCPServerCard({
                       disabled={needsAuth}
                     />
                   </Tooltip>
-                }
-              />
+                </InputHorizontal>
+              </Card>
             ))}
-          </div>
-        </ActionsLayouts.Content>
-      )}
-    </ExpandableCard.Root>
+          </Section>
+        ) : undefined
+      }
+    >
+      <CardLayout.Header
+        bottomChildren={
+          tools.length > 0 ? (
+            <Section flexDirection="row" gap={0.5}>
+              <InputTypeIn
+                placeholder="Search tools..."
+                variant="internal"
+                leftSearchIcon
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <Button
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+                prominence="internal"
+                size="lg"
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            </Section>
+          ) : undefined
+        }
+      >
+        <div className="p-2">
+          <ContentAction
+            icon={getActionIcon(server.server_url, server.name)}
+            title={server.name}
+            description={server.description}
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <Tooltip tooltip={authTooltip} side="top">
+                <Switch
+                  checked={serverEnabled}
+                  onCheckedChange={(checked) =>
+                    onToggleTools(allToolIds, checked)
+                  }
+                  disabled={needsAuth}
+                />
+              </Tooltip>
+            }
+          />
+        </div>
+      </CardLayout.Header>
+    </Card>
   );
 }
 
@@ -258,7 +281,7 @@ function NumericLimitField({
   };
 
   return (
-    <Hoverable.Root group="numericLimit" widthVariant="full">
+    <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
         showClearButton={false}
@@ -304,10 +327,11 @@ function FileSizeLimitFields({
   maxAllowedUploadSizeMb,
 }: FileSizeLimitFieldsProps) {
   return (
-    <div className="flex gap-4 w-full items-start">
+    <div className="flex gap-4 w-full items-start pt-2">
       <div className="flex-1">
         <InputVertical
-          title="File Size Limit (MB)"
+          title="File Size Limit"
+          suffix="(MB)"
           subDescription={
             maxAllowedUploadSizeMb
               ? `Max: ${maxAllowedUploadSizeMb} MB`
@@ -325,7 +349,11 @@ function FileSizeLimitFields({
         </InputVertical>
       </div>
       <div className="flex-1">
-        <InputVertical title="File Token Limit (thousand tokens)" withLabel>
+        <InputVertical
+          title="File Token Limit"
+          withLabel
+          suffix="(thousand tokens)"
+        >
           <NumericLimitField
             name="file_token_count_threshold_k"
             initialValue={initialTokenThresholdK}
@@ -339,7 +367,7 @@ function FileSizeLimitFields({
   );
 }
 
-function ChatPreferencesForm() {
+export default function ChatPreferencesPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const s = settings.settings;
@@ -518,77 +546,72 @@ function ChatPreferencesForm() {
           icon={route.icon}
           title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
-          separator
+          divider
         />
 
         <SettingsLayouts.Body>
           {/* Features */}
-          <Card>
-            <Tooltip
-              tooltip={
-                uniqueSources.length === 0
-                  ? "Set up connectors to use Search Mode"
-                  : undefined
-              }
-              side="top"
-            >
-              <Disabled disabled={uniqueSources.length === 0} allowClick>
-                <div className="w-full">
-                  <InputHorizontal
-                    title="Search Mode"
-                    tag={{ title: "beta", color: "blue" }}
-                    description="UI mode for quick document search across your organization."
+          <Card border="solid" rounding="lg">
+            <Section>
+              <Disabled
+                disabled={uniqueSources.length === 0}
+                allowClick
+                tooltip="Set up connectors to use Search Mode"
+              >
+                <InputHorizontal
+                  title="Search Mode"
+                  tag={{ title: "beta", color: "blue" }}
+                  description="UI mode for quick document search across your organization."
+                  disabled={uniqueSources.length === 0}
+                  withLabel
+                >
+                  <Switch
+                    checked={s.search_ui_enabled ?? true}
+                    onCheckedChange={(checked) => {
+                      void saveSettings({ search_ui_enabled: checked });
+                    }}
                     disabled={uniqueSources.length === 0}
-                    withLabel
-                  >
-                    <Switch
-                      checked={s.search_ui_enabled ?? true}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({ search_ui_enabled: checked });
-                      }}
-                      disabled={uniqueSources.length === 0}
-                    />
-                  </InputHorizontal>
-                </div>
+                  />
+                </InputHorizontal>
               </Disabled>
-            </Tooltip>
-            <InputHorizontal
-              title="Multi-Model Generation"
-              tag={{ title: "beta", color: "blue" }}
-              description="Allow multiple models to generate responses in parallel in chat."
-              withLabel
-            >
-              <Switch
-                checked={s.multi_model_chat_enabled ?? true}
-                onCheckedChange={(checked) => {
-                  void saveSettings({ multi_model_chat_enabled: checked });
-                }}
-              />
-            </InputHorizontal>
-            <InputHorizontal
-              title="Deep Research"
-              description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
-              withLabel
-            >
-              <Switch
-                checked={s.deep_research_enabled ?? true}
-                onCheckedChange={(checked) => {
-                  void saveSettings({ deep_research_enabled: checked });
-                }}
-              />
-            </InputHorizontal>
-            <InputHorizontal
-              title="Chat Auto-Scroll"
-              description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
-              withLabel
-            >
-              <Switch
-                checked={s.auto_scroll ?? false}
-                onCheckedChange={(checked) => {
-                  void saveSettings({ auto_scroll: checked });
-                }}
-              />
-            </InputHorizontal>
+              <InputHorizontal
+                title="Multi-Model Generation"
+                tag={{ title: "beta", color: "blue" }}
+                description="Allow multiple models to generate responses in parallel in chat."
+                withLabel
+              >
+                <Switch
+                  checked={s.multi_model_chat_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ multi_model_chat_enabled: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Deep Research"
+                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
+                withLabel
+              >
+                <Switch
+                  checked={s.deep_research_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ deep_research_enabled: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Chat Auto-Scroll"
+                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
+                withLabel
+              >
+                <Switch
+                  checked={s.auto_scroll ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputHorizontal>
+            </Section>
           </Card>
 
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
@@ -672,7 +695,10 @@ function ChatPreferencesForm() {
                     gap={0.25}
                   >
                     {uniqueSources.length === 0 ? (
-                      <EmptyMessage title="No connectors set up" />
+                      <EmptyMessageCard
+                        sizePreset="main-ui"
+                        title="No connectors set up"
+                      />
                     ) : (
                       <>
                         <Section
@@ -684,17 +710,15 @@ function ChatPreferencesForm() {
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
-                              <Card
-                                key={source}
-                                padding={0.75}
-                                className="w-[10rem]"
-                              >
-                                <Content
-                                  icon={meta.icon}
-                                  title={meta.displayName}
-                                  sizePreset="main-ui"
-                                />
-                              </Card>
+                              <div key={source} className="w-[10rem]">
+                                <Card padding="sm" border="solid">
+                                  <Content
+                                    icon={meta.icon}
+                                    title={meta.displayName}
+                                    sizePreset="main-ui"
+                                  />
+                                </Card>
+                              </div>
                             );
                           })}
                         </Section>
@@ -720,7 +744,7 @@ function ChatPreferencesForm() {
                   <SimpleCollapsible.Content>
                     <Section gap={0.5}>
                       {vectorDbEnabled && searchTool && (
-                        <Card>
+                        <Card border="solid" rounding="lg">
                           <InputHorizontal
                             title="Internal Search"
                             description="Search through your organization's connected knowledge base and documents."
@@ -736,15 +760,11 @@ function ChatPreferencesForm() {
                         </Card>
                       )}
 
-                      <Tooltip
-                        tooltip={
-                          imageGenTool
-                            ? undefined
-                            : "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
-                        }
-                        side="top"
+                      <Disabled
+                        disabled={!imageGenTool}
+                        tooltip="Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
                       >
-                        <Card variant={imageGenTool ? undefined : "disabled"}>
+                        <Card border="solid" rounding="lg">
                           <InputHorizontal
                             title="Image Generation"
                             description="Generate and manipulate images using AI-powered tools."
@@ -765,75 +785,79 @@ function ChatPreferencesForm() {
                             />
                           </InputHorizontal>
                         </Card>
-                      </Tooltip>
+                      </Disabled>
 
-                      <Card variant={webSearchTool ? undefined : "disabled"}>
-                        <InputHorizontal
-                          title="Web Search"
-                          description="Search the web for real-time information and up-to-date results."
-                          disabled={!webSearchTool}
-                          withLabel
-                        >
-                          <Switch
-                            checked={
-                              webSearchTool
-                                ? isToolEnabled(webSearchTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              webSearchTool &&
-                              void toggleTool(webSearchTool.id, checked)
-                            }
+                      <Disabled disabled={!webSearchTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Web Search"
+                            description="Search the web for real-time information and up-to-date results."
                             disabled={!webSearchTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                webSearchTool
+                                  ? isToolEnabled(webSearchTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                webSearchTool &&
+                                void toggleTool(webSearchTool.id, checked)
+                              }
+                              disabled={!webSearchTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                      <Card variant={openURLTool ? undefined : "disabled"}>
-                        <InputHorizontal
-                          title="Open URL"
-                          description="Fetch and read content from web URLs."
-                          disabled={!openURLTool}
-                          withLabel
-                        >
-                          <Switch
-                            checked={
-                              openURLTool
-                                ? isToolEnabled(openURLTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              openURLTool &&
-                              void toggleTool(openURLTool.id, checked)
-                            }
+                      <Disabled disabled={!openURLTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Open URL"
+                            description="Fetch and read content from web URLs."
                             disabled={!openURLTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                openURLTool
+                                  ? isToolEnabled(openURLTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                openURLTool &&
+                                void toggleTool(openURLTool.id, checked)
+                              }
+                              disabled={!openURLTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                      <Card
-                        variant={codeInterpreterTool ? undefined : "disabled"}
-                      >
-                        <InputHorizontal
-                          title="Code Interpreter"
-                          description="Generate and run code."
-                          disabled={!codeInterpreterTool}
-                          withLabel
-                        >
-                          <Switch
-                            checked={
-                              codeInterpreterTool
-                                ? isToolEnabled(codeInterpreterTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              codeInterpreterTool &&
-                              void toggleTool(codeInterpreterTool.id, checked)
-                            }
+                      <Disabled disabled={!codeInterpreterTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Code Interpreter"
+                            description="Generate and run code."
                             disabled={!codeInterpreterTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                codeInterpreterTool
+                                  ? isToolEnabled(codeInterpreterTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codeInterpreterTool &&
+                                void toggleTool(codeInterpreterTool.id, checked)
+                              }
+                              disabled={!codeInterpreterTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
                     </Section>
 
                     {/* Separator between built-in tools and MCP/OpenAPI tools */}
@@ -858,21 +882,21 @@ function ChatPreferencesForm() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <ExpandableCard.Root key={tool.id} defaultFolded>
-                          <ActionsLayouts.Header
+                        <Card key={tool.id} border="solid" rounding="lg">
+                          <InputHorizontal
+                            icon={SvgActions}
                             title={tool.display_name || tool.name}
                             description={tool.description}
-                            icon={SvgActions}
-                            rightChildren={
-                              <Switch
-                                checked={isToolEnabled(tool.id)}
-                                onCheckedChange={(checked) =>
-                                  toggleTool(tool.id, checked)
-                                }
-                              />
-                            }
-                          />
-                        </ExpandableCard.Root>
+                            withLabel
+                          >
+                            <Switch
+                              checked={isToolEnabled(tool.id)}
+                              onCheckedChange={(checked) =>
+                                toggleTool(tool.id, checked)
+                              }
+                            />
+                          </InputHorizontal>
+                        </Card>
                       ))}
                     </Section>
                   </SimpleCollapsible.Content>
@@ -888,40 +912,83 @@ function ChatPreferencesForm() {
             <SimpleCollapsible.Header title="Advanced Options" />
             <SimpleCollapsible.Content>
               <Section gap={1}>
-                <Card>
-                  <InputHorizontal
-                    title="Keep Chat History"
-                    description="Specify how long Onyx should retain chats in your organization."
-                    withLabel
-                  >
-                    <InputSelect
-                      value={
-                        s.maximum_chat_retention_days?.toString() ?? "forever"
-                      }
-                      onValueChange={(value) => {
-                        void saveSettings({
-                          maximum_chat_retention_days:
-                            value === "forever" ? null : parseInt(value, 10),
-                        });
-                      }}
+                <Card border="solid" rounding="lg">
+                  <Section>
+                    <InputHorizontal
+                      title="Keep Chat History"
+                      description="Specify how long Onyx should retain chats in your organization."
+                      withLabel
                     >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="forever">
-                          Forever
-                        </InputSelect.Item>
-                        <InputSelect.Item value="7">7 days</InputSelect.Item>
-                        <InputSelect.Item value="30">30 days</InputSelect.Item>
-                        <InputSelect.Item value="90">90 days</InputSelect.Item>
-                        <InputSelect.Item value="365">
-                          365 days
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
-                  </InputHorizontal>
+                      <InputSelect
+                        value={
+                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                        }
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            maximum_chat_retention_days:
+                              value === "forever" ? null : parseInt(value, 10),
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item value="forever">
+                            Forever
+                          </InputSelect.Item>
+                          <InputSelect.Item value="7">7 days</InputSelect.Item>
+                          <InputSelect.Item value="30">
+                            30 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="90">
+                            90 days
+                          </InputSelect.Item>
+                          <InputSelect.Item value="365">
+                            365 days
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+
+                    <InputHorizontal
+                      title="Query History Visibility"
+                      description="Control how your organization's full chat history appears in the Admin Panel."
+                      withLabel
+                    >
+                      <InputSelect
+                        value={s.query_history_type ?? QueryHistoryType.NORMAL}
+                        onValueChange={(value) => {
+                          void saveSettings({
+                            query_history_type: value as QueryHistoryType,
+                          });
+                        }}
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={QueryHistoryType.NORMAL}
+                            description="All queries are visible to admins and linked to individual users."
+                          >
+                            Show with User Info
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.ANONYMIZED}
+                            description="Queries are visible to admins with user identity removed"
+                          >
+                            Anonymized
+                          </InputSelect.Item>
+                          <InputSelect.Item
+                            value={QueryHistoryType.DISABLED}
+                            description="Query history reporting is disabled."
+                          >
+                            Hidden
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+                  </Section>
                 </Card>
 
-                <Card>
+                <Card border="solid" rounding="lg">
                   <InputVertical
                     title="File Attachment Size Limit"
                     description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
@@ -956,35 +1023,56 @@ function ChatPreferencesForm() {
                   </InputVertical>
                 </Card>
 
-                <Card>
+                <Card border="solid" rounding="lg">
                   <InputHorizontal
-                    title="Allow Anonymous Users"
-                    description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
+                    title="Image Extraction & Analysis"
+                    description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
                     withLabel
                   >
                     <Switch
-                      checked={s.anonymous_user_enabled ?? false}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({ anonymous_user_enabled: checked });
-                      }}
-                    />
-                  </InputHorizontal>
-
-                  <InputHorizontal
-                    title="Always Start with an Agent"
-                    description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
-                    withLabel
-                  >
-                    <Switch
-                      id="disable_default_assistant"
-                      checked={s.disable_default_assistant ?? false}
+                      checked={s.image_extraction_and_analysis_enabled ?? true}
                       onCheckedChange={(checked) => {
                         void saveSettings({
-                          disable_default_assistant: checked,
+                          image_extraction_and_analysis_enabled: checked,
                         });
                       }}
                     />
                   </InputHorizontal>
+                </Card>
+
+                <Card border="solid" rounding="lg">
+                  <Section>
+                    <InputHorizontal
+                      title="Allow Anonymous Users"
+                      description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
+                      withLabel
+                    >
+                      <Switch
+                        checked={s.anonymous_user_enabled ?? false}
+                        onCheckedChange={(checked) => {
+                          void saveSettings({
+                            anonymous_user_enabled: checked,
+                          });
+                        }}
+                      />
+                    </InputHorizontal>
+
+                    <InputHorizontal
+                      title="Always Start with an Agent"
+                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                      withLabel
+                    >
+                      <Switch
+                        id="disable_default_assistant"
+                        checked={s.disable_default_assistant ?? false}
+                        onCheckedChange={(checked) => {
+                          void saveSettings({
+                            disable_default_assistant: checked,
+                          });
+                        }}
+                      />
+                    </InputHorizontal>
+                  </Section>
                 </Card>
               </Section>
             </SimpleCollapsible.Content>
@@ -1046,14 +1134,11 @@ function ChatPreferencesForm() {
                       )}
                     </Text>
                   </Section>
-                  <OpalCard background="none" border="solid" padding="sm">
-                    <Content
-                      sizePreset="main-ui"
-                      icon={SvgAlertCircle}
-                      title="Modify with caution."
-                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                    />
-                  </OpalCard>
+                  <MessageCard
+                    title="Modify with caution."
+                    description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                    padding="xs"
+                  />
                 </Modal.Body>
                 <Modal.Footer>
                   <Button
@@ -1077,8 +1162,4 @@ function ChatPreferencesForm() {
       </Modal>
     </>
   );
-}
-
-export default function ChatPreferencesPage() {
-  return <ChatPreferencesForm />;
 }

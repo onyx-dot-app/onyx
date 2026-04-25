@@ -1,7 +1,7 @@
 "use client";
 
 import { SvgCheckCircle } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
@@ -34,7 +34,8 @@ export const PROVIDERS: ProviderConfig[] = [
     providerName: LLMProviderName.ANTHROPIC,
     recommended: true,
     models: [
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",

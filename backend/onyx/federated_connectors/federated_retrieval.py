@@ -255,11 +255,15 @@ def get_federated_retrieval_functions(
 
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
-            oauth_token.federated_connector.credentials.get_value(apply_mask=False),
+            oauth_token.federated_connector.credentials.get_value(  # ty: ignore[unresolved-attribute]
+                apply_mask=False
+            ),
         )
 
         # Capture variables by value to avoid lambda closure issues
-        access_token = oauth_token.token.get_value(apply_mask=False)
+        access_token = oauth_token.token.get_value(  # ty: ignore[unresolved-attribute]
+            apply_mask=False
+        )
 
         def create_retrieval_function(
             conn: FederatedConnector,

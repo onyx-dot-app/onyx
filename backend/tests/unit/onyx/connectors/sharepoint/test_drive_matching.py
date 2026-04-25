@@ -71,7 +71,7 @@ _SAMPLE_ITEM = DriveItemData(
 
 def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
     connector = SharepointConnector()
-    connector._graph_client = _FakeGraphClient(drives)
+    connector._graph_client = _FakeGraphClient(drives)  # ty: ignore[invalid-assignment]
     return connector
 
 
@@ -169,7 +169,7 @@ def test_get_drive_items_for_drive_id_matches_map(
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:
     connector = SharepointConnector()
-    connector._graph_client = object()
+    connector._graph_client = object()  # ty: ignore[invalid-assignment]
     connector.include_site_pages = False
 
     captured_drive_names: list[str] = []
@@ -212,6 +212,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
         access_token: str | None = None,  # noqa: ARG001
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
+        raw_file_callback: Any = None,  # noqa: ARG001
     ) -> Document:
         captured_drive_names.append(drive_name)
         return Document(

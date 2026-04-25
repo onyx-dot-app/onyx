@@ -572,7 +572,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
     async def validate_credentials(self) -> None:
         """Validate OpenAI API key by listing models."""
-        from openai import AuthenticationError, PermissionDeniedError
+        from openai import AuthenticationError
+        from openai import PermissionDeniedError
 
         client = self._get_client()
         try:
@@ -602,7 +603,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         """OpenAI supports real-time streaming TTS via Realtime API."""
         return True
 
-    async def create_streaming_transcriber(
+    async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
         self, _audio_format: str = "webm"
     ) -> OpenAIStreamingTranscriber:
         """Create a streaming transcription session using Realtime API."""

@@ -7,9 +7,7 @@ import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -20,7 +18,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
-
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
 
@@ -95,11 +92,13 @@ class ClickupConnector(LoadConnector, PollConnector):
             params["date_updated_lt"] = end
 
         if self.connector_type == "list":
-            params["list_ids[]"] = self.connector_ids
+            params["list_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
         elif self.connector_type == "folder":
-            params["project_ids[]"] = self.connector_ids
+            params["project_ids[]"] = (  # ty: ignore[invalid-assignment]
+                self.connector_ids
+            )
         elif self.connector_type == "space":
-            params["space_ids[]"] = self.connector_ids
+            params["space_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
 
         url_endpoint = f"/team/{self.team_id}/task"
 

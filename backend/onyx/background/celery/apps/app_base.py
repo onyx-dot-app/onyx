@@ -6,16 +6,16 @@ from typing import Any
 from typing import cast
 
 import sentry_sdk
-from celery import bootsteps  # type: ignore
+from celery import bootsteps  # ty: ignore[unresolved-import]
 from celery import Task
-from celery.app import trace
+from celery.app import trace  # ty: ignore[unresolved-import]
 from celery.exceptions import WorkerShutdown
 from celery.signals import before_task_publish
 from celery.signals import task_postrun
 from celery.signals import task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
-from celery.worker import strategy  # type: ignore
+from celery.worker import strategy  # ty: ignore[unresolved-import]
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
@@ -30,12 +30,11 @@ from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFI
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.opensearch.client import (
-    wait_for_opensearch_with_timeout,
-)
+from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
@@ -54,6 +53,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -68,7 +68,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
-        traces_sample_rate=0.1,
+        traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
         release=__version__,
         before_send=_add_instance_tags,
     )
@@ -531,23 +531,26 @@ def reset_tenant_id(
     CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
 
 
-def wait_for_vespa_or_shutdown(
-    sender: Any,  # noqa: ARG001
-    **kwargs: Any,  # noqa: ARG001
-) -> None:  # noqa: ARG001
-    """Waits for Vespa to become ready subject to a timeout.
-    Raises WorkerShutdown if the timeout is reached."""
+def wait_for_document_index_or_shutdown() -> None:
+    """
+    Waits for all configured document indices to become ready subject to a
+    timeout.
 
+    Raises WorkerShutdown if the timeout is reached.
+    """
     if DISABLE_VECTOR_DB:
         logger.info(
             "DISABLE_VECTOR_DB is set — skipping Vespa/OpenSearch readiness check."
         )
         return
 
-    if not wait_for_vespa_with_timeout():
-        msg = "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-        logger.error(msg)
-        raise WorkerShutdown(msg)
+    if not ONYX_DISABLE_VESPA:
+        if not wait_for_vespa_with_timeout():
+            msg = (
+                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
+            )
+            logger.error(msg)
+            raise WorkerShutdown(msg)
 
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         if not wait_for_opensearch_with_timeout():

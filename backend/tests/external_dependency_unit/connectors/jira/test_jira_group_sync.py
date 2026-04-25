@@ -14,7 +14,6 @@ from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
 from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 
-
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
 # Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN
@@ -46,6 +45,7 @@ _EXPECTED_JIRA_GROUPS = [
             "chris@onyx.app",
             "founders@onyx.app",
             "hagen@danswer.ai",
+            "oauth@onyx.app",
             "pablo@onyx.app",
             "yuhong@onyx.app",
         },
@@ -54,6 +54,11 @@ _EXPECTED_JIRA_GROUPS = [
     ExternalUserGroupSet(
         id="jira-admins-danswerai",
         user_emails={"founders@onyx.app", "hagen@danswer.ai", "pablo@onyx.app"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="jira-servicemanagement-users-danswerai",
+        user_emails={"oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
@@ -67,6 +72,7 @@ _EXPECTED_JIRA_GROUPS = [
             "chris@onyx.app",
             "founders@onyx.app",
             "hagen@danswer.ai",
+            "oauth@onyx.app",
             "pablo@onyx.app",
         },
         gives_anyone_access=False,
@@ -76,18 +82,19 @@ _EXPECTED_JIRA_GROUPS = [
         user_emails={
             "chris@onyx.app",
             "founders@onyx.app",
+            "oauth@onyx.app",
             "yuhong@onyx.app",
         },
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
         id="bitbucket-admins-onyxai",
-        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
         id="bitbucket-users-onyxai",
-        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
 ]

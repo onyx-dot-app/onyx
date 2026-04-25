@@ -99,6 +99,7 @@ export default function SwitchList({
                         item.leading) as React.FunctionComponent<IconProps>)
                     : undefined
                 }
+                strokeIcon={false}
                 rightChildren={
                   <Switch
                     checked={item.isEnabled}

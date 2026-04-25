@@ -17,7 +17,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -165,7 +164,7 @@ class ConnectorRunner(Generic[CT]):
                 checkpoint_connector_generator = load_from_checkpoint(
                     start=self.time_range[0].timestamp(),
                     end=self.time_range[1].timestamp(),
-                    checkpoint=checkpoint,
+                    checkpoint=checkpoint,  # ty: ignore[invalid-argument-type]
                 )
                 next_checkpoint: CT | None = None
                 # this is guaranteed to always run at least once with next_checkpoint being non-None
@@ -174,7 +173,9 @@ class ConnectorRunner(Generic[CT]):
                     hierarchy_node,
                     failure,
                     next_checkpoint,
-                ) in CheckpointOutputWrapper[CT]()(checkpoint_connector_generator):
+                ) in CheckpointOutputWrapper[CT]()(
+                    checkpoint_connector_generator  # ty: ignore[invalid-argument-type]
+                ):
                     if document is not None:
                         self.doc_batch.append(document)
 

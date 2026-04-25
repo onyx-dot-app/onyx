@@ -27,7 +27,6 @@ from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
 
-
 logger = setup_logger()
 
 
@@ -420,8 +419,12 @@ class TestRailConnector(LoadConnector, PollConnector):
         if isinstance(steps_separated, list) and steps_separated:
             rendered_steps: list[str] = []
             for idx, step_item in enumerate(steps_separated, start=1):
-                step_content = self._sanitize_rich_text(step_item.get("content"))
-                step_expected = self._sanitize_rich_text(step_item.get("expected"))
+                step_content = self._sanitize_rich_text(
+                    step_item.get("content")  # ty: ignore[unresolved-attribute]
+                )
+                step_expected = self._sanitize_rich_text(
+                    step_item.get("expected")  # ty: ignore[unresolved-attribute]
+                )
                 parts: list[str] = []
                 if step_content:
                     parts.append(f"Step {idx}: {step_content}")
@@ -533,11 +536,9 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    from onyx.configs.app_configs import (
-        TESTRAIL_API_KEY,
-        TESTRAIL_BASE_URL,
-        TESTRAIL_USERNAME,
-    )
+    from onyx.configs.app_configs import TESTRAIL_API_KEY
+    from onyx.configs.app_configs import TESTRAIL_BASE_URL
+    from onyx.configs.app_configs import TESTRAIL_USERNAME
 
     connector = TestRailConnector()
 

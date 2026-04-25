@@ -11,6 +11,8 @@ All public functions no-op in single-tenant mode (`MULTI_TENANT=False`).
 import time
 from typing import cast
 
+from prometheus_client import Counter
+from prometheus_client import Gauge
 from redis.client import Redis
 
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
@@ -26,6 +28,40 @@ logger = setup_logger()
 _SET_KEY = "active_tenants"
 
 
+# --- Prometheus metrics ---
+
+_active_set_size = Gauge(
+    "onyx_tenant_work_gating_active_set_size",
+    "Current cardinality of the active_tenants sorted set (updated once per "
+    "generator invocation when the gate reads it).",
+)
+
+_marked_total = Counter(
+    "onyx_tenant_work_gating_marked_total",
+    "Writes into active_tenants, labelled by caller.",
+    ["caller"],
+)
+
+_skipped_total = Counter(
+    "onyx_tenant_work_gating_skipped_total",
+    "Per-tenant fanouts skipped by the gate (enforce mode only), by task.",
+    ["task"],
+)
+
+_would_skip_total = Counter(
+    "onyx_tenant_work_gating_would_skip_total",
+    "Per-tenant fanouts that would have been skipped if enforce were on "
+    "(shadow counter), by task.",
+    ["task"],
+)
+
+_full_fanout_total = Counter(
+    "onyx_tenant_work_gating_full_fanout_total",
+    "Generator invocations that bypassed the gate for a full fanout cycle, by task.",
+    ["task"],
+)
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -39,10 +75,9 @@ def mark_tenant_active(tenant_id: str) -> None:
     current timestamp as the score). Best-effort — a Redis failure is logged
     and swallowed so it never breaks a writer path.
 
-    Call sites:
-    - Top of each gated beat-task consumer when its "is there work?" query
-      returns a non-empty result.
-    - cc_pair create lifecycle hook.
+    Raw write; does not check the feature flag. Writer call sites should
+    use `maybe_mark_tenant_active` instead so the feature flag gates the
+    ZADD.
     """
     if not MULTI_TENANT:
         return
@@ -53,6 +88,61 @@ def mark_tenant_active(tenant_id: str) -> None:
         _client().zadd(_SET_KEY, mapping={tenant_id: _now_ms()})
     except Exception:
         logger.exception(f"mark_tenant_active failed: tenant_id={tenant_id}")
+
+
+def maybe_mark_tenant_active(tenant_id: str, caller: str = "unknown") -> None:
+    """Convenience wrapper for writer call sites: records the tenant only
+    when the feature flag is on. Fully defensive — never raises, so a Redis
+    outage or flag-read failure can't abort the calling task.
+
+    `caller` labels the Prometheus counter so a dashboard can show which
+    consumer is firing the hook most.
+    """
+    try:
+        # Local import to avoid a module-load cycle: OnyxRuntime imports
+        # onyx.redis.redis_pool, so a top-level import here would wedge on
+        # certain startup paths.
+        from onyx.server.runtime.onyx_runtime import OnyxRuntime
+
+        if not OnyxRuntime.get_tenant_work_gating_enabled():
+            return
+        mark_tenant_active(tenant_id)
+        _marked_total.labels(caller=caller).inc()
+    except Exception:
+        logger.exception(f"maybe_mark_tenant_active failed: tenant_id={tenant_id}")
+
+
+def observe_active_set_size() -> int | None:
+    """Return `ZCARD active_tenants` and update the Prometheus gauge. Call
+    from the gate generator once per invocation so the dashboard has a
+    live reading.
+
+    Returns `None` on Redis error or in single-tenant mode; callers can
+    tolerate that (gauge simply doesn't update)."""
+    if not MULTI_TENANT:
+        return None
+    try:
+        size = cast(int, _client().zcard(_SET_KEY))
+        _active_set_size.set(size)
+        return size
+    except Exception:
+        logger.exception("observe_active_set_size failed")
+        return None
+
+
+def record_gate_decision(task_name: str, skipped: bool) -> None:
+    """Increment skip counters from the gate generator. Called once per
+    tenant that the gate would skip. Always increments the shadow counter;
+    increments the enforced counter only when `skipped=True`."""
+    _would_skip_total.labels(task=task_name).inc()
+    if skipped:
+        _skipped_total.labels(task=task_name).inc()
+
+
+def record_full_fanout_cycle(task_name: str) -> None:
+    """Increment the full-fanout counter. Called once per generator
+    invocation where the gate is bypassed (interval elapsed OR fail-open)."""
+    _full_fanout_total.labels(task=task_name).inc()
 
 
 def get_active_tenants(ttl_seconds: int) -> set[str] | None:

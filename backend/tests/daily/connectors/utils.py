@@ -70,7 +70,9 @@ def load_all_from_connector(
             else connector.load_from_checkpoint
         )
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
-            load_from_checkpoint_generator(start, end, checkpoint)
+            load_from_checkpoint_generator(  # ty: ignore[invalid-argument-type]
+                start, end, checkpoint  # ty: ignore[invalid-argument-type]
+            )
         )
 
         # Collect hierarchy nodes from this batch (for end-of-batch validation)

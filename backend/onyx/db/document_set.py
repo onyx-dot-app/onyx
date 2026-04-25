@@ -160,6 +160,24 @@ def get_document_sets_by_name(
     ).all()
 
 
+def filter_document_set_names_by_user_access(
+    db_session: Session,
+    document_set_names: list[str],
+    user: User,
+) -> set[str]:
+    """Return the subset of ``document_set_names`` the user has view access to.
+
+    Names that don't match an existing document set are omitted from the result.
+    """
+    if not document_set_names:
+        return set()
+    stmt = select(DocumentSetDBModel.name).where(
+        DocumentSetDBModel.name.in_(document_set_names)
+    )
+    stmt = _add_user_filters(stmt, user, get_editable=False)
+    return set(db_session.scalars(stmt).all())
+
+
 def get_document_sets_by_ids(
     db_session: Session, document_set_ids: list[int]
 ) -> Sequence[DocumentSetDBModel]:
@@ -488,7 +506,7 @@ def delete_document_set_cc_pair_relationship__no_commit(
         )
     )
     result = db_session.execute(delete_stmt)
-    return result.rowcount  # type: ignore
+    return result.rowcount  # ty: ignore[unresolved-attribute]
 
 
 def fetch_document_sets(
@@ -748,7 +766,7 @@ def fetch_document_sets_for_documents(
         .where(Document.id.in_(document_ids))
         .group_by(Document.id)
     )
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
 def get_or_create_document_set_by_name(
@@ -795,7 +813,7 @@ def check_document_sets_are_public(
         db_session.query(ConnectorCredentialPair.id)
         .filter(
             ConnectorCredentialPair.id.in_(
-                connector_credential_pair_ids  # type:ignore
+                connector_credential_pair_ids  # ty: ignore[invalid-argument-type]
             ),
             ConnectorCredentialPair.access_type != AccessType.PUBLIC,
         )

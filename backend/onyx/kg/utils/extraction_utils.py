@@ -591,7 +591,9 @@ def get_batch_documents_metadata(
     return batch_metadata
 
 
-def trackinfo_to_str(trackinfo: KGAttributeTrackInfo | None) -> str:
+def trackinfo_to_str(
+    trackinfo: KGAttributeTrackInfo | None,
+) -> str:  # ty: ignore[invalid-return-type]
     """Convert trackinfo to an LLM friendly string"""
     if trackinfo is None:
         return ""

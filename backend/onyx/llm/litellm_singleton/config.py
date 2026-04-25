@@ -12,10 +12,10 @@ def configure_litellm_settings() -> None:
     # If a user configures a different model and it doesn't support all the same
     # parameters like frequency and presence, just ignore them
     litellm.drop_params = True
-    litellm.telemetry = False
+    litellm.telemetry = False  # ty: ignore[invalid-assignment]
     litellm.modify_params = True
     litellm.add_function_to_prompt = False
-    litellm.suppress_debug_info = True
+    litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]
 
 
 # TODO: We might not need to register ollama_chat in addition to ollama but let's just do it for good measure for now.

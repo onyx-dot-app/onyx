@@ -114,7 +114,9 @@ def record_llm_span_output(
     elif isinstance(output, str):
         output_dict = {"role": "assistant", "content": output}
         if tool_calls:
-            output_dict["tool_calls"] = [tc.model_dump() for tc in tool_calls]
+            output_dict["tool_calls"] = [  # ty: ignore[invalid-assignment]
+                tc.model_dump() for tc in tool_calls
+            ]
         span.span_data.output = [output_dict]
     else:
         span.span_data.output = cast(Sequence[Mapping[str, Any]], output)

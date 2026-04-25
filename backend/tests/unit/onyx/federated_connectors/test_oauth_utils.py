@@ -61,7 +61,7 @@ class _MemoryCacheBackend(CacheBackend):
         raise NotImplementedError
 
 
-def _patched(cache: _MemoryCacheBackend):  # type: ignore[no-untyped-def]
+def _patched(cache: _MemoryCacheBackend):
     return patch(
         "onyx.federated_connectors.oauth_utils.get_cache_backend",
         return_value=cache,

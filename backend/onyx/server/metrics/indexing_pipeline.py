@@ -208,7 +208,9 @@ class QueueDepthCollector(_CachedCollector):
         inaccurate, which is the safest behavior for alerting.
         """
         try:
-            raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # type: ignore[assignment]
+            raw: bytes | str | None = redis_client.lindex(
+                queue_name, -1
+            )  # ty: ignore[invalid-assignment]
             if raw is None:
                 return None
             msg = json.loads(raw)
@@ -267,14 +269,18 @@ class RedisHealthCollector(_CachedCollector):
         )
 
         try:
-            mem_info: dict = redis_client.info("memory")  # type: ignore[assignment]
+            mem_info: dict = redis_client.info(  # ty: ignore[invalid-assignment]
+                "memory"
+            )
             memory_used.add_metric([], mem_info.get("used_memory", 0))
             memory_peak.add_metric([], mem_info.get("used_memory_peak", 0))
             frag = mem_info.get("mem_fragmentation_ratio")
             if frag is not None:
                 memory_frag.add_metric([], frag)
 
-            client_info: dict = redis_client.info("clients")  # type: ignore[assignment]
+            client_info: dict = redis_client.info(  # ty: ignore[invalid-assignment]
+                "clients"
+            )
             connected_clients.add_metric([], client_info.get("connected_clients", 0))
         except Exception:
             logger.debug("Failed to collect Redis health metrics", exc_info=True)
@@ -389,6 +395,15 @@ class WorkerHealthCollector(_CachedCollector):
 
     Reads worker status from ``WorkerHeartbeatMonitor`` which listens
     to the Celery event stream via a single persistent connection.
+
+    TODO: every monitoring pod subscribes to the cluster-wide Celery event
+    stream, so each replica reports health for *all* workers in the cluster,
+    not just itself. Prometheus distinguishes the replicas via the ``instance``
+    label, so this doesn't break scraping, but it means N monitoring replicas
+    do N× the work and may emit slightly inconsistent snapshots of the same
+    cluster. The proper fix is to have each worker expose its own health (or
+    to elect a single monitoring replica as the reporter) rather than
+    broadcasting the full cluster view from every monitoring pod.
     """
 
     def __init__(self, cache_ttl: float = 30.0) -> None:
@@ -407,10 +422,16 @@ class WorkerHealthCollector(_CachedCollector):
             "onyx_celery_active_worker_count",
             "Number of active Celery workers with recent heartbeats",
         )
+        # Celery hostnames are ``{worker_type}@{nodename}`` (see supervisord.conf).
+        # Emitting only the worker_type as a label causes N replicas of the same
+        # type to collapse into identical timeseries within a single scrape,
+        # which Prometheus rejects as "duplicate sample for timestamp". Split
+        # the pieces into separate labels so each replica is distinct; callers
+        # can still ``sum by (worker_type)`` to recover the old aggregated view.
         worker_up = GaugeMetricFamily(
             "onyx_celery_worker_up",
             "Whether a specific Celery worker is alive (1=up, 0=down)",
-            labels=["worker"],
+            labels=["worker_type", "hostname"],
         )
 
         try:
@@ -418,11 +439,15 @@ class WorkerHealthCollector(_CachedCollector):
             alive_count = sum(1 for alive in status.values() if alive)
             active_workers.add_metric([], alive_count)
 
-            for hostname in sorted(status):
-                # Use short name (before @) for single-host deployments,
-                # full hostname when multiple hosts share a worker type.
-                label = hostname.split("@")[0]
-                worker_up.add_metric([label], 1 if status[hostname] else 0)
+            for full_hostname in sorted(status):
+                worker_type, sep, host = full_hostname.partition("@")
+                if not sep:
+                    # Hostname didn't contain "@" — fall back to using the
+                    # whole string as the hostname with an empty type.
+                    worker_type, host = "", full_hostname
+                worker_up.add_metric(
+                    [worker_type, host], 1 if status[full_hostname] else 0
+                )
         except Exception:
             logger.debug("Failed to collect worker health metrics", exc_info=True)
 

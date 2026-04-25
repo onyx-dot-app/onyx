@@ -9,8 +9,10 @@ import pytest
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -111,15 +113,18 @@ def test_blob_s3_connector(
 
     for doc in all_docs:
         section = doc.sections[0]
-        assert isinstance(section, TextSection)
 
-        file_extension = get_file_ext(doc.semantic_identifier)
-        if file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+        if is_tabular_file(doc.semantic_identifier):
+            assert isinstance(section, TabularSection)
             assert len(section.text) > 0
             continue
 
-        # unknown extension
-        assert len(section.text) == 0
+        assert isinstance(section, TextSection)
+        file_extension = get_file_ext(doc.semantic_identifier)
+        if file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+            assert len(section.text) > 0
+        else:
+            assert len(section.text) == 0
 
 
 @patch(

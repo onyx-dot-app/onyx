@@ -21,7 +21,7 @@ class vespa_fixture:
         }
         response = requests.get(
             self.vespa_document_url,
-            params=params,  # type: ignore
+            params=params,
         )
         response.raise_for_status()
         return response.json()

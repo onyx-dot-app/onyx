@@ -11,14 +11,6 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { Interactive } from "@opal/core";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const STATES = ["empty", "filled", "selected"] as const;
 const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
@@ -28,7 +20,7 @@ const meta = {
   title: "opal/components/SelectCard",
   component: SelectCard,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },
@@ -209,7 +201,7 @@ export const PaddingVariants: Story = {
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title={`paddingVariant: ${padding}`}
+            title={`padding: ${padding}`}
             description="Shows padding differences."
           />
         </SelectCard>
@@ -227,7 +219,7 @@ export const RoundingVariants: Story = {
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title={`roundingVariant: ${rounding}`}
+            title={`rounding: ${rounding}`}
             description="Shows rounding differences."
           />
         </SelectCard>

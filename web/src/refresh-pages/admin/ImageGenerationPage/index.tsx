@@ -13,7 +13,7 @@ export default function ImageGenerationPage() {
         icon={route.icon}
         title={route.title}
         description="Settings for in-chat image generation."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <ImageGenerationContent />

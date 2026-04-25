@@ -13,7 +13,7 @@ export default function Main() {
         icon={route.icon}
         title={route.title}
         description="Connect OpenAPI servers to add custom actions and tools for your agents."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <OpenApiPageContent />

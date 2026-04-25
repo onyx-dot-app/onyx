@@ -60,10 +60,10 @@ def _is_user_already_exists_detail(detail: object) -> bool:
             or "register_user_already_exists" in normalized
         )
     if isinstance(detail, dict):
-        code = detail.get("code")
+        code = detail.get("code")  # ty: ignore[invalid-argument-type]
         if isinstance(code, str) and code.lower() == "register_user_already_exists":
             return True
-        message = detail.get("message")
+        message = detail.get("message")  # ty: ignore[invalid-argument-type]
         if isinstance(message, str) and "already exists" in message.lower():
             return True
     return False
@@ -182,4 +182,31 @@ def test_deleted_chat_session_access(
 def test_chat_session_not_found_returns_404(basic_user: DATestUser) -> None:
     """Verify unknown IDs return 404."""
     response = _get_chat_session(str(uuid4()), basic_user)
+    assert response.status_code == 404
+
+
+def _stop_chat_session(chat_session_id: str, user: DATestUser) -> requests.Response:
+    return requests.post(
+        f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+
+
+def test_stop_chat_session_rejects_non_owner(
+    basic_user: DATestUser, second_user: DATestUser
+) -> None:
+    """Non-owner callers must not be able to stop another user's chat session."""
+    chat_session = ChatSessionManager.create(user_performing_action=basic_user)
+
+    # Owner can stop their own session.
+    response = _stop_chat_session(str(chat_session.id), basic_user)
+    assert response.status_code == 200
+
+    # A different authenticated user must not be able to stop it.
+    response = _stop_chat_session(str(chat_session.id), second_user)
+    assert response.status_code == 404
+
+    # Unknown session IDs are also rejected.
+    response = _stop_chat_session(str(uuid4()), second_user)
     assert response.status_code == 404

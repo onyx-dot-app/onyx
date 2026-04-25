@@ -1,0 +1,86 @@
+/* ============================================================================
+   Checkbox — state x disabled color matrix
+
+   Visual styling is driven by two data attributes on the root element:
+     - `data-state`: "unchecked" | "checked" | "indeterminate"
+     - `data-disabled`: present when disabled
+
+   Layout and sizing are fixed (16x16 with rounded corners). The check/dash
+   icon inherits stroke color from the container.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------------- */
+
+.opal-checkbox {
+  @apply relative inline-flex shrink-0;
+}
+
+.opal-checkbox-surface {
+  @apply flex h-4 w-4 shrink-0 items-center justify-center rounded-04 transition-colors cursor-pointer;
+}
+
+.opal-checkbox-input {
+  @apply sr-only;
+}
+
+.opal-checkbox-icon {
+  @apply h-3 w-3 stroke-text-light-05;
+}
+
+/* ---------------------------------------------------------------------------
+   Unchecked
+   --------------------------------------------------------------------------- */
+
+.opal-checkbox-surface[data-state="unchecked"] {
+  @apply bg-background-neutral-00 border border-border-02;
+}
+
+.opal-checkbox-surface[data-state="unchecked"]:hover:not([data-disabled]) {
+  @apply border-border-03;
+}
+
+.opal-checkbox-surface[data-state="unchecked"]:focus-visible:not(
+    [data-disabled]
+  ) {
+  @apply border-border-05;
+}
+
+/* ---------------------------------------------------------------------------
+   Checked / Indeterminate
+   --------------------------------------------------------------------------- */
+
+.opal-checkbox-surface[data-state="checked"],
+.opal-checkbox-surface[data-state="indeterminate"] {
+  @apply bg-action-link-05;
+}
+
+.opal-checkbox-surface[data-state="checked"]:hover:not([data-disabled]),
+.opal-checkbox-surface[data-state="indeterminate"]:hover:not([data-disabled]) {
+  @apply bg-action-link-04;
+}
+
+.opal-checkbox-surface[data-state="checked"]:focus-visible:not([data-disabled]),
+.opal-checkbox-surface[data-state="indeterminate"]:focus-visible:not(
+    [data-disabled]
+  ) {
+  @apply border-border-05;
+}
+
+/* ---------------------------------------------------------------------------
+   Disabled
+   --------------------------------------------------------------------------- */
+
+.opal-checkbox-surface[data-disabled] {
+  @apply cursor-not-allowed;
+}
+
+.opal-checkbox-surface[data-state="unchecked"][data-disabled] {
+  @apply bg-background-neutral-03 border border-border-02;
+}
+
+.opal-checkbox-surface[data-state="checked"][data-disabled],
+.opal-checkbox-surface[data-state="indeterminate"][data-disabled] {
+  @apply bg-background-neutral-04;
+}

@@ -146,7 +146,9 @@ def test_execute_streaming_fallback_preserves_files_param() -> None:
 
     def mock_post(url: str, **kwargs: object) -> MagicMock:
         if "json" in kwargs:
-            captured_payloads.append(kwargs["json"])  # type: ignore[arg-type]
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
         if url.endswith("/v1/execute/stream"):
             return stream_resp
         if url.endswith("/v1/execute"):

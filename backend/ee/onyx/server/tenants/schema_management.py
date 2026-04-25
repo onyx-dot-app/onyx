@@ -3,12 +3,12 @@ import os
 import re
 from types import SimpleNamespace
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from alembic import command
-from alembic.config import Config
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -55,8 +55,10 @@ def run_alembic_migrations(schema_name: str) -> None:
         alembic_cfg.attributes["configure_logger"] = False
 
         # Mimic command-line options by adding 'cmd_opts' to the config
-        alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
-        alembic_cfg.cmd_opts.x = [f"schemas={schema_name}"]  # type: ignore
+        alembic_cfg.cmd_opts = SimpleNamespace()  # ty: ignore[invalid-assignment]
+        alembic_cfg.cmd_opts.x = [  # ty: ignore[invalid-assignment]
+            f"schemas={schema_name}"
+        ]
 
         # Run migrations programmatically
         command.upgrade(alembic_cfg, "head")

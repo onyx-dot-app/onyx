@@ -17,7 +17,7 @@ interface HoverableRootProps
   children: React.ReactNode;
   group: string;
   /** Width preset. @default "auto" */
-  widthVariant?: ExtremaSizeVariants;
+  width?: ExtremaSizeVariants;
   /**
    * JS-controllable interaction state override.
    *
@@ -70,7 +70,7 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
-  widthVariant = "full",
+  width = "full",
   interaction = "rest",
   ref,
   ...props
@@ -79,7 +79,7 @@ function HoverableRoot({
     <div
       {...props}
       ref={ref}
-      className={cn(widthVariants[widthVariant])}
+      className={cn(widthVariants[width])}
       data-hover-group={group}
       data-interaction={interaction !== "rest" ? interaction : undefined}
     >

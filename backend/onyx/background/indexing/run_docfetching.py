@@ -58,6 +58,9 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.file_store.staging import build_raw_file_callback
+from onyx.file_store.staging import RawFileCallback
+from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
@@ -69,7 +72,6 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
     get_persistent_document_writer,
 )
-from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
@@ -91,6 +93,7 @@ def _get_connector_runner(
     end_time: datetime,
     include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll connectors
@@ -109,6 +112,7 @@ def _get_connector_runner(
             input_type=task,
             connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
             credential=attempt.connector_credential_pair.credential,
+            raw_file_callback=raw_file_callback,
         )
 
         # validate the connector settings
@@ -269,20 +273,30 @@ def run_docfetching_entrypoint(
         )
         credential_id = attempt.connector_credential_pair.credential_id
 
-        on_index_attempt_status_change(
-            tenant_id=tenant_id,
-            source=attempt.connector_credential_pair.connector.source.value,
-            cc_pair_id=connector_credential_pair_id,
-            connector_name=connector_name or f"cc_pair_{connector_credential_pair_id}",
-            status="in_progress",
-        )
-
     logger.info(
         f"Docfetching starting{tenant_str}: "
         f"connector='{connector_name}' "
         f"config='{connector_config}' "
         f"credentials='{credential_id}'"
     )
+
+    raw_file_callback = build_raw_file_callback(
+        index_attempt_id=index_attempt_id,
+        cc_pair_id=connector_credential_pair_id,
+        tenant_id=tenant_id,
+    )
+
+    # Reap STAGING orphans from prior attempts on this cc_pair BEFORE we
+    # start fetching. Catches the crashed-worker case where the previous
+    # attempt couldn't run its own `finally` cleanup (OOM kill, pod
+    # eviction). Scoped by cc_pair + tenant so the sweep stays bounded.
+    with get_session_with_current_tenant() as reap_session:
+        reap_prior_attempt_staged_files(
+            current_attempt_id=index_attempt_id,
+            cc_pair_id=connector_credential_pair_id,
+            tenant_id=tenant_id,
+            db_session=reap_session,
+        )
 
     connector_document_extraction(
         app,
@@ -291,6 +305,7 @@ def run_docfetching_entrypoint(
         attempt.search_settings_id,
         tenant_id,
         callback,
+        raw_file_callback=raw_file_callback,
     )
 
     logger.info(
@@ -310,6 +325,7 @@ def connector_document_extraction(
     search_settings_id: int,
     tenant_id: str,
     callback: IndexingHeartbeatInterface | None = None,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> None:
     """Extract documents from connector and queue them for indexing pipeline processing.
 
@@ -460,6 +476,7 @@ def connector_document_extraction(
             start_time=window_start,
             end_time=window_end,
             include_permissions=should_fetch_permissions_during_indexing,
+            raw_file_callback=raw_file_callback,
         )
 
         # don't use a checkpoint if we're explicitly indexing from

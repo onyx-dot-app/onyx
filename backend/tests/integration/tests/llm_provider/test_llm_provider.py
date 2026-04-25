@@ -249,7 +249,7 @@ def test_update_model_configurations(
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
-                model_configuration.dict()
+                model_configuration.model_dump()
                 for model_configuration in model_configurations
             ],
             "is_public": True,
@@ -283,7 +283,7 @@ def test_update_model_configurations(
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
             "model_configurations": [
-                model_configuration.dict()
+                model_configuration.model_dump()
                 for model_configuration in updated_model_configurations
             ],
             "is_public": True,
@@ -316,7 +316,7 @@ def test_update_model_configurations(
             "provider": created_provider["provider"],
             "api_key": "sk-000000000000000000000000000000000000000000000001",
             "model_configurations": [
-                model_configuration.dict()
+                model_configuration.model_dump()
                 for model_configuration in updated_model_configurations
             ],
             "is_public": True,
@@ -361,7 +361,7 @@ def test_delete_llm_provider(
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
-                model_configuration.dict()
+                model_configuration.model_dump()
                 for model_configuration in model_configurations
             ],
             "is_public": True,
@@ -773,7 +773,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "name": "test-visibility-provider",
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "model_configurations": [config.dict() for config in model_configs],
+            "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
             "personas": [],
@@ -823,7 +823,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
-                config.dict() for config in edit_configs_all_visible
+                config.model_dump() for config in edit_configs_all_visible
             ],
             "is_public": True,
             "groups": [],
@@ -871,7 +871,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
-                config.dict() for config in edit_configs_one_visible
+                config.model_dump() for config in edit_configs_one_visible
             ],
             "is_public": True,
             "groups": [],
@@ -919,7 +919,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
-                config.dict() for config in edit_configs_none_visible
+                config.model_dump() for config in edit_configs_none_visible
             ],
             "is_public": True,
             "groups": [],

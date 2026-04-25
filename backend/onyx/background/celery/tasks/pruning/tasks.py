@@ -72,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
@@ -228,6 +229,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                 for cc_pair_entry in cc_pairs:
                     cc_pair_ids.append(cc_pair_entry.id)
 
+            prune_dispatched = False
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
                 with get_session_with_current_tenant() as db_session:
@@ -250,9 +252,18 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                         logger.info(f"Pruning not created: {cc_pair_id}")
                         continue
 
+                    prune_dispatched = True
                     task_logger.info(
                         f"Pruning queued: cc_pair={cc_pair.id} id={payload_id}"
                     )
+
+            # Tenant-work-gating hook: mark only when at least one cc_pair
+            # was actually due for pruning AND a prune task was dispatched.
+            # Marking on bare cc_pair existence over-counts the population
+            # since most tenants have cc_pairs but almost none are due on
+            # any given cycle.
+            if prune_dispatched:
+                maybe_mark_tenant_active(tenant_id, caller="check_for_pruning")
             r.set(OnyxRedisSignals.BLOCK_PRUNING, 1, ex=_get_pruning_block_expiration())
 
         # we want to run this less frequently than the overall task

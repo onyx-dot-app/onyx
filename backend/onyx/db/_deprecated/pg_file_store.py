@@ -16,7 +16,9 @@ logger = setup_logger()
 
 
 def get_pg_conn_from_session(db_session: Session) -> connection:
-    return db_session.connection().connection.connection  # type: ignore
+    return (
+        db_session.connection().connection.connection  # ty: ignore[unresolved-attribute]
+    )
 
 
 def create_populate_lobj(

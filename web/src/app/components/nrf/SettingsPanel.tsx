@@ -5,12 +5,13 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
+  ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 
 interface SettingRowProps {
@@ -95,7 +96,8 @@ export const SettingsPanel = ({
 }) => {
   const { useOnyxAsNewTab } = useNRFPreferences();
   const { theme, setTheme } = useTheme();
-  const { user, updateUserChatBackground } = useUser();
+  const { user, updateUserChatBackground, updateUserThemePreference } =
+    useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
@@ -104,10 +106,19 @@ export const SettingsPanel = ({
     setTheme(isDark ? "light" : "dark");
   };
 
-  const handleBackgroundChange = (backgroundId: string) => {
-    updateUserChatBackground(
-      backgroundId === CHAT_BACKGROUND_NONE ? null : backgroundId
-    );
+  const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
+    try {
+      await updateUserChatBackground(
+        bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+      );
+      if (bg.theme) {
+        setTheme(bg.theme);
+        await updateUserThemePreference(bg.theme);
+      }
+    } catch {
+      // errors are already logged and state is rolled back via refreshUser
+      // inside the update functions
+    }
   };
 
   return (
@@ -191,7 +202,7 @@ export const SettingsPanel = ({
                   label={bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
-                  onClick={() => handleBackgroundChange(bg.id)}
+                  onClick={() => handleBackgroundChange(bg)}
                 />
               ))}
             </div>

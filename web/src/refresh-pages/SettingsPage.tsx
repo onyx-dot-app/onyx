@@ -53,7 +53,7 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
@@ -61,12 +61,13 @@ import {
   CHAT_BACKGROUND_NONE,
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 interface PAT {
   id: number;
@@ -191,6 +192,24 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+
+  const applyBackground = useCallback(
+    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
+      try {
+        await updateUserChatBackground(
+          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+        );
+        if (bg.theme) {
+          setTheme(bg.theme);
+          await updateUserThemePreference(bg.theme);
+        }
+      } catch {
+        // errors are already logged and state is rolled back via refreshUser
+        // inside the update functions
+      }
+    },
+    [updateUserChatBackground, setTheme, updateUserThemePreference]
+  );
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -269,7 +288,7 @@ function GeneralSettings() {
             title="Profile"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
             <InputHorizontal
@@ -332,7 +351,7 @@ function GeneralSettings() {
             title="Appearance"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
             <InputHorizontal
@@ -394,11 +413,7 @@ function GeneralSettings() {
                   return (
                     <button
                       key={bg.id}
-                      onClick={() =>
-                        updateUserChatBackground(
-                          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-                        )
-                      }
+                      onClick={() => applyBackground(bg)}
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
                       aria-label={`${bg.label} background${
@@ -443,7 +458,7 @@ function GeneralSettings() {
             title="Danger Zone"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
             <InputHorizontal
@@ -763,6 +778,10 @@ function ChatPreferencesSettings() {
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
+  const {
+    enabled: smoothStreamingEnabled,
+    setEnabled: setSmoothStreamingEnabled,
+  } = useSmoothStreaming();
 
   const {
     personalizationValues,
@@ -831,7 +850,7 @@ function ChatPreferencesSettings() {
           title="Chats"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
           <InputHorizontal
@@ -857,6 +876,17 @@ function ChatPreferencesSettings() {
               onCheckedChange={(checked) => {
                 updateUserAutoScroll(checked);
               }}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Smooth Streaming"
+            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+            withLabel
+          >
+            <Switch
+              checked={smoothStreamingEnabled}
+              onCheckedChange={setSmoothStreamingEnabled}
             />
           </InputHorizontal>
 
@@ -920,7 +950,7 @@ function ChatPreferencesSettings() {
           title="Memory"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
           <InputHorizontal
@@ -968,7 +998,7 @@ function ChatPreferencesSettings() {
           title="Prompt Shortcuts"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
           <InputHorizontal
@@ -993,7 +1023,7 @@ function ChatPreferencesSettings() {
           title="Voice"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
           <InputHorizontal
@@ -1365,7 +1395,7 @@ function AccountsAccessSettings() {
             title="Accounts"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
             <InputHorizontal
@@ -1401,7 +1431,7 @@ function AccountsAccessSettings() {
               title="Access Tokens"
               sizePreset="main-content"
               variant="section"
-              widthVariant="full"
+              width="full"
             />
             {canCreateTokens ? (
               <Card padding={0.25}>
@@ -1463,8 +1493,8 @@ function AccountsAccessSettings() {
                       return (
                         <Interactive.Container
                           key={pat.id}
-                          heightVariant="fit"
-                          widthVariant="full"
+                          size="fit"
+                          width="full"
                         >
                           <div className="w-full bg-background-tint-01">
                             <AttachmentItemLayout
@@ -1605,7 +1635,7 @@ function FederatedConnectorCard({
           }
           sizePreset="main-content"
           variant="section"
-          paddingVariant="sm"
+          padding="sm"
           rightChildren={
             connector.has_oauth_token ? (
               <Button
@@ -1678,7 +1708,7 @@ function ConnectorsSettings() {
           title="Connectors"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         {hasConnectors ? (
           <>
@@ -1701,7 +1731,10 @@ function ConnectorsSettings() {
             ))}
           </>
         ) : (
-          <EmptyMessage title="No connectors set up for your organization." />
+          <EmptyMessageCard
+            sizePreset="main-ui"
+            title="No connectors set up for your organization."
+          />
         )}
       </Section>
     </Section>

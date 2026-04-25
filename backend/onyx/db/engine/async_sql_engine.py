@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import AsyncContextManager
 
-import asyncpg  # type: ignore
+import asyncpg
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
@@ -31,7 +31,6 @@ from onyx.db.engine.sql_engine import USE_IAM_AUTH
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
-
 
 # Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
@@ -75,7 +74,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         }
 
         if POSTGRES_USE_NULL_POOL:
-            engine_kwargs["poolclass"] = pool.NullPool
+            engine_kwargs["poolclass"] = pool.NullPool  # ty: ignore[invalid-assignment]
         else:
             engine_kwargs["pool_size"] = POSTGRES_API_SERVER_POOL_SIZE
             engine_kwargs["max_overflow"] = POSTGRES_API_SERVER_POOL_OVERFLOW

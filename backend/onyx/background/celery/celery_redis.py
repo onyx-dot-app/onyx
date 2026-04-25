@@ -12,7 +12,6 @@ from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 
-
 _broker_client: Redis | None = None
 _broker_url: str | None = None
 _broker_client_lock = threading.Lock()
@@ -179,7 +178,7 @@ def celery_inspect_get_workers(name_filter: str | None, app: Celery) -> list[str
 
     # filter for and create an indexing specific inspect object
     inspect = app.control.inspect()
-    workers: dict[str, Any] = inspect.ping()  # type: ignore
+    workers: dict[str, Any] = inspect.ping()  # ty: ignore[invalid-assignment]
     if workers:
         for worker_name in list(workers.keys()):
             # if the name filter not set, return all worker names
@@ -208,7 +207,9 @@ def celery_inspect_get_reserved(worker_names: list[str], app: Celery) -> set[str
     inspect = app.control.inspect(destination=worker_names)
 
     # get the list of reserved tasks
-    reserved_tasks: dict[str, list] | None = inspect.reserved()  # type: ignore
+    reserved_tasks: dict[str, list] | None = (  # ty: ignore[invalid-assignment]
+        inspect.reserved()
+    )
     if reserved_tasks:
         for _, task_list in reserved_tasks.items():
             for task in task_list:
@@ -229,7 +230,9 @@ def celery_inspect_get_active(worker_names: list[str], app: Celery) -> set[str]:
     inspect = app.control.inspect(destination=worker_names)
 
     # get the list of reserved tasks
-    active_tasks: dict[str, list] | None = inspect.active()  # type: ignore
+    active_tasks: dict[str, list] | None = (  # ty: ignore[invalid-assignment]
+        inspect.active()
+    )
     if active_tasks:
         for _, task_list in active_tasks.items():
             for task in task_list:

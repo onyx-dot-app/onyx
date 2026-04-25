@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock, SvgArrowRight } from "@opal/icons";
 import { logout } from "@/lib/user";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface NoLlmProvidersModalProps {
   open: boolean;

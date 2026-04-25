@@ -28,13 +28,9 @@ from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
 from onyx.kg.models import KGImpliedExtractionResults
 from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
-from onyx.kg.utils.extraction_utils import (
-    get_batch_documents_metadata,
-)
+from onyx.kg.utils.extraction_utils import get_batch_documents_metadata
 from onyx.kg.utils.extraction_utils import kg_deep_extraction
-from onyx.kg.utils.extraction_utils import (
-    kg_implied_extraction,
-)
+from onyx.kg.utils.extraction_utils import kg_implied_extraction
 from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import split_entity_id

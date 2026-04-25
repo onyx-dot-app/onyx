@@ -13,7 +13,8 @@ import {
 } from "@/app/app/message/MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
-import { transformLinkUri, cn } from "@/lib/utils";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 

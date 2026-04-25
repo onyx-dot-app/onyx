@@ -1,6 +1,7 @@
 "use client";
 
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -173,7 +174,7 @@ export default function InputImage({
   const dropzoneProps = onDrop ? getRootProps() : {};
 
   return (
-    <Hoverable.Root group="inputImage" widthVariant="fit">
+    <Hoverable.Root group="inputImage" width="fit">
       <div
         className={cn("relative", className)}
         style={{ width: size, height: size }}

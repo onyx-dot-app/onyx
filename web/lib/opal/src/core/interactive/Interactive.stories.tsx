@@ -135,7 +135,7 @@ export const VariantMatrix: StoryObj = {
   ),
 };
 
-/** All heightVariant sizes (lg, md, sm, xs, 2xs, fit). */
+/** All size presets (lg, md, sm, xs, 2xs, fit). */
 export const Sizes: StoryObj = {
   render: () => (
     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -146,7 +146,7 @@ export const Sizes: StoryObj = {
           prominence="secondary"
           onClick={() => {}}
         >
-          <Interactive.Container border heightVariant={size}>
+          <Interactive.Container border size={size}>
             <span>{size}</span>
           </Interactive.Container>
         </Interactive.Stateless>
@@ -155,7 +155,7 @@ export const Sizes: StoryObj = {
   ),
 };
 
-/** Container with widthVariant="full" stretching to fill its parent. */
+/** Container with width="full" stretching to fill its parent. */
 export const WidthFull: StoryObj = {
   render: () => (
     <div style={{ width: 400 }}>
@@ -164,7 +164,7 @@ export const WidthFull: StoryObj = {
         prominence="secondary"
         onClick={() => {}}
       >
-        <Interactive.Container border widthVariant="full">
+        <Interactive.Container border width="full">
           <span>Full width container</span>
         </Interactive.Container>
       </Interactive.Stateless>
@@ -183,7 +183,7 @@ export const Rounding: StoryObj = {
           prominence="secondary"
           onClick={() => {}}
         >
-          <Interactive.Container border roundingVariant={rounding}>
+          <Interactive.Container border rounding={rounding}>
             <span>{rounding}</span>
           </Interactive.Container>
         </Interactive.Stateless>

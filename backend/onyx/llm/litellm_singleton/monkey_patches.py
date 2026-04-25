@@ -244,7 +244,9 @@ def _patch_ollama_chunk_parser() -> None:
         except Exception as e:
             raise e
 
-    OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
+    OllamaChatCompletionResponseIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
+        _patched_chunk_parser
+    )
 
 
 def _patch_openai_responses_parallel_tool_calls() -> None:
@@ -275,18 +277,13 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
     def _patched_responses_chunk_parser(
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
+        from litellm.types.llms.openai import ChatCompletionToolCallFunctionChunk
+        from litellm.types.llms.openai import ResponsesAPIStreamEvents
+        from litellm.types.utils import ChatCompletionToolCallChunk
+        from litellm.types.utils import Delta
+        from litellm.types.utils import ModelResponseStream
+        from litellm.types.utils import StreamingChoices
         from pydantic import BaseModel
-
-        from litellm.types.llms.openai import (
-            ChatCompletionToolCallFunctionChunk,
-            ResponsesAPIStreamEvents,
-        )
-        from litellm.types.utils import (
-            ChatCompletionToolCallChunk,
-            Delta,
-            ModelResponseStream,
-            StreamingChoices,
-        )
 
         parsed_chunk = chunk
         if not parsed_chunk:
@@ -333,7 +330,9 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
                     function=function_chunk,
                 )
                 if provider_specific_fields:
-                    tool_call_chunk.provider_specific_fields = provider_specific_fields  # type: ignore
+                    tool_call_chunk.provider_specific_fields = (  # ty: ignore[unresolved-attribute]
+                        provider_specific_fields
+                    )
 
                 return ModelResponseStream(
                     choices=[
@@ -402,7 +401,9 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
                     function=function_chunk,
                 )
                 if provider_specific_fields:
-                    tool_call_chunk.provider_specific_fields = provider_specific_fields  # type: ignore
+                    tool_call_chunk.provider_specific_fields = (  # ty: ignore[unresolved-attribute]
+                        provider_specific_fields
+                    )
 
                 return ModelResponseStream(
                     choices=[
@@ -447,7 +448,9 @@ def _patch_openai_responses_parallel_tool_calls() -> None:
         )
 
     _patched_responses_chunk_parser.__name__ = "_patched_responses_chunk_parser"
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_responses_chunk_parser  # type: ignore[method-assign]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
+        _patched_responses_chunk_parser
+    )
 
 
 def _patch_openai_responses_transform_response() -> None:
@@ -547,13 +550,15 @@ def _patch_openai_responses_transform_response() -> None:
                                     if hasattr(choice, "message") and hasattr(
                                         choice.message, "reasoning_content"
                                     ):
-                                        choice.message.reasoning_content = combined_text
+                                        choice.message.reasoning_content = combined_text  # ty: ignore[invalid-assignment]
                     break  # Only process the first reasoning item
 
         return result
 
     _patched_transform_response.__name__ = "_patched_transform_response"
-    LiteLLMResponsesTransformationHandler.transform_response = _patched_transform_response  # type: ignore[method-assign]
+    LiteLLMResponsesTransformationHandler.transform_response = (  # ty: ignore[invalid-assignment]
+        _patched_transform_response
+    )
 
 
 def _patch_azure_responses_should_fake_stream() -> None:
@@ -587,7 +592,9 @@ def _patch_azure_responses_should_fake_stream() -> None:
         return False
 
     _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
-    AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream  # type: ignore[method-assign]
+    AzureOpenAIResponsesAPIConfig.should_fake_stream = (  # ty: ignore[invalid-assignment]
+        _patched_should_fake_stream
+    )
 
 
 def _patch_responses_api_usage_format() -> None:
@@ -610,14 +617,15 @@ def _patch_responses_api_usage_format() -> None:
     - litellm/llms/volcengine/responses/transformation.py (line 280)
     - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
     """
-    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
+    from litellm.types.llms.openai import ResponseAPIUsage
+    from litellm.types.llms.openai import ResponsesAPIResponse
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
     if getattr(original_model_construct, "_is_patched", False):
         return
 
-    @classmethod  # type: ignore[misc]
+    @classmethod
     def _patched_model_construct(
         cls: Any,
         _fields_set: Optional[set[str]] = None,
@@ -649,10 +657,12 @@ def _patch_responses_api_usage_format() -> None:
                         )
 
         # Call original model_construct (need to call it as unbound method)
-        return original_model_construct.__func__(cls, _fields_set, **values)  # type: ignore[attr-defined]
+        return original_model_construct.__func__(cls, _fields_set, **values)
 
-    _patched_model_construct._is_patched = True  # type: ignore[attr-defined]
-    ResponsesAPIResponse.model_construct = _patched_model_construct  # type: ignore[method-assign, assignment]
+    _patched_model_construct._is_patched = True  # ty: ignore[unresolved-attribute]
+    ResponsesAPIResponse.model_construct = (  # ty: ignore[invalid-assignment]
+        _patched_model_construct
+    )
 
 
 def _patch_logging_assembled_streaming_response() -> None:
@@ -670,12 +680,11 @@ def _patch_logging_assembled_streaming_response() -> None:
     """
     from litellm import LiteLLMLoggingObj
     from litellm.responses.utils import ResponseAPILoggingUtils
-    from litellm.types.llms.openai import (
-        ResponseAPIUsage,
-        ResponseCompletedEvent,
-        ResponsesAPIResponse,
-    )
-    from litellm.types.utils import ModelResponse, TextCompletionResponse
+    from litellm.types.llms.openai import ResponseAPIUsage
+    from litellm.types.llms.openai import ResponseCompletedEvent
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.utils import ModelResponse
+    from litellm.types.utils import TextCompletionResponse
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 
@@ -733,8 +742,12 @@ def _patch_logging_assembled_streaming_response() -> None:
         else:
             return None
 
-    _patched_get_assembled_streaming_response._is_patched = True  # type: ignore[attr-defined]
-    LiteLLMLoggingObj._get_assembled_streaming_response = _patched_get_assembled_streaming_response  # type: ignore[method-assign]
+    _patched_get_assembled_streaming_response._is_patched = (  # ty: ignore[unresolved-attribute]
+        True
+    )
+    LiteLLMLoggingObj._get_assembled_streaming_response = (  # ty: ignore[invalid-assignment]
+        _patched_get_assembled_streaming_response
+    )
 
 
 def _patch_responses_metadata_none() -> None:
@@ -757,8 +770,9 @@ def _patch_responses_metadata_none() -> None:
             which does not guard against metadata being explicitly None. Same pattern exists
             on line 1407 for async path.
     """
-    import litellm as _litellm
     from functools import wraps
+
+    import litellm as _litellm
 
     original_responses = _litellm.responses
 
@@ -771,7 +785,7 @@ def _patch_responses_metadata_none() -> None:
             kwargs["metadata"] = {}
         return original_responses(*args, **kwargs)
 
-    _patched_responses._metadata_patched = True  # type: ignore[attr-defined]
+    _patched_responses._metadata_patched = True  # ty: ignore[unresolved-attribute]
     _litellm.responses = _patched_responses
 
 

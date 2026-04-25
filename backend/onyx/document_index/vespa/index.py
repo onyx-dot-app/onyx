@@ -4,7 +4,7 @@ import logging
 import os
 import re
 import time
-import urllib
+import urllib.parse
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass

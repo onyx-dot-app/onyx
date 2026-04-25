@@ -33,7 +33,7 @@ import ChatUI from "@/sections/chat/ChatUI";
 import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
@@ -671,7 +671,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = "/admin/configuration/llm";
+            window.location.href = "/admin/configuration/language-models";
           }}
         >
           Set up an LLM.

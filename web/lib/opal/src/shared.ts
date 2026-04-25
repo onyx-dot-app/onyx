@@ -6,6 +6,8 @@
  * circular imports and gives every consumer a single source of truth.
  */
 
+import "@opal/root.css";
+
 import type {
   SizeVariants,
   OverridableExtremaSizeVariants,
@@ -21,14 +23,16 @@ import type {
  * Each entry maps a named preset to Tailwind utility classes for
  * `height`, `min-width`, and `padding`.
  *
- * | Key   | Height        | Padding  |
- * |-------|---------------|----------|
- * | `lg`  | 2.25rem (36px)| `p-2`   |
- * | `md`  | 1.75rem (28px)| `p-1`   |
- * | `sm`  | 1.5rem (24px) | `p-1`   |
- * | `xs`  | 1.25rem (20px)| `p-0.5` |
- * | `2xs` | 1rem (16px)   | `p-0.5` |
- * | `fit` | h-fit         | `p-0`   |
+ * Heights are driven by CSS custom properties defined in `@opal/root.css`.
+ *
+ * | Key   | Height                      | Padding  |
+ * |-------|-----------------------------|----------|
+ * | `lg`  | `--opal-line-height-lg`     | `p-2`   |
+ * | `md`  | `--opal-line-height-md`     | `p-1`   |
+ * | `sm`  | `--opal-line-height-sm`     | `p-1`   |
+ * | `xs`  | `--opal-line-height-xs`     | `p-0.5` |
+ * | `2xs` | `--opal-line-height-2xs`    | `p-0.5` |
+ * | `fit` | `h-fit`                     | `p-0`   |
  */
 type ContainerProperties = {
   height: string;
@@ -40,15 +44,31 @@ const containerSizeVariants: Record<
   ContainerProperties
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
-  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
-  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
-  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  lg: {
+    height: "h-[var(--opal-line-height-lg)]",
+    minWidth: "min-w-[var(--opal-line-height-lg)]",
+    padding: "p-2",
+  },
+  md: {
+    height: "h-[var(--opal-line-height-md)]",
+    minWidth: "min-w-[var(--opal-line-height-md)]",
+    padding: "p-1",
+  },
+  sm: {
+    height: "h-[var(--opal-line-height-sm)]",
+    minWidth: "min-w-[var(--opal-line-height-sm)]",
+    padding: "p-1",
+  },
   xs: {
-    height: "h-[1.25rem]",
-    minWidth: "min-w-[1.25rem]",
+    height: "h-[var(--opal-line-height-xs)]",
+    minWidth: "min-w-[var(--opal-line-height-xs)]",
     padding: "p-0.5",
   },
-  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  "2xs": {
+    height: "h-[var(--opal-line-height-2xs)]",
+    minWidth: "min-w-[var(--opal-line-height-2xs)]",
+    padding: "p-0.5",
+  },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -57,9 +77,9 @@ const containerSizeVariants: Record<
 // A named scale of width/height presets that map to Tailwind width/height utility classes.
 //
 // Consumers (for width):
-//   - Interactive.Container  (widthVariant)
+//   - Interactive.Container  (width)
 //   - Button                 (width)
-//   - Content                (widthVariant)
+//   - Content                (width)
 // ---------------------------------------------------------------------------
 
 /**
@@ -96,8 +116,8 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 // Shared padding and rounding scales for card components (Card, SelectCard).
 //
 // Consumers:
-//   - Card          (paddingVariant, roundingVariant)
-//   - SelectCard    (paddingVariant, roundingVariant)
+//   - Card          (padding, rounding)
+//   - SelectCard    (padding, rounding)
 // ---------------------------------------------------------------------------
 
 const paddingVariants: Record<PaddingVariants, string> = {
@@ -134,6 +154,20 @@ const cardRoundingVariants: Record<RoundingVariants, string> = {
   xs: "rounded-04",
 };
 
+const cardTopRoundingVariants: Record<RoundingVariants, string> = {
+  lg: "rounded-t-16",
+  md: "rounded-t-12",
+  sm: "rounded-t-08",
+  xs: "rounded-t-04",
+};
+
+const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
+  lg: "rounded-b-16",
+  md: "rounded-b-12",
+  sm: "rounded-b-08",
+  xs: "rounded-b-04",
+};
+
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
@@ -144,6 +178,8 @@ export {
   paddingXVariants,
   paddingYVariants,
   cardRoundingVariants,
+  cardTopRoundingVariants,
+  cardBottomRoundingVariants,
   widthVariants,
   heightVariants,
 };

@@ -25,11 +25,11 @@ def _make_litellm_style_error(
     """Create an exception with LiteLLM-style attributes."""
     exc = RuntimeError(message)
     if status_code is not None:
-        exc.status_code = status_code  # type: ignore[attr-defined]
+        exc.status_code = status_code  # ty: ignore[unresolved-attribute]
     if llm_provider is not None:
-        exc.llm_provider = llm_provider  # type: ignore[attr-defined]
+        exc.llm_provider = llm_provider  # ty: ignore[unresolved-attribute]
     if model is not None:
-        exc.model = model  # type: ignore[attr-defined]
+        exc.model = model  # ty: ignore[unresolved-attribute]
     return exc
 
 

@@ -229,7 +229,7 @@ def transition_attempt_to_in_progress(
             )
 
         attempt.status = IndexingStatus.IN_PROGRESS
-        attempt.time_started = attempt.time_started or func.now()  # type: ignore
+        attempt.time_started = attempt.time_started or func.now()
         db_session.commit()
         return attempt
     except Exception:
@@ -250,7 +250,7 @@ def mark_attempt_in_progress(
         ).scalar_one()
 
         attempt.status = IndexingStatus.IN_PROGRESS
-        attempt.time_started = index_attempt.time_started or func.now()  # type: ignore
+        attempt.time_started = index_attempt.time_started or func.now()
         db_session.commit()
 
         # Add telemetry for index attempt status change
@@ -546,6 +546,9 @@ def get_latest_index_attempts_parallel(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
 ) -> Sequence[IndexAttempt]:
+    # The session closes before returning, so only set eager_load_cc_pair=True if the
+    # caller actually accesses those relationships — otherwise it loads data for nothing
+    # and error_rows in particular can be very expensive on large deployments.
     with get_session_with_current_tenant() as db_session:
         return get_latest_index_attempts(
             secondary_index,

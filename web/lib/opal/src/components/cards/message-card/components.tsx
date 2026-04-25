@@ -1,6 +1,13 @@
+import "@opal/components/cards/shared.css";
 import "@opal/components/cards/message-card/styles.css";
 import { cn } from "@opal/utils";
-import type { RichStr, IconFunctionComponent } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  PaddingVariants,
+  RichStr,
+  StatusVariants,
+} from "@opal/types";
+import { paddingVariants } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
 import {
@@ -15,11 +22,9 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type MessageCardVariant = "default" | "info" | "success" | "warning" | "error";
-
 interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
-  variant?: MessageCardVariant;
+  variant?: StatusVariants;
 
   /** Override the default variant icon. */
   icon?: IconFunctionComponent;
@@ -29,6 +34,12 @@ interface MessageCardBaseProps {
 
   /** Optional description below the title. */
   description?: string | RichStr;
+
+  /** Padding preset. @default "sm" */
+  padding?: Extract<PaddingVariants, "sm" | "xs">;
+
+  /** Padding around the header Content area. @default "fit" */
+  headerPadding?: PaddingVariants;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -59,7 +70,7 @@ type MessageCardProps = MessageCardBaseProps &
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
-  MessageCardVariant,
+  StatusVariants,
   { icon: IconFunctionComponent; iconClass: string }
 > = {
   default: { icon: SvgAlertCircle, iconClass: "stroke-text-03" },
@@ -113,6 +124,8 @@ function MessageCard({
   icon: iconOverride,
   title,
   description,
+  padding = "sm",
+  headerPadding = "fit",
   bottomChildren,
   rightChildren,
   onClose,
@@ -134,18 +147,25 @@ function MessageCard({
   );
 
   return (
-    <div className="opal-message-card" data-variant={variant} ref={ref}>
-      <ContentAction
-        icon={(props) => (
-          <Icon {...props} className={cn(props.className, iconClass)} />
-        )}
-        title={title}
-        description={description}
-        sizePreset="main-ui"
-        variant="section"
-        paddingVariant="lg"
-        rightChildren={right}
-      />
+    <div
+      className={cn("opal-message-card", paddingVariants[padding])}
+      data-variant={variant}
+      data-opal-status-border={variant}
+      ref={ref}
+    >
+      <div className={paddingVariants[headerPadding]}>
+        <ContentAction
+          icon={(props) => (
+            <Icon {...props} className={cn(props.className, iconClass)} />
+          )}
+          title={title}
+          description={description}
+          sizePreset="main-ui"
+          variant="section"
+          padding="md"
+          rightChildren={right}
+        />
+      </div>
 
       {bottomChildren && (
         <>
@@ -157,4 +177,4 @@ function MessageCard({
   );
 }
 
-export { MessageCard, type MessageCardProps, type MessageCardVariant };
+export { MessageCard, type MessageCardProps };

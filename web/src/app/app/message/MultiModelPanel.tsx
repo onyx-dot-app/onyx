@@ -10,7 +10,7 @@ import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 
 export interface MultiModelPanelProps {
@@ -97,7 +97,7 @@ export default function MultiModelPanel({
       <ContentAction
         sizePreset="main-ui"
         variant="body"
-        paddingVariant="lg"
+        padding="lg"
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={

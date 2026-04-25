@@ -19,7 +19,7 @@ def assert_answer_stream_part_correct(
     assert isinstance(received, type(expected))
 
     if isinstance(received, Packet):
-        r_packet = cast(Packet, received)
+        r_packet = received
         e_packet = cast(Packet, expected)
 
         assert r_packet.placement == e_packet.placement

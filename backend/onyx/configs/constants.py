@@ -4,7 +4,6 @@ import socket
 from enum import auto
 from enum import Enum
 
-
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
 ONYX_UTM_SOURCE = "onyx_app"
@@ -137,6 +136,11 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 # hard timeout applied by the watchdog to the indexing connector run
 # to handle hung connectors
 CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
+
+# how long the indexing watchdog waits for a spawned subprocess to exit after
+# SIGTERM before escalating to SIGKILL. Kept short because we only fall into this
+# code path once we have already decided the process needs to die.
+CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
@@ -369,9 +373,11 @@ class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
+    CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    INDEXING_STAGING = "indexing_staging"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -450,6 +456,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
+    OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
@@ -638,10 +645,15 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS = {}
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
+# TCP_KEEPALIVE only exists on Darwin and TCP_KEEPIDLE only exists on Linux/BSD.
+# getattr keeps both branches type-checkable on either platform; any per-line
+# ty suppression (scoped or bare) would itself be flagged as unused on the
+# platform where the attribute actually resolves, since ty analyzes one
+# platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60
 
 
 class OnyxCallTypes(str, Enum):

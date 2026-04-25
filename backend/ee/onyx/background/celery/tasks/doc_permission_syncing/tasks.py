@@ -64,9 +64,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
-from onyx.db.permission_sync_attempt import (
-    mark_doc_permission_sync_attempt_in_progress,
-)
+from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_in_progress
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -80,6 +78,10 @@ from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSyn
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_docs_processed
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
+from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import doc_permission_sync_ctx
@@ -207,6 +209,11 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             for cc_pair in cc_pairs:
                 if _is_external_doc_permissions_sync_due(cc_pair):
                     cc_pair_ids_to_sync.append(cc_pair.id)
+
+        # Tenant-work-gating hook: refresh this tenant's active-set membership
+        # whenever doc-permission sync has any due cc_pairs to dispatch.
+        if cc_pair_ids_to_sync:
+            maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
 
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:
@@ -469,6 +476,8 @@ def connector_permission_sync_generator_task(
         _fail_doc_permission_sync_attempt(attempt_id, error_msg)
         return None
 
+    sync_start = time.monotonic()
+    connector_type: str = "unknown"
     try:
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
@@ -502,6 +511,7 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
+            connector_type = source_type.value
             sync_config = get_source_perm_sync_config(source_type)
             if sync_config is None:
                 error_msg = f"No sync config found for {source_type}"
@@ -587,7 +597,7 @@ def connector_permission_sync_generator_task(
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
-                    source_string=source_type,
+                    source_string=connector_type,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                     task_logger=task_logger,
@@ -599,6 +609,10 @@ def connector_permission_sync_generator_task(
                 f"RedisConnector.permissions.generate_tasks finished. "
                 f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
             )
+
+            inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
+            if docs_with_errors > 0:
+                inc_doc_perm_sync_errors(connector_type, docs_with_errors)
 
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
@@ -632,6 +646,7 @@ def connector_permission_sync_generator_task(
         redis_connector.permissions.set_fence(None)
         raise e
     finally:
+        observe_doc_perm_sync_duration(time.monotonic() - sync_start, connector_type)
         if lock.owned():
             lock.release()
 

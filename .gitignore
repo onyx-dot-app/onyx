@@ -61,4 +61,4 @@ node_modules
 plans/
 
 # Added context for LLMs
-onyx-llm-context/
+.claude/CLAUDE.md

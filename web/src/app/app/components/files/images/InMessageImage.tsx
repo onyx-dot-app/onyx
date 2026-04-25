@@ -5,7 +5,7 @@ import { FullImageModal } from "@/app/app/components/files/images/FullImageModal
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 const DEFAULT_SHAPE: ImageShape = "square";
 
@@ -77,7 +77,7 @@ export const InMessageImage = memo(function InMessageImage({
         onOpenChange={(open) => setFullImageShowing(open)}
       />
 
-      <Hoverable.Root group="messageImage" widthVariant="fit">
+      <Hoverable.Root group="messageImage" width="fit">
         <div className={cn("relative", shapeContainerClasses)}>
           {!imageLoaded && (
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />

@@ -204,7 +204,7 @@ def process_all_chat_feedback(onyx_url: str, api_key: str | None) -> None:
             except requests.exceptions.HTTPError:
                 logger.exception("get_session_history failed.")
 
-            for m in s.messages:
+            for m in s.messages:  # ty: ignore[possibly-unresolved-reference]
                 logger.info(
                     f"user={user_id} "
                     f"session={session.id} "

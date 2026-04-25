@@ -6,59 +6,63 @@ A namespace of card layout primitives. Each sub-component handles a specific reg
 
 ## Card.Header
 
-A card header layout that pairs a [`Content`](../content/README.md) block with a right-side column and an optional full-width children slot.
+A card header layout with a main content slot, an optional right-aligned column below, and a full-width `bottomChildren` slot.
 
 ### Why Card.Header?
 
-[`ContentAction`](../content-action/README.md) provides a single `rightChildren` slot. Card headers typically need two distinct right-side regions — a primary action on top and secondary actions on the bottom. `Card.Header` provides this with `rightChildren` and `bottomRightChildren` slots, plus a `children` slot for full-width content below the header row (e.g., search bars, expandable tool lists).
+`Card.Header` is layout-only — it provides `children` for the main content area plus `bottomRightChildren` and `bottomChildren` for secondary slots. For the typical icon/title/description + right-action pattern, pass a `<ContentAction />` into `children` with `rightChildren` for the action button.
 
 ### Props
 
-Inherits **all** props from [`Content`](../content/README.md) (icon, title, description, sizePreset, variant, editable, onTitleChange, suffix, etc.) plus:
-
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `rightChildren` | `ReactNode` | `undefined` | Content rendered to the right of the Content block (top of right column). |
-| `bottomRightChildren` | `ReactNode` | `undefined` | Content rendered below `rightChildren` in the same column. Laid out as `flex flex-row`. |
-| `children` | `ReactNode` | `undefined` | Content rendered below the full header row, spanning the entire width. |
+| `children` | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction />` block. |
+| `bottomRightChildren` | `ReactNode` | `undefined` | Content rendered below `children` in a right-aligned column. Laid out as `flex flex-row`. |
+| `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width. |
 
 ### Layout Structure
 
 ```
-+---------------------------------------------------------+
-| [Content (p-2, self-start)]    [rightChildren]          |
-|  icon + title + description    [bottomRightChildren]    |
-+---------------------------------------------------------+
-| [children — full width]                                 |
-+---------------------------------------------------------+
++-----------------------------------+
+| children                    |
++                  +----------------+
+|                  | bottomRight    |
++------------------+----------------+
+| bottomChildren (full width)       |
++-----------------------------------+
 ```
 
 - Outer wrapper: `flex flex-col w-full`
-- Header row: `flex flex-row items-stretch w-full`
-- Content area: `flex-1 min-w-0 self-start p-2` — top-aligned with fixed padding
-- Right column: `flex flex-col items-end shrink-0` — no padding, no gap
-- `bottomRightChildren` wrapper: `flex flex-row` — lays children out horizontally
-- `children` wrapper: `w-full` — only rendered when children are provided
+- Header row: `flex flex-row items-start w-full` — columns are independent in height
+- Left column (children wrapper): `self-start grow min-w-0` — grows to fill available space
+- Right column: `flex flex-col items-end shrink-0` — only rendered when `bottomRightChildren` is provided
+- `bottomChildren` wrapper: `w-full` — only rendered when provided
 
 ### Usage
 
-#### Card with primary and secondary actions
+#### Card with right action and bottom-right actions
 
 ```tsx
-import { Card } from "@opal/layouts";
+import { Card, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 <Card.Header
-  icon={SvgGlobe}
-  title="Google Search"
-  description="Web search provider"
-  sizePreset="main-ui"
-  variant="section"
-  rightChildren={
-    <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
-      Current Default
-    </Button>
+
+  children={
+    <ContentAction
+      icon={SvgGlobe}
+      title="Google Search"
+      description="Web search provider"
+      sizePreset="main-ui"
+      variant="section"
+      padding="fit"
+      rightChildren={
+        <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
+          Current Default
+        </Button>
+      }
+    />
   }
   bottomRightChildren={
     <>
@@ -73,44 +77,59 @@ import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header
-  icon={SvgCloud}
-  title="OpenAI"
-  description="Not configured"
-  sizePreset="main-ui"
-  variant="section"
-  rightChildren={
-    <Button rightIcon={SvgArrowExchange} prominence="tertiary">
-      Connect
-    </Button>
+
+  children={
+    <ContentAction
+      icon={SvgCloud}
+      title="OpenAI"
+      description="Not configured"
+      sizePreset="main-ui"
+      variant="section"
+      padding="fit"
+      rightChildren={
+        <Button rightIcon={SvgArrowExchange} prominence="tertiary">
+          Connect
+        </Button>
+      }
+    />
   }
 />
 ```
 
-#### Card with expandable children
+#### Card with bottom children
 
 ```tsx
 <Card.Header
-  icon={SvgServer}
-  title="MCP Server"
-  description="12 tools available"
-  sizePreset="main-ui"
-  variant="section"
-  rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
->
-  <SearchBar placeholder="Search tools..." />
-</Card.Header>
-```
 
-#### No right children
-
-```tsx
-<Card.Header
-  icon={SvgInfo}
-  title="Section Header"
-  description="Description text"
-  sizePreset="main-content"
-  variant="section"
+  children={
+    <ContentAction
+      icon={SvgServer}
+      title="MCP Server"
+      description="12 tools available"
+      sizePreset="main-ui"
+      variant="section"
+      padding="fit"
+      rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
+    />
+  }
+  bottomChildren={<SearchBar placeholder="Search tools..." />}
 />
 ```
 
-When both `rightChildren` and `bottomRightChildren` are omitted and no `children` are provided, the component renders only the padded `Content`.
+#### No actions
+
+```tsx
+<Card.Header
+
+  children={
+    <ContentAction
+      icon={SvgInfo}
+      title="Section Header"
+      description="Description text"
+      sizePreset="main-content"
+      variant="section"
+      padding="fit"
+    />
+  }
+/>
+```

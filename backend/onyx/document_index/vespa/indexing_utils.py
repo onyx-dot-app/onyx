@@ -62,7 +62,6 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 
-
 logger = setup_logger()
 
 # Retry configuration constants
@@ -390,7 +389,7 @@ class BaseHTTPXClientContext(ABC):
         pass
 
     @abstractmethod
-    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+    def __exit__(self, exc_type, exc_value, traceback):
         pass
 
 
@@ -403,7 +402,7 @@ class GlobalHTTPXClientContext(BaseHTTPXClientContext):
     def __enter__(self) -> httpx.Client:
         return self._client  # Reuse the global client
 
-    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+    def __exit__(self, exc_type, exc_value, traceback):
         pass  # Do nothing; don't close the global client
 
 
@@ -418,6 +417,6 @@ class TemporaryHTTPXClientContext(BaseHTTPXClientContext):
         self._client = self._client_factory()  # Create a new client
         return self._client
 
-    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore
+    def __exit__(self, exc_type, exc_value, traceback):
         if self._client:
             self._client.close()

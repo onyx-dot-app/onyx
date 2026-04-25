@@ -728,10 +728,25 @@ def run_deep_research_llm_loop(
                         research_results.intermediate_reports
                     ):
                         if report is None:
-                            # The LLM will not see that this research was even attempted, it may try
-                            # something similar again but this is not bad.
+                            # Every tool_use id in the preceding assistant message must have a
+                            # matching TOOL_CALL_RESPONSE or strict providers (e.g. AWS Bedrock
+                            # Converse) reject the next request with 400 "Expected toolResult
+                            # blocks at messages.N.content for the following Ids: ...". Emit a
+                            # synthetic failure response so the invariant holds and the LLM
+                            # knows the call failed.
                             logger.error(
-                                f"Research agent call at tab_index {tab_index} failed, skipping"
+                                f"Research agent call at tab_index {tab_index} failed; emitting synthetic failure response"
+                            )
+                            failed_tool_call = research_agent_calls[tab_index]
+                            failure_message = "Research agent call failed. Try a different approach or continue without this result."
+                            simple_chat_history.append(
+                                ChatMessageSimple(
+                                    message=failure_message,
+                                    token_count=token_counter(failure_message),
+                                    message_type=MessageType.TOOL_CALL_RESPONSE,
+                                    tool_call_id=failed_tool_call.tool_call_id,
+                                    image_files=None,
+                                )
                             )
                             continue
 

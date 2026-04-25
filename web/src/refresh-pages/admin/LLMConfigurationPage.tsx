@@ -5,7 +5,7 @@ import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, Card as CardLayout, InputHorizontal } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import {
   Button,
   Divider,
@@ -140,12 +140,13 @@ function ExistingProviderCard({
           rounding="lg"
           onClick={() => setIsOpen(true)}
         >
-          <CardLayout.Header
+          <ContentAction
             icon={icon}
             title={provider.name}
             description={companyName}
             sizePreset="main-ui"
             variant="section"
+            padding="lg"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
@@ -204,12 +205,13 @@ function NewProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <CardLayout.Header
+      <ContentAction
         icon={icon}
         title={productName}
         description={companyName}
         sizePreset="main-ui"
         variant="section"
+        padding="lg"
         rightChildren={
           <Button
             rightIcon={SvgArrowExchange}
@@ -251,12 +253,13 @@ function NewCustomProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <CardLayout.Header
+      <ContentAction
         icon={icon}
         title={productName}
         description={companyName}
         sizePreset="main-ui"
         variant="section"
+        padding="lg"
         rightChildren={
           <Button
             rightIcon={SvgArrowExchange}
@@ -332,7 +335,7 @@ export default function LLMConfigurationPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
 
       <SettingsLayouts.Body>
         {hasProviders ? (

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
-import { Button, Text } from "@opal/components";
+import { Button, LinkButton, Text } from "@opal/components";
 import {
   SvgCheckCircle,
   SvgShareWebhook,
@@ -272,7 +272,7 @@ export default function HookFormModal({
                   <ContentAction
                     sizePreset="main-ui"
                     variant="section"
-                    paddingVariant="fit"
+                    padding="fit"
                     title={hookPointDisplayName}
                     description={hookPointDescription}
                     rightChildren={
@@ -283,19 +283,12 @@ export default function HookFormModal({
                           icon={SvgShareWebhook}
                           title="Hook Point"
                           prominence="muted"
-                          widthVariant="fit"
+                          width="fit"
                         />
                         {docsUrl && (
-                          <a
-                            href={docsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline leading-none"
-                          >
-                            <Text font="secondary-body" color="text-03">
-                              Documentation
-                            </Text>
-                          </a>
+                          <LinkButton href={docsUrl} target="_blank">
+                            Documentation
+                          </LinkButton>
                         )}
                       </div>
                     }

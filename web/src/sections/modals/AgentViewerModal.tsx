@@ -10,7 +10,7 @@ import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { Divider } from "@opal/components";
+import { Card, Divider } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import {
   SvgActions,
@@ -21,12 +21,10 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import * as ExpandableCard from "@/layouts/expandable-card-layouts";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -50,46 +48,51 @@ interface ViewerMCPServerCardProps {
 }
 
 function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
-  const [folded, setFolded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const serverIcon = getActionIcon(server.server_url, server.name);
 
   return (
-    <ExpandableCard.Root isFolded={folded} onFoldedChange={setFolded}>
-      <ExpandableCard.Header>
-        <div className="p-2">
-          <ContentAction
-            icon={serverIcon}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            rightChildren={
-              <Button
-                prominence="internal"
-                rightIcon={folded ? SvgExpand : SvgFold}
-                onClick={() => setFolded((prev) => !prev)}
-              >
-                {folded ? "Expand" : "Fold"}
-              </Button>
-            }
-          />
-        </div>
-      </ExpandableCard.Header>
-      {tools.length > 0 && (
-        <ActionsLayouts.Content>
-          {tools.map((tool) => (
-            <Section key={tool.id} padding={0.25}>
-              <Content
-                title={tool.display_name}
-                description={tool.description}
-                sizePreset="main-ui"
-                variant="section"
-              />
-            </Section>
-          ))}
-        </ActionsLayouts.Content>
-      )}
-    </ExpandableCard.Root>
+    <Card
+      expandable
+      expanded={expanded}
+      border="solid"
+      rounding="lg"
+      padding="sm"
+      expandedContent={
+        tools.length > 0 ? (
+          <div className="flex flex-col gap-2 p-2">
+            {tools.map((tool) => (
+              <Section key={tool.id} padding={0.25}>
+                <Content
+                  title={tool.display_name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+              </Section>
+            ))}
+          </div>
+        ) : undefined
+      }
+    >
+      <ContentAction
+        icon={serverIcon}
+        title={server.name}
+        description={server.description}
+        sizePreset="main-ui"
+        variant="section"
+        padding="lg"
+        rightChildren={
+          <Button
+            prominence="internal"
+            rightIcon={expanded ? SvgFold : SvgExpand}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? "Fold" : "Expand"}
+          </Button>
+        }
+      />
+    </Card>
   );
 }
 
@@ -99,19 +102,15 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <ExpandableCard.Root>
-      <ExpandableCard.Header>
-        <div className="p-2">
-          <Content
-            icon={SvgActions}
-            title={tool.display_name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-        </div>
-      </ExpandableCard.Header>
-    </ExpandableCard.Root>
+    <Card border="solid" rounding="lg" padding="md">
+      <Content
+        icon={SvgActions}
+        title={tool.display_name}
+        description={tool.description}
+        sizePreset="main-ui"
+        variant="section"
+      />
+    </Card>
   );
 }
 
@@ -255,7 +254,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 title="Featured"
                 sizePreset="main-ui"
                 variant="body"
-                widthVariant="fit"
+                width="fit"
               />
             )}
             <Content
@@ -264,7 +263,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               sizePreset="main-ui"
               variant="body"
               prominence="muted"
-              widthVariant="fit"
+              width="fit"
             />
             {agent.is_public && (
               <Content
@@ -273,7 +272,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 sizePreset="main-ui"
                 variant="body"
                 prominence="muted"
-                widthVariant="fit"
+                width="fit"
               />
             )}
           </Section>
@@ -307,7 +306,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 })}
               </Section>
             ) : (
-              <EmptyMessage title="No Knowledge" />
+              <EmptyMessageCard sizePreset="main-ui" title="No Knowledge" />
             )}
           </Section>
 
@@ -329,7 +328,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   ))}
                 </Section>
               ) : (
-                <EmptyMessage title="No Actions" />
+                <EmptyMessageCard sizePreset="main-ui" title="No Actions" />
               )}
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
@@ -369,7 +368,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 <InputHorizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  withLabel
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </InputHorizontal>
@@ -413,7 +411,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         sizePreset="main-ui"
                         variant="body"
                         prominence="muted"
-                        widthVariant="full"
+                        width="full"
                       />
                     </Interactive.Container>
                   </Interactive.Stateless>

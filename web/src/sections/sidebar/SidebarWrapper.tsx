@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";

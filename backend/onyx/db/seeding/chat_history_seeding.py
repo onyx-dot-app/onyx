@@ -1,6 +1,7 @@
 import random
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from logging import getLogger
 from uuid import UUID
 
@@ -43,7 +44,7 @@ def seed_chat_history(
                 logger.info(f"Seeded messages for {x} sessions so far.")
 
             row = rows[x]
-            row.time_created = datetime.utcnow() - timedelta(
+            row.time_created = datetime.now(tz=timezone.utc) - timedelta(
                 days=random.randint(0, days)
             )
             row.time_updated = row.time_created + timedelta(
