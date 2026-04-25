@@ -44,6 +44,18 @@ Respond ONLY with valid JSON in this exact shape:
 """
 
 
+def _strip_code_fence(text: str) -> str:
+    """Strip markdown code fences (```json ... ```) if present."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # remove the opening fence line and closing fence
+        lines = stripped.splitlines()
+        # drop first line (```json or ```) and last line (```)
+        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+        return "\n".join(inner)
+    return stripped
+
+
 class ClaudeProvider(LLMProvider):
     MODEL = "claude-sonnet-4-6"
 
@@ -86,7 +98,7 @@ class ClaudeProvider(LLMProvider):
             ],
         )
 
-        data = json.loads(response.content[0].text)
+        data = json.loads(_strip_code_fence(response.content[0].text))
         return IngestResult(
             wiki_pages=[WikiPageDraft(**p) for p in data["wiki_pages"]],
             cross_refs=[CrossRefProposal(**r) for r in data.get("cross_refs", [])],
@@ -121,5 +133,5 @@ class ClaudeProvider(LLMProvider):
             ],
         )
 
-        data = json.loads(response.content[0].text)
+        data = json.loads(_strip_code_fence(response.content[0].text))
         return QueryResult(answer=data["answer"], citations=data.get("citations", []))
