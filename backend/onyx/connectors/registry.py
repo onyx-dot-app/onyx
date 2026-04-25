@@ -221,4 +221,8 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
     ),
+    DocumentSource.WIKI_RAW_FS: ConnectorMapping(
+        module_path="knowledge_layer.connectors.filesystem",
+        class_name="FilesystemConnector",
+    ),
 }

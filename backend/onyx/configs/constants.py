@@ -267,6 +267,9 @@ class DocumentSource(str, Enum):
     # Uses RAW_BINARY processing mode - no text extraction
     CRAFT_FILE = "craft_file"
 
+    # team-brain: local filesystem raw document source
+    WIKI_RAW_FS = "wiki_raw_fs"
+
 
 class FederatedConnectorSource(str, Enum):
     FEDERATED_SLACK = "federated_slack"
@@ -722,4 +725,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.WIKI_RAW_FS: "team-brain raw filesystem documents",
 }

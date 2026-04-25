@@ -191,6 +191,8 @@ services:
       - background_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
+      # team-brain: raw source documents from the host, read-only
+      - ${RAW_DOCS_PATH:-/Users/jacqueskaleigh/claude_ai/onyx/raw}:/raw:ro
     logging:
       driver: json-file
       options:

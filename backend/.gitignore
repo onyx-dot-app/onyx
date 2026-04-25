@@ -12,3 +12,4 @@ celerybeat-schedule*
 onyx/connectors/salesforce/data/
 .test.env
 /generated
+.gitnexus/

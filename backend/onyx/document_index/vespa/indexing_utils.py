@@ -34,6 +34,7 @@ from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import DOC_SUMMARY
+from onyx.document_index.vespa_constants import DOC_TYPE
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
@@ -194,6 +195,7 @@ def _index_vespa_chunk(
         # which contains the title prefix and metadata suffix
         CONTENT_SUMMARY: remove_invalid_unicode_chars(chunk.content),
         SOURCE_TYPE: str(document.source.value),
+        DOC_TYPE: document.metadata.get("doc_type", "raw_doc"),
         SOURCE_LINKS: json.dumps(chunk.source_links),
         SEMANTIC_IDENTIFIER: remove_invalid_unicode_chars(document.semantic_identifier),
         SECTION_CONTINUATION: chunk.section_continuation,

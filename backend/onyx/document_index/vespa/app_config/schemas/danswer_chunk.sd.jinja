@@ -71,6 +71,11 @@ schema {{ schema_name }} {
         field image_file_name type string {
             indexing: summary | attribute
         }
+        field doc_type type string {
+            indexing: summary | attribute
+            attribute: fast-search
+        }
+
         # https://docs.vespa.ai/en/attributes.html potential enum store for speed, but probably not worth it
         field source_type type string {
             indexing: summary | attribute

@@ -382,6 +382,18 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
+            # team-brain wiki ingest worker — single-tenant only (Phase 1 MVP).
+            # Multi-tenant support deferred per design/multi-tenancy.md.
+            {
+                "name": "knowledge-layer-ingest-worker",
+                "task": "knowledge_layer.ingest_worker",
+                "schedule": timedelta(seconds=30),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.VESPA_METADATA_SYNC,
+                },
+            },
         ]
     )
 
