@@ -180,3 +180,36 @@ def test_topic_summary_dataclass():
     ts = TopicSummary(name="trading", page_slugs=["signals", "execution"])
     assert ts.name == "trading"
     assert len(ts.page_slugs) == 2
+
+
+def test_ingest_call_includes_sibling_topics_in_prompt():
+    """When sibling_topics provided, prompt includes <sibling_topics> block."""
+    import json
+    from unittest.mock import MagicMock, patch
+    from knowledge_layer.providers.base import TopicSummary
+
+    mock_response_content = json.dumps({
+        "wiki_pages": [{"slug": "s", "title": "T", "content": "C"}],
+        "cross_refs": [{"from_slug": "s", "to_slug": "execution", "link_type": "see-also", "to_topic": "trading"}]
+    })
+    mock_message = MagicMock()
+    mock_message.content = [MagicMock(type="text", text=mock_response_content)]
+
+    with patch("knowledge_layer.providers.claude.anthropic.Anthropic") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.messages.create.return_value = mock_message
+
+        provider = ClaudeProvider()
+        result = provider.ingest_call(
+            raw_content="Content about signals.",
+            existing_pages=[],
+            topic_name="signals",
+            sibling_topics=[TopicSummary(name="trading", page_slugs=["execution", "risk"])],
+        )
+
+    call_args = mock_client.messages.create.call_args
+    user_content = call_args.kwargs["messages"][0]["content"]
+    assert "<sibling_topics>" in user_content
+    assert "trading" in user_content
+    assert result.cross_refs[0].to_topic == "trading"
