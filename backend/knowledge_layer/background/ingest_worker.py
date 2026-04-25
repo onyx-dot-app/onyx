@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
 from celery import shared_task
@@ -35,6 +36,62 @@ def _should_skip(content_hash: str, last_run: IngestRun | None) -> bool:
 def _get_existing_pages(db: Session, topic_id: int) -> list[WikiPageDraft]:
     pages = db.query(WikiPage).filter(WikiPage.topic_id == topic_id).all()
     return [WikiPageDraft(slug=p.slug, title=p.title, content=p.content) for p in pages]
+
+
+@dataclass
+class _ResolvedRef:
+    from_page_id: int
+    to_slug: str
+    link_type: str
+    to_topic_id: int | None  # None = same topic or unresolvable
+
+
+def _resolve_cross_refs(
+    db: Session,
+    current_topic_id: int,
+    proposals: list,  # list[CrossRefProposal]
+    all_pages: list,  # list[WikiPage] — all non-index pages in current topic
+) -> list[_ResolvedRef]:
+    """Resolve CrossRefProposals to _ResolvedRef with to_topic_id populated."""
+    slug_to_page = {p.slug: p for p in all_pages}
+    resolved = []
+
+    for prop in proposals:
+        from_page = slug_to_page.get(prop.from_slug)
+        if from_page is None:
+            continue  # from_slug not in current topic — skip
+
+        to_topic_id: int | None = None
+
+        if prop.to_slug not in slug_to_page:
+            # Not in current topic — try to resolve via to_topic hint
+            if prop.to_topic:
+                target_topic = (
+                    db.query(TopicExt)
+                    .filter(TopicExt.name == prop.to_topic)
+                    .first()
+                )
+                if target_topic and target_topic.id != current_topic_id:
+                    target_page = (
+                        db.query(WikiPage)
+                        .filter(
+                            WikiPage.topic_id == target_topic.id,
+                            WikiPage.slug == prop.to_slug,
+                            WikiPage.is_index_page.is_(False),
+                        )
+                        .first()
+                    )
+                    if target_page:
+                        to_topic_id = target_topic.id
+
+        resolved.append(_ResolvedRef(
+            from_page_id=from_page.id,
+            to_slug=prop.to_slug,
+            link_type=prop.link_type,
+            to_topic_id=to_topic_id,
+        ))
+
+    return resolved
 
 
 def _upsert_wiki_page(db: Session, topic_id: int, draft: WikiPageDraft) -> WikiPage:
