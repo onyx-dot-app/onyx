@@ -191,29 +191,17 @@ def test_jsm_connector_service_desk_scope(
             f"Expected JIRA_SERVICE_MANAGEMENT source, got {doc.source} for {doc.id}"
         )
 
-    # Exclusivity check: if a reference project is provided, every returned document
-    # must belong to that project (no software/business-project tickets should slip
-    # through the service_desk filter).
+    # Positive check: if JSM_PROJECT_KEY is provided, confirm that project appears
+    # in the results. The default service-desk scope query may return tickets from
+    # *multiple* service desk projects in the same Atlassian instance, so we do NOT
+    # assert that every document belongs to JSM_PROJECT_KEY — that would incorrectly
+    # fail in environments with more than one service desk project.
     project_key = os.environ.get("JSM_PROJECT_KEY")
     if project_key:
-        wrong_project_docs = [
-            doc
-            for doc in docs
-            if doc.metadata.get("project") not in (project_key, None)
-        ]
-        assert not wrong_project_docs, (
-            f"Found {len(wrong_project_docs)} document(s) from unexpected projects: "
-            + ", ".join(
-                f"{d.id} (project={d.metadata.get('project')})"
-                for d in wrong_project_docs[:5]
-            )
-            + ". The service_desk scope filter may not be restricting results correctly."
-        )
-        # Also ensure the expected project IS present
         returned_projects = {doc.metadata.get("project") for doc in docs}
         assert project_key in returned_projects, (
             f"JSM_PROJECT_KEY '{project_key}' not found in returned projects {returned_projects}. "
-            "The service-desk scope filter may be excluding it."
+            "The service-desk scope filter may be excluding the expected project."
         )
 
 
