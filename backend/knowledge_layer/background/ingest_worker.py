@@ -17,10 +17,9 @@ from knowledge_layer.db.models import (
     WikiPage,
     WikiPageVersion,
 )
+from knowledge_layer.connectors.filesystem import _SUPPORTED_EXTENSIONS
 from knowledge_layer.providers.base import LLMProvider, WikiPageDraft
 from knowledge_layer.providers.claude import ClaudeProvider
-
-_SUPPORTED_EXTENSIONS = {".md", ".txt", ".rst"}
 
 
 def _sha256(content: str) -> str:

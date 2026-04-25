@@ -382,7 +382,8 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
-            # team-brain: wiki ingest worker — scans all topic watch_paths every 30s
+            # team-brain wiki ingest worker — single-tenant only (Phase 1 MVP).
+            # Multi-tenant support deferred per design/multi-tenancy.md.
             {
                 "name": "knowledge-layer-ingest-worker",
                 "task": "knowledge_layer.ingest_worker",
