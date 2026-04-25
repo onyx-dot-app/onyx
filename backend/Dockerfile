@@ -134,6 +134,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY --chown=onyx:onyx ./onyx /app/onyx
 COPY --chown=onyx:onyx ./shared_configs /app/shared_configs
 COPY --chown=onyx:onyx ./alembic /app/alembic
+COPY --chown=onyx:onyx ./knowledge_layer /app/knowledge_layer
 COPY --chown=onyx:onyx ./alembic_tenants /app/alembic_tenants
 COPY --chown=onyx:onyx ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf

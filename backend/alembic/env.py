@@ -31,7 +31,15 @@ from celery.backends.database.session import (  # ty: ignore[unresolved-import]
     ResultModelBase,
 )
 from onyx.db.engine.sql_engine import SqlEngine
-from knowledge_layer.db.models import Base as KLBase
+try:
+    from knowledge_layer.db.models import Base as KLBase
+    _KL_METADATA = KLBase.metadata
+except ImportError:
+    import logging
+    logging.getLogger(__name__).warning(
+        "knowledge_layer not found — kl_* tables will not be included in migrations"
+    )
+    _KL_METADATA = None
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -46,7 +54,10 @@ if config.config_file_name is not None and config.attributes.get(
     # See: https://pytest-alembic.readthedocs.io/en/latest/setup.html#caplog-issues
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-target_metadata = [Base.metadata, ResultModelBase.metadata, KLBase.metadata]
+target_metadata = [
+    m for m in [Base.metadata, ResultModelBase.metadata, _KL_METADATA]
+    if m is not None
+]
 
 logger = logging.getLogger(__name__)
 
