@@ -6,6 +6,9 @@ from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -13,6 +16,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 JIRA_DOC_SYNC_TAG = "jira_doc_sync"
+JSM_DOC_SYNC_TAG = "jsm_doc_sync"
 
 
 def jira_doc_sync(
@@ -38,4 +42,35 @@ def jira_doc_sync(
         doc_source=DocumentSource.JIRA,
         slim_connector=jira_connector,
         label=JIRA_DOC_SYNC_TAG,
+    )
+
+
+def jsm_doc_sync(
+    cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    callback: IndexingHeartbeatInterface | None = None,
+) -> Generator[ElementExternalAccess, None, None]:
+    """Permission doc sync for Jira Service Management connectors.
+
+    Uses JiraServiceManagementConnector (which scopes to service_desk project
+    types) instead of plain JiraConnector, and reports DocumentSource.JIRA_SERVICE_MANAGEMENT.
+    """
+    jsm_connector = JiraServiceManagementConnector(
+        **cc_pair.connector.connector_specific_config,
+    )
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    jsm_connector.load_credentials(credential_json)
+
+    yield from generic_doc_sync(
+        cc_pair=cc_pair,
+        fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
+        callback=callback,
+        doc_source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        slim_connector=jsm_connector,
+        label=JSM_DOC_SYNC_TAG,
     )

@@ -24,6 +24,7 @@ from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
+from ee.onyx.external_permissions.jira.doc_sync import jsm_doc_sync
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 from ee.onyx.external_permissions.perm_sync_types import CensoringFuncType
 from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
@@ -118,12 +119,13 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             group_sync_is_cc_pair_agnostic=True,
         ),
     ),
-    # JSM reuses the same Atlassian permission model as Jira — register it so
-    # that EE permission sync runs for JSM connectors.
+    # JSM uses the same Atlassian permission model as Jira for group sync,
+    # but uses a dedicated doc_sync that instantiates JiraServiceManagementConnector
+    # and reports DocumentSource.JIRA_SERVICE_MANAGEMENT (not plain JIRA).
     DocumentSource.JIRA_SERVICE_MANAGEMENT: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=jira_doc_sync,
+            doc_sync_func=jsm_doc_sync,
             initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
