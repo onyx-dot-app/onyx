@@ -816,7 +816,7 @@ def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
     if server.owner != user.email:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Curators can only modify MCP servers that they have created.",
+            "Only the server owner can modify MCP servers they have created.",
         )
 
 

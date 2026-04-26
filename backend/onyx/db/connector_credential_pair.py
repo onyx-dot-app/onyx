@@ -50,9 +50,9 @@ class ConnectorType(str, Enum):
 def _add_user_filters(
     stmt: Select[tuple[*R]], user: User, get_editable: bool = True
 ) -> Select[tuple[*R]]:
-    effective = get_effective_permissions(user)
+    user_permissions = get_effective_permissions(user)
 
-    if Permission.MANAGE_CONNECTORS in effective:
+    if Permission.MANAGE_CONNECTORS in user_permissions:
         return stmt
 
     if user.is_anonymous:
