@@ -339,6 +339,9 @@ def create_config(
             image_provider_id=config_create.image_provider_id,
             model_configuration_id=model_configuration_id,
             is_default=config_create.is_default,
+            is_public=config_create.is_public,
+            groups=config_create.groups,
+            personas=config_create.personas,
         )
         db_session.commit()
         db_session.refresh(config)
@@ -460,8 +463,11 @@ def update_config(
             model_name=config_update.model_name,
         )
 
-        # 4. Update the ImageGenerationConfig to point to new model config
+        # 4. Update the ImageGenerationConfig to point to new model config and update access control
         existing_config.model_configuration_id = new_model_config_id
+        existing_config.is_public = config_update.is_public
+        existing_config.groups = config_update.groups if config_update.groups is not None else []
+        existing_config.personas = config_update.personas if config_update.personas is not None else []
 
         # 5. Delete old LLM provider (safe now - nothing references it)
         remove_llm_provider(db_session, old_llm_provider_id, commit=False)

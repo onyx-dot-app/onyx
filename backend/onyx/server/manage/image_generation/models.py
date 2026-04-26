@@ -116,6 +116,9 @@ class ImageGenerationConfigView(BaseModel):
     llm_provider_id: int  # From model_configuration.llm_provider_id
     llm_provider_name: str | None  # From model_configuration.llm_provider.name
     is_default: bool
+    is_public: bool
+    groups: list[int]
+    personas: list[int]
 
     @classmethod
     def from_model(
@@ -129,6 +132,9 @@ class ImageGenerationConfigView(BaseModel):
             llm_provider_id=config.model_configuration.llm_provider_id,
             llm_provider_name=config.model_configuration.llm_provider.name,
             is_default=config.is_default,
+            is_public=config.is_public,
+            groups=config.groups,
+            personas=config.personas,
         )
 
 

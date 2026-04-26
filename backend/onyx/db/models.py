@@ -33,6 +33,7 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
@@ -3313,6 +3314,9 @@ class ImageGenerationConfig(Base):
         nullable=False,
     )
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    groups: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=list)
+    personas: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=list)
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration"
