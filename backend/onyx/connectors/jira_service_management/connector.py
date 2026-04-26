@@ -92,10 +92,11 @@ def _get_jsm_request_details(
                         last.get("breached", False)
                     ).lower()
                     break
-    except Exception:
+    except Exception as e:
         logger.debug(
             f"Could not fetch JSM request details for {issue_key} — "
-            "skipping JSM-specific metadata."
+            f"skipping JSM-specific metadata. Error: {e}",
+            exc_info=True,
         )
     return result
 
