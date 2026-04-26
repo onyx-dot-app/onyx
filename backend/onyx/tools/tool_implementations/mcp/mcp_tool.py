@@ -37,10 +37,12 @@ def _safe_llm_tool_name(mcp_server_id: int, tool_name: str) -> str:
     `fetch`, so namespace by the stable numeric server id to avoid collisions.
     """
 
-    safe_tool_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name).strip("_")
+    safe_tool_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name).strip("_-")
     if not safe_tool_name:
         safe_tool_name = "tool"
-    return f"mcp_{mcp_server_id}_{safe_tool_name}"
+
+    prefix = f"mcp_{mcp_server_id}_"
+    return f"{prefix}{safe_tool_name}"[:64]
 
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
