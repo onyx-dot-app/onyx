@@ -45,7 +45,7 @@ def _get_jsm_request_details(
     result: dict[str, Any] = {}
     try:
         url = f"{jira_base}/rest/servicedeskapi/request/{issue_key}"
-        resp = session.get(url, headers={"X-ExperimentalApi": "opt-in"})
+        resp = session.get(url, headers={"X-ExperimentalApi": "opt-in"}, timeout=30)
         if resp.status_code != 200:
             return result
         data = resp.json()
