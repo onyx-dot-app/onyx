@@ -1093,7 +1093,7 @@ function AccountsAccessSettings() {
 
   // Hide the section entirely if user has no permission AND no existing tokens
   const showTokensSection =
-    authType !== null && (canCreatePAT || pats.length > 0);
+    authType !== null && (isLoading || canCreatePAT || pats.length > 0);
 
   // Use filter hook for searching tokens
   const {
