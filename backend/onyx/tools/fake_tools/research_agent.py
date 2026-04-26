@@ -236,8 +236,15 @@ def run_research_agent_call(
             reasoning_cycles = 0
             just_ran_web_search = False
 
-            # If this fails to parse, we can't run the loop anyway, let this one fail in that case
-            research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
+            research_topic = research_agent_call.tool_args.get(RESEARCH_AGENT_TASK_KEY)
+            if not isinstance(research_topic, str) or not research_topic.strip():
+                logger.warning(
+                    "Research agent tool call missing non-empty '%s' argument: %s",
+                    RESEARCH_AGENT_TASK_KEY,
+                    research_agent_call.tool_args,
+                )
+                return None
+            research_topic = research_topic.strip()
 
             emitter.emit(
                 Packet(
