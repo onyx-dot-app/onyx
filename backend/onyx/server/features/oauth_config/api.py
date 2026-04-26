@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -64,7 +63,7 @@ def _oauth_config_to_snapshot(
 def create_oauth_config_endpoint(
     oauth_data: OAuthConfigCreate,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> OAuthConfigSnapshot:
     """Create a new OAuth configuration (admin only)."""
     try:
@@ -86,7 +85,7 @@ def create_oauth_config_endpoint(
 @admin_router.get("")
 def list_oauth_configs(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> list[OAuthConfigSnapshot]:
     """List all OAuth configurations (admin only)."""
     oauth_configs = get_oauth_configs(db_session)
@@ -97,7 +96,7 @@ def list_oauth_configs(
 def get_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> OAuthConfigSnapshot:
     """Retrieve a single OAuth configuration (admin only)."""
     oauth_config = get_oauth_config(oauth_config_id, db_session)
@@ -113,7 +112,7 @@ def update_oauth_config_endpoint(
     oauth_config_id: int,
     oauth_data: OAuthConfigUpdate,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> OAuthConfigSnapshot:
     """Update an OAuth configuration (admin only)."""
     try:
@@ -139,7 +138,7 @@ def update_oauth_config_endpoint(
 def delete_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> dict[str, str]:
     """Delete an OAuth configuration (admin only)."""
     try:

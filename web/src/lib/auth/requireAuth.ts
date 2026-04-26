@@ -1,4 +1,4 @@
-import { User, UserRole } from "@/lib/types";
+import { User } from "@/lib/types";
 import {
   AuthTypeMetadata,
   getAuthTypeMetadataSS,
@@ -100,12 +100,8 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
 
   const { user, authTypeMetadata } = authResult;
 
-  // Check if user has admin role or any admin permission via groups
-  if (
-    user &&
-    user.role !== UserRole.ADMIN &&
-    !hasAnyAdminPermission(user.effective_permissions ?? [])
-  ) {
+  // Check if user has any admin permission
+  if (user && !hasAnyAdminPermission(user.effective_permissions ?? [])) {
     return {
       user,
       authTypeMetadata,

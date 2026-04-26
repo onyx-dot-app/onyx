@@ -11,13 +11,14 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.configs.constants import MessageType
+from onyx.db.enums import Permission
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.models import UserRole
 
 
 def fetch_query_analytics(
@@ -338,7 +339,7 @@ def fetch_assistant_unique_users_total(
 def user_can_view_assistant_stats(
     db_session: Session, user: User, assistant_id: int
 ) -> bool:
-    if user.role == UserRole.ADMIN:
+    if has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return True
 
     # Check if the user created the persona

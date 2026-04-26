@@ -2,34 +2,19 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { SvgUsers, SvgLogOut, SvgCheck } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
-import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useGroups from "@/hooks/useGroups";
-import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
+import { addUserToGroup, removeUserFromGroup } from "./svc";
 import type { UserRow } from "./interfaces";
 import { cn } from "../../../lib/utils";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ASSIGNABLE_ROLES: UserRole[] = [
-  UserRole.ADMIN,
-  UserRole.GLOBAL_CURATOR,
-  UserRole.BASIC,
-];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,14 +35,10 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole | "">(
-    user.role ?? ""
-  );
 
   const initialMemberGroupIds = useMemo(
     () => new Set(user.groups.map((g) => g.id)),
@@ -88,13 +69,7 @@ export default function EditUserModal({
     );
   }, [memberGroupIds, initialMemberGroupIds]);
 
-  const visibleRoles = isPaidEnterpriseFeaturesEnabled
-    ? ASSIGNABLE_ROLES
-    : ASSIGNABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
-
-  const hasRoleChange =
-    user.role !== null && selectedRole !== "" && selectedRole !== user.role;
-  const hasChanges = hasGroupChanges || hasRoleChange;
+  const hasChanges = hasGroupChanges;
 
   const toggleGroup = (groupId: number) => {
     setMemberGroupIds((prev) => {
@@ -137,14 +112,6 @@ export default function EditUserModal({
         }
       }
 
-      if (
-        user.role !== null &&
-        selectedRole !== "" &&
-        selectedRole !== user.role
-      ) {
-        await setUserRole(user.email, selectedRole);
-      }
-
       onMutate();
       toast.success("User updated");
       onClose();
@@ -170,7 +137,7 @@ export default function EditUserModal({
       <Modal.Content width="sm" ref={contentRef}>
         <Modal.Header
           icon={SvgUsers}
-          title="Edit User's Groups & Roles"
+          title="Edit User's Groups"
           description={
             user.personal_name
               ? `${user.personal_name} (${user.email})`
@@ -289,47 +256,6 @@ export default function EditUserModal({
                 )}
               </ShadowDiv>
             </Section>
-            {user.role && (
-              <>
-                <Separator noPadding />
-
-                <ContentAction
-                  title="User Role"
-                  description="This controls their general permissions."
-                  sizePreset="main-ui"
-                  variant="section"
-                  paddingVariant="fit"
-                  rightChildren={
-                    <InputSelect
-                      value={selectedRole}
-                      onValueChange={(v) => setSelectedRole(v as UserRole)}
-                    >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        {user.role && !visibleRoles.includes(user.role) && (
-                          <InputSelect.Item
-                            key={user.role}
-                            value={user.role}
-                            icon={SvgUser}
-                          >
-                            {USER_ROLE_LABELS[user.role]}
-                          </InputSelect.Item>
-                        )}
-                        {visibleRoles.map((role) => (
-                          <InputSelect.Item
-                            key={role}
-                            value={role}
-                            icon={SvgUser}
-                          >
-                            {USER_ROLE_LABELS[role]}
-                          </InputSelect.Item>
-                        ))}
-                      </InputSelect.Content>
-                    </InputSelect>
-                  }
-                />
-              </>
-            )}
           </Section>
         </Modal.Body>
 

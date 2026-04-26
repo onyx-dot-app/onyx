@@ -10,10 +10,10 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import AccountType
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import ThemePreference
 from onyx.db.memory import MAX_MEMORIES_PER_USER
@@ -124,7 +124,7 @@ class UserInfo(BaseModel):
     is_active: bool
     is_superuser: bool
     is_verified: bool
-    role: UserRole
+    account_type: AccountType = AccountType.STANDARD
     preferences: UserPreferences
     personalization: UserPersonalization = Field(default_factory=UserPersonalization)
     oidc_expiry: datetime | None = None
@@ -157,7 +157,7 @@ class UserInfo(BaseModel):
             is_active=user.is_active,
             is_superuser=user.is_superuser,
             is_verified=user.is_verified,
-            role=user.role,
+            account_type=user.account_type,
             password_configured=user.password_configured,
             preferences=(
                 UserPreferences(
@@ -203,16 +203,6 @@ class UserInfo(BaseModel):
 
 class UserByEmail(BaseModel):
     user_email: str
-
-
-class UserRoleUpdateRequest(BaseModel):
-    user_email: str
-    new_role: UserRole
-    explicit_override: bool = False
-
-
-class UserRoleResponse(BaseModel):
-    role: str
 
 
 class BoostDoc(BaseModel):

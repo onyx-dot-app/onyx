@@ -3,6 +3,8 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { SvgSettings } from "@opal/icons";
 
 export default function Sidebar() {
@@ -10,8 +12,13 @@ export default function Sidebar() {
     useFormContext();
   const noCredential = credentialTemplates[connector] == null;
 
-  const { isAdmin } = useUser();
-  const buttonName = isAdmin ? "Admin Page" : "Curator Page";
+  const { permissions } = useUser();
+  const buttonName = hasPermission(
+    permissions,
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  )
+    ? "Admin Page"
+    : "Curator Page";
 
   const settingSteps = [
     ...(!noCredential ? ["Credential"] : []),

@@ -84,7 +84,7 @@ interface SelectedConnectorState {
  * Uses SettingsLayouts like AgentEditorPage does.
  */
 export default function BuildConfigPage() {
-  const { isAdmin, isCurator } = useUser();
+  const { isAdmin, hasAdminAccess } = useUser();
   const { llmProviders } = useLLMProviders();
   const { openPersonaEditor, openLlmSetup } = useOnboarding();
   const [selectedConnector, setSelectedConnector] =
@@ -113,7 +113,7 @@ export default function BuildConfigPage() {
     null
   );
 
-  const isBasicUser = !isAdmin && !isCurator;
+  const isBasicUser = !hasAdminAccess;
   const isPreProvisioning = useIsPreProvisioning();
 
   // Build mode LLM selection (cookie-based)

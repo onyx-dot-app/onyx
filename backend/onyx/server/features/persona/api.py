@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
@@ -135,7 +134,7 @@ class IsFeaturedRequest(BaseModel):
 def patch_persona_visibility(
     persona_id: int,
     is_listed_request: IsListedRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_visibility(
@@ -150,7 +149,7 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -169,7 +168,7 @@ def patch_user_persona_public_status(
 def patch_persona_featured_status(
     persona_id: int,
     is_featured_request: IsFeaturedRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -204,7 +203,7 @@ def patch_agents_display_priorities(
 
 @admin_router.get("", tags=PUBLIC_API_TAGS)
 def list_personas_admin(
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_AGENTS)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
@@ -221,7 +220,7 @@ def list_personas_admin(
 def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_AGENTS)),
     db_session: Session = Depends(get_session),
     include_deleted: bool = Query(
         False, description="If true, includes deleted personas."
@@ -298,7 +297,7 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
@@ -328,7 +327,7 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -410,7 +409,7 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -434,7 +433,7 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_deleted(

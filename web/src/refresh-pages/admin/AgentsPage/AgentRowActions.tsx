@@ -37,6 +37,8 @@ import {
 } from "@/lib/agents";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,9 +58,12 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
-  const { isAdmin, isCurator } = useUser();
+  const { isAdmin, permissions } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const shareModal = useCreateModal();
 

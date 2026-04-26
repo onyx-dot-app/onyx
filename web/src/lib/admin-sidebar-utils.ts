@@ -7,6 +7,7 @@ import {
   sidebarItem,
 } from "@/lib/admin-routes";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { CombinedSettings } from "@/interfaces/settings";
 
 export type { FeatureFlags } from "@/lib/admin-routes";
@@ -48,7 +49,7 @@ export function buildItems(
   }
 
   // Upgrade Plan — only for full admins without a subscription
-  if (can("admin") && !flags.hasSubscription) {
+  if (can(Permission.FULL_ADMIN_PANEL_ACCESS) && !flags.hasSubscription) {
     items.push({
       section: "",
       name: "Upgrade Plan",
