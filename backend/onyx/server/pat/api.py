@@ -47,7 +47,7 @@ def list_tokens(
 @router.post("")
 def create_token(
     request: CreateTokenRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.CREATE_USER_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> CreatedTokenResponse:
     """Create new personal access token for current user."""

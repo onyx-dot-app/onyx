@@ -26,7 +26,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
@@ -109,9 +109,10 @@ def test_user(
         id=uuid4(),
         email=TEST_USER_EMAIL,
         hashed_password="test_hashed_password",  # Required NOT NULL field
-        role=UserRole.BASIC,  # Required NOT NULL field
     )
     db_session.add(user)
+    db_session.flush()
+    assign_user_to_default_groups__no_commit(db_session, user, is_admin=False)
     db_session.commit()
     db_session.refresh(user)
 

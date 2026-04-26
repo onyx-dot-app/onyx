@@ -10,7 +10,6 @@ from fastapi import Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -65,7 +64,7 @@ def _get_federated_connector_instance(
 @router.post("")
 def create_federated_connector(
     federated_connector_data: FederatedConnectorRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorResponse:
     """Create a new federated connector"""
@@ -110,7 +109,7 @@ def create_federated_connector(
 @router.get("/{id}/entities")
 def get_entities(
     id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> EntitySpecResponse:
     """Fetch allowed entities for the source type"""
@@ -152,7 +151,7 @@ def get_entities(
 @router.get("/{id}/credentials/schema")
 def get_credentials_schema(
     id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialSchemaResponse:
     """Fetch credential schema for the source type"""
@@ -197,7 +196,7 @@ def get_credentials_schema(
 @router.get("/sources/{source}/configuration/schema")
 def get_configuration_schema_by_source(
     source: FederatedConnectorSource,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
 ) -> ConfigurationSchemaResponse:
     """Fetch configuration schema for a specific source type (for setup/edit forms)"""
     try:
@@ -225,7 +224,7 @@ def get_configuration_schema_by_source(
 @router.get("/sources/{source}/credentials/schema")
 def get_credentials_schema_by_source(
     source: FederatedConnectorSource,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
 ) -> CredentialSchemaResponse:
     """Fetch credential schema for a specific source type (for setup forms)"""
     try:
@@ -257,7 +256,7 @@ def get_credentials_schema_by_source(
 def validate_credentials(
     source: FederatedConnectorSource,
     credentials: FederatedConnectorCredentials,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> bool:
     """Validate credentials for a specific source type"""
     try:
@@ -281,7 +280,7 @@ def validate_credentials(
 def validate_entities(
     id: int,
     request: Request,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Validate specified entities for source type"""
@@ -518,7 +517,7 @@ def get_user_oauth_status(
 @router.get("/{id}")
 def get_federated_connector_detail(
     id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorDetail:
     """Get detailed information about a specific federated connector"""
@@ -568,7 +567,7 @@ def get_federated_connector_detail(
 def update_federated_connector_endpoint(
     id: int,
     update_request: FederatedConnectorUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorDetail:
     """Update a federated connector's configuration"""
@@ -599,7 +598,7 @@ def update_federated_connector_endpoint(
 @router.delete("/{id}")
 def delete_federated_connector_endpoint(
     id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> bool:
     """Delete a federated connector"""

@@ -61,10 +61,10 @@ from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import user_is_admin
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -498,7 +498,6 @@ def create_user(
     user = User(
         email=email,
         hashed_password=_pw_helper.hash(_pw_helper.generate()),
-        role=UserRole.BASIC,
         account_type=AccountType.STANDARD,
         is_active=user_resource.active,
         is_verified=True,
@@ -586,7 +585,7 @@ def replace_user(
     # Reconcile default-group membership on reactivation
     if is_reactivation:
         assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+            db_session, user, is_admin=user_is_admin(user)
         )
 
     new_external_id = user_resource.externalId
@@ -686,7 +685,7 @@ def patch_user(
     # Reconcile default-group membership on reactivation
     if is_reactivation:
         assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+            db_session, user, is_admin=user_is_admin(user)
         )
 
     # Build updated fields by merging PATCH enterprise data with current values

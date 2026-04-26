@@ -31,7 +31,6 @@ import requests
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
-from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HOST
 from onyx.configs.app_configs import REDIS_PORT
@@ -85,7 +84,7 @@ def scim_token(idp_style: str) -> str:
                 email=build_email(ADMIN_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
@@ -242,7 +241,7 @@ def test_create_user_default_group_and_account_type(
             email=build_email(ADMIN_USER_NAME),
             password=DEFAULT_PASSWORD,
             headers=GENERAL_HEADERS,
-            role=UserRole.ADMIN,
+            is_admin=True,
             is_active=True,
         )
     )

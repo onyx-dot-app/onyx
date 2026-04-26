@@ -5,11 +5,9 @@ from typing import cast
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
@@ -29,6 +27,8 @@ from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -53,7 +53,7 @@ logger = setup_logger()
 def get_most_boosted_docs(
     ascending: bool,
     limit: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
     boost_docs = fetch_docs_ranked_by_boost_for_user(
@@ -78,7 +78,7 @@ def get_most_boosted_docs(
 @router.post("/admin/doc-boosts")
 def document_boost_update(
     boost_update: BoostUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_boost_for_user(
@@ -93,7 +93,7 @@ def document_boost_update(
 @router.post("/admin/doc-hidden")
 def document_hidden_update(
     hidden_update: HiddenUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_hidden_for_user(
@@ -107,7 +107,7 @@ def document_hidden_update(
 
 @router.get("/admin/genai-api-key/validate")
 def validate_existing_genai_api_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> None:
     # Only validate every so often
     kv_store = get_kv_store()
@@ -126,11 +126,11 @@ def validate_existing_genai_api_key(
     try:
         llm = get_default_llm(timeout=10)
     except ValueError:
-        raise HTTPException(status_code=404, detail="LLM not setup")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "LLM not setup")
 
     error = test_llm(llm)
     if error:
-        raise HTTPException(status_code=400, detail=error)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error)
 
     # Mark check as successful
     curr_time = datetime.now(tz=timezone.utc)
@@ -140,7 +140,7 @@ def validate_existing_genai_api_key(
 @router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()
@@ -158,10 +158,7 @@ def create_deletion_attempt_for_connector_id(
     if cc_pair is None:
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
-        raise HTTPException(
-            status_code=404,
-            detail=error,
-        )
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
 
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(

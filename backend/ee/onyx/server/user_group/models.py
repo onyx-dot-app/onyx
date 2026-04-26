@@ -17,7 +17,6 @@ class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
-    curator_ids: list[UUID]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
@@ -37,18 +36,13 @@ class UserGroup(BaseModel):
                     is_active=user.is_active,
                     is_superuser=user.is_superuser,
                     is_verified=user.is_verified,
-                    role=user.role,
+                    account_type=user.account_type,
                     preferences=UserPreferences(
                         default_model=user.default_model,
                         chosen_assistants=user.chosen_assistants,
                     ),
                 )
                 for user in user_group_model.users
-            ],
-            curator_ids=[
-                user.user_id
-                for user in user_group_model.user_group_relationships
-                if user.is_curator and user.user_id is not None
             ],
             cc_pairs=[
                 ConnectorCredentialPairDescriptor(
@@ -112,11 +106,6 @@ class AddUsersToUserGroupRequest(BaseModel):
 class UserGroupRename(BaseModel):
     id: int
     name: str
-
-
-class SetCuratorRequest(BaseModel):
-    user_id: UUID
-    is_curator: bool
 
 
 class UpdateGroupAgentsRequest(BaseModel):

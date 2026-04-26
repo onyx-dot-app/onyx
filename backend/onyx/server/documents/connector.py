@@ -22,10 +22,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_email
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
+from onyx.background.celery.tasks.pruning.tasks import (
+    try_creating_prune_generator_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
@@ -96,7 +99,8 @@ from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
 from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_store.file_store import FileStore
@@ -138,7 +142,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -158,7 +161,7 @@ router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 @router.get("/admin/connector/gmail/app-credential")
 def check_google_app_gmail_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> dict[str, str]:
     try:
         return {"client_id": get_google_app_cred(DocumentSource.GMAIL).web.client_id}
@@ -169,7 +172,7 @@ def check_google_app_gmail_credentials_exist(
 @router.put("/admin/connector/gmail/app-credential")
 def upsert_google_app_gmail_credentials(
     app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> StatusResponse:
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
@@ -183,7 +186,7 @@ def upsert_google_app_gmail_credentials(
 
 @router.delete("/admin/connector/gmail/app-credential")
 def delete_google_app_gmail_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -199,7 +202,7 @@ def delete_google_app_gmail_credentials(
 
 @router.get("/admin/connector/google-drive/app-credential")
 def check_google_app_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> dict[str, str]:
     try:
         return {
@@ -212,7 +215,7 @@ def check_google_app_credentials_exist(
 @router.put("/admin/connector/google-drive/app-credential")
 def upsert_google_app_credentials(
     app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> StatusResponse:
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GOOGLE_DRIVE)
@@ -226,7 +229,7 @@ def upsert_google_app_credentials(
 
 @router.delete("/admin/connector/google-drive/app-credential")
 def delete_google_app_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -242,7 +245,7 @@ def delete_google_app_credentials(
 
 @router.get("/admin/connector/gmail/service-account-key")
 def check_google_service_gmail_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> dict[str, str]:
     try:
         return {
@@ -259,7 +262,7 @@ def check_google_service_gmail_account_key_exist(
 @router.put("/admin/connector/gmail/service-account-key")
 def upsert_google_service_gmail_account_key(
     service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> StatusResponse:
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GMAIL)
@@ -273,7 +276,7 @@ def upsert_google_service_gmail_account_key(
 
 @router.delete("/admin/connector/gmail/service-account-key")
 def delete_google_service_gmail_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -289,7 +292,7 @@ def delete_google_service_gmail_account_key(
 
 @router.get("/admin/connector/google-drive/service-account-key")
 def check_google_service_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> dict[str, str]:
     try:
         return {
@@ -306,7 +309,7 @@ def check_google_service_account_key_exist(
 @router.put("/admin/connector/google-drive/service-account-key")
 def upsert_google_service_account_key(
     service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> StatusResponse:
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GOOGLE_DRIVE)
@@ -320,7 +323,7 @@ def upsert_google_service_account_key(
 
 @router.delete("/admin/connector/google-drive/service-account-key")
 def delete_google_service_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -337,7 +340,7 @@ def delete_google_service_account_key(
 @router.put("/admin/connector/google-drive/service-account-credential")
 def upsert_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -364,7 +367,7 @@ def upsert_service_account_credential(
 @router.put("/admin/connector/gmail/service-account-credential")
 def upsert_gmail_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -390,7 +393,7 @@ def upsert_gmail_service_account_credential(
 @router.get("/admin/connector/google-drive/check-auth/{credential_id}")
 def check_drive_tokens(
     credential_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> AuthStatus:
     db_credentials = fetch_credential_by_id_for_user(credential_id, user, db_session)
@@ -598,11 +601,11 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     if has_requested_access:
         return cc_pair
 
-    # Special case: global curators should be able to manage files
+    # Special case: users with MANAGE_CONNECTORS should be able to manage files
     # for public file connectors even when they are not the creator.
     if (
         require_editable
-        and user.role == UserRole.GLOBAL_CURATOR
+        and Permission.MANAGE_CONNECTORS in get_effective_permissions(user)
         and cc_pair.access_type == AccessType.PUBLIC
     ):
         return cc_pair
@@ -617,7 +620,7 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 def upload_files_api(
     files: list[UploadFile],
     unzip: bool = True,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
 ) -> FileUploadResponse:
     return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
@@ -625,7 +628,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -694,7 +697,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -913,7 +916,7 @@ def update_connector_files(
 
 @router.get("/admin/connector", tags=PUBLIC_API_TAGS)
 def get_connectors_by_credential(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     credential: int | None = None,
 ) -> list[ConnectorSnapshot]:
@@ -947,7 +950,7 @@ def get_connectors_by_credential(
 @router.get("/admin/connector/failed-indexing-status", tags=PUBLIC_API_TAGS)
 def get_currently_failed_indexing_status(
     secondary_index: bool = False,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
@@ -1034,7 +1037,7 @@ def get_currently_failed_indexing_status(
 
 @router.get("/admin/connector/status", tags=PUBLIC_API_TAGS)
 def get_connector_status(
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorStatus]:
     # This method is only used document set and group creation/editing
@@ -1087,7 +1090,7 @@ def get_connector_status(
 @router.post("/admin/connector/indexing-status", tags=PUBLIC_API_TAGS)
 def get_connector_indexing_status(
     request: IndexingStatusRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorIndexingStatusLiteResponse]:
     tenant_id = get_current_tenant_id()
@@ -1159,7 +1162,7 @@ def get_connector_indexing_status(
         ),
     ]
 
-    if user and user.role == UserRole.ADMIN:
+    if user and Permission.MANAGE_CONNECTORS in get_effective_permissions(user):
         (
             editable_cc_pairs,
             federated_connectors,
@@ -1533,7 +1536,7 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
 @router.post("/admin/connector", tags=PUBLIC_API_TAGS)
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     tenant_id = get_current_tenant_id()
@@ -1541,16 +1544,6 @@ def create_connector_from_model(
     try:
         _validate_connector_allowed(connector_data.source)
 
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=connector_data.groups,
-            object_is_public=connector_data.access_type == AccessType.PUBLIC,
-            object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
-            object_is_new=True,
-        )
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
             db_session=db_session,
@@ -1572,20 +1565,11 @@ def create_connector_from_model(
 @router.post("/admin/connector-with-mock-credential")
 def create_connector_with_mock_credential(
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
 
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        target_group_ids=connector_data.groups,
-        object_is_public=connector_data.access_type == AccessType.PUBLIC,
-        object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
-    )
     try:
         _validate_connector_allowed(connector_data.source)
         connector_response = create_connector(
@@ -1659,30 +1643,20 @@ def create_connector_with_mock_credential(
 def update_connector_from_model(
     connector_id: int,
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
-    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     try:
         _validate_connector_allowed(connector_data.source)
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=connector_data.groups,
-            object_is_public=connector_data.access_type == AccessType.PUBLIC,
-            object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
-            object_is_owned_by_user=cc_pair and user and cc_pair.creator_id == user.id,
-        )
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
-        raise HTTPException(
-            status_code=404, detail=f"Connector {connector_id} does not exist"
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector {connector_id} does not exist",
         )
 
     return ConnectorSnapshot(
@@ -1709,7 +1683,7 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     try:
@@ -1725,7 +1699,7 @@ def delete_connector_by_id(
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
 def connector_run_once(
     run_info: RunConnectorRequest,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     """Used to trigger indexing on a set of cc_pairs associated with a

@@ -6,9 +6,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -20,6 +19,8 @@ from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import get_tools_by_ids
 from onyx.db.tools import update_tool
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
 from onyx.server.features.tool.models import ToolSnapshot
@@ -68,13 +69,13 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
         )
 
     # Admins can always make changes; non-admins must own the tool.
-    if user.role == UserRole.ADMIN:
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         return tool
 
     if tool.user_id is None or tool.user_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only modify actions that you created.",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only modify actions that you created.",
         )
 
     return tool
@@ -84,7 +85,7 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -108,7 +109,7 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> ToolSnapshot:
     existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
@@ -132,7 +133,7 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> None:
     _ = _get_editable_custom_tool(tool_id, db_session, user)
     try:
@@ -159,7 +160,7 @@ class ToolStatusUpdateResponse(BaseModel):
 def update_tools_status(
     update_data: ToolStatusUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),  # noqa: ARG001
 ) -> ToolStatusUpdateResponse:
     """Enable or disable one or more tools.
 
@@ -207,7 +208,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS)
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)

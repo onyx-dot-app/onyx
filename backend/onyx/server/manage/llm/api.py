@@ -15,8 +15,8 @@ from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
@@ -352,7 +352,7 @@ def fetch_custom_provider_names(
 
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
 
@@ -360,7 +360,7 @@ def fetch_llm_options(
 @admin_router.get("/built-in/options/{provider_name}")
 def fetch_llm_provider_options(
     provider_name: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> WellKnownLLMProviderDescriptor:
     well_known_llms = fetch_available_well_known_llms()
     for well_known_llm in well_known_llms:
@@ -372,7 +372,7 @@ def fetch_llm_provider_options(
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -435,7 +435,7 @@ def test_llm_configuration(
 
 @admin_router.post("/test/default")
 def test_default_provider(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> None:
     try:
         llm = get_default_llm()
@@ -451,7 +451,7 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
@@ -499,7 +499,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -625,7 +625,7 @@ def put_llm_provider(
 def delete_llm_provider(
     provider_id: int,
     force: bool = Query(False),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not force:
@@ -646,7 +646,7 @@ def delete_llm_provider(
 @admin_router.post("/default")
 def set_provider_as_default(
     default_model_request: DefaultModel,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_provider(
@@ -659,7 +659,7 @@ def set_provider_as_default(
 @admin_router.post("/default-vision")
 def set_provider_as_default_vision(
     default_model: DefaultModel,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
@@ -671,7 +671,7 @@ def set_provider_as_default_vision(
 
 @admin_router.get("/auto-config")
 def get_auto_config(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> dict:
     """Get the current Auto mode configuration from GitHub.
 
@@ -689,7 +689,7 @@ def get_auto_config(
 
 @admin_router.get("/vision-providers")
 def get_vision_capable_providers(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
@@ -751,7 +751,7 @@ def list_llm_provider_basics(
 
     all_providers = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
 
     accessible_providers = []
 
@@ -763,7 +763,7 @@ def list_llm_provider_basics(
         # - Excludes providers with persona restrictions (requires specific persona)
         # - Excludes non-public providers with no restrictions (admin-only)
         if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, is_admin=is_admin
+            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         ):
             accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
@@ -801,17 +801,19 @@ def get_valid_model_names_for_persona(
     if not persona:
         return []
 
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
-    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
 
     valid_models = []
     for llm_provider_model in all_providers:
         # Check access with persona context — respects all RBAC restrictions
         if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             # Collect all model names from this provider
             for model_config in llm_provider_model.model_configurations:
@@ -877,18 +879,20 @@ def list_llm_providers_for_persona(
             "You don't have access to this assistant",
         )
 
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
-    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
 
     llm_provider_list: list[LLMProviderDescriptor] = []
 
     for llm_provider_model in all_providers:
         # Check access with persona context — respects persona restrictions
         if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             llm_provider_list.append(
                 LLMProviderDescriptor.from_model(llm_provider_model)
@@ -916,7 +920,7 @@ def list_llm_providers_for_persona(
             db_session, persona.default_model_configuration_id
         )
         if model_config and can_user_access_llm_provider(
-            model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
+            model_config.llm_provider, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             default_text = DefaultModel(
                 provider_id=model_config.llm_provider_id,
@@ -932,7 +936,7 @@ def list_llm_providers_for_persona(
 
 @admin_router.get("/provider-contextual-cost")
 def get_provider_contextual_cost(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[LLMCost]:
     """
@@ -981,7 +985,7 @@ def get_provider_contextual_cost(
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[BedrockFinalModelResponse]:
     """Fetch available Bedrock models for a specific region and credentials.
@@ -1156,7 +1160,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 @admin_router.post("/ollama/available-models")
 def get_ollama_available_models(
     request: OllamaModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
@@ -1281,7 +1285,7 @@ def _get_openrouter_models_response(api_base: str, api_key: str | None) -> dict:
 @admin_router.post("/openrouter/available-models")
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[OpenRouterFinalModelResponse]:
     """Fetch available models from OpenRouter `/models` endpoint.
@@ -1366,7 +1370,7 @@ def get_openrouter_available_models(
 @admin_router.post("/lm-studio/available-models")
 def get_lm_studio_available_models(
     request: LMStudioModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[LMStudioFinalModelResponse]:
     """Fetch available models from an LM Studio server.
@@ -1479,7 +1483,7 @@ def get_lm_studio_available_models(
 @admin_router.post("/litellm/available-models")
 def get_litellm_available_models(
     request: LitellmModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from LiteLLM proxy /v1/model/info endpoint."""
@@ -1627,7 +1631,7 @@ def _get_openai_compatible_models_response(
 @admin_router.post("/bifrost/available-models")
 def get_bifrost_available_models(
     request: BifrostModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
@@ -1725,7 +1729,7 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
 @admin_router.post("/openai-compatible/available-models")
 def get_openai_compatible_server_available_models(
     request: OpenAICompatibleModelsRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""

@@ -42,7 +42,7 @@ const ICON_MAP: Record<string, IconFunctionComponent> = {
   manage_actions: SvgActions,
   manage_groups: SvgUsers,
   manage_service_accounts: SvgUserKey,
-  manage_slack_discord_bots: SvgSlack,
+  manage_bots: SvgSlack,
   create_agents: SvgCreateAgent,
   manage_agents: SvgManageAgent,
   view_agent_analytics: SvgBarChart,

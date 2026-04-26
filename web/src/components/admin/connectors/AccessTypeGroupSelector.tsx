@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
-import { UserGroup, UserRole } from "@/lib/types";
+import { UserGroup } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
   AccessType,
@@ -34,7 +34,7 @@ export function AccessTypeGroupSelector({
   connector: ConfigurableSources;
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user, isCurator } = useUser();
+  const { isAdmin, user } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const [shouldHideContent, setShouldHideContent] = useState(false);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
@@ -45,7 +45,7 @@ export function AccessTypeGroupSelector({
 
   useEffect(() => {
     if (user && userGroups && businessTier) {
-      const isUserAdmin = user.role === UserRole.ADMIN;
+      const isUserAdmin = isAdmin;
       if (!businessTier) {
         access_type_helpers.setValue("public");
         return;
@@ -104,7 +104,7 @@ export function AccessTypeGroupSelector({
 
   return (
     <div>
-      {(access_type.value === "private" || isCurator) &&
+      {access_type.value === "private" &&
         userGroups &&
         userGroups?.length > 0 && (
           <>

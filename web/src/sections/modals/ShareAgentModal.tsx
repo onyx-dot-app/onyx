@@ -21,6 +21,8 @@ import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { Formik, useFormikContext } from "formik";
 import { useAgent, useLabels } from "@/lib/agents/hooks";
 import { Button, Card, Divider, MessageCard, Text } from "@opal/components";
@@ -60,7 +62,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { data: groupsData } = useShareableGroups();
   const userDirectoryRestricted =
     usersError instanceof FetchError && usersError.status === 403;
-  const { user: currentUser, isAdmin, isCurator } = useUser();
+  const { user: currentUser, isAdmin, permissions } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
   const { labels: allLabels, createLabel } = useLabels();
@@ -68,7 +70,10 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {

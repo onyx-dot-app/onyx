@@ -5,18 +5,15 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import Form
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import alter_credential
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import create_credential
-from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from onyx.db.credentials import delete_credential
 from onyx.db.credentials import delete_credential_for_user
 from onyx.db.credentials import fetch_credential_by_id_for_user
@@ -38,7 +35,6 @@ from onyx.server.documents.private_key_types import PrivateKeyFileTypes
 from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -46,23 +42,18 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 
-def _ignore_credential_permissions(source: DocumentSource) -> bool:
-    return source in CREDENTIAL_PERMISSIONS_TO_IGNORE
-
-
 """Admin-only endpoints"""
 
 
 @router.get("/admin/credential")
 def list_credentials_admin(
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     """Lists all public credentials"""
     credentials = fetch_credentials_for_user(
         db_session=db_session,
         user=user,
-        get_editable=False,
     )
     return [
         CredentialSnapshot.from_credential_db_model(credential)
@@ -73,17 +64,13 @@ def list_credentials_admin(
 @router.get("/admin/similar-credentials/{source_type}")
 def get_cc_source_full_info(
     source_type: DocumentSource,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
-    get_editable: bool = Query(
-        False, description="If true, return editable credentials"
-    ),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_by_source_for_user(
         db_session=db_session,
         user=user,
         document_source=source_type,
-        get_editable=get_editable,
     )
 
     return [
@@ -95,7 +82,7 @@ def get_cc_source_full_info(
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
@@ -108,7 +95,7 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     validate_ccpair_for_user(
@@ -135,18 +122,9 @@ def swap_credentials_for_connector(
 @router.post("/credential")
 def create_credential_from_model(
     credential_info: CredentialBase,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if not _ignore_credential_permissions(credential_info.source):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=credential_info.groups,
-            object_is_public=credential_info.curator_public,
-        )
 
     # Temporary fix for empty Google App credentials
     if credential_info.source == DocumentSource.GMAIL:
@@ -167,7 +145,7 @@ def create_credential_with_private_key(
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
@@ -201,16 +179,6 @@ def create_credential_with_private_key(
         name=name,
         source=DocumentSource(source),
     )
-
-    if not _ignore_credential_permissions(DocumentSource(source)):
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group", "validate_object_creation_for_user", None
-        )(
-            db_session=db_session,
-            user=user,
-            target_group_ids=groups,
-            object_is_public=curator_public,
-        )
 
     # Temporary fix for empty Google App credentials
     if DocumentSource(source) == DocumentSource.GMAIL:
@@ -248,7 +216,6 @@ def get_credential_by_id(
         credential_id,
         user,
         db_session,
-        get_editable=False,
     )
     if credential is None:
         raise HTTPException(
@@ -263,7 +230,7 @@ def get_credential_by_id(
 def update_credential_data(
     credential_id: int,
     credential_update: CredentialDataUpdateRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     credential = alter_credential(
@@ -291,7 +258,7 @@ def update_credential_private_key(
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
     try:

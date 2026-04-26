@@ -43,7 +43,7 @@ async def test_get_or_create_user_updates_expiry(
     existing_user = MagicMock()
     existing_user.email = email
     existing_user.oidc_expiry = None
-    existing_user.role.is_web_login.return_value = True
+    existing_user.account_type.is_web_login.return_value = True
 
     manager_holder: dict[str, Any] = {}
 
@@ -60,7 +60,7 @@ async def test_get_or_create_user_updates_expiry(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -94,7 +94,7 @@ async def test_get_or_create_user_skips_inactive(
     existing_user = MagicMock()
     existing_user.email = email
     existing_user.is_active = False
-    existing_user.role.is_web_login.return_value = True
+    existing_user.account_type.is_web_login.return_value = True
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
@@ -108,7 +108,7 @@ async def test_get_or_create_user_skips_inactive(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -134,7 +134,7 @@ async def test_get_or_create_user_handles_race_conditions(
     inactive_user = MagicMock()
     inactive_user.email = email
     inactive_user.is_active = False
-    inactive_user.role.is_web_login.return_value = True
+    inactive_user.account_type.is_web_login.return_value = True
 
     class StubUserManager:
         def __init__(self, _user_db: object) -> None:
@@ -156,7 +156,7 @@ async def test_get_or_create_user_handles_race_conditions(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
@@ -177,7 +177,7 @@ async def test_get_or_create_user_provisions_new_user(
     created_user = MagicMock()
     created_user.email = email
     created_user.oidc_expiry = None
-    created_user.role.is_web_login.return_value = True
+    created_user.account_type.is_web_login.return_value = True
 
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
@@ -203,7 +203,7 @@ async def test_get_or_create_user_provisions_new_user(
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
-        "SQLAlchemyUserAdminDB",
+        "SQLAlchemyUserDatabase",
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 

@@ -3,7 +3,9 @@
 import { useMemo, useState, useRef } from "react";
 import AgentCard from "@/sections/agents/AgentCard";
 import { useUser } from "@/providers/UserProvider";
-import { checkUserOwnsAgent } from "@/lib/agents/utils";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
+import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
@@ -48,7 +50,8 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
 
 export default function AgentsNavigationPage() {
   const { agents } = useAgents();
-  const { user } = useUser();
+  const { user, permissions } = useUser();
+  const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -101,9 +104,15 @@ export default function AgentsNavigationPage() {
         description="Customize AI behavior and knowledge for you and your team's use cases."
         rightChildren={
           <Button
-            href="/app/agents/create"
+            href={canCreateAgent ? "/app/agents/create" : undefined}
             icon={SvgPlus}
             aria-label="AgentsPage/new-agent-button"
+            disabled={!canCreateAgent}
+            tooltip={
+              !canCreateAgent
+                ? "You don't have permission to create agents. Contact your admin to request access."
+                : undefined
+            }
           >
             New Agent
           </Button>

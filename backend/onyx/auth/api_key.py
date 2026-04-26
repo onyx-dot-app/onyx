@@ -10,9 +10,9 @@ from pydantic import BaseModel
 from onyx.auth.constants import API_KEY_LENGTH
 from onyx.auth.constants import API_KEY_PREFIX
 from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
-from onyx.auth.schemas import UserRole
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
+from onyx.server.models import UserGroupInfo
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -21,7 +21,7 @@ class ApiKeyDescriptor(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    groups: list[UserGroupInfo]
 
     user_id: uuid.UUID
 

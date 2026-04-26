@@ -11,7 +11,6 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import { useUser } from "@/providers/UserProvider";
-import { UserRole } from "@/lib/types";
 import NonAdminStep from "./components/NonAdminStep";
 
 type OnboardingFlowProps = {
@@ -29,13 +28,13 @@ const OnboardingFlowInner = ({
   state: onboardingState,
   actions: onboardingActions,
 }: OnboardingFlowProps) => {
-  const { user } = useUser();
+  const { user, isAdmin } = useUser();
 
   if (!user) return null;
 
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
 
-  return user.role === UserRole.ADMIN ? (
+  return isAdmin ? (
     showOnboarding ? (
       <div
         className="flex flex-col items-center justify-center w-full max-w-(--app-page-main-content-width) gap-2 mb-4"

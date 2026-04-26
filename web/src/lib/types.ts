@@ -62,24 +62,34 @@ export enum AccountType {
   ANONYMOUS = "ANONYMOUS",
 }
 
-export enum UserRole {
-  LIMITED = "limited",
-  BASIC = "basic",
-  ADMIN = "admin",
-  CURATOR = "curator",
-  GLOBAL_CURATOR = "global_curator",
-  EXT_PERM_USER = "ext_perm_user",
-  SLACK_USER = "slack_user",
+export enum Permission {
+  BASIC_ACCESS = "basic",
+  READ_CONNECTORS = "read:connectors",
+  READ_DOCUMENT_SETS = "read:document_sets",
+  READ_AGENTS = "read:agents",
+  READ_USERS = "read:users",
+  READ_USER_GROUPS = "read:user_groups",
+  ADD_AGENTS = "add:agents",
+  MANAGE_AGENTS = "manage:agents",
+  MANAGE_DOCUMENT_SETS = "manage:document_sets",
+  MANAGE_CONNECTORS = "manage:connectors",
+  MANAGE_LLMS = "manage:llms",
+  READ_AGENT_ANALYTICS = "read:agent_analytics",
+  MANAGE_ACTIONS = "manage:actions",
+  READ_QUERY_HISTORY = "read:query_history",
+  MANAGE_USER_GROUPS = "manage:user_groups",
+  CREATE_USER_API_KEYS = "create:user_api_keys",
+  MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
+  MANAGE_BOTS = "manage:bots",
+  FULL_ADMIN_PANEL_ACCESS = "admin",
 }
 
-export const USER_ROLE_LABELS: Record<UserRole, string> = {
-  [UserRole.BASIC]: "Basic",
-  [UserRole.ADMIN]: "Admin",
-  [UserRole.GLOBAL_CURATOR]: "Global Curator",
-  [UserRole.CURATOR]: "Curator",
-  [UserRole.LIMITED]: "Limited",
-  [UserRole.EXT_PERM_USER]: "External Permissioned User",
-  [UserRole.SLACK_USER]: "Slack User",
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  [AccountType.STANDARD]: "Standard",
+  [AccountType.BOT]: "Slack Bot",
+  [AccountType.EXT_PERM_USER]: "External User",
+  [AccountType.SERVICE_ACCOUNT]: "Service Account",
+  [AccountType.ANONYMOUS]: "Anonymous",
 };
 
 export enum UserStatus {
@@ -96,23 +106,13 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.REQUESTED]: "Request to Join",
 };
 
-export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
-  [UserRole.BASIC]: "Basic users can't perform any admin actions",
-  [UserRole.ADMIN]: "Admin users can perform all admin actions",
-  [UserRole.GLOBAL_CURATOR]:
-    "Global Curator users can perform admin actions for all groups they are a member of",
-  [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
-  [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
-};
-
 export interface User {
   id: string;
   email: string;
   is_active: boolean;
   is_superuser: boolean;
   is_verified: boolean;
-  role: UserRole;
+  account_type: AccountType;
   preferences: UserPreferences;
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
@@ -128,6 +128,8 @@ export interface User {
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
   personalization?: UserPersonalization;
+  effective_permissions?: string[];
+  is_admin?: boolean;
 }
 
 export interface TenantInfo {
@@ -152,7 +154,6 @@ export interface AllUsersResponse {
 export interface AcceptedUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   is_active: boolean;
 }
 

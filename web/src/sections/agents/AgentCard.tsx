@@ -19,6 +19,8 @@ import {
   updateAgentFeaturedStatus,
 } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -50,9 +52,12 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { user, isAdmin, isCurator } = useUser();
+  const { user, isAdmin, permissions } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();

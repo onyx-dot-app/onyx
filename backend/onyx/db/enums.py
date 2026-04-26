@@ -413,6 +413,7 @@ class Permission(str, PyEnum):
     READ_DOCUMENT_SETS = "read:document_sets"
     READ_AGENTS = "read:agents"
     READ_USERS = "read:users"
+    READ_USER_GROUPS = "read:user_groups"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -427,8 +428,8 @@ class Permission(str, PyEnum):
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
-    CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
-    CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
+    MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys"
+    MANAGE_BOTS = "manage:bots"
 
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
