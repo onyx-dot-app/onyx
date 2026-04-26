@@ -73,8 +73,7 @@ export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
     if (!user) return;
 
     const matchedRoute = Object.values(ADMIN_ROUTES).find(
-      (route: AdminRouteEntry) =>
-        route.sidebarLabel && pathname.startsWith(route.path)
+      (route: AdminRouteEntry) => pathname.startsWith(route.path)
     );
     if (
       matchedRoute &&
