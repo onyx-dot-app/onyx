@@ -6,7 +6,6 @@ import pytest
 # Integration tests rely on this mode to enable mock_llm_response paths.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -23,6 +22,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -98,7 +98,7 @@ def admin_user() -> DATestUser:
         user = UserManager.create(name=ADMIN_USER_NAME)
 
         # if there are other users for some reason, reset and try again
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             print("Trying to reset")
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
@@ -113,11 +113,11 @@ def admin_user() -> DATestUser:
                 email=build_email("admin_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
-        if not UserManager.is_role(user, UserRole.ADMIN):
+        if not UserManager.is_admin(user):
             reset_all()
             user = UserManager.create(name=ADMIN_USER_NAME)
             return user
@@ -132,16 +132,15 @@ def admin_user() -> DATestUser:
 @pytest.fixture
 def basic_user(
     # make sure the admin user exists first to ensure this new user
-    # gets the BASIC role
+    # lands in the Basic group rather than Admin
     admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
     try:
         user = UserManager.create(name=BASIC_USER_NAME)
 
-        # Validate that the user has the BASIC role
-        if user.role != UserRole.BASIC:
+        if user.is_admin:
             raise RuntimeError(
-                f"Created user {BASIC_USER_NAME} does not have BASIC role"
+                f"Created user {BASIC_USER_NAME} unexpectedly has admin privileges"
             )
 
         return user
@@ -155,14 +154,15 @@ def basic_user(
                 email=build_email(BASIC_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )
 
-        # Validate that the logged-in user has the BASIC role
-        if not UserManager.is_role(user, UserRole.BASIC):
-            raise RuntimeError(f"User {BASIC_USER_NAME} does not have BASIC role")
+        if UserManager.is_admin(user):
+            raise RuntimeError(
+                f"User {BASIC_USER_NAME} unexpectedly has admin privileges"
+            )
 
         return user
 
@@ -196,8 +196,12 @@ def image_generation_config(
 
 @pytest.fixture
 def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connector

@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key
 from onyx.db.models import ApiKey
@@ -112,7 +111,6 @@ def get_or_create_discord_service_api_key(
     logger.info(f"Creating Discord service API key for tenant {tenant_id}")
     api_key_args = APIKeyArgs(
         name=DISCORD_SERVICE_API_KEY_NAME,
-        role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
     )
     api_key_descriptor = insert_api_key(
         db_session=db_session,

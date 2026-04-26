@@ -8,6 +8,7 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DAQueryHistoryEntry
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -79,7 +80,13 @@ def setup_chat_sessions_with_different_feedback() -> (
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
+    api_key = APIKeyManager.create(
+        user_performing_action=admin_user,
+        group_ids=[admin_group.id],
+    )
     LLMProviderManager.create(user_performing_action=admin_user)
 
     # Seed a document

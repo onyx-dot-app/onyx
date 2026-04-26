@@ -1,6 +1,5 @@
 from typing import Any
 
-from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -8,18 +7,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_
 from sqlalchemy.sql.expression import or_
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import get_effective_permissions
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import Permission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import User
-from onyx.db.models import User__UserGroup
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 
@@ -43,16 +42,14 @@ PUBLIC_CREDENTIAL_ID = 0
 def _add_user_filters(
     stmt: Select,
     user: User,
-    get_editable: bool = True,
 ) -> Select:
-    """Attaches filters to the statement to ensure that the user can only
-    access the appropriate credentials"""
+    """Attaches filters to ensure the user can only access appropriate credentials."""
     if user.is_anonymous:
         raise ValueError("Anonymous users are not allowed to access credentials")
 
-    if user.role == UserRole.ADMIN:
-        # Admins can access all credentials that are public or owned by them
-        # or are not associated with any user
+    effective = get_effective_permissions(user)
+
+    if Permission.MANAGE_CONNECTORS in effective:
         return stmt.where(
             or_(
                 Credential.user_id == user.id,
@@ -61,56 +58,9 @@ def _add_user_filters(
                 Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
             )
         )
-    if user.role == UserRole.BASIC:
-        # Basic users can only access credentials that are owned by them
-        return stmt.where(Credential.user_id == user.id)
 
-    stmt = stmt.distinct()
-    """
-    THIS PART IS FOR CURATORS AND GLOBAL CURATORS
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> Credential__UserGroup -> Credential
-    """
-    stmt = stmt.outerjoin(Credential__UserGroup).outerjoin(
-        User__UserGroup,
-        User__UserGroup.user_group_id == Credential__UserGroup.user_group_id,
-    )
-    """
-    Filter Credentials by:
-    - if the user is in the user_group that owns the Credential
-    - if the user is a curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out Credentials that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all Credentials in the groups the user is a curator
-    for (as well as public Credentials)
-    - if we are not editing, we return all Credentials directly connected to the user
-    """
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
-
-    if get_editable:
-        user_groups = select(User__UserGroup.user_group_id).where(
-            User__UserGroup.user_id == user.id
-        )
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
-        where_clause &= (
-            ~exists()
-            .where(Credential__UserGroup.credential_id == Credential.id)
-            .where(~Credential__UserGroup.user_group_id.in_(user_groups))
-            .correlate(Credential)
-        )
-    else:
-        where_clause |= Credential.curator_public == True  # noqa: E712
-        where_clause |= Credential.user_id == user.id  # noqa: E712
-
-    where_clause |= Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE)
-
-    return stmt.where(where_clause)
+    # All other users: only their own credentials
+    return stmt.where(Credential.user_id == user.id)
 
 
 def _relate_credential_to_user_groups__no_commit(
@@ -132,10 +82,9 @@ def _relate_credential_to_user_groups__no_commit(
 def fetch_credentials_for_user(
     db_session: Session,
     user: User,
-    get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)
-    stmt = _add_user_filters(stmt, user, get_editable=get_editable)
+    stmt = _add_user_filters(stmt, user)
     results = db_session.scalars(stmt)
     return list(results.all())
 
@@ -144,14 +93,12 @@ def fetch_credential_by_id_for_user(
     credential_id: int,
     user: User,
     db_session: Session,
-    get_editable: bool = True,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
     stmt = _add_user_filters(
         stmt=stmt,
         user=user,
-        get_editable=get_editable,
     )
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
@@ -173,10 +120,9 @@ def fetch_credentials_by_source_for_user(
     db_session: Session,
     user: User,
     document_source: DocumentSource | None = None,
-    get_editable: bool = True,
 ) -> list[Credential]:
     base_query = select(Credential).where(Credential.source == document_source)
-    base_query = _add_user_filters(base_query, user, get_editable=get_editable)
+    base_query = _add_user_filters(base_query, user)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
 

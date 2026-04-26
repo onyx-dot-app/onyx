@@ -21,7 +21,6 @@ from onyx.db.models import Credential
 from onyx.db.models import PublicExternalUserGroup
 from onyx.db.models import User
 from onyx.db.models import User__ExternalUserGroupId
-from onyx.db.models import UserRole
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
@@ -31,7 +30,6 @@ def _create_ext_perm_user(db_session: Session, name: str) -> User:
     return create_test_user(
         db_session,
         name,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
 

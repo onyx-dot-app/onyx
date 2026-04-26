@@ -4,6 +4,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/sections/cards/AgentCard";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
@@ -68,7 +69,7 @@ export default function AgentsNavigationPage() {
   const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
   const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
   const { user, permissions } = useUser();
-  const canCreateAgent = hasPermission(permissions, "add:agents");
+  const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(

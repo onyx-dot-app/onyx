@@ -14,7 +14,7 @@ from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.override_models import LLMOverride
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -46,10 +46,11 @@ def _create_admin(db_session: Session) -> User:
         is_active=True,
         is_superuser=True,
         is_verified=True,
-        role=UserRole.ADMIN,
         account_type=AccountType.STANDARD,
     )
     db_session.add(user)
+    db_session.flush()
+    assign_user_to_default_groups__no_commit(db_session, user, is_admin=True)
     db_session.commit()
     db_session.refresh(user)
     return user

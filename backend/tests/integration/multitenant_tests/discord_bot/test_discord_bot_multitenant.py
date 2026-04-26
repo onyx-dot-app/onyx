@@ -14,7 +14,6 @@ from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import register_guild
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
@@ -109,13 +108,13 @@ class TestGuildDataIsolation:
         admin_user1: DATestUser = UserManager.create(
             email=f"discord_admin1_{unique}@example.com",
         )
-        assert UserManager.is_role(admin_user1, UserRole.ADMIN)
+        assert UserManager.is_admin(admin_user1)
 
         # Create admin user for tenant 2
         admin_user2: DATestUser = UserManager.create(
             email=f"discord_admin2_{unique}@example.com",
         )
-        assert UserManager.is_role(admin_user2, UserRole.ADMIN)
+        assert UserManager.is_admin(admin_user2)
 
         # Create a guild registration key in tenant 1
         response1 = requests.post(

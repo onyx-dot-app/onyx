@@ -7,24 +7,19 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
-import { Button, Text } from "@opal/components";
+import { Button, Tag, Text } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
   SvgDownload,
   SvgKey,
-  SvgLock,
   SvgMoreHorizontal,
   SvgRefreshCw,
   SvgTrash,
-  SvgUser,
   SvgUserEdit,
   SvgUserKey,
-  SvgUserManage,
 } from "@opal/icons";
-import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
@@ -39,7 +34,6 @@ import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
 import {
   deleteApiKey,
   regenerateApiKey,
-  updateApiKey,
 } from "@/refresh-pages/admin/ServiceAccountsPage/svc";
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
@@ -87,24 +81,6 @@ export default function ServiceAccountsPage() {
       (key.api_key_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       key.api_key_display.toLowerCase().includes(search.toLowerCase())
   );
-
-  const handleRoleChange = async (apiKey: APIKey, newRole: UserRole) => {
-    try {
-      const response = await updateApiKey(apiKey.api_key_id, {
-        name: apiKey.api_key_name ?? undefined,
-        role: newRole,
-      });
-      if (!response.ok) {
-        const errorMsg = await response.text();
-        toast.error(`Failed to update role: ${errorMsg}`);
-        return;
-      }
-      mutate(API_KEY_SWR_KEY);
-      toast.success("Role updated.");
-    } catch {
-      toast.error("Failed to update role.");
-    }
-  };
 
   const handleRegenerate = async (apiKey: APIKey) => {
     try {
@@ -165,40 +141,30 @@ export default function ServiceAccountsPage() {
         ),
       }),
       tc.displayColumn({
-        id: "account_type",
-        header: "Account Type",
+        id: "groups",
+        header: "Groups",
         width: { weight: 25, minWidth: 160 },
-        cell: (row) => (
-          <InputSelect
-            value={row.api_key_role}
-            onValueChange={(value) => handleRoleChange(row, value as UserRole)}
-          >
-            <InputSelect.Trigger />
-            <InputSelect.Content>
-              <InputSelect.Item
-                value={UserRole.ADMIN.toString()}
-                icon={SvgUserManage}
-                description="Unrestricted admin access to all endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.ADMIN]}
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={UserRole.BASIC.toString()}
-                icon={SvgUser}
-                description="Standard user-level access to non-admin endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.BASIC]}
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={UserRole.LIMITED.toString()}
-                icon={SvgLock}
-                description="For agents: chat posting and read-only access to other endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.LIMITED]}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
-        ),
+        cell: (row) => {
+          const groups = row.groups ?? [];
+          if (groups.length === 0) {
+            return (
+              <Text font="secondary-body" color="text-03">
+                —
+              </Text>
+            );
+          }
+          const maxVisible = 2;
+          const visible = groups.slice(0, maxVisible);
+          const overflow = groups.length - maxVisible;
+          return (
+            <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
+              {visible.map((g) => (
+                <Tag key={g.id} title={g.name} size="md" />
+              ))}
+              {overflow > 0 && <Tag title={`+${overflow}`} size="md" />}
+            </div>
+          );
+        },
       }),
       tc.actions({
         cell: (row) => (

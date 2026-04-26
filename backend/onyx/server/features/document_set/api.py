@@ -25,7 +25,6 @@ from onyx.server.features.document_set.models import CheckDocSetPublicResponse
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -39,15 +38,6 @@ def create_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> int:
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        target_group_ids=document_set_creation_request.groups,
-        object_is_public=document_set_creation_request.is_public,
-        object_is_new=True,
-    )
     try:
         document_set_db_model, _ = insert_document_set(
             document_set_creation_request=document_set_creation_request,
@@ -81,16 +71,6 @@ def patch_document_set(
             f"Document set {document_set_update_request.id} does not exist",
         )
 
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        target_group_ids=document_set_update_request.groups,
-        object_is_public=document_set_update_request.is_public,
-        object_is_owned_by_user=user
-        and (document_set.user_id is None or document_set.user_id == user.id),
-    )
     try:
         update_document_set(
             document_set_update_request=document_set_update_request,
@@ -121,19 +101,6 @@ def delete_document_set(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
             f"Document set {document_set_id} does not exist",
         )
-
-    # check if the user has "edit" access to the document set.
-    # `validate_object_creation_for_user` is poorly named, but this
-    # is the right function to use here
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        object_is_public=document_set.is_public,
-        object_is_owned_by_user=user
-        and (document_set.user_id is None or document_set.user_id == user.id),
-    )
 
     try:
         mark_document_set_as_to_be_deleted(

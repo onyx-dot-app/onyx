@@ -9,7 +9,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccountType
 from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -56,11 +56,12 @@ def tenant_context() -> Generator[None, None, None]:
 def create_test_user(
     db_session: Session,
     email_prefix: str,
-    role: UserRole = UserRole.BASIC,
     account_type: AccountType = AccountType.STANDARD,
+    is_admin: bool = False,
 ) -> User:
-    """Helper to create a test user with a unique email"""
-    # Use UUID to ensure unique email addresses
+    """Create a test user. Assigns the seeded Basic
+    (or Admin if is_admin=True) default group and populates
+    effective_permissions; skipped for BOT/EXT_PERM_USER/ANONYMOUS."""
     unique_email = f"{email_prefix}_{uuid4().hex[:8]}@example.com"
 
     password_helper = PasswordHelper()
@@ -74,10 +75,13 @@ def create_test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=role,
         account_type=account_type,
     )
     db_session.add(user)
+    db_session.flush()
+
+    assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+
     db_session.commit()
     db_session.refresh(user)
     return user

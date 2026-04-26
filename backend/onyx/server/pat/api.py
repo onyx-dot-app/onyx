@@ -59,7 +59,7 @@ def create_token(
             expiration_days=request.expiration_days,
         )
     except ValueError as e:
-        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     logger.info(f"User {user.email} created PAT '{request.name}'")
 
