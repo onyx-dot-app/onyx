@@ -1,6 +1,14 @@
 # Local development override with different ports to avoid conflicts
 services:
   api_server:
+    volumes:
+      - ./keycloak-proxy.py:/app/keycloak-proxy.py:ro
+    command: >
+      /bin/sh -c "python /app/keycloak-proxy.py &
+      sleep 1 &&
+      alembic upgrade head &&
+      echo 'Starting Onyx Api Server' &&
+      uvicorn onyx.main:app --factory --host 0.0.0.0 --port 8080"
     ports:
       - "8086:8080"
     environment:
@@ -12,7 +20,7 @@ services:
 
   relational_db:
     ports:
-      - "5433:5432"
+      - "5434:5432"
 
   index:
     ports:

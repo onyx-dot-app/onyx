@@ -4,9 +4,8 @@
 # This configuration uses the existing keycloak_postgres container to restore
 # the old Keycloak data while upgrading to Keycloak 26.1
 #
-# Keycloak will be available at:
-#   - HTTPS: https://localhost:8082
-# Admin console: https://localhost:8082/admin
+# Keycloak will be available at http://<host>:8082
+# Admin console: http://<host>:8082/admin
 # =============================================================================
 
 services:
@@ -14,7 +13,8 @@ services:
     image: quay.io/keycloak/keycloak:26.1
     command: start-dev
     restart: unless-stopped
-    # external_links removed - arthub-postgres is connected to onyx_default with alias keycloak-postgres
+    external_links:
+      - keycloak_postgres:keycloak-postgres
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
@@ -23,20 +23,13 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
-      # HTTPS Configuration
-      KC_HTTPS_ENABLED: "true"
-      KC_HTTPS_PORT: 8082
-      KC_HTTPS_CERTIFICATE_FILE: /etc/x509/https/tls.crt
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /etc/x509/https/tls.key
+      KC_HTTP_PORT: 8082
       # Health check
       KC_HEALTH_ENABLED: "true"
     ports:
-      - "8082:8082"
-    volumes:
-      - ./certs/keycloak.crt:/etc/x509/https/tls.crt:ro
-      - ./certs/keycloak.key:/etc/x509/https/tls.key:ro
+      - "${KEYCLOAK_PORT:-8082}:8082"
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8082;echo -e \"GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3;if [ $? -eq 0 ];then echo 'Healthcheck Successful';exit 0;else exit 1;fi"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8082;echo -e \"GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n\" >&3;if [ $? -eq 0 ];then echo 'Healthcheck Successful';exit 0;else exit 1;fi"]
       interval: 30s
       timeout: 10s
       retries: 5
