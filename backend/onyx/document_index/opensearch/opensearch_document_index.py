@@ -83,6 +83,14 @@ logger = setup_logger(__name__)
 VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
+# Per-process cache of indices that have already been verified/created. Verify
+# is idempotent and the schema only changes on deploys (which restart the
+# process), so once we've verified an index once we can skip the redis lock
+# and the OpenSearch round-trip on subsequent constructions. Without this,
+# every vespa_metadata_sync_task acquires the lock and contends with all
+# sibling threads, producing RedisSharedLockAcquisitionError under load.
+_verified_index_names: set[str] = set()
+
 
 class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
@@ -632,6 +640,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             Exception: There was an error verifying or creating the index or
                 search pipelines.
         """
+        if self._index_name in _verified_index_names:
+            return
+
         logger.debug(
             f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if "
             f"necessary, with embedding dimension {embedding_dim}."
@@ -643,31 +654,39 @@ class OpenSearchDocumentIndex(DocumentIndex):
             wait_for_lock_s=VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S,
             logger=logger,
         ):
-            if not self._tenant_state.multitenant:
-                set_cluster_state(self._client)
+            # Re-check once we hold the lock — another worker (or thread) may
+            # have completed the verify while we were waiting.
+            if self._index_name in _verified_index_names:
+                return
+            self._verify_and_create_index(embedding_dim)
+            _verified_index_names.add(self._index_name)
 
-            expected_mappings = DocumentSchema.get_document_schema(
-                embedding_dim, self._tenant_state.multitenant
+    def _verify_and_create_index(self, embedding_dim: int) -> None:
+        """Performs the actual verify/create work. Caller must hold the
+        shared verify-index redis lock."""
+        if not self._tenant_state.multitenant:
+            set_cluster_state(self._client)
+
+        expected_mappings = DocumentSchema.get_document_schema(
+            embedding_dim, self._tenant_state.multitenant
+        )
+
+        if not self._client.index_exists():
+            index_settings = DocumentSchema.get_index_settings_based_on_environment()
+            self._client.create_index(
+                mappings=expected_mappings,
+                settings=index_settings,
             )
-
-            if not self._client.index_exists():
-                index_settings = (
-                    DocumentSchema.get_index_settings_based_on_environment()
+        else:
+            # Ensure schema is up to date by applying the current mappings.
+            try:
+                self._client.put_mapping(expected_mappings)
+            except Exception as e:
+                logger.error(
+                    f"Failed to update mappings for index {self._index_name}. This likely means a "
+                    f"field type was changed which requires reindexing. Error: {e}"
                 )
-                self._client.create_index(
-                    mappings=expected_mappings,
-                    settings=index_settings,
-                )
-            else:
-                # Ensure schema is up to date by applying the current mappings.
-                try:
-                    self._client.put_mapping(expected_mappings)
-                except Exception as e:
-                    logger.error(
-                        f"Failed to update mappings for index {self._index_name}. This likely means a "
-                        f"field type was changed which requires reindexing. Error: {e}"
-                    )
-                    raise
+                raise
 
     def index(
         self,
