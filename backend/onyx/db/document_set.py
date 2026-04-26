@@ -45,8 +45,10 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         if get_editable:
             return stmt.where(sa_false())
         return stmt
-    # No permission → return nothing
-    return stmt.where(sa_false())
+
+    if get_editable:
+        return stmt.where(sa_false())
+    return stmt.where(DocumentSetDBModel.is_public.is_(True))
 
 
 def _delete_document_set_cc_pairs__no_commit(
