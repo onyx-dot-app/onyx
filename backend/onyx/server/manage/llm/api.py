@@ -667,7 +667,7 @@ def list_llm_provider_basics(
         # - Excludes providers with persona restrictions (requires specific persona)
         # - Excludes non-public providers with no restrictions (admin-only)
         if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, is_admin=can_manage_llms
+            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         ):
             accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
@@ -715,7 +715,7 @@ def get_valid_model_names_for_persona(
     for llm_provider_model in all_providers:
         # Check access with persona context — respects all RBAC restrictions
         if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, is_admin=can_manage_llms
+            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             # Collect all model names from this provider
             for model_config in llm_provider_model.model_configurations:
@@ -767,7 +767,7 @@ def list_llm_providers_for_persona(
     for llm_provider_model in all_providers:
         # Check access with persona context — respects persona restrictions
         if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, is_admin=can_manage_llms
+            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             llm_provider_list.append(
                 LLMProviderDescriptor.from_model(llm_provider_model)
@@ -795,7 +795,7 @@ def list_llm_providers_for_persona(
     if persona_default_provider:
         provider = fetch_existing_llm_provider(persona_default_provider, db_session)
         if provider and can_user_access_llm_provider(
-            provider, user_group_ids, persona, is_admin=can_manage_llms
+            provider, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             if persona_default_model:
                 # Persona specifies both provider and model — use them directly

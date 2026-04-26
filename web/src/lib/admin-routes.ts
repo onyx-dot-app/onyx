@@ -49,12 +49,38 @@ export interface FeatureFlags {
   queryHistoryEnabled: boolean;
 }
 
+/**
+ * Declarative metadata for a single admin-panel route. Drives both the
+ * sidebar (in `admin-sidebar-utils.ts`) and the per-page permission gate
+ * (in `ClientLayout.tsx`).
+ *
+ * Fields:
+ * - `path`: Route path. Used for matching the current pathname (via
+ *   `pathname.startsWith(path)`) and as the link target in the sidebar.
+ * - `icon`: Icon shown next to the sidebar label.
+ * - `title`: Human-readable page title (currently used for documentation
+ *   and potential future page headers).
+ * - `sidebarLabel`: Text shown in the sidebar. **An empty string means the
+ *   route is permission-gated and layout-matched but does not render in the
+ *   sidebar** (e.g. deep-link-only or hidden admin tools like `/admin/debug`).
+ * - `requiredPermission`: The single `Permission` token the user must hold
+ *   to access this route. `FULL_ADMIN_PANEL_ACCESS` overrides every other
+ *   permission. There is no "any-of" — gate only on a single token.
+ * - `section`: Sidebar grouping label. **An empty string places the route in
+ *   the unlabeled (default) section.**
+ * - `requiresEnterprise`: When true, the sidebar entry is rendered as
+ *   disabled in CE; the route still resolves but the UI surfaces the EE gate.
+ * - `visibleWhen`: Optional feature-flag predicate. **`null` means always
+ *   visible (subject to the permission and enterprise checks above).** When
+ *   provided, the predicate is evaluated against the resolved feature flags;
+ *   returning `false` hides the route from the sidebar.
+ */
 export interface AdminRouteEntry {
   path: string;
   icon: IconFunctionComponent;
   title: string;
   sidebarLabel: string;
-  requiredPermission: string;
+  requiredPermission: Permission;
   section: string;
   requiresEnterprise: boolean;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;

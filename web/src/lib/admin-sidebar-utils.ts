@@ -26,12 +26,12 @@ export function buildItems(
   flags: FeatureFlags,
   settings: CombinedSettings | null
 ): SidebarItemEntry[] {
-  const can = (perm: string) => hasPermission(permissions, perm);
+  const userCanAccess = (perm: string) => hasPermission(permissions, perm);
   const items: SidebarItemEntry[] = [];
 
   for (const route of Object.values(ADMIN_ROUTES) as AdminRouteEntry[]) {
     if (!route.sidebarLabel) continue;
-    if (!can(route.requiredPermission)) continue;
+    if (!userCanAccess(route.requiredPermission)) continue;
     if (route.visibleWhen && !route.visibleWhen(flags)) continue;
 
     const item: SidebarItemEntry = {
@@ -49,7 +49,10 @@ export function buildItems(
   }
 
   // Upgrade Plan — only for full admins without a subscription
-  if (can(Permission.FULL_ADMIN_PANEL_ACCESS) && !flags.hasSubscription) {
+  if (
+    userCanAccess(Permission.FULL_ADMIN_PANEL_ACCESS) &&
+    !flags.hasSubscription
+  ) {
     items.push({
       section: "",
       name: "Upgrade Plan",
