@@ -201,7 +201,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             return []
         if assoc_collection.paging and assoc_collection.paging.next:
             return None
-        return [r.id for r in (assoc_collection.results or [])]
+        return list(dict.fromkeys(r.id for r in (assoc_collection.results or [])))
 
     def _get_associated_objects(
         self,
@@ -222,7 +222,11 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     object_id=object_id,
                     to_object_type=to_object_type,
                 )
-                object_ids = [str(assoc.to_object_id) for assoc in associations_iter]
+                object_ids = list(
+                    dict.fromkeys(
+                        str(assoc.to_object_id) for assoc in associations_iter
+                    )
+                )
 
             associated_objects: list[dict[str, Any]] = []
 
