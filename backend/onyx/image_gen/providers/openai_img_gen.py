@@ -71,13 +71,17 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         reference_images: list[ReferenceImage] | None = None,
         **kwargs: Any,
     ) -> ImageGenerationResponse:
+        normalized_model = self._normalize_model_name(model)
+        # Explicitly prefix with `openai/` so LiteLLM routes correctly even
+        # for models not yet in its built-in registry (e.g. new gpt-image-* releases).
+        litellm_model = f"openai/{normalized_model}"
+
         if reference_images:
             if not self._model_supports_image_edits(model):
                 raise ValueError(
                     f"Model '{model}' does not support image edits with reference images."
                 )
 
-            normalized_model = self._normalize_model_name(model)
             if (
                 normalized_model == self._DALL_E_2_MODEL_NAME
                 and len(reference_images) > 1
@@ -91,7 +95,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
             return image_edit(
                 image=[image.data for image in reference_images],
                 prompt=prompt,
-                model=model,
+                model=litellm_model,
                 api_key=self._api_key,
                 api_base=self._api_base,
                 size=size,
@@ -104,7 +108,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
 
         return image_generation(
             prompt=prompt,
-            model=model,
+            model=litellm_model,
             api_key=self._api_key,
             api_base=self._api_base,
             size=size,
