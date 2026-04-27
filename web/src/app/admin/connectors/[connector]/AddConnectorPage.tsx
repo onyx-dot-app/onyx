@@ -467,7 +467,7 @@ export default function AddConnector({
             isTimeout?: true;
           };
 
-          if (result.isTimeout) {
+          if (result?.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             toast.error(
               `Operation timed out after ${
