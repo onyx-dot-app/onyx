@@ -73,7 +73,7 @@ export default function NonAdminStep() {
             title="You're all set!"
             sizePreset="main-ui"
             variant="body"
-            prominence="muted"
+            color="muted"
             padding="fit"
             rightChildren={
               <Button

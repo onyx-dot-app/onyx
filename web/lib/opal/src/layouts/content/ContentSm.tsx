@@ -11,7 +11,6 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 
 type ContentSmSizePreset = "main-content" | "main-ui" | "secondary";
 type ContentSmOrientation = "vertical" | "inline" | "reverse";
-type ContentSmProminence = "default" | "muted";
 
 interface ContentSmPresetConfig {
   /** Opal font name for the title. */
@@ -35,9 +34,6 @@ interface ContentSmProps {
 
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
-
-  /** Title prominence. Default: `"default"`. */
-  prominence?: ContentSmProminence;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -74,7 +70,6 @@ function ContentSm({
   title,
   sizePreset = "main-ui",
   orientation = "inline",
-  prominence = "default",
   ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
@@ -85,7 +80,6 @@ function ContentSm({
       className="opal-content-sm"
       data-opal-content
       data-orientation={orientation}
-      data-prominence={prominence}
     >
       {Icon && (
         <div
@@ -116,5 +110,4 @@ export {
   type ContentSmProps,
   type ContentSmSizePreset,
   type ContentSmOrientation,
-  type ContentSmProminence,
 };

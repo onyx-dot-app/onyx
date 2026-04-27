@@ -2,9 +2,9 @@
    Content — Shared color properties
 
    Two registered CSS custom properties drive all Content title + icon colors.
-   Each `.opal-content-*` base class sets defaults; the Interactive override
-   (at the bottom of this file) reassigns them when nested inside
-   `.interactive`.
+   The `data-content-color` attribute on the Content dispatcher's wrapper div
+   selects the color mode. Since the properties use `inherits: true`, all
+   descendant layout elements pick up the values automatically.
 
    @property registration enables hardware-accelerated color interpolation
    on the parent — children just read the variable with no independent
@@ -23,6 +23,33 @@
   initial-value: transparent;
 }
 
+/* ---------------------------------------------------------------------------
+   Color modes — driven by `data-content-color` on the dispatcher wrapper
+   --------------------------------------------------------------------------- */
+
+[data-content-color="default"] {
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
+}
+
+[data-content-color="muted"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--text-03);
+  color: var(--content-foreground);
+}
+
+[data-content-color="danger"] {
+  --content-foreground: var(--status-error-05);
+  --content-foreground-icon: var(--status-error-05);
+  color: var(--content-foreground);
+}
+
+[data-content-color="interactive"] {
+  color: inherit;
+  --content-foreground-icon: var(--interactive-foreground-icon);
+}
+
 /* ===========================================================================
    Content — ContentXl
 
@@ -39,9 +66,6 @@
 
 .opal-content-xl {
   @apply flex flex-col items-start;
-  --content-foreground: var(--text-04);
-  --content-foreground-icon: var(--text-04);
-  color: var(--content-foreground);
 }
 
 /* ---------------------------------------------------------------------------
@@ -134,9 +158,6 @@
 
 .opal-content-lg {
   @apply flex flex-col items-start;
-  --content-foreground: var(--text-04);
-  --content-foreground-icon: var(--text-04);
-  color: var(--content-foreground);
 }
 
 /* ---------------------------------------------------------------------------
@@ -223,9 +244,6 @@
 
 .opal-content-md {
   @apply flex flex-col items-start;
-  --content-foreground: var(--text-04);
-  --content-foreground-icon: var(--text-04);
-  color: var(--content-foreground);
 }
 
 .opal-content-md-header {
@@ -330,9 +348,6 @@
   /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
   @apply flex items-center;
   gap: 0.125rem;
-  --content-foreground: var(--text-04);
-  --content-foreground-icon: var(--text-04);
-  color: var(--content-foreground);
 }
 
 .opal-content-sm[data-orientation="inline"] {
@@ -357,34 +372,4 @@
 
 .opal-content-sm-icon {
   color: var(--content-foreground-icon);
-}
-
-/* ---------------------------------------------------------------------------
-   Prominence
-   --------------------------------------------------------------------------- */
-
-.opal-content-sm[data-prominence="muted"] {
-  --content-foreground: var(--text-03);
-  --content-foreground-icon: var(--text-03);
-}
-
-/* ===========================================================================
-   Interactive override
-
-   When a Content variant is nested inside an `.interactive` element,
-   the title inherits color from the Interactive's `--interactive-foreground`
-   and icons switch to `--interactive-foreground-icon`. This is automatic —
-   no opt-in prop is required.
-
-   Opt-out: set `nonInteractive` on <Content> to add
-   `data-opal-non-interactive` to the wrapper div, which excludes
-   the element from these overrides via the `:not(…) >` selector.
-
-   All four Content variants mark their root with `data-opal-content`,
-   so a single rule handles all of them.
-   =========================================================================== */
-
-.interactive :not([data-opal-non-interactive]) > [data-opal-content] {
-  color: inherit;
-  --content-foreground-icon: var(--interactive-foreground-icon);
 }
