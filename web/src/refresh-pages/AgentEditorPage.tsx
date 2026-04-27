@@ -7,7 +7,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -176,14 +176,14 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
   const imageSrc = uploadedImagePreview
     ? uploadedImagePreview
-    : values.uploaded_image_id
-      ? buildImgUrl(values.uploaded_image_id)
+    : values.uploaded_image_id && existingAgent?.id != null
+      ? buildAgentAvatarUrl(existingAgent.id)
       : values.icon_name
         ? undefined
         : values.remove_image
           ? undefined
           : existingAgent?.uploaded_image_id
-            ? buildImgUrl(existingAgent.uploaded_image_id)
+            ? buildAgentAvatarUrl(existingAgent.id)
             : undefined;
 
   function handleIconClick(iconName: string | null) {
