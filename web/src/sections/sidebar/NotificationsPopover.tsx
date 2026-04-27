@@ -76,7 +76,7 @@ function NotificationItem({
                       size="sm"
                       prominence="tertiary"
                       onClick={noProp(dismiss)}
-                      tooltip="Mark as read"
+                      tooltip="Mark as Read"
                     />
                   </Hoverable.Item>
                 </div>
@@ -208,11 +208,18 @@ export default function NotificationsPopover({
         </Section>
 
         <Section flexDirection="row" gap={0.25} justifyContent="end">
+          {undismissedCount !== 0 && (
+            <span className="text-action-link-05 font-secondary-body">
+              {`${undismissedCount} unread`}
+            </span>
+          )}
           <Button
             icon={SvgCheckAll}
             size="sm"
             prominence="tertiary"
             onClick={handleDismissAll}
+            tooltip="Mark All as Read"
+            disabled={undismissedCount === 0}
           />
         </Section>
       </Section>
