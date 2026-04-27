@@ -9,7 +9,7 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Callout } from "@/components/ui/callout";
 import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
@@ -17,10 +17,11 @@ import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { SvgInfo } from "@opal/icons";
+import { SvgBarChartSmall, SvgClock, SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { Tooltip } from "@opal/components";
-import { SvgClock } from "@opal/icons";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import StageMetricsModal from "./StageMetricsModal";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
   indexAttempts: IndexAttemptSnapshot[];
@@ -38,6 +39,7 @@ export function IndexAttemptsTable({
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
+  const [metricsAttemptId, setMetricsAttemptId] = useState<number | null>(null);
 
   if (!indexAttempts?.length) {
     return (
@@ -62,6 +64,13 @@ export function IndexAttemptsTable({
         <ExceptionTraceModal
           onOutsideClick={() => setIndexAttemptTracePopupId(null)}
           exceptionTrace={indexAttemptToDisplayTraceFor.full_exception_trace}
+        />
+      )}
+
+      {metricsAttemptId !== null && (
+        <StageMetricsModal
+          indexAttemptId={metricsAttemptId}
+          onClose={() => setMetricsAttemptId(null)}
         />
       )}
 
@@ -112,20 +121,47 @@ export function IndexAttemptsTable({
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  <IndexAttemptStatus
-                    status={indexAttempt.status || "not_started"}
-                  />
-                  {docsPerMinute ? (
-                    <div className="text-xs mt-1">
-                      {docsPerMinute} docs / min
-                    </div>
-                  ) : (
-                    indexAttempt.status === "success" && (
-                      <div className="text-xs mt-1">
-                        No additional docs processed
-                      </div>
-                    )
-                  )}
+                  <GeneralLayouts.Section
+                    alignItems="start"
+                    width="fit"
+                    height="fit"
+                    gap={0.25}
+                  >
+                    <IndexAttemptStatus
+                      status={indexAttempt.status || "not_started"}
+                    />
+                    {docsPerMinute ? (
+                      <GeneralLayouts.Section
+                        flexDirection="row"
+                        justifyContent="start"
+                        alignItems="center"
+                        width="fit"
+                        height="fit"
+                        gap={0.25}
+                        // Stack above the row-wide trace overlay button so
+                        // the metrics button is actually clickable on rows
+                        // that have a full exception trace.
+                        className="relative z-10"
+                      >
+                        <Text font="secondary-body" color="text-03">
+                          {`${docsPerMinute} docs / min`}
+                        </Text>
+                        <Button
+                          icon={SvgBarChartSmall}
+                          prominence="tertiary"
+                          size="sm"
+                          tooltip="View stage metrics"
+                          onClick={() => setMetricsAttemptId(indexAttempt.id)}
+                        />
+                      </GeneralLayouts.Section>
+                    ) : (
+                      indexAttempt.status === "success" && (
+                        <Text font="secondary-body" color="text-03">
+                          No additional docs processed
+                        </Text>
+                      )
+                    )}
+                  </GeneralLayouts.Section>
                 </TableCell>
                 <TableCell>
                   <div className="flex">
