@@ -79,30 +79,10 @@ export interface Settings {
   default_file_token_count_threshold_k?: number;
 }
 
-export enum NotificationType {
-  PERSONA_SHARED = "persona_shared",
-  REINDEX = "reindex",
-  TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
-  ASSISTANT_FILES_READY = "assistant_files_ready",
-  RELEASE_NOTES = "release_notes",
-  FEATURE_ANNOUNCEMENT = "feature_announcement",
-}
+export { NotificationType } from "@/lib/notifications/interfaces";
+export type { Notification } from "@/lib/notifications/interfaces";
 
-export interface Notification {
-  id: number;
-  notif_type: string;
-  title: string;
-  description: string | null;
-  dismissed: boolean;
-  first_shown: string;
-  last_shown: string;
-  additional_data?: {
-    persona_id?: number;
-    link?: string;
-    version?: string; // For release notes notifications
-    [key: string]: any;
-  };
-}
+import type { Notification } from "@/lib/notifications/interfaces";
 
 export interface NavigationItem {
   link: string;

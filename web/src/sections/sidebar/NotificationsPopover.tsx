@@ -4,59 +4,24 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
-import {
-  Notification as NotificationData,
-  NotificationType,
-} from "@/interfaces/settings";
+import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
+import { NotificationType } from "@/lib/notifications/interfaces";
+import { getNotificationIcon } from "@/lib/notifications";
+import { timeAgo } from "@/lib/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
-  SvgSparkle,
-  SvgRefreshCw,
   SvgX,
-  SvgBullhorn,
   SvgCheckAll,
+  SvgNotificationBubble,
+  SvgCheckSquare,
 } from "@opal/icons";
-import type { IconProps } from "@opal/types";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction, IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getNotificationIcon(
-  notifType: string
-): React.FunctionComponent<IconProps> {
-  switch (notifType) {
-    case NotificationType.REINDEX:
-      return SvgRefreshCw;
-    case NotificationType.RELEASE_NOTES:
-      return SvgBullhorn;
-    default:
-      return SvgSparkle;
-  }
-}
-
-function formatRelativeDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMs / 3_600_000);
-  const diffDays = Math.floor(diffMs / 86_400_000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
+import { Hoverable } from "@opal/core";
+import { noProp } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // NotificationItem
@@ -68,28 +33,55 @@ interface NotificationItemProps {
   notification: NotificationData;
   state: NotificationState;
   onClick: () => void;
+  dismiss: () => void;
 }
 
 function NotificationItem({
   notification,
   state,
   onClick,
+  dismiss,
 }: NotificationItemProps) {
   return (
-    <LineItemButton
-      icon={getNotificationIcon(notification.notif_type)}
-      title={notification.title}
-      description={notification.description ?? undefined}
-      sizePreset="main-ui"
-      rounding="sm"
-      color={state === "new" ? undefined : "muted"}
-      onClick={onClick}
-      rightChildren={
-        <Text font="secondary-body" color="text-02">
-          {formatRelativeDate(notification.first_shown)}
-        </Text>
-      }
-    />
+    <Hoverable.Root group="notifications-popover/NotificationItem">
+      <LineItemButton
+        icon={getNotificationIcon(notification.notif_type)}
+        title={notification.title}
+        description={notification.description ?? undefined}
+        sizePreset="main-ui"
+        rounding="sm"
+        color={state === "new" ? undefined : "muted"}
+        onClick={onClick}
+        rightChildren={
+          <Section flexDirection="row" alignItems="start" gap={0.5} padding={0}>
+            <Text font="secondary-body" color="text-02">
+              {timeAgo(notification.first_shown) ?? ""}
+            </Text>
+            {state === "new" && (
+              <div className="w-4 flex flex-col items-center justify-center">
+                <Hoverable.Item
+                  group="notifications-popover/NotificationItem"
+                  variant="replace-on-hover"
+                  resting={
+                    <div className="w-full h-full p-1">
+                      <SvgNotificationBubble size={6} />
+                    </div>
+                  }
+                >
+                  <Button
+                    icon={SvgCheckSquare}
+                    size="2xs"
+                    prominence="tertiary"
+                    onClick={noProp(dismiss)}
+                    tooltip="Mark as read"
+                  />
+                </Hoverable.Item>
+              </div>
+            )}
+          </Section>
+        }
+      />
+    </Hoverable.Root>
   );
 }
 
@@ -199,7 +191,7 @@ export default function NotificationsPopover({
   }, [newNotifications, handleDismiss]);
 
   return (
-    <div className="flex flex-col gap-1">
+    <Section>
       <ContentAction
         title="Notifications"
         sizePreset="main-content"
@@ -256,6 +248,7 @@ export default function NotificationsPopover({
                     notification={notification}
                     state="new"
                     onClick={() => handleNotificationClick(notification)}
+                    dismiss={() => handleDismiss(notification.id)}
                   />
                 ))}
               </div>
@@ -272,6 +265,7 @@ export default function NotificationsPopover({
                     notification={notification}
                     state="older"
                     onClick={() => handleNotificationClick(notification)}
+                    dismiss={() => handleDismiss(notification.id)}
                   />
                 ))}
               </div>
@@ -279,6 +273,6 @@ export default function NotificationsPopover({
           )}
         </div>
       )}
-    </div>
+    </Section>
   );
 }
