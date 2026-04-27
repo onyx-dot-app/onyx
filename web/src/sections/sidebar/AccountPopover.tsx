@@ -141,12 +141,12 @@ function SettingsPopover({
             onClick={handleLogin}
           />
         ),
-        // TODO(@raunakab): Add support for custom colour configuration for text
         showLogout && (
           <LineItemButton
             key="log-out"
             sizePreset="main-ui"
             variant="section"
+            color="danger"
             rounding="sm"
             icon={SvgLogOut}
             title="Log Out"

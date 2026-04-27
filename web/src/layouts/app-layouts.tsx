@@ -29,7 +29,6 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
@@ -47,7 +46,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
-import { Button, OpenButton } from "@opal/components";
+import { Button, LineItemButton, OpenButton } from "@opal/components";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -221,31 +220,34 @@ function Header() {
             onSearch={setSearchTerm}
           />,
           ...filteredProjects.map((project) => (
-            <LineItem
+            <LineItemButton
               key={project.id}
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolderIn}
+              title={project.name}
               onClick={noProp(() => handleMoveClick(project.id))}
-            >
-              {project.name}
-            </LineItem>
+            />
           )),
         ]
       : [
-          <LineItem
+          <LineItemButton
             key="move"
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgFolderIn}
+            title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
-          >
-            Move to Project
-          </LineItem>,
-          <LineItem
+          />,
+          <LineItemButton
             key="delete"
+            sizePreset="main-ui"
+            rounding="sm"
+            color="danger"
             icon={SvgTrash}
+            title="Delete"
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-            danger
-          >
-            Delete
-          </LineItem>,
+          />,
         ];
 
     setPopoverItems(items);
@@ -339,28 +341,30 @@ function Header() {
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       icon={SvgSearchMenu}
-                      selected={effectiveMode === "search"}
+                      state={effectiveMode === "search" ? "selected" : "empty"}
+                      title="Search"
                       description="Quick search for documents"
                       onClick={noProp(() => {
                         setAppMode("search");
                         setModePopoverOpen(false);
                       })}
-                    >
-                      Search
-                    </LineItem>
-                    <LineItem
+                    />
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       icon={SvgBubbleText}
-                      selected={effectiveMode === "chat"}
+                      state={effectiveMode === "chat" ? "selected" : "empty"}
+                      title="Chat"
                       description="Conversation and research"
                       onClick={noProp(() => {
                         setAppMode("chat");
                         setModePopoverOpen(false);
                       })}
-                    >
-                      Chat
-                    </LineItem>
+                    />
                   </Popover.Menu>
                 </Popover.Content>
               </Popover>
