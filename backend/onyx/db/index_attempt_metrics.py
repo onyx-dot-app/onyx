@@ -24,6 +24,7 @@ from sqlalchemy import case
 from sqlalchemy import cast
 from sqlalchemy import Float
 from sqlalchemy import func
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -363,3 +364,39 @@ class StageEventBuffer:
         self._m2 = 0.0
         self._min = None
         self._max = None
+
+
+# --- Read helpers ---------------------------------------------------------
+
+# Cached lookup from stage -> declaration index. Used to sort query results
+# in the natural pipeline order so the API response order is the canonical
+# "Pipeline order" the frontend renders by default.
+_STAGE_PIPELINE_ORDER: dict[IndexAttemptStage, int] = {
+    stage: idx for idx, stage in enumerate(IndexAttemptStage)
+}
+
+
+def get_stage_metrics_for_attempt(
+    db_session: Session,
+    index_attempt_id: int,
+) -> list["IndexAttemptStageMetric"]:
+    """Return all stage metric rows for an attempt, in pipeline order.
+
+    Pipeline order matches the declaration order of ``IndexAttemptStage`` so
+    the frontend can render the default "Pipeline order" sort by simply
+    rendering the response as-is.
+    """
+    # Imported here to avoid a circular dependency: ``onyx.db.models`` imports
+    # ``IndexAttemptStage`` from this module.
+    from onyx.db.models import IndexAttemptStageMetric
+
+    rows = list(
+        db_session.execute(
+            select(IndexAttemptStageMetric).where(
+                IndexAttemptStageMetric.index_attempt_id == index_attempt_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return sorted(rows, key=lambda r: _STAGE_PIPELINE_ORDER[r.stage])
