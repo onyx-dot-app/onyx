@@ -1,6 +1,6 @@
 import os
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -33,12 +33,8 @@ def jsm_connector() -> JiraServiceManagementConnector:
     return _make_connector()
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
 def test_jsm_connector_basic(
-    reset: None,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
     output = load_all_from_connector(
@@ -63,12 +59,8 @@ def test_jsm_connector_basic(
         )
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
 def test_jsm_connector_customer_portal_url(
-    reset: None,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
     """When service desk ID is resolved, documents should carry customer_portal_url."""
@@ -92,23 +84,15 @@ def test_jsm_connector_customer_portal_url(
         assert "/servicedesk/customer/portal/" in url
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
 def test_jsm_validate_connector_settings(
-    reset: None,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
 ) -> None:
     jsm_connector = _make_connector()
     jsm_connector.validate_connector_settings()  # should not raise
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
 def test_jsm_validate_rejects_non_jsm_project(
-    reset: None,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
 ) -> None:
     """validate_connector_settings should raise ConnectorValidationError for a
     non-Service-Desk project key."""
