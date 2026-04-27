@@ -30,6 +30,8 @@ interface ContentXlPresetConfig {
   editButtonSize: ContainerSizeVariants;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
+  /** Gap between icon row and title row (CSS value). */
+  iconRowMarginBottom: string;
 }
 
 interface ContentXlProps {
@@ -74,6 +76,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon2Size: "2rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
+    iconRowMarginBottom: "0rem",
   },
   section: {
     titleFont: "heading-h3",
@@ -83,6 +86,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon2Size: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
+    iconRowMarginBottom: "0.25rem",
   },
 };
 
@@ -120,7 +124,10 @@ function ContentXl({
   return (
     <div ref={ref} className="opal-content-xl" data-opal-content>
       {(Icon || MoreIcon1 || MoreIcon2) && (
-        <div className="opal-content-xl-icon-row">
+        <div
+          className="opal-content-xl-icon-row"
+          style={{ marginBottom: config.iconRowMarginBottom }}
+        >
           {Icon && (
             <div
               className="opal-content-xl-icon-container shrink-0"
