@@ -42,6 +42,10 @@ describe("toPlainString", () => {
     expect(toPlainString(markdown("snake_case_word"))).toBe("snake_case_word");
   });
 
+  it("preserves double underscores inside identifiers", () => {
+    expect(toPlainString(markdown("foo__bar__baz"))).toBe("foo__bar__baz");
+  });
+
   it("strips strikethrough syntax", () => {
     expect(toPlainString(markdown("~~struck~~"))).toBe("struck");
   });

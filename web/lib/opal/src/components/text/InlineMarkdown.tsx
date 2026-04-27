@@ -83,7 +83,7 @@ export function toPlainString(value: string | RichStr): string {
   return value.raw
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(?<!\w)__([^_]+)__(?!\w)/g, "$1")
     .replace(/~~([^~]+)~~/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1")
