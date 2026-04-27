@@ -226,7 +226,10 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if fresh_attempt.total_batches and fresh_attempt.completed_batches == 0:
+            if (
+                fresh_attempt.total_batches
+                and fresh_attempt.completed_batches < fresh_attempt.total_batches
+            ):
                 heartbeat_timeout_seconds = (
                     HEARTBEAT_TIMEOUT_SECONDS
                     * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
