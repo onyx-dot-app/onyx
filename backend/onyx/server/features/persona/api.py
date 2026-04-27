@@ -573,6 +573,10 @@ def get_persona_avatar(
     # to another user's USER_FILE / CHAT_IMAGE_GEN asset.
     file_record = get_filerecord_by_file_id_optional(file_id, db_session)
     if not file_record:
+        logger.warning(
+            f"Persona {persona_id} references avatar file {file_id} with no "
+            f"matching FileRecord; rejecting."
+        )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
     if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
         logger.warning(
