@@ -52,10 +52,13 @@ def _make_assistant_message(
     return msg
 
 
-def test_pairing_prefers_preferred_response_when_set(db_session: Session) -> None:
-    """Multi-model branch: user message has two assistant children with different
-    models. `preferred_response_id` should determine which model is reported."""
-    user = create_test_user(db_session, "usage-export-preferred")
+def test_multi_model_branch_emits_row_per_assistant_child(
+    db_session: Session,
+) -> None:
+    """A user message answered by multiple models (multi-model branch) must
+    produce one report row per assistant child so no model invocation is
+    dropped — even non-preferred branches."""
+    user = create_test_user(db_session, "usage-export-branch")
     chat_session = create_chat_session(
         db_session=db_session,
         description="multi-model branch",
@@ -70,6 +73,7 @@ def test_pairing_prefers_preferred_response_when_set(db_session: Session) -> Non
         db_session, chat_session.id, user_msg, "model-b"
     )
 
+    # Even when one branch is marked preferred, both must still be reported.
     user_msg.preferred_response_id = assistant_b.id
     db_session.commit()
 
@@ -78,27 +82,25 @@ def test_pairing_prefers_preferred_response_when_set(db_session: Session) -> Non
     )
 
     matching = [s for s in skeletons if s.message_id == user_msg.id]
-    assert len(matching) == 1
-    assert matching[0].llm_model == "model-b"
+    assert {s.llm_model for s in matching} == {"model-a", "model-b"}
+    assert len(matching) == 2
 
 
-def test_pairing_falls_back_to_earliest_child_when_no_preference(
-    db_session: Session,
-) -> None:
-    """No `preferred_response_id` set: pick the earliest assistant child (the
-    original reply, before any retries)."""
-    user = create_test_user(db_session, "usage-export-fallback")
+def test_single_assistant_child_emits_single_row(db_session: Session) -> None:
+    """The common case (one assistant reply per user message) still produces
+    exactly one row with that model. Guards against the per-pair change
+    inflating row counts in non-branched conversations."""
+    user = create_test_user(db_session, "usage-export-single")
     chat_session = create_chat_session(
         db_session=db_session,
-        description="multi-model fallback",
+        description="single reply",
         user_id=user.id,
         persona_id=None,
     )
     root = get_or_create_root_message(chat_session.id, db_session)
 
     user_msg = _make_user_message(db_session, chat_session.id, root)
-    _make_assistant_message(db_session, chat_session.id, user_msg, "first-model")
-    _make_assistant_message(db_session, chat_session.id, user_msg, "second-model")
+    _make_assistant_message(db_session, chat_session.id, user_msg, "only-model")
 
     _, skeletons = get_empty_chat_messages_entries__paginated(
         db_session, _full_period()
@@ -106,12 +108,12 @@ def test_pairing_falls_back_to_earliest_child_when_no_preference(
 
     matching = [s for s in skeletons if s.message_id == user_msg.id]
     assert len(matching) == 1
-    assert matching[0].llm_model == "first-model"
+    assert matching[0].llm_model == "only-model"
 
 
-def test_pairing_returns_none_for_orphan_user_message(db_session: Session) -> None:
-    """User message with no assistant reply (e.g. still streaming, errored) gets
-    a None llm_model rather than crashing."""
+def test_orphan_user_message_emits_row_with_null_model(db_session: Session) -> None:
+    """User message with no assistant reply (still streaming, errored) gets a
+    single row with `llm_model=None` rather than being dropped."""
     user = create_test_user(db_session, "usage-export-orphan")
     chat_session = create_chat_session(
         db_session=db_session,

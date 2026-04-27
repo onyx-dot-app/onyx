@@ -46,10 +46,10 @@ def get_empty_chat_messages_entries__paginated(
     for chat_session in chat_sessions:
         flow_type = FlowType.SLACK if chat_session.onyxbot_flow else FlowType.CHAT
 
-        # Group assistant messages by their parent (user) message id so we can
-        # report the model that answered each user prompt. A user message can
-        # have multiple assistant children in multi-model branches; we prefer
-        # `preferred_response_id` and fall back to the earliest child.
+        # Group assistant messages by their parent (user) message id. A user
+        # message can have multiple assistant children in multi-model branches
+        # (e.g. "compare models") — we emit one row per branch so every model
+        # invocation is represented in the report.
         assistant_children_by_parent: dict[int, list[ChatMessage]] = {}
         for message in chat_session.messages:
             if (
@@ -73,35 +73,37 @@ def get_empty_chat_messages_entries__paginated(
             if chat_session.persona:
                 assistant_name = chat_session.persona.name
 
-            # Resolve the paired assistant reply and its model display name.
-            paired_assistant = None
-            children = assistant_children_by_parent.get(message.id, [])
-            if children:
-                if message.preferred_response_id is not None:
-                    paired_assistant = next(
-                        (c for c in children if c.id == message.preferred_response_id),
-                        None,
-                    )
-                if paired_assistant is None:
-                    paired_assistant = min(children, key=lambda c: c.id)
-
-            llm_model = (
-                paired_assistant.model_display_name if paired_assistant else None
+            children = sorted(
+                assistant_children_by_parent.get(message.id, []),
+                key=lambda c: c.id,
+            )
+            # Emit one row per assistant child so multi-model branches each
+            # contribute their own model. If there is no assistant reply
+            # (orphan / errored / still streaming), still emit a row with
+            # llm_model=None so the user prompt is not dropped.
+            paired_assistants: list[ChatMessage | None] = (
+                list(children) if children else [None]
             )
 
-            message_skeletons.append(
-                ChatMessageSkeleton(
-                    message_id=message.id,
-                    chat_session_id=chat_session.id,
-                    user_id=str(chat_session.user_id) if chat_session.user_id else None,
-                    flow_type=flow_type,
-                    time_sent=message.time_sent,
-                    assistant_name=assistant_name,
-                    user_email=user_email,
-                    number_of_tokens=message.token_count,
-                    llm_model=llm_model,
+            for paired_assistant in paired_assistants:
+                llm_model = (
+                    paired_assistant.model_display_name if paired_assistant else None
                 )
-            )
+                message_skeletons.append(
+                    ChatMessageSkeleton(
+                        message_id=message.id,
+                        chat_session_id=chat_session.id,
+                        user_id=(
+                            str(chat_session.user_id) if chat_session.user_id else None
+                        ),
+                        flow_type=flow_type,
+                        time_sent=message.time_sent,
+                        assistant_name=assistant_name,
+                        user_email=user_email,
+                        number_of_tokens=message.token_count,
+                        llm_model=llm_model,
+                    )
+                )
     if len(chat_sessions) == 0:
         return None, []
 
