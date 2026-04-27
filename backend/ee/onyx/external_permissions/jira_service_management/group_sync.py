@@ -6,15 +6,15 @@ from jira import JIRA
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.jira.group_sync import _get_group_member_emails
 from onyx.connectors.jira.utils import build_jira_client
+from onyx.connectors.jira_service_management.utils import _JSM_API_BASE
+from onyx.connectors.jira_service_management.utils import _JSM_CUSTOMER_PAGE_SIZE
+from onyx.connectors.jira_service_management.utils import _JSM_CUSTOMER_PATH
+from onyx.connectors.jira_service_management.utils import _JSM_SERVICEDESK_PATH
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_JSM_API_BASE = "rest/servicedeskapi"
-_JSM_SERVICEDESK_PATH = "servicedesk"
-_JSM_CUSTOMER_PATH = "servicedesk/{service_desk_id}/customer"
-_JSM_CUSTOMER_PAGE_SIZE = 50
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
 
 
@@ -119,19 +119,16 @@ def jsm_group_sync(
     # find their own tickets via Onyx search.
     if jsm_project_key:
         service_desk_ids = _get_service_desk_ids(jira_client, jsm_project_key)
+        all_customer_emails: set[str] = set()
         for sd_id in service_desk_ids:
-            customer_emails = _get_portal_customer_emails(jira_client, sd_id)
-            if not customer_emails:
-                logger.debug(
-                    f"No portal customers found for service desk {sd_id}"
-                )
-                continue
+            all_customer_emails.update(_get_portal_customer_emails(jira_client, sd_id))
+        if all_customer_emails:
             group_id = f"jsm_portal_customers_{jsm_project_key}"
             logger.info(
                 f"Yielding portal customer group '{group_id}' with "
-                f"{len(customer_emails)} members"
+                f"{len(all_customer_emails)} members"
             )
             yield ExternalUserGroup(
                 id=group_id,
-                user_emails=list(customer_emails),
+                user_emails=list(all_customer_emails),
             )

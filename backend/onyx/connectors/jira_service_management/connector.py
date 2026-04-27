@@ -7,15 +7,12 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira_service_management.utils import _JSM_API_BASE
+from onyx.connectors.jira_service_management.utils import _JSM_SERVICEDESK_PATH
 from onyx.connectors.models import Document
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_JSM_SERVICEDESK_PATH = "servicedesk"
-_JSM_CUSTOMER_PATH = "servicedesk/{service_desk_id}/customer"
-_JSM_API_BASE = "rest/servicedeskapi"
-_JSM_CUSTOMER_PAGE_SIZE = 50
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -70,6 +67,9 @@ class JiraServiceManagementConnector(JiraConnector):
         super().validate_connector_settings()
         if not self.jira_project:
             return
+        # The parent already validated credentials and project existence.
+        # One additional round-trip here is acceptable to inspect projectTypeKey,
+        # which the parent does not expose.
         try:
             project = self.jira_client.project(self.jira_project)
             project_type = project.raw.get("projectTypeKey")
@@ -82,7 +82,9 @@ class JiraServiceManagementConnector(JiraConnector):
         except ConnectorValidationError:
             raise
         except Exception as e:
-            logger.warning(f"Could not verify project type for '{self.jira_project}': {e}")
+            raise ConnectorValidationError(
+                f"Could not verify project type for '{self.jira_project}': {e}"
+            ) from e
 
     def _load_from_checkpoint(
         self,
@@ -90,8 +92,6 @@ class JiraServiceManagementConnector(JiraConnector):
         checkpoint: JiraConnectorCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        # Use while/next/StopIteration instead of a for-loop so the generator's
-        # return value (the updated checkpoint) is captured and re-returned here.
         gen = super()._load_from_checkpoint(jql, checkpoint, include_permissions)
         try:
             while True:
