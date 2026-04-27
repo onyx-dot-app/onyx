@@ -572,7 +572,13 @@ def get_persona_avatar(
     # avatar upload endpoint, so a crafted PATCH cannot rebind a persona
     # to another user's USER_FILE / CHAT_IMAGE_GEN asset.
     file_record = get_filerecord_by_file_id_optional(file_id, db_session)
-    if not file_record or file_record.file_origin != FileOrigin.CHAT_UPLOAD:
+    if not file_record:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+    if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
+        logger.warning(
+            f"Persona {persona_id} avatar references file {file_id} with "
+            f"unexpected origin {file_record.file_origin}; rejecting."
+        )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
     etag = f'"{file_id}"'
