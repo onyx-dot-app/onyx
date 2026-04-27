@@ -19,9 +19,9 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
-from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import STAGE_SCOPE
-from onyx.db.index_attempt_metrics import StageScope
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
+from onyx.db.index_attempt_metrics_models import StageScope
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
