@@ -89,6 +89,7 @@ from onyx.db.enums import SyncType
 from onyx.db.enums import TaskStatus
 from onyx.db.enums import ThemePreference
 from onyx.db.enums import UserFileStatus
+from onyx.db.index_attempt_metrics import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
 from onyx.file_store.models import FileDescriptor
@@ -2289,6 +2290,12 @@ class IndexAttempt(Base):
         cascade="all, delete-orphan",
     )
 
+    stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
+        "IndexAttemptStageMetric",
+        back_populates="index_attempt",
+        cascade="all, delete-orphan",
+    )
+
     __table_args__ = (
         Index(
             "ix_index_attempt_latest_for_connector_credential_pair",
@@ -2431,6 +2438,67 @@ class IndexAttemptError(Base):
 
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
+
+
+class IndexAttemptStageMetric(Base):
+    """Per-stage timing aggregate for an `IndexAttempt`.
+
+    One row per `(index_attempt_id, stage)` pair. The row holds running
+    aggregates (count, sum, min, max, and Welford/Chan M2 accumulator) so we
+    can derive average and standard deviation at read time without storing
+    individual samples. See `plans/index-attempt-stage-metrics.md` for the
+    write-path SQL and `onyx.db.index_attempt_metrics.STAGE_SCOPE` for the
+    per-stage display scope.
+    """
+
+    __tablename__ = "index_attempt_stage_metric"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    index_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stage: Mapped[IndexAttemptStage] = mapped_column(
+        Enum(IndexAttemptStage, native_enum=False, length=40),
+        nullable=False,
+    )
+
+    event_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    total_duration_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    # Welford / Chan running sum of squared deviations from the mean. Stored
+    # as Float (DOUBLE PRECISION on PostgreSQL) so the SQL upsert can apply
+    # Chan's parallel-combination formula without rounding drift.
+    m2_duration_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    min_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+    max_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+
+    time_first_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_last_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    index_attempt: Mapped["IndexAttempt"] = relationship(
+        "IndexAttempt", back_populates="stage_metrics"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "index_attempt_id",
+            "stage",
+            name="uq_index_attempt_stage_metric_attempt_stage",
+        ),
+    )
 
 
 class SyncRecord(Base):
