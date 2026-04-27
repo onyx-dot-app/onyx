@@ -64,7 +64,7 @@ function NotificationItem({
                     group="notifications-popover/NotificationItem"
                     variant="replace-on-hover"
                     resting={
-                      <div className="w-full h-full p-2">
+                      <div className="w-full h-full p-1.5">
                         <div className="p-px">
                           <SvgNotificationBubble size={6} />
                         </div>
@@ -73,7 +73,7 @@ function NotificationItem({
                   >
                     <Button
                       icon={SvgCheckSquare}
-                      size="sm"
+                      size="xs"
                       prominence="tertiary"
                       onClick={noProp(dismiss)}
                       tooltip="Mark as Read"
