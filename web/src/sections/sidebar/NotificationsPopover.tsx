@@ -66,7 +66,7 @@ function formatRelativeDate(dateString: string): string {
 // NotificationItem
 // ---------------------------------------------------------------------------
 
-type NotificationState = "new" | "dismissed" | "older";
+type NotificationState = "new" | "older";
 
 interface NotificationItemProps {
   notification: NotificationData;
@@ -211,8 +211,8 @@ export default function NotificationsPopover({
 
   const getState = useCallback(
     (notification: NotificationData): NotificationState => {
-      if (sessionDismissedIds.has(notification.id)) return "dismissed";
-      if (notification.dismissed) return "older";
+      if (sessionDismissedIds.has(notification.id) || notification.dismissed)
+        return "older";
       return "new";
     },
     [sessionDismissedIds]
@@ -220,10 +220,6 @@ export default function NotificationsPopover({
 
   const newNotifications = useMemo(
     () => notifications?.filter((n) => getState(n) === "new") ?? [],
-    [notifications, getState]
-  );
-  const dismissedNotifications = useMemo(
-    () => notifications?.filter((n) => getState(n) === "dismissed") ?? [],
     [notifications, getState]
   );
   const olderNotifications = useMemo(
@@ -288,7 +284,7 @@ export default function NotificationsPopover({
           {newNotifications.length > 0 && (
             <>
               <Divider title="New" />
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-1">
                 {newNotifications.map((notification) => (
                   <NotificationItem
                     key={notification.id}
@@ -302,27 +298,10 @@ export default function NotificationsPopover({
             </>
           )}
 
-          {dismissedNotifications.length > 0 && (
-            <>
-              <Divider title="Dismissed" />
-              <div className="flex flex-col">
-                {dismissedNotifications.map((notification) => (
-                  <NotificationItem
-                    key={notification.id}
-                    notification={notification}
-                    state="dismissed"
-                    onClick={() => handleNotificationClick(notification)}
-                    onDismiss={handleDismiss}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-
           {olderNotifications.length > 0 && (
             <>
               <Divider title="Older" />
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-1">
                 {olderNotifications.map((notification) => (
                   <NotificationItem
                     key={notification.id}
