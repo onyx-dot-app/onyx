@@ -20,7 +20,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { Button, Divider, SelectCard, Text } from "@opal/components";
+import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
@@ -85,33 +85,24 @@ function NotificationItem({
 
   return (
     <Hoverable.Root group={hoverGroup}>
-      <SelectCard onClick={onClick} padding="sm" rounding="sm">
-        <div className="flex flex-row gap-1 items-start">
-          <div className="flex-1 min-w-0">
-            <ContentAction
-              icon={getNotificationIcon(notification.notif_type)}
-              title={notification.title}
-              description={notification.description ?? undefined}
-              sizePreset="main-ui"
-              variant="section"
-              color={state === "new" ? "interactive" : "muted"}
-              padding="fit"
-              rightChildren={
-                <Text font="secondary-body" color="text-02">
-                  {formatRelativeDate(notification.first_shown)}
-                </Text>
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-center w-6 shrink-0">
-            {state === "new" ? (
-              <div className="relative flex items-center justify-center w-6 h-6">
-                {/* Dot: visible at rest, fades out on hover */}
+      <LineItemButton
+        icon={getNotificationIcon(notification.notif_type)}
+        title={notification.title}
+        description={notification.description ?? undefined}
+        sizePreset="main-ui"
+        rounding="sm"
+        color={state === "new" ? undefined : "muted"}
+        onClick={onClick}
+        rightChildren={
+          <div className="flex flex-row items-start gap-1">
+            <Text font="secondary-body" color="text-02">
+              {formatRelativeDate(notification.first_shown)}
+            </Text>
+            {/*{state === "new" ? (
+              <>
                 <div className="absolute inset-0 flex items-center justify-center transition-opacity opacity-100 [div[data-hover-group]:hover_&]:opacity-0">
                   <SvgNotificationBubble size={6} />
                 </div>
-                {/* Check: hidden at rest, fades in on hover */}
                 <Hoverable.Item group={hoverGroup} variant="opacity-on-hover">
                   <Button
                     icon={SvgCheckSquare}
@@ -124,15 +115,15 @@ function NotificationItem({
                     tooltip="Mark as read"
                   />
                 </Hoverable.Item>
-              </div>
+              </>
             ) : (
               <Hoverable.Item group={hoverGroup} variant="opacity-on-hover">
                 <Button icon={SvgSquare} size="sm" prominence="tertiary" />
               </Hoverable.Item>
-            )}
+            )}*/}
           </div>
-        </div>
-      </SelectCard>
+        }
+      />
     </Hoverable.Root>
   );
 }
@@ -247,7 +238,7 @@ export default function NotificationsPopover({
   }, [newNotifications, handleDismiss]);
 
   return (
-    <div className="flex flex-col gap-1 p-1">
+    <div className="flex flex-col gap-1">
       <ContentAction
         title="Notifications"
         sizePreset="main-content"
