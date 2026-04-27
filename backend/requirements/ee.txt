@@ -317,7 +317,7 @@ pyyaml==6.0.3
     # via
     #   huggingface-hub
     #   kubernetes
-referencing==0.36.2
+referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications

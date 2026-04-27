@@ -811,7 +811,7 @@ rapidfuzz==3.13.0
     # via unstructured
 redis==5.0.8
     # via fastapi-limiter
-referencing==0.36.2
+referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-path
