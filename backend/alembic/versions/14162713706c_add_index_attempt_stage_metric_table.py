@@ -17,7 +17,8 @@ depends_on = None
 
 # Stage names are stored as VARCHAR (native_enum=False) to match the
 # codebase-wide convention; new stages can be added without an enum-altering
-# migration. Keep this list in sync with onyx.db.index_attempt_metrics.IndexAttemptStage.
+# migration. Keep this list in sync with
+# onyx.db.index_attempt_metrics_models.IndexAttemptStage.
 _INDEX_ATTEMPT_STAGE_VALUES = (
     "CONNECTOR_VALIDATION",
     "PERMISSION_VALIDATION",
