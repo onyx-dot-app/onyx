@@ -6,6 +6,12 @@ class DiscordCheckpoint(ConnectorCheckpoint):
     # None == "haven't enumerated channels yet"; once populated, never mutated.
     channel_ids: list[str] | None
 
+    # Subset of channel_ids that are ForumChannels. Populated alongside channel_ids
+    # at cold start; never mutated after. Consulted on rollover to pre-set
+    # current_channel_main_exhausted=True (forums have no main-channel history).
+    # Default [] so checkpoints persisted before PR2 deserialize cleanly.
+    forum_channel_ids: list[str] = []
+
     # channel_id -> oldest seen message snowflake (we walk newest -> oldest like Slack).
     # Presence == "started"; value == "resume here via channel.history(before=...)".
     channel_completion_map: dict[str, str]

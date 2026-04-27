@@ -65,6 +65,7 @@ def _forbidden() -> Forbidden:
 def _make_cp(
     *,
     channel_ids: list[str] | None = None,
+    forum_channel_ids: list[str] | None = None,
     channel_completion_map: dict[str, str] | None = None,
     current_channel_id: str | None = "100",
     current_channel_main_exhausted: bool = False,
@@ -76,6 +77,7 @@ def _make_cp(
 ) -> DiscordCheckpoint:
     return DiscordCheckpoint(
         channel_ids=channel_ids if channel_ids is not None else ["100"],
+        forum_channel_ids=forum_channel_ids or [],
         channel_completion_map=channel_completion_map or {},
         current_channel_id=current_channel_id,
         current_channel_main_exhausted=current_channel_main_exhausted,
@@ -116,7 +118,8 @@ def helpers() -> Generator[dict[str, AsyncMock], None, None]:
     active_mock.return_value = []
     # (thread_ids, next_cursor) — empty + None signals "archived enumeration done".
     archived_mock.return_value = ([], None)
-    list_mock.return_value = []
+    # _list_channel_ids returns (channel_ids, forum_channel_ids).
+    list_mock.return_value = ([], set())
     with (
         patch.object(connector_module, "_list_channel_ids", list_mock),
         patch.object(connector_module, "_fetch_history_page", fetch_mock),
@@ -139,7 +142,7 @@ def helpers() -> Generator[dict[str, AsyncMock], None, None]:
 def test_cold_start_enumerates_channels(
     connector: DiscordConnector, helpers: dict[str, AsyncMock]
 ) -> None:
-    helpers["list"].return_value = ["100", "200"]
+    helpers["list"].return_value = (["100", "200"], set())
 
     outputs = load_everything_from_checkpoint_connector_from_checkpoint(
         connector, 0, _END, connector.build_dummy_checkpoint()
@@ -163,7 +166,7 @@ def test_full_lifecycle_main_pagination_then_thread(
     """Phase 1 (cold start) -> phase 2 (multi-page main) -> phase 3a (active enum)
     -> phase 3b (archived enum, single page) -> phase 4 (thread page)
     -> phase 5 (rollover) -> done."""
-    helpers["list"].return_value = ["100"]
+    helpers["list"].return_value = (["100"], set())
     main_page1 = [_make_doc(1000 - i) for i in range(100)]
     main_page2 = [_make_doc(900 - i) for i in range(20)]
     thread_page = [_make_doc(200 + i) for i in range(50)]
@@ -455,3 +458,110 @@ def test_archived_thread_enumeration_paginates_across_cycles(
     # The full run terminates cleanly (each thread drains via the empty-page
     # default for `helpers["fetch"]`).
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+# ----- PR2 (forum channels + archived-thread toggle) ----------------------
+
+
+def test_forum_channel_skips_phase_2_and_routes_through_thread_phases(
+    helpers: dict[str, AsyncMock],
+) -> None:
+    """Forum channels have no main-channel history. Cold start must pre-set
+    current_channel_main_exhausted=True so the dispatcher routes straight to
+    phase 3 (thread enumeration) without ever invoking _fetch_history_page on
+    the forum channel itself."""
+    connector = DiscordConnector(include_forum_channels=True)
+    connector.load_credentials({"discord_bot_token": "fake-token"})
+    helpers["list"].return_value = (["500"], {"500"})
+    helpers["active"].return_value = ["1500"]
+    forum_post_page = [_make_doc(2000 + i) for i in range(3)]
+    # Single sub-full thread page exhausts the only forum post.
+    helpers["fetch"].side_effect = [(forum_post_page, [], "2000", 3)]
+
+    outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+        connector, 0, _END, connector.build_dummy_checkpoint()
+    )
+
+    # Cold start: forum-channel selection pre-skips main.
+    cold = outputs[0].next_checkpoint
+    assert cold.channel_ids == ["500"]
+    assert cold.forum_channel_ids == ["500"]
+    assert cold.current_channel_main_exhausted is True
+
+    # Phase 2 must never have run for the forum channel.
+    fetched_ids = [args[1] for args, _ in helpers["fetch"].call_args_list]
+    assert 500 not in fetched_ids
+    # The only fetch call was for the forum post (thread id 1500).
+    assert fetched_ids == [1500]
+
+    # Run terminates: no more forum posts, no main history -> rollover -> done.
+    assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_forum_channels_dropped_by_default(helpers: dict[str, AsyncMock]) -> None:
+    """Default include_forum_channels=False: the discovery helper is asked NOT
+    to enumerate forums. Mock returns an empty channel list to mimic the
+    behavior, and the state machine completes without any thread/page calls."""
+    connector = DiscordConnector()
+    connector.load_credentials({"discord_bot_token": "fake-token"})
+    # Defaults already return ([], set()) on the list helper. No customisation.
+    outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+        connector, 0, _END, connector.build_dummy_checkpoint()
+    )
+
+    # The discovery helper was called with include_forum_channels=False.
+    args, _ = helpers["list"].call_args
+    assert args[3] is False
+
+    # Empty channel list -> straight to has_more=False after cold start.
+    assert outputs[0].next_checkpoint.channel_ids == []
+    assert outputs[0].next_checkpoint.forum_channel_ids == []
+    assert outputs[-1].next_checkpoint.has_more is False
+    helpers["active"].assert_not_called()
+    helpers["archived"].assert_not_called()
+    helpers["fetch"].assert_not_called()
+
+
+def test_include_archived_threads_false_skips_phase_3b(
+    helpers: dict[str, AsyncMock],
+) -> None:
+    """When the operator opts out of archived threads, phase 3b must be skipped
+    entirely: the archived-page helper is never called, and the dispatcher
+    proceeds directly to phase 4 with the active threads in hand."""
+    connector = DiscordConnector(include_archived_threads=False)
+    connector.load_credentials({"discord_bot_token": "fake-token"})
+    helpers["active"].return_value = []  # no active threads either
+
+    initial = _make_cp(
+        channel_ids=["100"],
+        current_channel_id="100",
+        current_channel_main_exhausted=True,
+        current_channel_thread_ids=None,
+    )
+    load_everything_from_checkpoint_connector_from_checkpoint(
+        connector, 0, _END, initial
+    )
+
+    helpers["archived"].assert_not_called()
+
+
+def test_include_archived_threads_default_runs_phase_3b(
+    helpers: dict[str, AsyncMock],
+) -> None:
+    """Default include_archived_threads=True drives phase 3b: the archived-page
+    helper is called at least once after active enumeration completes."""
+    connector = DiscordConnector()
+    connector.load_credentials({"discord_bot_token": "fake-token"})
+    helpers["active"].return_value = []
+
+    initial = _make_cp(
+        channel_ids=["100"],
+        current_channel_id="100",
+        current_channel_main_exhausted=True,
+        current_channel_thread_ids=None,
+    )
+    load_everything_from_checkpoint_connector_from_checkpoint(
+        connector, 0, _END, initial
+    )
+
+    helpers["archived"].assert_called()

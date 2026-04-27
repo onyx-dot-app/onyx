@@ -10,6 +10,7 @@ from typing import TypeVar
 from discord import Client
 from discord import Object as DiscordObject
 from discord.abc import Messageable
+from discord.channel import ForumChannel
 from discord.channel import TextChannel
 from discord.channel import Thread
 from discord.enums import MessageType
@@ -177,8 +178,14 @@ def _build_client() -> Client:
 
 
 async def _list_channel_ids(
-    token: str, server_ids: set[int], channel_names: set[str]
-) -> list[str]:
+    token: str,
+    server_ids: set[int],
+    channel_names: set[str],
+    include_forum_channels: bool,
+) -> tuple[list[str], set[str]]:
+    """Returns (channel_ids, forum_channel_ids). The latter is the subset of the
+    former whose Discord channel type is ForumChannel; consumers use it to skip
+    phase 2 (forums have no main-channel history)."""
     # REST-only: gateway-cached `get_all_channels()` and `guild.me` are unavailable.
     client = _build_client()
     try:
@@ -187,7 +194,12 @@ async def _list_channel_ids(
         if bot_user is None:
             raise CredentialInvalidError("Discord login did not populate client.user")
 
+        allowed: tuple[type, ...] = (
+            (TextChannel, ForumChannel) if include_forum_channels else (TextChannel,)
+        )
+
         result: list[str] = []
+        forum_ids: set[str] = set()
         async for partial_guild in client.fetch_guilds(limit=None):
             if server_ids and partial_guild.id not in server_ids:
                 continue
@@ -203,14 +215,16 @@ async def _list_channel_ids(
                 continue
 
             for channel in channels:
-                if not isinstance(channel, TextChannel):
+                if not isinstance(channel, allowed):
                     continue
                 if channel_names and channel.name not in channel_names:
                     continue
                 if not channel.permissions_for(bot_member).read_message_history:
                     continue
                 result.append(str(channel.id))
-        return result
+                if isinstance(channel, ForumChannel):
+                    forum_ids.add(str(channel.id))
+        return result, forum_ids
     finally:
         await client.close()
 
@@ -285,7 +299,7 @@ async def _enumerate_active_threads(token: str, channel_id: int) -> list[str]:
     try:
         await client.login(token)
         channel = await client.fetch_channel(channel_id)
-        if not isinstance(channel, TextChannel):
+        if not isinstance(channel, (TextChannel, ForumChannel)):
             return []
 
         async def _fetch_active() -> list[str]:
@@ -313,12 +327,15 @@ async def _fetch_archived_threads_page(
     the oldest archived-thread snowflake on the page; callers pass it as
     `before_snowflake` to fetch the next page. A page with fewer than
     `_ARCHIVED_THREADS_PAGE_SIZE` results indicates archived enumeration is
-    complete."""
+    complete.
+
+    The `archived_threads(limit=N, before=Snowflake)` shape is identical on
+    both TextChannel and ForumChannel."""
     client = _build_client()
     try:
         await client.login(token)
         channel = await client.fetch_channel(channel_id)
-        if not isinstance(channel, TextChannel):
+        if not isinstance(channel, (TextChannel, ForumChannel)):
             return [], None
 
         async def _fetch_page() -> tuple[list[str], str | None]:
@@ -355,6 +372,10 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
         channel_names: list[str] | None = None,
         # YYYY-MM-DD
         start_date: str | None = None,
+        # Defaults preserve PR1 behavior for connector specs that predate PR2:
+        # forums were never indexed (False); archived threads were always drained (True).
+        include_forum_channels: bool = False,
+        include_archived_threads: bool = True,
     ) -> None:
         self.channel_names: set[str] = set(channel_names) if channel_names else set()
         self.server_ids: set[int] = (
@@ -362,6 +383,8 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
         )
         self._discord_bot_token: str | None = None
         self.requested_start_date_string: str = start_date or ""
+        self.include_forum_channels = include_forum_channels
+        self.include_archived_threads = include_archived_threads
 
     @property
     def discord_bot_token(self) -> str:
@@ -391,6 +414,7 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
     def build_dummy_checkpoint(self) -> DiscordCheckpoint:
         return DiscordCheckpoint(
             channel_ids=None,
+            forum_channel_ids=[],
             channel_completion_map={},
             current_channel_id=None,
             current_channel_main_exhausted=False,
@@ -462,17 +486,30 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
 
     def _phase_cold_start(self, checkpoint: DiscordCheckpoint) -> DiscordCheckpoint:
         try:
-            channel_ids = run_async_sync_no_cancel(
+            channel_ids, forum_ids = run_async_sync_no_cancel(
                 _list_channel_ids(
-                    self.discord_bot_token, self.server_ids, self.channel_names
+                    self.discord_bot_token,
+                    self.server_ids,
+                    self.channel_names,
+                    self.include_forum_channels,
                 )
             )
         except LoginFailure as e:
             raise CredentialInvalidError(f"Invalid Discord bot token: {e}")
-        logger.info(f"Discord channel discovery: found {len(channel_ids)} channels")
+        logger.info(
+            f"Discord channel discovery: found {len(channel_ids)} channels "
+            f"({len(forum_ids)} forum)"
+        )
         checkpoint.channel_ids = channel_ids
-        checkpoint.current_channel_id = channel_ids[0] if channel_ids else None
-        checkpoint.has_more = checkpoint.current_channel_id is not None
+        checkpoint.forum_channel_ids = sorted(forum_ids)
+        first = channel_ids[0] if channel_ids else None
+        checkpoint.current_channel_id = first
+        # Forums have no main-channel history; pre-skip phase 2 so the dispatcher
+        # routes straight to thread enumeration.
+        checkpoint.current_channel_main_exhausted = (
+            first is not None and first in forum_ids
+        )
+        checkpoint.has_more = first is not None
         return checkpoint
 
     def _phase_thread_enum(
@@ -520,7 +557,14 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
                 checkpoint.archived_thread_cursor = None
                 return checkpoint
             checkpoint.current_channel_thread_ids = thread_ids
-            checkpoint.archived_thread_cursor = _ARCHIVED_CURSOR_BEGIN
+            if self.include_archived_threads:
+                # Phase 3b will paginate archived threads on the next cycle.
+                checkpoint.archived_thread_cursor = _ARCHIVED_CURSOR_BEGIN
+            else:
+                # Archived enumeration disabled: skip phase 3b and head straight
+                # to phase 4 with the active threads we have.
+                checkpoint.archived_thread_cursor = None
+                checkpoint.current_thread_id = thread_ids[0] if thread_ids else None
             return checkpoint
 
         # Phase 3b: fetch one archived-threads page.
@@ -591,7 +635,10 @@ class DiscordConnector(CheckpointedConnector[DiscordCheckpoint]):
                 if channel_id != checkpoint.current_channel_id
             }
         checkpoint.current_channel_id = next_channel
-        checkpoint.current_channel_main_exhausted = False
+        # Forums have no main-channel history; pre-skip phase 2 on rollover into one.
+        checkpoint.current_channel_main_exhausted = (
+            next_channel is not None and next_channel in checkpoint.forum_channel_ids
+        )
         checkpoint.current_channel_thread_ids = None
         checkpoint.archived_thread_cursor = None
         checkpoint.current_thread_id = None
