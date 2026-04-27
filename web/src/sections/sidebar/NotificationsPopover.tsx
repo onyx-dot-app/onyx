@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
@@ -14,9 +15,13 @@ import {
   SvgX,
   SvgBullhorn,
   SvgCheckAll,
+  SvgCheckSquare,
+  SvgSquare,
+  SvgNotificationBubble,
 } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { Button, Divider, LineItemButton, Text } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction, IllustrationContent } from "@opal/layouts";
@@ -51,43 +56,87 @@ function formatRelativeDate(dateString: string): string {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // ---------------------------------------------------------------------------
 // NotificationItem
 // ---------------------------------------------------------------------------
 
+type NotificationState = "new" | "dismissed" | "older";
+
 interface NotificationItemProps {
   notification: NotificationData;
+  state: NotificationState;
   onClick: () => void;
-  onDismiss: (id: number, e?: React.MouseEvent) => void;
+  onDismiss: (id: number) => void;
 }
 
 function NotificationItem({
   notification,
+  state,
   onClick,
   onDismiss,
 }: NotificationItemProps) {
-  const isNew = !notification.dismissed;
+  const hoverGroup = `notif-${notification.id}`;
 
   return (
-    <LineItemButton
-      icon={getNotificationIcon(notification.notif_type)}
-      title={notification.title}
-      description={notification.description ?? undefined}
-      selectVariant="select-heavy"
-      sizePreset="main-ui"
-      rounding="sm"
-      state={isNew ? "selected" : "empty"}
-      color={isNew ? "interactive" : "muted"}
-      onClick={onClick}
-      rightChildren={
-        <Text font="secondary-body" color="text-02">
-          {formatRelativeDate(notification.first_shown)}
-        </Text>
-      }
-    />
+    <Hoverable.Root group={hoverGroup}>
+      <div
+        className="flex flex-row gap-1 items-start cursor-pointer"
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+      >
+        <div className="flex-1 min-w-0">
+          <ContentAction
+            icon={getNotificationIcon(notification.notif_type)}
+            title={notification.title}
+            description={notification.description ?? undefined}
+            sizePreset="main-ui"
+            variant="section"
+            color={state === "new" ? "default" : "muted"}
+            padding="fit"
+            rightChildren={
+              <Text font="secondary-body" color="text-02">
+                {formatRelativeDate(notification.first_shown)}
+              </Text>
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-center w-6 shrink-0">
+          {state === "new" ? (
+            <div className="relative flex items-center justify-center w-6 h-6">
+              {/* Dot: visible at rest, fades out on hover */}
+              <div className="absolute inset-0 flex items-center justify-center transition-opacity opacity-100 [div[data-hover-group]:hover_&]:opacity-0">
+                <SvgNotificationBubble size={6} />
+              </div>
+              {/* Check: hidden at rest, fades in on hover */}
+              <Hoverable.Item group={hoverGroup} variant="opacity-on-hover">
+                <Button
+                  icon={SvgCheckSquare}
+                  size="sm"
+                  prominence="tertiary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDismiss(notification.id);
+                  }}
+                  tooltip="Mark as read"
+                />
+              </Hoverable.Item>
+            </div>
+          ) : (
+            <Hoverable.Item group={hoverGroup} variant="opacity-on-hover">
+              <Button icon={SvgSquare} size="sm" prominence="tertiary" />
+            </Hoverable.Item>
+          )}
+        </div>
+      </div>
+    </Hoverable.Root>
   );
 }
 
@@ -114,64 +163,91 @@ export default function NotificationsPopover({
     refresh: mutate,
   } = useNotifications();
 
-  const handleNotificationClick = (notification: NotificationData) => {
-    if (
-      notification.notif_type === NotificationType.FEATURE_ANNOUNCEMENT &&
-      notification.additional_data?.feature === "build_mode" &&
-      onShowBuildIntro
-    ) {
+  // Track IDs dismissed during this session (before popover closes)
+  const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
+    new Set()
+  );
+
+  const handleNotificationClick = useCallback(
+    (notification: NotificationData) => {
+      if (
+        notification.notif_type === NotificationType.FEATURE_ANNOUNCEMENT &&
+        notification.additional_data?.feature === "build_mode" &&
+        onShowBuildIntro
+      ) {
+        onNavigate();
+        onShowBuildIntro();
+        return;
+      }
+
+      const link = notification.additional_data?.link;
+      if (!link) return;
+
+      if (notification.notif_type === NotificationType.RELEASE_NOTES) {
+        track(AnalyticsEvent.RELEASE_NOTIFICATION_CLICKED, {
+          version: notification.additional_data?.version,
+        });
+      }
+
+      if (link.startsWith("http://") || link.startsWith("https://")) {
+        if (!notification.dismissed) {
+          handleDismiss(notification.id);
+        }
+        window.open(link, "_blank", "noopener,noreferrer");
+        return;
+      }
+
       onNavigate();
-      onShowBuildIntro();
-      return;
-    }
+      router.push(link as Route);
+    },
+    [onNavigate, onShowBuildIntro, router]
+  );
 
-    const link = notification.additional_data?.link;
-    if (!link) return;
-
-    if (notification.notif_type === NotificationType.RELEASE_NOTES) {
-      track(AnalyticsEvent.RELEASE_NOTIFICATION_CLICKED, {
-        version: notification.additional_data?.version,
-      });
-    }
-
-    if (link.startsWith("http://") || link.startsWith("https://")) {
-      if (!notification.dismissed) {
-        handleDismiss(notification.id);
+  const handleDismiss = useCallback(
+    async (notificationId: number) => {
+      try {
+        const response = await fetch(
+          `/api/notifications/${notificationId}/dismiss`,
+          { method: "POST" }
+        );
+        if (response.ok) {
+          setSessionDismissedIds((prev) => new Set([...prev, notificationId]));
+          mutate();
+        }
+      } catch (error) {
+        console.error("Error dismissing notification:", error);
       }
-      window.open(link, "_blank", "noopener,noreferrer");
-      return;
-    }
+    },
+    [mutate]
+  );
 
-    onNavigate();
-    router.push(link as Route);
-  };
+  const getState = useCallback(
+    (notification: NotificationData): NotificationState => {
+      if (sessionDismissedIds.has(notification.id)) return "dismissed";
+      if (notification.dismissed) return "older";
+      return "new";
+    },
+    [sessionDismissedIds]
+  );
 
-  const handleDismiss = async (
-    notificationId: number,
-    e?: React.MouseEvent
-  ) => {
-    e?.stopPropagation();
-    try {
-      const response = await fetch(
-        `/api/notifications/${notificationId}/dismiss`,
-        { method: "POST" }
-      );
-      if (response.ok) {
-        mutate();
-      }
-    } catch (error) {
-      console.error("Error dismissing notification:", error);
-    }
-  };
+  const newNotifications = useMemo(
+    () => notifications?.filter((n) => getState(n) === "new") ?? [],
+    [notifications, getState]
+  );
+  const dismissedNotifications = useMemo(
+    () => notifications?.filter((n) => getState(n) === "dismissed") ?? [],
+    [notifications, getState]
+  );
+  const olderNotifications = useMemo(
+    () => notifications?.filter((n) => getState(n) === "older") ?? [],
+    [notifications, getState]
+  );
 
-  const newNotifications = notifications?.filter((n) => !n.dismissed) ?? [];
-  const olderNotifications = notifications?.filter((n) => n.dismissed) ?? [];
-
-  const handleDismissAll = async () => {
+  const handleDismissAll = useCallback(async () => {
     for (const n of newNotifications) {
       await handleDismiss(n.id);
     }
-  };
+  }, [newNotifications, handleDismiss]);
 
   return (
     <div className="flex flex-col gap-1 p-1">
@@ -229,6 +305,24 @@ export default function NotificationsPopover({
                   <NotificationItem
                     key={notification.id}
                     notification={notification}
+                    state="new"
+                    onClick={() => handleNotificationClick(notification)}
+                    onDismiss={handleDismiss}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {dismissedNotifications.length > 0 && (
+            <>
+              <Divider title="Dismissed" />
+              <div className="flex flex-col">
+                {dismissedNotifications.map((notification) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    state="dismissed"
                     onClick={() => handleNotificationClick(notification)}
                     onDismiss={handleDismiss}
                   />
@@ -245,6 +339,7 @@ export default function NotificationsPopover({
                   <NotificationItem
                     key={notification.id}
                     notification={notification}
+                    state="older"
                     onClick={() => handleNotificationClick(notification)}
                     onDismiss={handleDismiss}
                   />
