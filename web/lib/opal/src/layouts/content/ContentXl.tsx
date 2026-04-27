@@ -16,26 +16,22 @@ import { useState } from "react";
 type ContentXlSizePreset = "headline" | "section";
 
 interface ContentXlPresetConfig {
-  /** Icon width/height (CSS value). */
+  /** Opal font name for the title. */
+  titleFont: TextFont;
+  /** Title line-height — also sets icon container height (CSS value). */
+  lineHeight: string;
+  /** Icon width/height = lineHeight - 4px (CSS value). */
   iconSize: string;
-  /** Tailwind padding class for the icon container. */
-  iconContainerPadding: string;
   /** More-icon-1 width/height (CSS value). */
   moreIcon1Size: string;
-  /** Tailwind padding class for the more-icon-1 container. */
-  moreIcon1ContainerPadding: string;
   /** More-icon-2 width/height (CSS value). */
   moreIcon2Size: string;
-  /** Tailwind padding class for the more-icon-2 container. */
-  moreIcon2ContainerPadding: string;
-  /** Opal font name for the title (without `font-` prefix). */
-  titleFont: TextFont;
-  /** Title line-height — also used as icon container min-height (CSS value). */
-  lineHeight: string;
-  /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
+  /** Button `size` prop for the edit button. */
   editButtonSize: ContainerSizeVariants;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
+  /** Gap between icon row and title row (CSS value). */
+  iconRowMarginBottom: string;
 }
 
 interface ContentXlProps {
@@ -73,28 +69,24 @@ interface ContentXlProps {
 
 const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
   headline: {
-    iconSize: "2rem",
-    iconContainerPadding: "p-0.5",
-    moreIcon1Size: "1rem",
-    moreIcon1ContainerPadding: "p-0.5",
-    moreIcon2Size: "2rem",
-    moreIcon2ContainerPadding: "p-0.5",
     titleFont: "heading-h2",
     lineHeight: "2.25rem",
+    iconSize: "2rem",
+    moreIcon1Size: "1rem",
+    moreIcon2Size: "2rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
+    iconRowMarginBottom: "0rem",
   },
   section: {
-    iconSize: "1.5rem",
-    iconContainerPadding: "p-0.5",
-    moreIcon1Size: "0.75rem",
-    moreIcon1ContainerPadding: "p-0.5",
-    moreIcon2Size: "1.5rem",
-    moreIcon2ContainerPadding: "p-0.5",
     titleFont: "heading-h3",
     lineHeight: "1.75rem",
+    iconSize: "1.5rem",
+    moreIcon1Size: "0.75rem",
+    moreIcon2Size: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
+    iconRowMarginBottom: "0.25rem",
   },
 };
 
@@ -130,15 +122,15 @@ function ContentXl({
   }
 
   return (
-    <div ref={ref} className="opal-content-xl">
+    <div ref={ref} className="opal-content-xl" data-opal-content>
       {(Icon || MoreIcon1 || MoreIcon2) && (
-        <div className="opal-content-xl-icon-row">
+        <div
+          className="opal-content-xl-icon-row"
+          style={{ marginBottom: config.iconRowMarginBottom }}
+        >
           {Icon && (
             <div
-              className={cn(
-                "opal-content-xl-icon-container shrink-0",
-                config.iconContainerPadding
-              )}
+              className="opal-content-xl-icon-container shrink-0"
               style={{ minHeight: config.lineHeight }}
             >
               <Icon
@@ -149,12 +141,7 @@ function ContentXl({
           )}
 
           {MoreIcon1 && (
-            <div
-              className={cn(
-                "opal-content-xl-more-icon-container shrink-0",
-                config.moreIcon1ContainerPadding
-              )}
-            >
+            <div className="opal-content-xl-more-icon-container shrink-0">
               <MoreIcon1
                 className="opal-content-xl-icon"
                 style={{
@@ -166,12 +153,7 @@ function ContentXl({
           )}
 
           {MoreIcon2 && (
-            <div
-              className={cn(
-                "opal-content-xl-more-icon-container shrink-0",
-                config.moreIcon2ContainerPadding
-              )}
-            >
+            <div className="opal-content-xl-more-icon-container shrink-0">
               <MoreIcon2
                 className="opal-content-xl-icon"
                 style={{
@@ -184,79 +166,77 @@ function ContentXl({
         </div>
       )}
 
-      <div className="opal-content-xl-body">
-        <div className="opal-content-xl-title-row">
-          {editing ? (
-            <div className="opal-content-xl-input-sizer">
-              <span
-                className={cn(
-                  "opal-content-xl-input-mirror",
-                  `font-${config.titleFont}`
-                )}
-              >
-                {editValue || "\u00A0"}
-              </span>
-              <input
-                className={cn(
-                  "opal-content-xl-input",
-                  `font-${config.titleFont}`,
-                  "text-text-04"
-                )}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                size={1}
-                autoFocus
-                onFocus={(e) => e.currentTarget.select()}
-                onBlur={commit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commit();
-                  if (e.key === "Escape") {
-                    setEditValue(toPlainString(title));
-                    setEditing(false);
-                  }
-                }}
-                style={{ height: config.lineHeight }}
-              />
-            </div>
-          ) : (
-            <Text
-              font={config.titleFont}
-              color="inherit"
-              maxLines={1}
-              title={toPlainString(title)}
-              onClick={editable ? startEditing : undefined}
-            >
-              {title}
-            </Text>
-          )}
-
-          {editable && !editing && (
-            <div
+      <div className="opal-content-xl-title-row">
+        {editing ? (
+          <div className="opal-content-xl-input-sizer">
+            <span
               className={cn(
-                "opal-content-xl-edit-button",
-                config.editButtonPadding
+                "opal-content-xl-input-mirror",
+                `font-${config.titleFont}`
               )}
             >
-              <Button
-                icon={SvgEdit}
-                prominence="internal"
-                size={config.editButtonSize}
-                tooltip="Edit"
-                tooltipSide="right"
-                onClick={startEditing}
-              />
-            </div>
-          )}
-        </div>
+              {editValue || "\u00A0"}
+            </span>
+            <input
+              className={cn(
+                "opal-content-xl-input",
+                `font-${config.titleFont}`,
+                "text-text-04"
+              )}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              size={1}
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commit();
+                if (e.key === "Escape") {
+                  setEditValue(toPlainString(title));
+                  setEditing(false);
+                }
+              }}
+              style={{ height: config.lineHeight }}
+            />
+          </div>
+        ) : (
+          <Text
+            font={config.titleFont}
+            color="inherit"
+            maxLines={1}
+            title={toPlainString(title)}
+            onClick={editable ? startEditing : undefined}
+          >
+            {title}
+          </Text>
+        )}
 
-        {description && toPlainString(description) && (
-          <div className="opal-content-xl-description">
-            <Text font="secondary-body" color="text-03" as="p">
-              {description}
-            </Text>
+        {editable && !editing && (
+          <div
+            className={cn(
+              "opal-content-xl-edit-button",
+              config.editButtonPadding
+            )}
+          >
+            <Button
+              icon={SvgEdit}
+              prominence="internal"
+              size={config.editButtonSize}
+              tooltip="Edit"
+              tooltipSide="right"
+              onClick={startEditing}
+            />
           </div>
         )}
       </div>
+
+      {description && toPlainString(description) && (
+        <div className="opal-content-xl-description">
+          <Text font="secondary-body" color="text-03" as="p">
+            {description}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }

@@ -42,7 +42,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
               sizePreset="main-ui"
               variant="body"
               width="full"
-              prominence="muted"
+              color="muted"
             />
           </Interactive.Container>
         </Interactive.Stateless>

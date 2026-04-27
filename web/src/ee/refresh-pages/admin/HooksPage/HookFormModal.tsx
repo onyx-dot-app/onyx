@@ -282,7 +282,7 @@ export default function HookFormModal({
                           variant="body"
                           icon={SvgShareWebhook}
                           title="Hook Point"
-                          prominence="muted"
+                          color="muted"
                           width="fit"
                         />
                         {docsUrl && (
