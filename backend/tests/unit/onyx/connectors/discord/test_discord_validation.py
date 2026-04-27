@@ -1,3 +1,10 @@
+"""Unit tests for `DiscordConnector.validate_connector_settings`.
+
+The new checkpointed connector still calls `Client.login` via a fresh,
+gateway-free client at validation time, so we mock `login`/`close` at the
+class level and assert the same login-then-close lifecycle.
+"""
+
 from unittest.mock import AsyncMock
 from unittest.mock import patch
 
