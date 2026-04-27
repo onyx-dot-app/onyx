@@ -19,9 +19,11 @@ declared but unused — hence the `ARG002` suppression at the file level.
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 
@@ -36,6 +38,7 @@ from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import StreamingChoice
+from onyx.llm.model_response import Usage
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
@@ -506,3 +509,127 @@ def test_stream_forwards_every_chunk_unchanged_when_tool_calls_present() -> None
     assert chunks[0].choice.delta.tool_calls[0].id == "call_1"
     assert chunks[1].choice.delta.tool_calls[0].id is None  # fragment
     assert chunks[2].choice.delta.tool_calls[0].id is None  # fragment
+
+
+# ---------------------------------------------------------------------------
+# Usage recording on non-clean stream exits
+# ---------------------------------------------------------------------------
+
+
+_TEST_USAGE = Usage(
+    completion_tokens=10,
+    prompt_tokens=200,
+    total_tokens=210,
+    cache_creation_input_tokens=0,
+    cache_read_input_tokens=0,
+)
+
+
+class _UsageStreamLLM(LLM):
+    """Test double that yields a usage chunk first, then content chunks.
+
+    Mirrors the real LiteLLM streaming order where the first chunk often
+    carries cumulative ``usage`` even before all content has been emitted.
+    """
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider="test",
+            model_name="test-model",
+            temperature=0.0,
+            max_input_tokens=1000,
+        )
+
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        return _TEST_MODEL_RESPONSE
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        yield ModelResponseStream(
+            id="stream-id",
+            created="2026-04-22T00:00:00Z",
+            choice=StreamingChoice(delta=Delta(content="hello")),
+            usage=_TEST_USAGE,
+        )
+        yield ModelResponseStream(
+            id="stream-id",
+            created="2026-04-22T00:00:00Z",
+            choice=StreamingChoice(delta=Delta(content=" world")),
+        )
+
+
+class _UsageThenExplodeLLM(_UsageStreamLLM):
+    """Yields one usage-bearing chunk, then raises mid-stream."""
+
+    def stream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        yield ModelResponseStream(
+            id="stream-id",
+            created="2026-04-22T00:00:00Z",
+            choice=StreamingChoice(delta=Delta(content="hello")),
+            usage=_TEST_USAGE,
+        )
+        raise RuntimeError("stream-mid-boom")
+
+
+def test_stream_records_usage_when_consumer_abandons_generator() -> None:
+    """Consumer reads the first chunk (which carries usage) then closes the
+    generator without exhausting it. The wrap must still record the usage
+    seen so far so cost attribution doesn't silently zero out — the upstream
+    provider already billed for those tokens."""
+    llm = _UsageStreamLLM()
+    with patch("onyx.tracing.llm_utils.record_llm_span_output") as recorder:
+        gen = cast(
+            Generator[ModelResponseStream, None, None],
+            llm.stream(UserMessage(content="hi")),
+        )
+        first_chunk = next(gen)
+        assert first_chunk.choice.delta.content == "hello"
+        gen.close()  # triggers GeneratorExit inside the wrap
+    recorder.assert_called_once()
+    kwargs = recorder.call_args.kwargs
+    assert kwargs["usage"] == _TEST_USAGE
+    assert kwargs["output"] == "hello"
+
+
+def test_stream_records_usage_when_inner_stream_raises_mid_flight() -> None:
+    """Provider streams a usage-bearing chunk, then raises. Wrap must
+    record the usage seen before the failure so cost is attributed
+    correctly even though the consumer never saw a clean completion."""
+    llm = _UsageThenExplodeLLM()
+    with patch("onyx.tracing.llm_utils.record_llm_span_output") as recorder:
+        with pytest.raises(RuntimeError, match="stream-mid-boom"):
+            list(llm.stream(UserMessage(content="hi")))
+    recorder.assert_called_once()
+    kwargs = recorder.call_args.kwargs
+    assert kwargs["usage"] == _TEST_USAGE
+    assert kwargs["output"] == "hello"
