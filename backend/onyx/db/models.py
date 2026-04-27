@@ -89,7 +89,7 @@ from onyx.db.enums import SyncType
 from onyx.db.enums import TaskStatus
 from onyx.db.enums import ThemePreference
 from onyx.db.enums import UserFileStatus
-from onyx.db.index_attempt_metrics import IndexAttemptStage
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
 from onyx.file_store.models import FileDescriptor
@@ -2447,8 +2447,8 @@ class IndexAttemptStageMetric(Base):
     aggregates (count, sum, min, max, and Welford/Chan M2 accumulator) so we
     can derive average and standard deviation at read time without storing
     individual samples. See `plans/index-attempt-stage-metrics.md` for the
-    write-path SQL and `onyx.db.index_attempt_metrics.STAGE_SCOPE` for the
-    per-stage display scope.
+    write-path SQL and `onyx.db.index_attempt_metrics_models.STAGE_SCOPE`
+    for the per-stage display scope.
     """
 
     __tablename__ = "index_attempt_stage_metric"
