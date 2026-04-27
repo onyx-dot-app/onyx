@@ -167,6 +167,33 @@ def record_single_event(
     )
 
 
+def safe_record_single_event(
+    stage: IndexAttemptStage,
+    index_attempt_id: int,
+    duration_ms: int,
+) -> None:
+    """Best-effort recording for an externally-measured duration.
+
+    Opens a fresh tenant-scoped session, calls ``record_single_event``, and
+    swallows + logs any failure. Use when you can't wrap the work in
+    ``time_stage`` because the duration is measured externally (e.g. between
+    generator yields, or aggregated across a refactored call chain).
+    """
+    try:
+        with get_session_with_current_tenant() as db_session:
+            record_single_event(
+                db_session,
+                index_attempt_id=index_attempt_id,
+                stage=stage,
+                duration_ms=duration_ms,
+            )
+    except Exception:
+        logger.exception(
+            f"Failed to record stage event {stage.value} "
+            f"for attempt {index_attempt_id}"
+        )
+
+
 @contextmanager
 def time_stage(
     stage: IndexAttemptStage,
