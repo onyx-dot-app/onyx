@@ -458,7 +458,7 @@ pyzmq==27.1.0
     # via
     #   ipykernel
     #   jupyter-client
-referencing==0.36.2
+referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications

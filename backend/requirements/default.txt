@@ -440,7 +440,7 @@ jsonschema==4.25.1
     # via
     #   litellm
     #   mcp
-jsonschema-path==0.3.4
+jsonschema-path==0.4.6
     # via fastmcp
 jsonschema-specifications==2025.9.1
     # via jsonschema
@@ -618,7 +618,7 @@ parameterized==0.9.0
 partd==1.4.2
     # via dask
 passlib==1.7.4
-pathable==0.4.4
+pathable==0.5.0
     # via jsonschema-path
 pdfminer-six==20251107
     # via markitdown
@@ -811,7 +811,7 @@ rapidfuzz==3.13.0
     # via unstructured
 redis==5.0.8
     # via fastapi-limiter
-referencing==0.36.2
+referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-path
@@ -834,7 +834,6 @@ requests==2.33.0
     #   google-genai
     #   hubspot-api-client
     #   jira
-    #   jsonschema-path
     #   kubernetes
     #   langfuse
     #   langsmith
