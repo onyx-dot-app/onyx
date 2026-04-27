@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/layouts/content/styles.css";
 import {
   ContentSm,

@@ -1,4 +1,29 @@
 /* ===========================================================================
+   Content — Shared color properties
+
+   Two registered CSS custom properties drive all Content title + icon colors.
+   Each `.opal-content-*` base class sets defaults; the Interactive override
+   (at the bottom of this file) reassigns them when nested inside
+   `.interactive`.
+
+   @property registration enables hardware-accelerated color interpolation
+   on the parent — children just read the variable with no independent
+   transitions, guaranteeing perfect sync with Interactive's transitions.
+   =========================================================================== */
+
+@property --content-foreground {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+@property --content-foreground-icon {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+/* ===========================================================================
    Content — ContentXl
 
    Icon row on top (flex-col). Icon row contains main icon + optional
@@ -13,7 +38,10 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-xl {
-  @apply flex flex-col items-start text-text-04;
+  @apply flex flex-col items-start;
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
 }
 
 /* ---------------------------------------------------------------------------
@@ -23,6 +51,7 @@
 .opal-content-xl-icon-row {
   @apply flex flex-row items-center;
   gap: 0.25rem;
+  margin-bottom: 0.125rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -30,28 +59,15 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-xl-icon-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center p-0.5;
 }
 
 .opal-content-xl-more-icon-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center p-0.5;
 }
 
 .opal-content-xl-icon {
-  color: var(--text-04);
-}
-
-/* ---------------------------------------------------------------------------
-   Body column
-   --------------------------------------------------------------------------- */
-
-.opal-content-xl-body {
-  @apply flex flex-1 flex-col items-start;
-  min-width: 0.0625rem;
+  color: var(--content-foreground-icon);
 }
 
 /* ---------------------------------------------------------------------------
@@ -61,6 +77,7 @@
 .opal-content-xl-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
+  min-width: 0.0625rem;
 }
 
 .opal-content-xl-input-sizer {
@@ -117,7 +134,19 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg {
-  @apply flex flex-row items-start text-text-04;
+  @apply flex flex-col items-start;
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
+}
+
+/* ---------------------------------------------------------------------------
+   Header row — icon beside title (flex-row)
+   --------------------------------------------------------------------------- */
+
+.opal-content-lg-header {
+  @apply flex flex-row items-start w-full;
+  gap: 0.125rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -125,22 +154,11 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg-icon-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center p-0.5;
 }
 
 .opal-content-lg-icon {
-  color: var(--text-04);
-}
-
-/* ---------------------------------------------------------------------------
-   Body column
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-body {
-  @apply flex flex-1 flex-col items-start;
-  min-width: 0.0625rem;
+  color: var(--content-foreground-icon);
 }
 
 /* ---------------------------------------------------------------------------
@@ -150,6 +168,7 @@
 .opal-content-lg-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
+  min-width: 0.0625rem;
 }
 
 .opal-content-lg-input-sizer {
@@ -195,8 +214,8 @@
 /* ===========================================================================
    Content — ContentMd
 
-   Always inline (flex-row). Icon color varies per sizePreset and is applied
-   via Tailwind class from the component.
+   Always inline (flex-row). Icon color is set via the shared
+   `--content-foreground-icon` custom property.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -204,11 +223,15 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-col items-start text-text-04;
+  @apply flex flex-col items-start;
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
 }
 
 .opal-content-md-header {
   @apply flex flex-row items-center w-full;
+  gap: 0.125rem;
 }
 
 .opal-content-md-header[data-editing] {
@@ -221,9 +244,11 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-icon-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center p-0.5;
+}
+
+.opal-content-md-icon {
+  color: var(--content-foreground-icon);
 }
 
 /* ---------------------------------------------------------------------------
@@ -294,8 +319,8 @@
      vertical: flex-col         — icon top, title below
      reverse : flex-row-reverse — title left, icon right
 
-   Icon color is always text-03. Title color varies by prominence
-   (text-04 default, text-03 muted) via data-prominence.
+   Default colors are text-04 for both title and icon.
+   Prominence="muted" overrides both to text-03.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -304,7 +329,11 @@
 
 .opal-content-sm {
   /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
-  @apply flex items-center text-text-04;
+  @apply flex items-center;
+  gap: 0.125rem;
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
 }
 
 .opal-content-sm[data-orientation="inline"] {
@@ -312,7 +341,7 @@
 }
 
 .opal-content-sm[data-orientation="vertical"] {
-  @apply flex-col;
+  @apply flex-col items-start;
 }
 
 .opal-content-sm[data-orientation="reverse"] {
@@ -324,25 +353,20 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-sm-icon-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @apply flex items-center justify-center p-0.5;
 }
 
 .opal-content-sm-icon {
-  @apply text-text-03;
-}
-
-.opal-content-sm[data-prominence="muted"] .opal-content-sm-icon {
-  @apply text-text-02;
+  color: var(--content-foreground-icon);
 }
 
 /* ---------------------------------------------------------------------------
-   Title
+   Prominence
    --------------------------------------------------------------------------- */
 
 .opal-content-sm[data-prominence="muted"] {
-  @apply text-text-03;
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--text-03);
 }
 
 /* ===========================================================================
@@ -356,48 +380,12 @@
    Opt-out: set `nonInteractive` on <Content> to add
    `data-opal-non-interactive` to the wrapper div, which excludes
    the element from these overrides via the `:not(…) >` selector.
+
+   All four Content variants mark their root with `data-opal-content`,
+   so a single rule handles all of them.
    =========================================================================== */
 
-.interactive :not([data-opal-non-interactive]) > .opal-content-xl {
+.interactive :not([data-opal-non-interactive]) > [data-opal-content] {
   color: inherit;
-}
-
-.interactive
-  :not([data-opal-non-interactive])
-  > .opal-content-xl
-  .opal-content-xl-icon {
-  color: var(--interactive-foreground-icon);
-}
-
-.interactive :not([data-opal-non-interactive]) > .opal-content-lg {
-  color: inherit;
-}
-
-.interactive
-  :not([data-opal-non-interactive])
-  > .opal-content-lg
-  .opal-content-lg-icon {
-  color: var(--interactive-foreground-icon);
-}
-
-.interactive :not([data-opal-non-interactive]) > .opal-content-md {
-  color: inherit;
-}
-
-.interactive
-  :not([data-opal-non-interactive])
-  > .opal-content-md
-  .opal-content-md-icon {
-  color: var(--interactive-foreground-icon);
-}
-
-.interactive :not([data-opal-non-interactive]) > .opal-content-sm {
-  color: inherit;
-}
-
-.interactive
-  :not([data-opal-non-interactive])
-  > .opal-content-sm
-  .opal-content-sm-icon {
-  color: var(--interactive-foreground-icon);
+  --content-foreground-icon: var(--interactive-foreground-icon);
 }
