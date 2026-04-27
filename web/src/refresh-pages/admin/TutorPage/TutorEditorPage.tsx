@@ -682,7 +682,7 @@ export default function TutorEditorPage({
                       </GeneralLayouts.Section>
 
                       {/* Section 5: Advanced */}
-                      <SimpleCollapsible>
+                      <SimpleCollapsible defaultOpen={false}>
                         <SimpleCollapsible.Header
                           title="Advanced"
                           description="Manually customize the system prompt given to the tutor."
