@@ -83,12 +83,11 @@ logger = setup_logger(__name__)
 VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
-# Per-process cache of indices that have already been verified/created. Verify
-# is idempotent and the schema only changes on deploys (which restart the
-# process), so once we've verified an index once we can skip the redis lock
-# and the OpenSearch round-trip on subsequent constructions. Without this,
-# every vespa_metadata_sync_task acquires the lock and contends with all
-# sibling threads, producing RedisSharedLockAcquisitionError under load.
+# Per-process cache of indices we've already created/applied the mapping for.
+# The schema only changes on deploys (which restart the process), so we only
+# need to do that work once per process. We still ping the index on every call
+# so that OpenSearch outages or a deleted-out-from-under-us index surface at
+# construction time instead of being deferred to the next indexing/search op.
 _verified_index_names: set[str] = set()
 
 
@@ -640,6 +639,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
             Exception: There was an error verifying or creating the index or
                 search pipelines.
         """
+        # Cheap existence check on every call. Surfaces OpenSearch outages
+        # at construction time and detects the rare case where the index was
+        # deleted out from under us — invalidating the cache so we'll
+        # recreate it under the lock below.
+        if not self._client.index_exists():
+            _verified_index_names.discard(self._index_name)
+
         if self._index_name in _verified_index_names:
             return
 
