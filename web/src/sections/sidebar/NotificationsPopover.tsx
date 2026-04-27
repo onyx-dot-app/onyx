@@ -83,20 +83,9 @@ function NotificationItem({
       color={isNew ? "interactive" : "muted"}
       onClick={onClick}
       rightChildren={
-        <div className="flex flex-col items-end gap-1">
-          <Text font="secondary-body" color="text-02">
-            {formatRelativeDate(notification.first_shown)}
-          </Text>
-          {isNew && (
-            <Button
-              prominence="tertiary"
-              size="sm"
-              icon={SvgCheckAll}
-              onClick={(e) => onDismiss(notification.id, e)}
-              tooltip="Mark as read"
-            />
-          )}
-        </div>
+        <Text font="secondary-body" color="text-02">
+          {formatRelativeDate(notification.first_shown)}
+        </Text>
       }
     />
   );
@@ -178,27 +167,42 @@ export default function NotificationsPopover({
   const newNotifications = notifications?.filter((n) => !n.dismissed) ?? [];
   const olderNotifications = notifications?.filter((n) => n.dismissed) ?? [];
 
+  const handleDismissAll = async () => {
+    for (const n of newNotifications) {
+      await handleDismiss(n.id);
+    }
+  };
+
   return (
-    <Section gap={0}>
-      <div className="w-full p-2">
-        <ContentAction
-          title="Notifications"
-          sizePreset="main-content"
-          tag={{
-            title: `${undismissedCount} unread`,
-            color: "blue",
-          }}
-          rightChildren={
+    <div className="flex flex-col gap-1 p-1">
+      <ContentAction
+        title="Notifications"
+        sizePreset="main-content"
+        tag={{
+          title: `${undismissedCount} unread`,
+          color: "blue",
+        }}
+        rightChildren={
+          <div className="flex flex-row items-center gap-1">
+            {newNotifications.length > 0 && (
+              <Button
+                icon={SvgCheckAll}
+                onClick={handleDismissAll}
+                size="sm"
+                prominence="tertiary"
+                tooltip="Mark all as read"
+              />
+            )}
             <Button
               icon={SvgX}
               onClick={onClose}
               size="sm"
               prominence="tertiary"
             />
-          }
-          padding="fit"
-        />
-      </div>
+          </div>
+        }
+        padding="fit"
+      />
 
       {isLoading ? (
         <div className="h-[var(--notifications-popover)]">
@@ -216,11 +220,11 @@ export default function NotificationsPopover({
           </Section>
         </div>
       ) : (
-        <div className="max-h-[var(--notifications-popover)] overflow-y-auto flex flex-col">
+        <div className="max-h-[var(--notifications-popover)] overflow-y-auto flex flex-col gap-1">
           {newNotifications.length > 0 && (
             <>
               <Divider title="New" />
-              <div className="flex flex-col gap-1 px-1">
+              <div className="flex flex-col">
                 {newNotifications.map((notification) => (
                   <NotificationItem
                     key={notification.id}
@@ -236,7 +240,7 @@ export default function NotificationsPopover({
           {olderNotifications.length > 0 && (
             <>
               <Divider title="Older" />
-              <div className="flex flex-col gap-1 px-1">
+              <div className="flex flex-col">
                 {olderNotifications.map((notification) => (
                   <NotificationItem
                     key={notification.id}
@@ -250,6 +254,6 @@ export default function NotificationsPopover({
           )}
         </div>
       )}
-    </Section>
+    </div>
   );
 }
