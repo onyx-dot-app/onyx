@@ -19,9 +19,8 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { SidebarTab } from "@opal/components";
+import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
@@ -31,7 +30,6 @@ import {
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import useAppFocus from "@/hooks/useAppFocus";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -190,45 +188,50 @@ const ChatButton = memo(
     useEffect(() => {
       if (!showMoveOptions) {
         const popoverItems = [
-          <LineItem
+          <LineItemButton
             key="share"
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgShare}
+            title="Share"
             onClick={noProp(() => setShowShareModal(true))}
-          >
-            Share
-          </LineItem>,
-          <LineItem
+          />,
+          <LineItemButton
             key="rename"
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgEdit}
+            title="Rename"
             onClick={noProp(() => setRenaming(true))}
-          >
-            Rename
-          </LineItem>,
-          <LineItem
+          />,
+          <LineItemButton
             key="move"
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgFolderIn}
+            title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
-          >
-            Move to Project
-          </LineItem>,
+          />,
           project && (
-            <LineItem
+            <LineItemButton
               key="remove"
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolder}
+              title={`Remove from ${project.name}`}
               onClick={noProp(() => handleRemoveFromProject())}
-            >
-              {`Remove from ${project.name}`}
-            </LineItem>
+            />
           ),
           null,
-          <LineItem
+          <LineItemButton
             key="delete"
+            sizePreset="main-ui"
+            rounding="sm"
+            color="danger"
             icon={SvgTrash}
-            danger
+            title="Delete"
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          >
-            Delete
-          </LineItem>,
+          />,
         ];
         setPopoverItems(popoverItems);
       } else {
@@ -243,27 +246,29 @@ const ChatButton = memo(
             onSearch={setSearchTerm}
           />,
           ...availableProjects.map((targetProject) => (
-            <LineItem
+            <LineItemButton
               key={targetProject.id}
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolder}
+              title={targetProject.name}
               onClick={noProp(() => handleChatMove(targetProject))}
-            >
-              {targetProject.name}
-            </LineItem>
+            />
           )),
           // Show "Create New Project" option when no projects match the search
           ...(availableProjects.length === 0 && searchTerm.trim() !== ""
             ? [
                 null,
-                <LineItem
+                <LineItemButton
                   key="create-new"
+                  sizePreset="main-ui"
+                  rounding="sm"
                   icon={SvgFolderPlus}
+                  title={`Create ${searchTerm.trim()}`}
                   onClick={noProp(() =>
                     handleCreateProjectAndMove(searchTerm.trim())
                   )}
-                >
-                  {`Create ${searchTerm.trim()}`}
-                </LineItem>,
+                />,
               ]
             : []),
         ];
