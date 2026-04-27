@@ -61,10 +61,10 @@ export const TooltipSides: Story = {
           key={side}
           disabled
           tooltip={`Tooltip on ${side}`}
-          side={side}
+          tooltipSide={side}
         >
           <Card border="solid" padding="sm">
-            <p className="text-sm">side: {side}</p>
+            <p className="text-sm">tooltipSide: {side}</p>
           </Card>
         </Disabled>
       ))}
