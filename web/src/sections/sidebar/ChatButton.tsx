@@ -19,9 +19,8 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { SidebarTab, LineItemButton } from "@opal/components";
+import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
