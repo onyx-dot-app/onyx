@@ -19,6 +19,10 @@ class ChatMessageSkeleton(BaseModel):
     assistant_name: str | None
     user_email: str | None
     number_of_tokens: int
+    # Display name of the LLM that generated the assistant reply paired with
+    # this user message. None if no assistant reply exists yet or the model
+    # was never recorded.
+    llm_model: str | None
 
 
 class UserSkeleton(BaseModel):

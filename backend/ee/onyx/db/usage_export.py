@@ -14,6 +14,7 @@ from ee.onyx.server.reporting.usage_export_models import ChatMessageSkeleton
 from ee.onyx.server.reporting.usage_export_models import FlowType
 from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from onyx.configs.constants import MessageType
+from onyx.db.models import ChatMessage
 from onyx.db.models import UsageReport
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
@@ -45,6 +46,20 @@ def get_empty_chat_messages_entries__paginated(
     for chat_session in chat_sessions:
         flow_type = FlowType.SLACK if chat_session.onyxbot_flow else FlowType.CHAT
 
+        # Group assistant messages by their parent (user) message id so we can
+        # report the model that answered each user prompt. A user message can
+        # have multiple assistant children in multi-model branches; we prefer
+        # `preferred_response_id` and fall back to the earliest child.
+        assistant_children_by_parent: dict[int, list[ChatMessage]] = {}
+        for message in chat_session.messages:
+            if (
+                message.message_type == MessageType.ASSISTANT
+                and message.parent_message_id is not None
+            ):
+                assistant_children_by_parent.setdefault(
+                    message.parent_message_id, []
+                ).append(message)
+
         for message in chat_session.messages:
             # Only count user messages
             if message.message_type != MessageType.USER:
@@ -58,6 +73,22 @@ def get_empty_chat_messages_entries__paginated(
             if chat_session.persona:
                 assistant_name = chat_session.persona.name
 
+            # Resolve the paired assistant reply and its model display name.
+            paired_assistant = None
+            children = assistant_children_by_parent.get(message.id, [])
+            if children:
+                if message.preferred_response_id is not None:
+                    paired_assistant = next(
+                        (c for c in children if c.id == message.preferred_response_id),
+                        None,
+                    )
+                if paired_assistant is None:
+                    paired_assistant = min(children, key=lambda c: c.id)
+
+            llm_model = (
+                paired_assistant.model_display_name if paired_assistant else None
+            )
+
             message_skeletons.append(
                 ChatMessageSkeleton(
                     message_id=message.id,
@@ -68,6 +99,7 @@ def get_empty_chat_messages_entries__paginated(
                     assistant_name=assistant_name,
                     user_email=user_email,
                     number_of_tokens=message.token_count,
+                    llm_model=llm_model,
                 )
             )
     if len(chat_sessions) == 0:
