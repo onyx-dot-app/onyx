@@ -16,17 +16,13 @@ import { useState } from "react";
 type ContentLgSizePreset = "headline" | "section";
 
 interface ContentLgPresetConfig {
-  /** Icon width/height (CSS value). */
-  iconSize: string;
-  /** Tailwind padding class for the icon container. */
-  iconContainerPadding: string;
-  /** Gap between icon container and content (CSS value). */
-  gap: string;
-  /** Opal font name for the title (without `font-` prefix). */
+  /** Opal font name for the title. */
   titleFont: TextFont;
-  /** Title line-height — also used as icon container min-height (CSS value). */
+  /** Title line-height — also sets icon container height (CSS value). */
   lineHeight: string;
-  /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
+  /** Icon width/height = lineHeight - 4px (CSS value). */
+  iconSize: string;
+  /** Button `size` prop for the edit button. */
   editButtonSize: ContainerSizeVariants;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
@@ -61,20 +57,16 @@ interface ContentLgProps {
 
 const CONTENT_LG_PRESETS: Record<ContentLgSizePreset, ContentLgPresetConfig> = {
   headline: {
-    iconSize: "2rem",
-    iconContainerPadding: "p-0.5",
-    gap: "0.25rem",
     titleFont: "heading-h2",
     lineHeight: "2.25rem",
+    iconSize: "2rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
   },
   section: {
-    iconSize: "1.25rem",
-    iconContainerPadding: "p-1",
-    gap: "0rem",
     titleFont: "heading-h3-muted",
     lineHeight: "1.75rem",
+    iconSize: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
   },
@@ -110,23 +102,20 @@ function ContentLg({
   }
 
   return (
-    <div ref={ref} className="opal-content-lg" style={{ gap: config.gap }}>
-      {Icon && (
-        <div
-          className={cn(
-            "opal-content-lg-icon-container shrink-0",
-            config.iconContainerPadding
-          )}
-          style={{ minHeight: config.lineHeight }}
-        >
-          <Icon
-            className="opal-content-lg-icon"
-            style={{ width: config.iconSize, height: config.iconSize }}
-          />
-        </div>
-      )}
+    <div ref={ref} className="opal-content-lg" data-opal-content>
+      <div className="opal-content-lg-header">
+        {Icon && (
+          <div
+            className="opal-content-lg-icon-container shrink-0"
+            style={{ minHeight: config.lineHeight }}
+          >
+            <Icon
+              className="opal-content-lg-icon"
+              style={{ width: config.iconSize, height: config.iconSize }}
+            />
+          </div>
+        )}
 
-      <div className="opal-content-lg-body">
         <div className="opal-content-lg-title-row">
           {editing ? (
             <div className="opal-content-lg-input-sizer">
@@ -190,15 +179,22 @@ function ContentLg({
             </div>
           )}
         </div>
-
-        {description && toPlainString(description) && (
-          <div className="opal-content-lg-description">
-            <Text font="secondary-body" color="text-03" as="p">
-              {description}
-            </Text>
-          </div>
-        )}
       </div>
+
+      {description && toPlainString(description) && (
+        <div
+          className="opal-content-lg-description"
+          style={
+            Icon
+              ? { paddingLeft: `calc(${config.lineHeight} + 0.125rem)` }
+              : undefined
+          }
+        >
+          <Text font="secondary-body" color="text-03" as="p">
+            {description}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }

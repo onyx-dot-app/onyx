@@ -158,7 +158,7 @@ function SettingsPopover({
           <Content
             sizePreset="secondary"
             variant="body"
-            prominence="muted"
+            color="muted"
             orientation="reverse"
             icon={SvgOnyxLogo}
             title={markdown(
