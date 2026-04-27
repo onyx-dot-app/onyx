@@ -29,7 +29,6 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -524,10 +523,8 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         List of IndexingDocument objects with processed_sections as list[Section]
     """
     # Check if image extraction and analysis is enabled before trying to get a vision LLM.
-    # Use section.type rather than isinstance because sections can round-trip
-    # through pydantic as base Section instances (not the concrete subclass).
     has_image_section = any(
-        section.type == SectionType.IMAGE
+        isinstance(section, ImageSection)
         for document in documents
         for section in document.sections
     )
