@@ -383,7 +383,7 @@ pygments==2.20.0
     # via rich
 pyjwt==2.12.0
     # via mcp
-python-dateutil==2.8.2
+python-dateutil==2.9.0.post0
     # via
     #   aiobotocore
     #   botocore

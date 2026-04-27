@@ -348,7 +348,7 @@ hpack==4.1.0
     # via h2
 html5lib==1.1
     # via unstructured
-htmldate==1.9.1
+htmldate==1.9.4
     # via trafilatura
 httpcore==1.0.9
     # via
@@ -743,7 +743,7 @@ pytest-base-url==2.1.0
     # via pytest-playwright
 pytest-mock==3.12.0
 pytest-playwright==0.7.2
-python-dateutil==2.8.2
+python-dateutil==2.9.0.post0
     # via
     #   aiobotocore
     #   asana
