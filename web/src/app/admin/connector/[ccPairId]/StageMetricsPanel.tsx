@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Button, Text, Tooltip } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { SvgQuestionMarkSmall } from "@opal/icons";
 import { Callout } from "@/components/ui/callout";
 import {
   Table,
@@ -47,9 +48,50 @@ const STAGE_LABELS: Record<IndexAttemptStage, string> = {
   BATCH_TOTAL: "Batch total",
 };
 
-// Distinct background classes for stacked-bar segments. Cycled by stage's
-// pipeline-order index so the same stage gets the same color in both the bar
-// and the table swatch regardless of the active sort mode.
+// Short explainer per stage, shown in a tooltip next to each row in the
+// per-batch table so admins can interpret the timings without leaving the
+// modal.
+const STAGE_DESCRIPTIONS: Record<IndexAttemptStage, string> = {
+  CONNECTOR_VALIDATION:
+    "Validates that the connector is configured correctly and reachable before fetching begins.",
+  PERMISSION_VALIDATION:
+    "Verifies the credential has the permissions needed to read documents from the source.",
+  CHECKPOINT_LOAD:
+    "Loads any prior checkpoint so a resumed attempt can pick up where the last one left off.",
+  CONNECTOR_FETCH:
+    "Time spent calling the upstream source to retrieve a batch of raw documents.",
+  HIERARCHY_UPSERT:
+    "Records hierarchy and metadata relationships (folders, parents, etc.) for the batch in Postgres.",
+  DOC_BATCH_STORE:
+    "Persists the fetched batch to the file store so the docprocessing worker can consume it asynchronously.",
+  DOC_BATCH_ENQUEUE:
+    "Submits a docprocessing task for the batch onto the Celery queue.",
+  QUEUE_WAIT:
+    "Time the docprocessing task spent waiting in the Celery queue before a worker picked it up.",
+  DOCPROCESSING_SETUP:
+    "One-time setup the docprocessing worker performs before processing batches (DB session, embedder, etc.).",
+  BATCH_LOAD:
+    "Reads the batch back from the file store inside the docprocessing worker.",
+  DOC_DB_PREPARE:
+    "Cleans, dedupes, and prepares documents for indexing — includes the DB lookups against existing document state.",
+  IMAGE_PROCESSING:
+    "Extracts and processes images embedded in document sections.",
+  CHUNKING: "Splits documents into chunks sized for the embedding model.",
+  CONTEXTUAL_RAG:
+    "Optional LLM call that adds short contextual summaries to each chunk to improve retrieval quality.",
+  EMBEDDING: "Calls the embedding model to produce vectors for each chunk.",
+  VECTOR_DB_WRITE: "Writes the embedded chunks and their metadata to Vespa.",
+  POST_INDEX_DB_UPDATE:
+    "Updates Postgres with final document state after indexing (last-indexed timestamps, hashes, etc.).",
+  COORDINATION_UPDATE:
+    "Bookkeeping updates after a batch — progress counters, checkpoint advances, and similar.",
+  BATCH_TOTAL:
+    "Total wall-clock time elapsed processing a single batch end-to-end.",
+};
+
+// Distinct background classes for the per-row average-time bar. Cycled by
+// stage's pipeline-order index so the same stage gets the same color in both
+// the bar and the table swatch regardless of the active sort mode.
 const STAGE_BAR_COLORS = [
   "bg-theme-blue-05",
   "bg-theme-green-05",
@@ -204,7 +246,6 @@ function PerBatchSection({
       gap={0.75}
     >
       <SortToggle sortMode={sortMode} onChange={onSortModeChange} />
-      <PerBatchStackedBar perBatchStages={perBatchStages} sortMode={sortMode} />
       <PerBatchTable perBatchStages={perBatchStages} sortMode={sortMode} />
     </GeneralLayouts.Section>
   );
@@ -269,102 +310,6 @@ function colorClassForStage(stage: IndexAttemptStage): string {
   return STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length]!;
 }
 
-interface PerBatchStackedBarProps {
-  perBatchStages: IndexAttemptStageMetric[];
-  sortMode: SortMode;
-}
-
-function PerBatchStackedBar({
-  perBatchStages,
-  sortMode,
-}: PerBatchStackedBarProps) {
-  const sorted = useMemo(
-    () => sortPerBatchStages(perBatchStages, sortMode),
-    [perBatchStages, sortMode]
-  );
-
-  const totalMs = sorted.reduce((acc, s) => acc + s.total_duration_ms, 0);
-
-  if (totalMs <= 0) {
-    return (
-      <Text font="secondary-body" color="text-03">
-        Per-batch stages have no recorded duration yet.
-      </Text>
-    );
-  }
-
-  return (
-    <GeneralLayouts.Section
-      flexDirection="row"
-      justifyContent="start"
-      alignItems="stretch"
-      width="full"
-      height={0.75}
-      gap={0}
-      className="overflow-hidden rounded-04 border border-border-01"
-      role="img"
-      aria-label="Per-batch stage duration breakdown"
-    >
-      {sorted.map((stage) => {
-        const widthPct = (stage.total_duration_ms / totalMs) * 100;
-        if (widthPct <= 0) return null;
-        return (
-          <Tooltip
-            key={stage.stage}
-            side="top"
-            tooltip={<StageTooltipContent stage={stage} totalMs={totalMs} />}
-          >
-            {/* Inline width is unavoidable: bar segment widths are derived
-                from runtime durations, which Tailwind cannot express. */}
-            <div
-              className={cn("h-full", colorClassForStage(stage.stage))}
-              style={{ width: `${widthPct}%` }}
-            />
-          </Tooltip>
-        );
-      })}
-    </GeneralLayouts.Section>
-  );
-}
-
-interface StageTooltipContentProps {
-  stage: IndexAttemptStageMetric;
-  totalMs: number;
-}
-
-function StageTooltipContent({ stage, totalMs }: StageTooltipContentProps) {
-  const sharePct = ((stage.total_duration_ms / totalMs) * 100).toFixed(1);
-  const avg = stage.avg_duration_ms;
-  const std = stage.std_dev_duration_ms;
-  const avgLabel =
-    avg !== null
-      ? std !== null
-        ? `${formatDurationMs(avg)} ± ${formatDurationMs(std)}`
-        : formatDurationMs(avg)
-      : "—";
-  return (
-    <GeneralLayouts.Section
-      alignItems="start"
-      width="fit"
-      height="fit"
-      gap={0.25}
-    >
-      <Text font="secondary-action" color="text-inverted-05">
-        {STAGE_LABELS[stage.stage]}
-      </Text>
-      <Text font="secondary-body" color="text-inverted-03">
-        {`Total: ${formatDurationMs(stage.total_duration_ms)} (${sharePct}%)`}
-      </Text>
-      <Text font="secondary-body" color="text-inverted-03">
-        {`Avg: ${avgLabel}`}
-      </Text>
-      <Text font="secondary-body" color="text-inverted-03">
-        {`Calls: ${stage.event_count}`}
-      </Text>
-    </GeneralLayouts.Section>
-  );
-}
-
 interface PerBatchTableProps {
   perBatchStages: IndexAttemptStageMetric[];
   sortMode: SortMode;
@@ -376,12 +321,24 @@ function PerBatchTable({ perBatchStages, sortMode }: PerBatchTableProps) {
     [perBatchStages, sortMode]
   );
 
+  // Used to scale the per-row average-time bar. Falls back to 0 when no
+  // stage has an average yet, in which case rows render no bar at all.
+  const maxAvgMs = useMemo(
+    () =>
+      sorted.reduce(
+        (acc, s) =>
+          s.avg_duration_ms !== null ? Math.max(acc, s.avg_duration_ms) : acc,
+        0
+      ),
+    [sorted]
+  );
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Stage</TableHead>
-          <TableHead className="text-right">Avg time</TableHead>
+          <TableHead>Avg time</TableHead>
           <TableHead className="text-right">Total time</TableHead>
           <TableHead className="text-right">Calls</TableHead>
           <TableHead className="text-right">Min</TableHead>
@@ -390,7 +347,11 @@ function PerBatchTable({ perBatchStages, sortMode }: PerBatchTableProps) {
       </TableHeader>
       <TableBody>
         {sorted.map((stage) => (
-          <PerBatchTableRow key={stage.stage} stage={stage} />
+          <PerBatchTableRow
+            key={stage.stage}
+            stage={stage}
+            maxAvgMs={maxAvgMs}
+          />
         ))}
       </TableBody>
     </Table>
@@ -399,9 +360,10 @@ function PerBatchTable({ perBatchStages, sortMode }: PerBatchTableProps) {
 
 interface PerBatchTableRowProps {
   stage: IndexAttemptStageMetric;
+  maxAvgMs: number;
 }
 
-function PerBatchTableRow({ stage }: PerBatchTableRowProps) {
+function PerBatchTableRow({ stage, maxAvgMs }: PerBatchTableRowProps) {
   const avg = stage.avg_duration_ms;
   const std = stage.std_dev_duration_ms;
   const avgLabel =
@@ -410,6 +372,7 @@ function PerBatchTableRow({ stage }: PerBatchTableRowProps) {
         ? `${formatDurationMs(avg)} ± ${formatDurationMs(std)}`
         : formatDurationMs(avg)
       : "—";
+  const avgPct = avg !== null && maxAvgMs > 0 ? (avg / maxAvgMs) * 100 : 0;
 
   return (
     <TableRow>
@@ -434,9 +397,43 @@ function PerBatchTableRow({ stage }: PerBatchTableRowProps) {
           <Text font="secondary-body" color="text-05">
             {STAGE_LABELS[stage.stage]}
           </Text>
+          <Button
+            icon={SvgQuestionMarkSmall}
+            prominence="tertiary"
+            size="sm"
+            tooltip={STAGE_DESCRIPTIONS[stage.stage]}
+          />
         </GeneralLayouts.Section>
       </TableCell>
-      <TableCell className="text-right">{avgLabel}</TableCell>
+      <TableCell>
+        <GeneralLayouts.Section
+          alignItems="start"
+          justifyContent="center"
+          width="full"
+          height="fit"
+          gap={0.25}
+        >
+          <Text font="secondary-body" color="text-05">
+            {avgLabel}
+          </Text>
+          {avgPct > 0 && (
+            // Track + filled bar. Inline width is unavoidable since the bar
+            // length is derived from a runtime ratio Tailwind can't express.
+            <div
+              aria-hidden="true"
+              className="w-full h-1 rounded-full bg-background-tint-01 overflow-hidden"
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  colorClassForStage(stage.stage)
+                )}
+                style={{ width: `${avgPct}%` }}
+              />
+            </div>
+          )}
+        </GeneralLayouts.Section>
+      </TableCell>
       <TableCell className="text-right">
         {formatDurationMs(stage.total_duration_ms)}
       </TableCell>
