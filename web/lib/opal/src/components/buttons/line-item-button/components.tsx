@@ -13,7 +13,7 @@ import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
 type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
-  "padding" | "width" | "ref"
+  "padding" | "width" | "color" | "ref"
 >;
 
 type LineItemButtonOwnProps = Pick<

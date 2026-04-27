@@ -336,8 +336,8 @@
      vertical: flex-col         — icon top, title below
      reverse : flex-row-reverse — title left, icon right
 
-   Default colors are text-04 for both title and icon.
-   Prominence="muted" overrides both to text-03.
+   Colors are driven by the `data-content-color` attribute on the
+   Content dispatcher wrapper (see `color` prop on `<Content>`).
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
