@@ -26,12 +26,15 @@ from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import get_user_db
 from onyx.auth.users import get_user_manager
+from onyx.configs.constants import DocumentSource
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.configs.lti_configs import LTI_NONCE_TTL_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.enums import HierarchyNodeType
+from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import User
@@ -359,6 +362,43 @@ async def get_or_create_lti_course_project(
             course_id,
         )
         return project.id
+
+
+async def find_canvas_course_node_id(course_title: str) -> int | None:
+    """Resolve the indexed Canvas course HierarchyNode that matches an LTI launch.
+
+    The Canvas connector indexes each course as a top-level COURSE
+    `HierarchyNode` whose `display_name` is the course name. The LTI 1.3
+    launch sends the same name as `context.title`, so we match by display
+    name to scope the tutor editor to the Canvas course the launch came
+    from. Returns None if there is no unique match (zero or multiple
+    candidates) — callers fall back to showing the whole hierarchy.
+    """
+    title = course_title.strip()
+    if not title:
+        return None
+
+    async with get_async_session_context_manager() as session:
+        result = await session.execute(
+            select(HierarchyNode.id)
+            .where(
+                HierarchyNode.source == DocumentSource.CANVAS,
+                HierarchyNode.node_type == HierarchyNodeType.COURSE,
+                HierarchyNode.display_name == title,
+            )
+            .limit(2)
+        )
+        ids = [row[0] for row in result.all()]
+        if len(ids) == 1:
+            return ids[0]
+        if len(ids) > 1:
+            logger.info(
+                "LTI Canvas course node lookup matched %d nodes for title %r; "
+                "skipping scoped filter",
+                len(ids),
+                title,
+            )
+        return None
 
 
 async def find_tutor_personas_for_course(lti_context_id: str) -> list[int]:

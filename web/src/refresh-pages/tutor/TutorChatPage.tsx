@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   createChatSession,
   personaIncludesRetrieval,
 } from "@/app/app/services/lib";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAgents } from "@/hooks/useAgents";
 import useChatSessions from "@/hooks/useChatSessions";
 import useChatController, { OnSubmitProps } from "@/hooks/useChatController";
@@ -51,6 +54,8 @@ export default function TutorChatPage() {
   const projectId = projectIdRaw ? parseInt(projectIdRaw) : null;
   const ltiContextId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
+  const ltiCanvasCourseNodeId =
+    searchParams?.get(SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID) ?? null;
 
   // State
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -68,6 +73,23 @@ export default function TutorChatPage() {
 
   // Data hooks
   const { agents, isLoading: isLoadingAgents } = useAgents();
+
+  // The set of tutors that belong to the current Canvas course. Used to scope
+  // the History panel to only conversations with this course's tutors.
+  const courseTutorsSwrKey = ltiContextId
+    ? `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
+        ltiContextId
+      )}`
+    : null;
+  const { data: courseTutors } = useSWR<MinimalPersonaSnapshot[]>(
+    courseTutorsSwrKey,
+    errorHandlingFetcher
+  );
+  const courseTutorIds = useMemo(() => {
+    if (!courseTutors) return null;
+    return new Set(courseTutors.map((t) => t.id));
+  }, [courseTutors]);
+
   const {
     chatSessions,
     refreshChatSessions,
@@ -178,8 +200,13 @@ export default function TutorChatPage() {
     if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
     if (ltiContextId)
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
+    if (ltiCanvasCourseNodeId)
+      params.set(
+        SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+        ltiCanvasCourseNodeId
+      );
     router.push(`/tutor?${params.toString()}`);
-  }, [router, assistantId, projectId, ltiContextId]);
+  }, [router, assistantId, projectId, ltiContextId, ltiCanvasCourseNodeId]);
 
   // Manage tutors: jump back to the picker for the current course.
   const handleManageTutors = useCallback(() => {
@@ -187,8 +214,13 @@ export default function TutorChatPage() {
     const params = new URLSearchParams();
     params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
     if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+    if (ltiCanvasCourseNodeId)
+      params.set(
+        SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+        ltiCanvasCourseNodeId
+      );
     router.push(`/tutor?${params.toString()}`);
-  }, [router, ltiContextId, projectId]);
+  }, [router, ltiContextId, projectId, ltiCanvasCourseNodeId]);
 
   // Select a session from history
   const handleSelectSession = useCallback(
@@ -201,10 +233,15 @@ export default function TutorChatPage() {
         params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
       if (ltiContextId)
         params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
+      if (ltiCanvasCourseNodeId)
+        params.set(
+          SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+          ltiCanvasCourseNodeId
+        );
       router.push(`/tutor?${params.toString()}`);
       setHistoryOpen(false);
     },
-    [router, assistantId, projectId, ltiContextId]
+    [router, assistantId, projectId, ltiContextId, ltiCanvasCourseNodeId]
   );
 
   // Submit message handler
@@ -248,7 +285,11 @@ export default function TutorChatPage() {
   if (!assistantId) {
     if (ltiContextId) {
       return (
-        <TutorPickerView ltiContextId={ltiContextId} projectId={projectId} />
+        <TutorPickerView
+          ltiContextId={ltiContextId}
+          projectId={projectId}
+          ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+        />
       );
     }
     if (!isLoadingAgents) {
@@ -272,7 +313,7 @@ export default function TutorChatPage() {
         <TutorHistoryPanel
           sessions={chatSessions}
           currentSessionId={currentChatSessionId}
-          projectId={projectId}
+          allowedPersonaIds={courseTutorIds}
           onSelectSession={handleSelectSession}
           onClose={() => setHistoryOpen(false)}
         />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Button } from "@opal/components";
@@ -21,11 +21,13 @@ import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 interface TutorPickerViewProps {
   ltiContextId: string;
   projectId: number | null;
+  ltiCanvasCourseNodeId: string | null;
 }
 
 export default function TutorPickerView({
   ltiContextId,
   projectId,
+  ltiCanvasCourseNodeId,
 }: TutorPickerViewProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
@@ -49,25 +51,43 @@ export default function TutorPickerView({
       if (projectId !== null) {
         params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
       }
+      if (ltiCanvasCourseNodeId) {
+        params.set(
+          SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+          ltiCanvasCourseNodeId
+        );
+      }
       return `/tutor?${params.toString()}`;
     },
-    [ltiContextId, projectId]
+    [ltiContextId, projectId, ltiCanvasCourseNodeId]
   );
 
   const buildEditTutorUrl = useCallback(
     (agentId: number) => {
       const params = new URLSearchParams();
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
+      if (ltiCanvasCourseNodeId) {
+        params.set(
+          SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+          ltiCanvasCourseNodeId
+        );
+      }
       return `/admin/tutor/edit/${agentId}?${params.toString()}`;
     },
-    [ltiContextId]
+    [ltiContextId, ltiCanvasCourseNodeId]
   );
 
   const buildCreateTutorUrl = useCallback(() => {
     const params = new URLSearchParams();
     params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
+    if (ltiCanvasCourseNodeId) {
+      params.set(
+        SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+        ltiCanvasCourseNodeId
+      );
+    }
     return `/admin/tutor/create?${params.toString()}`;
-  }, [ltiContextId]);
+  }, [ltiContextId, ltiCanvasCourseNodeId]);
 
   const handleSelect = useCallback(
     (agentId: number) => {
@@ -76,7 +96,16 @@ export default function TutorPickerView({
     [router, buildTutorChatUrl]
   );
 
-  if (isLoading) {
+  // Students with exactly one tutor skip the picker and jump straight in.
+  // Instructors always see the picker so they can manage their tutors.
+  const soleStudentTutorId =
+    !isInstructor && tutors.length === 1 ? tutors[0]!.id : null;
+  useEffect(() => {
+    if (soleStudentTutorId === null) return;
+    router.replace(buildTutorChatUrl(soleStudentTutorId) as Route);
+  }, [router, soleStudentTutorId, buildTutorChatUrl]);
+
+  if (isLoading || soleStudentTutorId !== null) {
     return (
       <div className="h-full w-full flex items-center justify-center">
         <SimpleLoader className="h-6 w-6" />

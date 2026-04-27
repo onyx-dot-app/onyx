@@ -12,7 +12,10 @@ import { cn } from "@/lib/utils";
 interface TutorHistoryPanelProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
-  projectId: number | null;
+  // Persona IDs that belong to the current course. When provided, only
+  // sessions whose persona is in this set are shown. Pass null to skip
+  // filtering (e.g., while the course-tutor list is still loading).
+  allowedPersonaIds: Set<number> | null;
   onSelectSession: (sessionId: string) => void;
   onClose: () => void;
 }
@@ -57,15 +60,15 @@ function groupByDate(
 export default function TutorHistoryPanel({
   sessions,
   currentSessionId,
-  projectId,
+  allowedPersonaIds,
   onSelectSession,
   onClose,
 }: TutorHistoryPanelProps) {
-  // Filter sessions to only those in the current project (course)
+  // Filter sessions to only those whose persona belongs to the current course.
   const filteredSessions = useMemo(() => {
-    if (projectId === null) return sessions;
-    return sessions.filter((s) => s.project_id === projectId);
-  }, [sessions, projectId]);
+    if (allowedPersonaIds === null) return sessions;
+    return sessions.filter((s) => allowedPersonaIds.has(s.persona_id));
+  }, [sessions, allowedPersonaIds]);
 
   const grouped = useMemo(
     () => groupByDate(filteredSessions),

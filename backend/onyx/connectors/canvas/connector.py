@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -198,6 +199,7 @@ class CanvasModuleItem(BaseModel):
     id: int
     title: str
     item_type: str  # "Page", "Assignment", "File", "ExternalUrl", etc.
+    content_id: int | None = None  # numeric id of the linked content
     html_url: str | None = None
     external_url: str | None = None
     module_id: int
@@ -211,6 +213,7 @@ class CanvasModuleItem(BaseModel):
             id=payload["id"],
             title=payload.get("title", ""),
             item_type=payload.get("type", ""),
+            content_id=payload.get("content_id"),
             html_url=payload.get("html_url"),
             external_url=payload.get("external_url"),
             module_id=module_id,
@@ -280,6 +283,37 @@ CanvasStage: TypeAlias = Literal[
 ]
 
 
+# Maps a Canvas module item `type` value to the doc_type prefix used in
+# document IDs and folder IDs. Items whose type isn't in this map (SubHeader,
+# ExternalUrl, ExternalTool, ...) are ignored when building the membership map.
+_MODULE_ITEM_TYPE_TO_DOC_TYPE: dict[str, str] = {
+    "Page": "page",
+    "Assignment": "assignment",
+    "File": "file",
+    "Quiz": "quiz",
+    "Discussion": "discussion",
+}
+
+
+_DOC_TYPE_DISPLAY_NAMES: dict[str, str] = {
+    "page": "Pages",
+    "assignment": "Assignments",
+    "announcement": "Announcements",
+    "file": "Files",
+    "quiz": "Quizzes",
+    "discussion": "Discussions",
+    "syllabus": "Syllabus",
+}
+
+
+def _course_type_folder_id(course_id: int, doc_type: str) -> str:
+    return f"canvas-type-course-{course_id}-{doc_type}"
+
+
+def _module_type_folder_id(course_id: int, module_id: int, doc_type: str) -> str:
+    return f"canvas-type-module-{course_id}-{module_id}-{doc_type}"
+
+
 class CanvasConnectorCheckpoint(ConnectorCheckpoint):
     """Checkpoint state for resumable Canvas indexing.
 
@@ -320,6 +354,21 @@ class CanvasConnector(
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
         self._course_permissions_cache: dict[int, ExternalAccess | None] = {}
+        # Maps course_id -> {(doc_type, content_id): module_id}.
+        # Populated lazily on first use per course; persists for the lifetime
+        # of the connector instance.
+        self._module_membership_cache: dict[int, dict[tuple[str, int], int]] = {}
+        # Cache CanvasCourse objects so hierarchy emission has the proper
+        # display name without an extra round trip per call.
+        self._courses_by_id: dict[int, CanvasCourse] = {}
+        # Tracks which course-level type folder raw_node_ids have been
+        # emitted in this connector instance's lifetime. Re-emission across
+        # connector instances is fine — hierarchy upserts are idempotent.
+        self._emitted_course_folders: set[str] = set()
+        # Tracks course_ids whose starter hierarchy (course + modules +
+        # module-level type folders) has already been emitted in this
+        # connector instance.
+        self._emitted_starter_hierarchy: set[int] = set()
 
     @property
     def canvas_client(self) -> CanvasApiClient:
@@ -336,6 +385,203 @@ class CanvasConnector(
             )
         return self._course_permissions_cache[course_id]
 
+    def _build_module_membership_map(
+        self, course_id: int
+    ) -> dict[tuple[str, int], int]:
+        """Map (doc_type, content_id) -> module_id.
+
+        When an item belongs to multiple modules, the first module by
+        position wins (Canvas returns items in position order within a
+        module; we sort modules by position).
+        """
+        mapping: dict[tuple[str, int], int] = {}
+        try:
+            modules = self._list_modules(course_id)
+        except Exception as e:
+            logger.warning(f"Failed to list modules for course {course_id}: {e}")
+            return mapping
+
+        modules_sorted = sorted(
+            modules, key=lambda m: (m.position is None, m.position or 0)
+        )
+
+        for module in modules_sorted:
+            try:
+                items = self._list_module_items(course_id, module.id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to list items for module {module.id} "
+                    f"in course {course_id}: {e}"
+                )
+                continue
+            for item in items:
+                doc_type = _MODULE_ITEM_TYPE_TO_DOC_TYPE.get(item.item_type)
+                if doc_type is None or item.content_id is None:
+                    continue
+                key = (doc_type, item.content_id)
+                if key not in mapping:
+                    mapping[key] = module.id
+        return mapping
+
+    def _get_module_membership_map(self, course_id: int) -> dict[tuple[str, int], int]:
+        """Cached accessor for the per-course module membership map."""
+        if course_id not in self._module_membership_cache:
+            self._module_membership_cache[course_id] = (
+                self._build_module_membership_map(course_id)
+            )
+        return self._module_membership_cache[course_id]
+
+    def _resolve_doc_parent(
+        self, course_id: int, doc_type: str, content_id: int
+    ) -> str:
+        """Return the hierarchy node ID a doc of (doc_type, content_id) hangs from.
+
+        If the item is a member of any module, returns the module-scoped type
+        folder under that module. Otherwise returns the course-scoped type
+        folder under the course.
+        """
+        membership = self._get_module_membership_map(course_id)
+        module_id = membership.get((doc_type, content_id))
+        if module_id is not None:
+            return _module_type_folder_id(course_id, module_id, doc_type)
+        return _course_type_folder_id(course_id, doc_type)
+
+    def _make_course_node(
+        self, course: CanvasCourse, permissions: ExternalAccess | None
+    ) -> HierarchyNode:
+        return HierarchyNode(
+            raw_node_id=f"canvas-course-{course.id}",
+            raw_parent_id=None,
+            display_name=course.name or f"Course {course.id}",
+            link=f"{self.canvas_base_url}/courses/{course.id}",
+            node_type=HierarchyNodeType.COURSE,
+            external_access=permissions,
+        )
+
+    def _make_module_node(
+        self,
+        course_id: int,
+        module: CanvasModule,
+        permissions: ExternalAccess | None,
+    ) -> HierarchyNode:
+        return HierarchyNode(
+            raw_node_id=f"canvas-module-{course_id}-{module.id}",
+            raw_parent_id=f"canvas-course-{course_id}",
+            display_name=module.name,
+            link=(
+                f"{self.canvas_base_url}/courses/{course_id}"
+                f"/modules#module_{module.id}"
+            ),
+            node_type=HierarchyNodeType.MODULE,
+            external_access=permissions,
+        )
+
+    def _make_module_type_folder_node(
+        self,
+        course_id: int,
+        module_id: int,
+        doc_type: str,
+        permissions: ExternalAccess | None,
+    ) -> HierarchyNode:
+        return HierarchyNode(
+            raw_node_id=_module_type_folder_id(course_id, module_id, doc_type),
+            raw_parent_id=f"canvas-module-{course_id}-{module_id}",
+            display_name=_DOC_TYPE_DISPLAY_NAMES[doc_type],
+            link=(
+                f"{self.canvas_base_url}/courses/{course_id}"
+                f"/modules#module_{module_id}"
+            ),
+            node_type=HierarchyNodeType.FOLDER,
+            external_access=permissions,
+        )
+
+    def _make_course_type_folder_node(
+        self,
+        course_id: int,
+        doc_type: str,
+        permissions: ExternalAccess | None,
+    ) -> HierarchyNode:
+        return HierarchyNode(
+            raw_node_id=_course_type_folder_id(course_id, doc_type),
+            raw_parent_id=f"canvas-course-{course_id}",
+            display_name=_DOC_TYPE_DISPLAY_NAMES[doc_type],
+            link=f"{self.canvas_base_url}/courses/{course_id}",
+            node_type=HierarchyNodeType.FOLDER,
+            external_access=permissions,
+        )
+
+    def _iter_course_starter_hierarchy(
+        self, course_id: int, permissions: ExternalAccess | None
+    ) -> Iterator[HierarchyNode]:
+        """Yield the hierarchy nodes that can be emitted purely from
+        knowledge of the course's modules and items, in parent-before-child
+        order:
+
+            Course
+            └── Module
+                └── module-level Type folder (one per type with items)
+
+        Course-level type folders are NOT emitted here — they are emitted
+        lazily by the caller the first time a doc with a course-level type
+        folder parent is yielded. This keeps the hierarchy free of empty
+        folders.
+        """
+        course = self._get_course(course_id)
+        if course is None:
+            # Fall back to a synthetic course with just the ID so the rest
+            # of the hierarchy still resolves.
+            course = CanvasCourse(id=course_id)
+        yield self._make_course_node(course, permissions)
+
+        # Build the membership map (also lists modules + items). After this
+        # call, _module_membership_cache[course_id] is populated.
+        try:
+            modules = self._list_modules(course_id)
+        except Exception as e:
+            logger.warning(f"Failed to list modules for course {course_id}: {e}")
+            return
+
+        modules_sorted = sorted(
+            modules, key=lambda m: (m.position is None, m.position or 0)
+        )
+        membership = self._get_module_membership_map(course_id)
+        # Invert membership: module_id -> set of doc_types that route to it.
+        module_to_doc_types: dict[int, set[str]] = {}
+        for (doc_type, _content_id), module_id in membership.items():
+            module_to_doc_types.setdefault(module_id, set()).add(doc_type)
+
+        for module in modules_sorted:
+            yield self._make_module_node(course_id, module, permissions)
+            for doc_type in sorted(module_to_doc_types.get(module.id, set())):
+                yield self._make_module_type_folder_node(
+                    course_id, module.id, doc_type, permissions
+                )
+
+    def _maybe_emit_course_type_folder(
+        self,
+        parent_raw_node_id: str | None,
+        course_id: int,
+        permissions: ExternalAccess | None,
+    ) -> HierarchyNode | None:
+        """Return a course-level type-folder HierarchyNode if `parent_raw_node_id`
+        names one and we haven't yet emitted it; otherwise None.
+
+        Used right before yielding a document so the folder lands in the
+        runner before its child doc.
+        """
+        if parent_raw_node_id is None:
+            return None
+        prefix = f"canvas-type-course-{course_id}-"
+        if not parent_raw_node_id.startswith(prefix):
+            return None
+        if parent_raw_node_id in self._emitted_course_folders:
+            return None
+        doc_type = parent_raw_node_id[len(prefix) :]
+        if doc_type not in _DOC_TYPE_DISPLAY_NAMES:
+            return None
+        self._emitted_course_folders.add(parent_raw_node_id)
+        return self._make_course_type_folder_node(course_id, doc_type, permissions)
+
     @retry(tries=3, delay=1, backoff=2)
     def _list_courses(self) -> list[CanvasCourse]:
         """Fetch all courses accessible to the authenticated user."""
@@ -346,7 +592,30 @@ class CanvasConnector(
             "courses", params={"per_page": "100", "state[]": "available"}
         ):
             courses.extend(CanvasCourse.from_api(c) for c in page)
+        for c in courses:
+            self._courses_by_id[c.id] = c
         return courses
+
+    def _get_course(self, course_id: int) -> CanvasCourse | None:
+        """Fetch a single course by ID, with per-instance caching.
+
+        Used by the hierarchy emission path so we always have the proper
+        display name even when the connector instance was created mid-run
+        (e.g., resumed from a checkpoint after course_ids was already
+        materialized).
+        """
+        if course_id in self._courses_by_id:
+            return self._courses_by_id[course_id]
+        try:
+            data, _ = self.canvas_client.get(f"courses/{course_id}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch course {course_id}: {e}")
+            return None
+        if not isinstance(data, dict):
+            return None
+        course = CanvasCourse.from_api(data)
+        self._courses_by_id[course_id] = course
+        return course
 
     @retry(tries=3, delay=1, backoff=2)
     def _list_pages(self, course_id: int) -> list[CanvasPage]:
@@ -505,13 +774,9 @@ class CanvasConnector(
         doc_updated_at: datetime | None,
         course_id: int,
         doc_type: str,
-        parent_hierarchy_raw_node_id: str | None = None,
+        parent_hierarchy_raw_node_id: str,
     ) -> Document:
         """Build a Document with standard Canvas fields."""
-        # Default parent to the course hierarchy node
-        if parent_hierarchy_raw_node_id is None:
-            parent_hierarchy_raw_node_id = f"canvas-course-{course_id}"
-
         return Document(
             id=doc_id,
             sections=cast(
@@ -550,6 +815,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=page.course_id,
             doc_type="page",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                page.course_id, "page", page.page_id
+            ),
         )
         return document
 
@@ -585,6 +853,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=assignment.course_id,
             doc_type="assignment",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                assignment.course_id, "assignment", assignment.id
+            ),
         )
         return document
 
@@ -615,6 +886,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=announcement.course_id,
             doc_type="announcement",
+            parent_hierarchy_raw_node_id=_course_type_folder_id(
+                announcement.course_id, "announcement"
+            ),
         )
         return document
 
@@ -646,6 +920,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=file.course_id,
             doc_type="file",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                file.course_id, "file", file.id
+            ),
         )
 
     def _convert_quiz_to_document(self, quiz: CanvasQuiz) -> Document:
@@ -675,6 +952,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=quiz.course_id,
             doc_type="quiz",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                quiz.course_id, "quiz", quiz.id
+            ),
         )
 
     def _convert_discussion_to_document(self, discussion: CanvasDiscussion) -> Document:
@@ -702,6 +982,9 @@ class CanvasConnector(
             doc_updated_at=doc_updated_at,
             course_id=discussion.course_id,
             doc_type="discussion",
+            parent_hierarchy_raw_node_id=self._resolve_doc_parent(
+                discussion.course_id, "discussion", discussion.id
+            ),
         )
 
     def _convert_syllabus_to_document(
@@ -719,6 +1002,7 @@ class CanvasConnector(
             doc_updated_at=None,
             course_id=course_id,
             doc_type="syllabus",
+            parent_hierarchy_raw_node_id=_course_type_folder_id(course_id, "syllabus"),
         )
 
     @override
@@ -788,6 +1072,22 @@ class CanvasConnector(
         if stage not in _VALID_STAGES:
             raise ValueError(f"Invalid checkpoint stage: {stage!r}")
 
+        # Hierarchy nodes attached to this course's perms only when we are
+        # running the perm-sync flavor of this method.
+        hierarchy_perms = (
+            self._get_course_permissions(course_id) if include_permissions else None
+        )
+
+        # Emit starter hierarchy once per course per connector-instance.
+        # This ensures regular indexing populates the Course/Module/folder
+        # nodes — without this, PUBLIC connectors (which never run
+        # retrieve_all_slim_docs_perm_sync) would have no hierarchy at all
+        # and every doc would fall back to the SOURCE root.
+        if course_id not in self._emitted_starter_hierarchy:
+            for node in self._iter_course_starter_hierarchy(course_id, hierarchy_perms):
+                yield node
+            self._emitted_starter_hierarchy.add(course_id)
+
         def _in_time_window(timestamp_str: str) -> bool:
             ts = (
                 datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
@@ -800,6 +1100,18 @@ class CanvasConnector(
             if include_permissions:
                 document.external_access = self._get_course_permissions(course_id)
             return document
+
+        def _emit_doc(
+            document: Document,
+        ) -> Iterator[Document | HierarchyNode]:
+            """Yield a doc — preceded by its course-level type folder
+            HierarchyNode if we haven't emitted that folder yet."""
+            folder = self._maybe_emit_course_type_folder(
+                document.parent_hierarchy_raw_node_id, course_id, hierarchy_perms
+            )
+            if folder is not None:
+                yield folder
+            yield _maybe_attach_permissions(document)
 
         # Fetch one page of API results for the current stage.
         # If next_url is set, we're resuming mid-pagination.
@@ -819,7 +1131,7 @@ class CanvasConnector(
             if syllabus_body:
                 try:
                     doc = self._convert_syllabus_to_document(course_id, syllabus_body)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
                 except Exception as e:
                     yield ConnectorFailure(
                         failed_document=DocumentFailure(
@@ -937,7 +1249,7 @@ class CanvasConnector(
                     if not page.updated_at or not _in_time_window(page.updated_at):
                         continue
                     doc = self._convert_page_to_document(page)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
                 elif stage == "assignments":
                     assignment = CanvasAssignment.from_api(item, course_id=course_id)
@@ -946,7 +1258,7 @@ class CanvasConnector(
                     ):
                         continue
                     doc = self._convert_assignment_to_document(assignment)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
                 elif stage == "announcements":
                     announcement = CanvasAnnouncement.from_api(
@@ -961,14 +1273,14 @@ class CanvasConnector(
                     if not _in_time_window(announcement.posted_at):
                         continue
                     doc = self._convert_announcement_to_document(announcement)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
                 elif stage == "files":
                     file = CanvasFile.from_api(item, course_id=course_id)
                     if not file.updated_at or not _in_time_window(file.updated_at):
                         continue
                     doc = self._convert_file_to_document(file)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
                 elif stage == "quizzes":
                     quiz = CanvasQuiz.from_api(item, course_id=course_id)
@@ -977,7 +1289,7 @@ class CanvasConnector(
                     if not quiz.updated_at or not _in_time_window(quiz.updated_at):
                         continue
                     doc = self._convert_quiz_to_document(quiz)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
                 elif stage == "discussions":
                     disc = CanvasDiscussion.from_api(item, course_id=course_id)
@@ -990,7 +1302,7 @@ class CanvasConnector(
                     if not _in_time_window(disc.posted_at):
                         continue
                     doc = self._convert_discussion_to_document(disc)
-                    yield _maybe_attach_permissions(doc)
+                    yield from _emit_doc(doc)
 
             except Exception as e:
                 item_id = item.get("id") or item.get("page_id", "unknown")
@@ -1102,151 +1414,108 @@ class CanvasConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """Return slim documents with permission info for all courses."""
+        """Return slim documents with permission info for all courses.
+
+        Hierarchy emitted per course:
+
+            canvas-course-{course_id}
+            ├── canvas-type-course-{course_id}-{doc_type}      (FOLDER)
+            │   └── slim docs not in any module
+            └── canvas-module-{course_id}-{module_id}          (MODULE)
+                └── canvas-type-module-{course_id}-{module_id}-{doc_type}  (FOLDER)
+                    └── slim docs that belong to this module
+
+        A type folder is only emitted if at least one slim doc actually hangs
+        from it.
+        """
         batch: list[SlimDocument | HierarchyNode] = []
         courses = self._list_courses()
+
+        def _maybe_flush() -> Iterator[list[SlimDocument | HierarchyNode]]:
+            nonlocal batch
+            if len(batch) >= self.batch_size:
+                yield batch
+                batch = self._flush_batch(batch, callback)
 
         for course in courses:
             course_id = course.id
             permissions = self._get_course_permissions(course_id)
 
-            # Emit course hierarchy node
-            batch.append(
-                HierarchyNode(
-                    raw_node_id=f"canvas-course-{course_id}",
-                    raw_parent_id=None,
-                    display_name=course.name or f"Course {course_id}",
-                    link=f"{self.canvas_base_url}/courses/{course_id}",
-                    node_type=HierarchyNodeType.COURSE,
-                    external_access=permissions,
+            # 1. Course + modules + module-level type folders. The starter
+            # helper emits everything we know up front from the membership
+            # map.
+            for node in self._iter_course_starter_hierarchy(course_id, permissions):
+                batch.append(node)
+                yield from _maybe_flush()
+            self._emitted_starter_hierarchy.add(course_id)
+            membership = self._get_module_membership_map(course_id)
+
+            def _emit_slim(
+                doc_type: str, doc_id: str, content_id: int | None
+            ) -> Iterator[list[SlimDocument | HierarchyNode]]:
+                if content_id is not None and (doc_type, content_id) in membership:
+                    module_id = membership[(doc_type, content_id)]
+                    parent = _module_type_folder_id(course_id, module_id, doc_type)
+                else:
+                    parent = _course_type_folder_id(course_id, doc_type)
+                folder = self._maybe_emit_course_type_folder(
+                    parent, course_id, permissions
                 )
-            )
-
-            # Emit module hierarchy nodes
-            try:
-                modules = self._list_modules(course_id)
-                for module in modules:
-                    batch.append(
-                        HierarchyNode(
-                            raw_node_id=f"canvas-module-{course_id}-{module.id}",
-                            raw_parent_id=f"canvas-course-{course_id}",
-                            display_name=module.name,
-                            link=(
-                                f"{self.canvas_base_url}/courses/{course_id}"
-                                f"/modules#{module.id}"
-                            ),
-                            node_type=HierarchyNodeType.MODULE,
-                            external_access=permissions,
-                        )
-                    )
-                    if len(batch) >= self.batch_size:
-                        yield batch
-                        batch = self._flush_batch(batch, callback)
-            except Exception as e:
-                logger.warning(f"Failed to list modules for course {course_id}: {e}")
-
-            # Pages — no try/except: if the API fails, the entire sync
-            # must abort so generic_doc_sync doesn't treat missing docs
-            # as deleted and mass-revoke permissions.
-            pages = self._list_pages(course_id)
-            for page in pages:
+                if folder is not None:
+                    batch.append(folder)
+                    yield from _maybe_flush()
                 batch.append(
                     SlimDocument(
-                        id=f"canvas-page-{course_id}-{page.page_id}",
+                        id=doc_id,
                         external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
+                        parent_hierarchy_raw_node_id=parent,
                     )
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
+                yield from _maybe_flush()
 
-            # Assignments
-            assignments = self._list_assignments(course_id)
-            for assignment in assignments:
-                batch.append(
-                    SlimDocument(
-                        id=f"canvas-assignment-{course_id}-{assignment.id}",
-                        external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                    )
+            # 2. Slim docs. Each doc auto-emits its course-level type
+            # folder lazily (before itself) so empty folders are never
+            # created. Pages/assignments/etc have no try/except: a
+            # mid-fetch failure must abort the whole sync rather than risk
+            # generic_doc_sync mass-revoking permissions.
+            for page in self._list_pages(course_id):
+                yield from _emit_slim(
+                    "page", f"canvas-page-{course_id}-{page.page_id}", page.page_id
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
-
-            # Announcements
-            announcements = self._list_announcements(course_id)
-            for announcement in announcements:
-                batch.append(
-                    SlimDocument(
-                        id=f"canvas-announcement-{course_id}-{announcement.id}",
-                        external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                    )
+            for assignment in self._list_assignments(course_id):
+                yield from _emit_slim(
+                    "assignment",
+                    f"canvas-assignment-{course_id}-{assignment.id}",
+                    assignment.id,
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
-
-            # Files
-            files = self._list_files(course_id)
-            for file in files:
-                batch.append(
-                    SlimDocument(
-                        id=f"canvas-file-{course_id}-{file.id}",
-                        external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                    )
+            for announcement in self._list_announcements(course_id):
+                yield from _emit_slim(
+                    "announcement",
+                    f"canvas-announcement-{course_id}-{announcement.id}",
+                    None,
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
-
-            # Quizzes
-            quizzes = self._list_quizzes(course_id)
-            for quiz in quizzes:
-                batch.append(
-                    SlimDocument(
-                        id=f"canvas-quiz-{course_id}-{quiz.id}",
-                        external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                    )
+            for file in self._list_files(course_id):
+                yield from _emit_slim(
+                    "file", f"canvas-file-{course_id}-{file.id}", file.id
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
-
-            # Discussions
-            discussions = self._list_discussions(course_id)
-            for disc in discussions:
-                batch.append(
-                    SlimDocument(
-                        id=f"canvas-discussion-{course_id}-{disc.id}",
-                        external_access=permissions,
-                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                    )
+            for quiz in self._list_quizzes(course_id):
+                yield from _emit_slim(
+                    "quiz", f"canvas-quiz-{course_id}-{quiz.id}", quiz.id
                 )
-                if len(batch) >= self.batch_size:
-                    yield batch
-                    batch = self._flush_batch(batch, callback)
+            for disc in self._list_discussions(course_id):
+                yield from _emit_slim(
+                    "discussion",
+                    f"canvas-discussion-{course_id}-{disc.id}",
+                    disc.id,
+                )
 
-            # Syllabus
             try:
                 syllabus_body = self._get_syllabus(course_id)
-                if syllabus_body:
-                    batch.append(
-                        SlimDocument(
-                            id=f"canvas-syllabus-{course_id}",
-                            external_access=permissions,
-                            parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
-                        )
-                    )
-                    if len(batch) >= self.batch_size:
-                        yield batch
-                        batch = self._flush_batch(batch, callback)
             except Exception as e:
                 logger.warning(f"Failed to fetch syllabus for course {course_id}: {e}")
+                syllabus_body = None
+            if syllabus_body:
+                yield from _emit_slim("syllabus", f"canvas-syllabus-{course_id}", None)
 
             if callback:
                 callback.progress("canvas_perm_sync", 1)

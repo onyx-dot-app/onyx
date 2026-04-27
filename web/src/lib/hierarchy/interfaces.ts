@@ -75,4 +75,7 @@ export interface HierarchyBreadcrumbProps {
   path: HierarchyNodeSummary[];
   onNavigateToRoot: () => void;
   onNavigateToNode: (node: HierarchyNodeSummary, index: number) => void;
+  // When true, path[0] is the auto-entered root node. The breadcrumb hides
+  // it visually so the user sees the source name as the topmost segment.
+  hideRootNode?: boolean;
 }

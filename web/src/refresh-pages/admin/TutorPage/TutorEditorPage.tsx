@@ -26,15 +26,8 @@ import {
 } from "@/app/admin/agents/lib";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import TutorKnowledgePane from "./TutorKnowledgePane";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
-import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useProjectsContext } from "@/providers/ProjectsContext";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
 import { useAgents } from "@/hooks/useAgents";
 import { useLabels } from "@/lib/hooks";
 import { FullPersona } from "@/app/admin/agents/interfaces";
@@ -162,8 +155,6 @@ export default function TutorEditorPage({
   const vectorDbEnabled = useVectorDbEnabled();
   const deleteModal = useCreateModal();
 
-  const { allRecentFiles, beginUpload } = useProjectsContext();
-  const { data: documentSets } = useDocumentSets();
   const { labels, createLabel } = useLabels();
 
   // The course this tutor is being created/edited for, sourced from the live
@@ -172,6 +163,12 @@ export default function TutorEditorPage({
   // whatever course label they already carry.
   const ltiContextId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
+  const ltiCanvasCourseNodeIdRaw = searchParams?.get(
+    SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID
+  );
+  const ltiCanvasCourseNodeId = ltiCanvasCourseNodeIdRaw
+    ? parseInt(ltiCanvasCourseNodeIdRaw)
+    : null;
   const isCreating = !existingTutor;
   const missingLtiContextOnCreate = isCreating && !ltiContextId;
 
@@ -237,18 +234,11 @@ export default function TutorEditorPage({
         ""
     ),
 
-    // Knowledge
-    enable_knowledge:
-      (existingTutor?.document_sets?.length ?? 0) > 0 ||
-      (existingTutor?.hierarchy_nodes?.length ?? 0) > 0 ||
-      (existingTutor?.attached_documents?.length ?? 0) > 0 ||
-      (existingTutor?.user_file_ids?.length ?? 0) > 0,
-    document_set_ids: existingTutor?.document_sets?.map((ds) => ds.id) ?? [],
+    // Canvas knowledge — always enabled for tutors. The user picks which
+    // folders / documents to scope the tutor to (none means "all of Canvas").
     document_ids: existingTutor?.attached_documents?.map((doc) => doc.id) ?? [],
     hierarchy_node_ids:
       existingTutor?.hierarchy_nodes?.map((node) => node.id) ?? [],
-    user_file_ids: existingTutor?.user_file_ids ?? [],
-    selected_sources: [] as ValidSources[],
   };
 
   const validationSchema = Yup.object().shape({
@@ -266,12 +256,8 @@ export default function TutorEditorPage({
         `Conversation starter must be ${MAX_CHARACTERS_STARTER_MESSAGE} characters or less`
       )
     ),
-    enable_knowledge: Yup.boolean(),
-    document_set_ids: Yup.array().of(Yup.number()),
     document_ids: Yup.array().of(Yup.string()),
     hierarchy_node_ids: Yup.array().of(Yup.number()),
-    user_file_ids: Yup.array().of(Yup.string()),
-    selected_sources: Yup.array().of(Yup.string()),
   });
 
   async function handleSubmit(values: typeof initialValues) {
@@ -284,7 +270,7 @@ export default function TutorEditorPage({
         starterMessages.length > 0 ? starterMessages : null;
 
       const toolIds: number[] = [];
-      if (values.enable_knowledge && vectorDbEnabled && searchTool) {
+      if (vectorDbEnabled && searchTool) {
         toolIds.push(searchTool.id);
       }
 
@@ -323,9 +309,7 @@ export default function TutorEditorPage({
         replace_base_system_prompt: true,
         task_prompt: "",
         datetime_aware: false,
-        document_set_ids: values.enable_knowledge
-          ? values.document_set_ids
-          : [],
+        document_set_ids: [],
         is_public: true,
         llm_model_provider_override: null,
         llm_model_version_override: null,
@@ -337,11 +321,9 @@ export default function TutorEditorPage({
         icon_name: null,
         is_featured: false,
         label_ids: labelIds,
-        user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
-        hierarchy_node_ids: values.enable_knowledge
-          ? values.hierarchy_node_ids
-          : [],
-        document_ids: values.enable_knowledge ? values.document_ids : [],
+        user_file_ids: [],
+        hierarchy_node_ids: values.hierarchy_node_ids,
+        document_ids: values.document_ids,
       };
 
       let personaResponse;
@@ -383,6 +365,12 @@ export default function TutorEditorPage({
         const params = new URLSearchParams({
           [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
         });
+        if (ltiCanvasCourseNodeIdRaw) {
+          params.set(
+            SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+            ltiCanvasCourseNodeIdRaw
+          );
+        }
         router.push(`/tutor?${params.toString()}`);
       } else {
         router.push("/admin/tutor");
@@ -406,6 +394,12 @@ export default function TutorEditorPage({
         const params = new URLSearchParams({
           [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
         });
+        if (ltiCanvasCourseNodeIdRaw) {
+          params.set(
+            SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+            ltiCanvasCourseNodeIdRaw
+          );
+        }
         router.push(`/tutor?${params.toString()}`);
       } else {
         router.push("/admin/tutor");
@@ -414,47 +408,6 @@ export default function TutorEditorPage({
       toast.error(
         err instanceof Error ? err.message : "Failed to delete tutor"
       );
-    }
-  }
-
-  function handleFileClick(_file: ProjectFile) {
-    // File preview is not used in tutor editor
-  }
-
-  async function handleUploadChange(
-    e: React.ChangeEvent<HTMLInputElement>,
-    currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
-  ) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    try {
-      let selectedIds = [...(currentFileIds || [])];
-      const optimistic = await beginUpload(
-        Array.from(files),
-        null,
-        (result) => {
-          const uploadedFiles = result.user_files || [];
-          if (uploadedFiles.length === 0) return;
-          const tempToFinal = new Map(
-            uploadedFiles
-              .filter((f) => f.temp_id)
-              .map((f) => [f.temp_id as string, f.id])
-          );
-          const replaced = (selectedIds || []).map(
-            (id: string) => tempToFinal.get(id) ?? id
-          );
-          selectedIds = replaced;
-          setFieldValue("user_file_ids", replaced);
-        }
-      );
-      if (optimistic) {
-        const optimisticIds = optimistic.map((f) => f.id);
-        selectedIds = [...selectedIds, ...optimisticIds];
-        setFieldValue("user_file_ids", selectedIds);
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
     }
   }
 
@@ -474,25 +427,6 @@ export default function TutorEditorPage({
           validateOnMount
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
-            const fileStatusMap = new Map(
-              allRecentFiles.map((f) => [f.id, f.status])
-            );
-
-            const hasUploadingFiles = values.user_file_ids.some(
-              (fileId: string) => {
-                const status = fileStatusMap.get(fileId);
-                if (status === undefined) {
-                  return fileId.startsWith("temp_");
-                }
-                return status === UserFileStatus.UPLOADING;
-              }
-            );
-
-            const hasProcessingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
-            );
-
             return (
               <>
                 <deleteModal.Provider>
@@ -546,9 +480,7 @@ export default function TutorEditorPage({
                                     ? "Please fix the errors before saving."
                                     : !dirty
                                       ? "No changes have been made."
-                                      : hasUploadingFiles
-                                        ? "Please wait for files to finish uploading."
-                                        : undefined
+                                      : undefined
                             }
                             side="bottom"
                           >
@@ -557,7 +489,6 @@ export default function TutorEditorPage({
                                 isSubmitting ||
                                 !isValid ||
                                 !dirty ||
-                                hasUploadingFiles ||
                                 missingLtiContextOnCreate
                               }
                             >
@@ -623,21 +554,8 @@ export default function TutorEditorPage({
 
                       <Separator noPadding />
 
-                      {/* Section 3: Knowledge Sources */}
-                      <AgentKnowledgePane
-                        enableKnowledge={values.enable_knowledge}
-                        onEnableKnowledgeChange={(enabled) =>
-                          setFieldValue("enable_knowledge", enabled)
-                        }
-                        selectedSources={values.selected_sources}
-                        onSourcesChange={(sources) =>
-                          setFieldValue("selected_sources", sources)
-                        }
-                        documentSets={documentSets ?? []}
-                        selectedDocumentSetIds={values.document_set_ids}
-                        onDocumentSetIdsChange={(ids) =>
-                          setFieldValue("document_set_ids", ids)
-                        }
+                      {/* Section 3: Canvas course materials */}
+                      <TutorKnowledgePane
                         selectedDocumentIds={values.document_ids}
                         onDocumentIdsChange={(ids) =>
                           setFieldValue("document_ids", ids)
@@ -646,25 +564,10 @@ export default function TutorEditorPage({
                         onFolderIdsChange={(ids) =>
                           setFieldValue("hierarchy_node_ids", ids)
                         }
-                        selectedFileIds={values.user_file_ids}
-                        onFileIdsChange={(ids) =>
-                          setFieldValue("user_file_ids", ids)
-                        }
-                        allRecentFiles={allRecentFiles}
-                        onFileClick={handleFileClick}
-                        onUploadChange={(e) =>
-                          handleUploadChange(
-                            e,
-                            values.user_file_ids,
-                            setFieldValue
-                          )
-                        }
-                        hasProcessingFiles={hasProcessingFiles}
                         initialAttachedDocuments={
                           existingTutor?.attached_documents
                         }
-                        initialHierarchyNodes={existingTutor?.hierarchy_nodes}
-                        vectorDbEnabled={vectorDbEnabled}
+                        canvasCourseNodeId={ltiCanvasCourseNodeId}
                       />
 
                       <Separator noPadding />

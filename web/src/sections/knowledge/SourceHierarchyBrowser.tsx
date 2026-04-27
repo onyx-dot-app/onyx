@@ -57,17 +57,25 @@ function HierarchyBreadcrumb({
   path,
   onNavigateToRoot,
   onNavigateToNode,
+  hideRootNode = false,
 }: HierarchyBreadcrumbProps) {
   const sourceMetadata = getSourceMetadata(source);
   const MAX_VISIBLE_SEGMENTS = 3;
 
+  // When the root node is hidden, path[0] is the auto-entered root. The
+  // visual root in the breadcrumb is the synthetic "source name" segment;
+  // that segment maps onto path[0] under the hood, but the user only sees
+  // segments from path[1] onwards.
+  const rootOffset = hideRootNode && path.length > 0 ? 1 : 0;
+  const displayPath = path.slice(rootOffset);
+
   // Determine which segments to show
-  const shouldCollapse = path.length > MAX_VISIBLE_SEGMENTS;
+  const shouldCollapse = displayPath.length > MAX_VISIBLE_SEGMENTS;
   const visiblePath = shouldCollapse
-    ? path.slice(path.length - MAX_VISIBLE_SEGMENTS + 1)
-    : path;
+    ? displayPath.slice(displayPath.length - MAX_VISIBLE_SEGMENTS + 1)
+    : displayPath;
   const collapsedCount = shouldCollapse
-    ? path.length - MAX_VISIBLE_SEGMENTS + 1
+    ? displayPath.length - MAX_VISIBLE_SEGMENTS + 1
     : 0;
 
   return (
@@ -79,7 +87,7 @@ function HierarchyBreadcrumb({
       height="auto"
     >
       {/* Root source link */}
-      {path.length > 0 ? (
+      {displayPath.length > 0 ? (
         <Button prominence="tertiary" onClick={onNavigateToRoot}>
           {sourceMetadata.displayName}
         </Button>
@@ -99,9 +107,10 @@ function HierarchyBreadcrumb({
 
       {/* Visible path segments */}
       {visiblePath.map((node, visibleIndex) => {
-        const actualIndex = shouldCollapse
+        const displayIndex = shouldCollapse
           ? collapsedCount + visibleIndex
           : visibleIndex;
+        const actualIndex = displayIndex + rootOffset;
         const isLast = actualIndex === path.length - 1;
 
         return (
@@ -141,6 +150,16 @@ export interface SourceHierarchyBrowserProps {
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  // When true and the source has exactly one root hierarchy node, the
+  // browser auto-enters it on load and hides it from the breadcrumb. Useful
+  // for sources like Canvas where the single top-level node ("Canvas") adds
+  // no information for the user.
+  hideRootNode?: boolean;
+  // When set, the browser scopes itself to a specific root hierarchy node:
+  // it auto-enters that node, hides it from the breadcrumb, and filters
+  // sibling roots out of the navigation. Used by the Virtual Tutor editor
+  // to scope to the Canvas course resolved at LTI launch time.
+  restrictToRootNodeId?: number | null;
 }
 
 export default function SourceHierarchyBrowser({
@@ -155,6 +174,8 @@ export default function SourceHierarchyBrowser({
   onDeselectAllFolders,
   initialAttachedDocuments,
   onSelectionCountChange,
+  hideRootNode = false,
+  restrictToRootNodeId = null,
 }: SourceHierarchyBrowserProps) {
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -213,7 +234,53 @@ export default function SourceHierarchyBrowser({
 
       try {
         const response = await fetchHierarchyNodes(source);
-        setAllNodes(response.nodes);
+
+        // When scoped to a specific root, prune `allNodes` to just that
+        // root and its descendants and auto-enter it so the rest of the
+        // browser never has to know other roots exist.
+        if (restrictToRootNodeId !== null) {
+          const allowedIds = new Set<number>();
+          allowedIds.add(restrictToRootNodeId);
+          // BFS to collect descendants. Hierarchy depth is small in
+          // practice, so a simple loop is fine.
+          let added = true;
+          while (added) {
+            added = false;
+            for (const node of response.nodes) {
+              if (
+                node.parent_id !== null &&
+                allowedIds.has(node.parent_id) &&
+                !allowedIds.has(node.id)
+              ) {
+                allowedIds.add(node.id);
+                added = true;
+              }
+            }
+          }
+          const subtree = response.nodes.filter((n) => allowedIds.has(n.id));
+          setAllNodes(subtree);
+
+          const rootNode =
+            subtree.find((n) => n.id === restrictToRootNodeId) ?? null;
+          if (rootNode) {
+            setPath([rootNode]);
+          }
+        } else {
+          setAllNodes(response.nodes);
+
+          // If the caller asked to hide the root node and there is exactly
+          // one, auto-enter it so the user never sees the synthetic top
+          // folder.
+          if (hideRootNode) {
+            const rootNodes = response.nodes.filter(
+              (n) => n.parent_id === null
+            );
+            const rootNode = rootNodes[0];
+            if (rootNodes.length === 1 && rootNode) {
+              setPath([rootNode]);
+            }
+          }
+        }
       } catch (error) {
         setNodesError(
           error instanceof Error ? error.message : "Failed to load folders"
@@ -224,7 +291,7 @@ export default function SourceHierarchyBrowser({
     };
 
     loadNodes();
-  }, [source]);
+  }, [source, hideRootNode, restrictToRootNodeId]);
 
   // Load documents when current path or sort options change
   useEffect(() => {
@@ -559,8 +626,27 @@ export default function SourceHierarchyBrowser({
     }
   };
 
-  // Navigation handlers
-  const handleNavigateToRoot = () => setPath([]);
+  // Navigation handlers. When hideRootNode / restrictToRootNodeId is on,
+  // the visual root corresponds to staying inside the auto-entered root
+  // node, not popping back to an empty path.
+  const handleNavigateToRoot = () => {
+    if (restrictToRootNodeId !== null) {
+      const rootNode = allNodes.find((n) => n.id === restrictToRootNodeId);
+      if (rootNode) {
+        setPath([rootNode]);
+        return;
+      }
+    }
+    if (hideRootNode) {
+      const rootNodes = allNodes.filter((n) => n.parent_id === null);
+      const rootNode = rootNodes[0];
+      if (rootNodes.length === 1 && rootNode) {
+        setPath([rootNode]);
+        return;
+      }
+    }
+    setPath([]);
+  };
 
   const handleNavigateToNode = (node: HierarchyNodeSummary, index: number) => {
     setPath((prev) => prev.slice(0, index + 1));
@@ -714,6 +800,7 @@ export default function SourceHierarchyBrowser({
               path={path}
               onNavigateToRoot={handleNavigateToRoot}
               onNavigateToNode={handleNavigateToNode}
+              hideRootNode={hideRootNode || restrictToRootNodeId !== null}
             />
           </>
         )

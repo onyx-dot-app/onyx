@@ -244,13 +244,23 @@ def _run_checkpoint(
     checkpoint: CanvasConnectorCheckpoint,
     start: float = 0,
     end: float = datetime(2099, 1, 1, tzinfo=timezone.utc).timestamp(),
-) -> tuple[list[Document | ConnectorFailure], CanvasConnectorCheckpoint]:
-    """Drive one load_from_checkpoint call, collecting yielded items."""
+    include_hierarchy: bool = False,
+) -> tuple[
+    list[Document | ConnectorFailure | HierarchyNode], CanvasConnectorCheckpoint
+]:
+    """Drive one load_from_checkpoint call, collecting yielded items.
+
+    Filters HierarchyNode out by default — most tests assert on document
+    counts. Pass include_hierarchy=True to retain them.
+    """
     gen = connector.load_from_checkpoint(start, end, checkpoint)
-    items: list[Document | ConnectorFailure] = []
+    items: list[Document | ConnectorFailure | HierarchyNode] = []
     try:
         while True:
-            items.append(next(gen))
+            item = next(gen)
+            if not include_hierarchy and isinstance(item, HierarchyNode):
+                continue
+            items.append(item)
     except StopIteration as e:
         new_cp: CanvasConnectorCheckpoint = e.value
     return items, new_cp
@@ -1469,18 +1479,20 @@ class TestLoadFromCheckpointWithPermSync:
         end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
 
         gen = connector.load_from_checkpoint_with_perm_sync(start, end, cp)
-        items: list[Document | ConnectorFailure] = []
+        items: list[Document | ConnectorFailure | HierarchyNode] = []
         try:
             while True:
                 items.append(next(gen))
         except StopIteration as e:
             new_cp = e.value
 
-        assert len(items) == 1
-        assert isinstance(items[0], Document)
-        assert items[0].external_access == expected_access
+        docs = [i for i in items if isinstance(i, Document)]
+        assert len(docs) == 1
+        assert docs[0].external_access == expected_access
         assert new_cp.stage == "assignments"
-        mock_perms.assert_called_once()
+        # Permissions are looked up once per course and cached. The hierarchy
+        # emission path also consults them, so we just assert it was called.
+        mock_perms.assert_called()
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_per_document_conversion_failure_yields_connector_failure(
@@ -1619,9 +1631,9 @@ class TestRetrieveAllSlimDocsPermSync:
         batches = list(connector.retrieve_all_slim_docs_perm_sync())
         all_items = [item for batch in batches for item in batch]
 
-        # 1 course hierarchy node + 3 page slim docs = 4 items total
-        # with batch_size=2: batches of [2, 2]
-        assert len(all_items) == 4
+        # 1 course node + 1 course-level "Pages" type folder + 3 page slim
+        # docs = 5 items total. With batch_size=2: batches of [2, 2, 1].
+        assert len(all_items) == 5
         assert len(batches[0]) == 2
 
 
@@ -1830,7 +1842,7 @@ class TestDocumentConversionNewTypes:
         assert doc.metadata["type"] == "file"
         assert doc.metadata["course_id"] == "1"
         assert "slides_week1.pdf" in doc.sections[0].text
-        assert doc.parent_hierarchy_raw_node_id == "canvas-course-1"
+        assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-file"
 
     def test_convert_quiz_to_document(self) -> None:
         from onyx.connectors.canvas.connector import CanvasQuiz
@@ -1856,7 +1868,7 @@ class TestDocumentConversionNewTypes:
         assert "Midterm Review" in text
         assert "Practice for the midterm" in text
         assert "Questions: 20" in text
-        assert doc.parent_hierarchy_raw_node_id == "canvas-course-1"
+        assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-quiz"
 
     def test_convert_discussion_to_document(self) -> None:
         from onyx.connectors.canvas.connector import CanvasDiscussion
@@ -1878,7 +1890,7 @@ class TestDocumentConversionNewTypes:
         text = doc.sections[0].text
         assert "Week 1 Discussion" in text
         assert "Discuss the readings" in text
-        assert doc.parent_hierarchy_raw_node_id == "canvas-course-1"
+        assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-discussion"
 
     def test_convert_syllabus_to_document(self) -> None:
         connector = _build_connector()
@@ -1893,7 +1905,7 @@ class TestDocumentConversionNewTypes:
         text = doc.sections[0].text
         assert "Syllabus" in text
         assert "Welcome to CS 101" in text
-        assert doc.parent_hierarchy_raw_node_id == "canvas-course-1"
+        assert doc.parent_hierarchy_raw_node_id == "canvas-type-course-1-syllabus"
 
 
 class TestCheckpointNewStages:
@@ -2148,4 +2160,245 @@ class TestSlimDocsNewTypes:
         slim_docs = [d for d in all_items if isinstance(d, SlimDocument)]
 
         assert len(slim_docs) == 1
-        assert slim_docs[0].parent_hierarchy_raw_node_id == "canvas-course-1"
+        assert slim_docs[0].parent_hierarchy_raw_node_id == "canvas-type-course-1-page"
+
+
+# ---------------------------------------------------------------------------
+# Module membership routing — type folders under courses & modules
+# ---------------------------------------------------------------------------
+
+
+class TestModuleTypeFolders:
+    """Type folder routing: items in a module land under that module's
+    type folder; otherwise under the course's type folder."""
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_in_module_routes_to_module_type_folder(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = None
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10)],
+            modules=[_mock_module(70, "Module 1")],
+            module_items=[
+                {
+                    "id": 500,
+                    "title": "Welcome",
+                    "type": "Page",
+                    "content_id": 10,
+                }
+            ],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_items = [item for batch in batches for item in batch]
+        slim_docs = [d for d in all_items if isinstance(d, SlimDocument)]
+        hierarchy_nodes = [n for n in all_items if isinstance(n, HierarchyNode)]
+
+        assert len(slim_docs) == 1
+        assert (
+            slim_docs[0].parent_hierarchy_raw_node_id == "canvas-type-module-1-70-page"
+        )
+
+        # The module-level Pages folder must be emitted with the module
+        # as its parent.
+        module_type_folder = next(
+            n
+            for n in hierarchy_nodes
+            if n.raw_node_id == "canvas-type-module-1-70-page"
+        )
+        assert module_type_folder.raw_parent_id == "canvas-module-1-70"
+        assert module_type_folder.display_name == "Pages"
+
+        # No course-level Pages folder should be emitted, since no page
+        # landed under the course.
+        node_ids = {n.raw_node_id for n in hierarchy_nodes}
+        assert "canvas-type-course-1-page" not in node_ids
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_announcement_always_routes_to_course_folder(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        # Announcements aren't part of modules in Canvas — they always
+        # hang off the course-level Announcements folder regardless of
+        # what modules exist.
+        mock_perms.return_value = None
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            announcements=[_mock_announcement(30)],
+            modules=[_mock_module(70, "Module 1")],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_items = [item for batch in batches for item in batch]
+        slim_docs = [d for d in all_items if isinstance(d, SlimDocument)]
+
+        assert len(slim_docs) == 1
+        assert (
+            slim_docs[0].parent_hierarchy_raw_node_id
+            == "canvas-type-course-1-announcement"
+        )
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_full_doc_uses_module_type_folder_parent(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        # Full Document path (load_from_checkpoint) also routes through
+        # the membership map.
+        mock_perms.return_value = None
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            modules=[_mock_module(70, "Module 1")],
+            module_items=[
+                {
+                    "id": 500,
+                    "title": "Welcome",
+                    "type": "Page",
+                    "content_id": 10,
+                }
+            ],
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, _new_cp = _run_checkpoint(connector, cp, start, end)
+
+        docs = [i for i in items if isinstance(i, Document)]
+        assert len(docs) == 1
+        assert docs[0].parent_hierarchy_raw_node_id == "canvas-type-module-1-70-page"
+
+
+# ---------------------------------------------------------------------------
+# Hierarchy emission from load_from_checkpoint (regular indexing)
+# ---------------------------------------------------------------------------
+
+
+class TestHierarchyEmissionInIndexing:
+    """The regular indexing flow (load_from_checkpoint) must yield Course +
+    Module + module-level type folder HierarchyNode objects so that
+    PUBLIC connectors (which never run perm sync) still get their hierarchy
+    populated."""
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_starter_hierarchy_emitted_at_start_of_course(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            modules=[_mock_module(70, "Module 1")],
+            module_items=[
+                {"id": 500, "title": "Welcome", "type": "Page", "content_id": 10}
+            ],
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, _ = _run_checkpoint(connector, cp, start, end, include_hierarchy=True)
+
+        nodes = [i for i in items if isinstance(i, HierarchyNode)]
+        node_ids = {n.raw_node_id for n in nodes}
+
+        assert "canvas-course-1" in node_ids
+        assert "canvas-module-1-70" in node_ids
+        # Module-level Pages folder must exist (has an item)
+        assert "canvas-type-module-1-70-page" in node_ids
+
+        # Parent relationships
+        course_node = next(n for n in nodes if n.raw_node_id == "canvas-course-1")
+        module_node = next(n for n in nodes if n.raw_node_id == "canvas-module-1-70")
+        module_pages_folder = next(
+            n for n in nodes if n.raw_node_id == "canvas-type-module-1-70-page"
+        )
+        assert course_node.raw_parent_id is None
+        assert module_node.raw_parent_id == "canvas-course-1"
+        assert module_pages_folder.raw_parent_id == "canvas-module-1-70"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_course_level_type_folder_emitted_lazily_before_doc(
+        self, mock_requests: MagicMock
+    ) -> None:
+        # Page is NOT in any module — its parent is a course-level type
+        # folder, which must be emitted before the doc itself.
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            modules=[],
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, _ = _run_checkpoint(connector, cp, start, end, include_hierarchy=True)
+
+        # Find the Pages course-level folder and the page doc.
+        folder_idx = next(
+            i
+            for i, item in enumerate(items)
+            if isinstance(item, HierarchyNode)
+            and item.raw_node_id == "canvas-type-course-1-page"
+        )
+        doc_idx = next(
+            i
+            for i, item in enumerate(items)
+            if isinstance(item, Document) and item.id == "canvas-page-1-10"
+        )
+        # Folder must be yielded before the doc that depends on it.
+        assert folder_idx < doc_idx
+
+        folder = items[folder_idx]
+        assert isinstance(folder, HierarchyNode)
+        assert folder.raw_parent_id == "canvas-course-1"
+        assert folder.display_name == "Pages"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_starter_hierarchy_only_emitted_once_per_course(
+        self, mock_requests: MagicMock
+    ) -> None:
+        # Drive multiple stages on the same course and verify the course
+        # node is yielded only the first time, not on every stage call.
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            assignments=[_mock_assignment(20, updated_at="2025-06-15T12:00:00Z")],
+        )
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+        items_pages, cp = _run_checkpoint(
+            connector, cp, start, end, include_hierarchy=True
+        )
+        items_assignments, _ = _run_checkpoint(
+            connector, cp, start, end, include_hierarchy=True
+        )
+
+        course_nodes_pages = [
+            n
+            for n in items_pages
+            if isinstance(n, HierarchyNode) and n.raw_node_id == "canvas-course-1"
+        ]
+        course_nodes_assignments = [
+            n
+            for n in items_assignments
+            if isinstance(n, HierarchyNode) and n.raw_node_id == "canvas-course-1"
+        ]
+        assert len(course_nodes_pages) == 1
+        assert len(course_nodes_assignments) == 0

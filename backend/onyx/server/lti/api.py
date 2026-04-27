@@ -43,6 +43,7 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.lti.jwks import get_public_jwks
 from onyx.server.lti.utils import _extract_email_from_claims
 from onyx.server.lti.utils import extract_lti_context
+from onyx.server.lti.utils import find_canvas_course_node_id
 from onyx.server.lti.utils import find_tutor_personas_for_course
 from onyx.server.lti.utils import get_or_create_lti_course_project
 from onyx.server.lti.utils import store_lti_state
@@ -237,8 +238,18 @@ async def lti_launch(
     # against. We always pass it through so the picker view and editor can
     # find / create / list tutors for this course without any admin typing.
     course_id = context.get("course_id")
+    course_title = context.get("course_title")
     if course_id:
         redirect_params["lti_context_id"] = course_id
+
+    # Try to resolve the Canvas course's indexed hierarchy node so the editor
+    # can scope its knowledge picker to just this course's contents. Optional:
+    # if the connector hasn't indexed the course (or two courses share a
+    # title) we leave it out and fall back to the full hierarchy.
+    if course_title:
+        canvas_node_id = await find_canvas_course_node_id(course_title)
+        if canvas_node_id is not None:
+            redirect_params["lti_canvas_course_node_id"] = str(canvas_node_id)
 
     # Resolve which tutor persona to use:
     # 1. Explicit assistant_id from a Canvas custom claim (rare; admin override).
