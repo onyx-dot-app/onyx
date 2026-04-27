@@ -240,6 +240,7 @@ export default function AddConnector({
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
+      refresh();
       toast.success("Credential deleted successfully!");
     } else {
       const errorData = await response.json();
