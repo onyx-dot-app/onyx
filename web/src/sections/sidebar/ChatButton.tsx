@@ -192,6 +192,7 @@ const ChatButton = memo(
           <LineItemButton
             key="share"
             sizePreset="main-ui"
+            rounding="sm"
             icon={SvgShare}
             title="Share"
             onClick={noProp(() => setShowShareModal(true))}
@@ -199,6 +200,7 @@ const ChatButton = memo(
           <LineItemButton
             key="rename"
             sizePreset="main-ui"
+            rounding="sm"
             icon={SvgEdit}
             title="Rename"
             onClick={noProp(() => setRenaming(true))}
@@ -206,6 +208,7 @@ const ChatButton = memo(
           <LineItemButton
             key="move"
             sizePreset="main-ui"
+            rounding="sm"
             icon={SvgFolderIn}
             title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
@@ -214,6 +217,7 @@ const ChatButton = memo(
             <LineItemButton
               key="remove"
               sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolder}
               title={`Remove from ${project.name}`}
               onClick={noProp(() => handleRemoveFromProject())}
@@ -223,6 +227,7 @@ const ChatButton = memo(
           <LineItemButton
             key="delete"
             sizePreset="main-ui"
+            rounding="sm"
             color="danger"
             icon={SvgTrash}
             title="Delete"
@@ -245,6 +250,7 @@ const ChatButton = memo(
             <LineItemButton
               key={targetProject.id}
               sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolder}
               title={targetProject.name}
               onClick={noProp(() => handleChatMove(targetProject))}
@@ -257,6 +263,7 @@ const ChatButton = memo(
                 <LineItemButton
                   key="create-new"
                   sizePreset="main-ui"
+                  rounding="sm"
                   icon={SvgFolderPlus}
                   title={`Create ${searchTerm.trim()}`}
                   onClick={noProp(() =>
