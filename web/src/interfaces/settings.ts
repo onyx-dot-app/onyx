@@ -1,3 +1,5 @@
+import type { Notification } from "@/lib/notifications/interfaces";
+
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
   GATED_ACCESS = "gated_access",
@@ -78,11 +80,6 @@ export interface Settings {
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 }
-
-export { NotificationType } from "@/lib/notifications/interfaces";
-export type { Notification } from "@/lib/notifications/interfaces";
-
-import type { Notification } from "@/lib/notifications/interfaces";
 
 export interface NavigationItem {
   link: string;

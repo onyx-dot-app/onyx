@@ -73,7 +73,7 @@ import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
-import { NotificationType } from "@/interfaces/settings";
+import { NotificationType } from "@/lib/notifications/interfaces";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
