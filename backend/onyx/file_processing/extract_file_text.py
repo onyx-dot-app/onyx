@@ -93,10 +93,24 @@ def is_text_file(file: IO[bytes]) -> bool:
 
 
 def detect_encoding(file: IO[bytes]) -> str:
+    """Detect the character encoding of a binary file.
+
+    Tries UTF-8 first — if the bytes decode cleanly, they are definitively UTF-8
+    (UTF-8 is self-validating). Falls back to chardet only when UTF-8 fails, since
+    chardet can misidentify valid UTF-8 text (e.g. Cyrillic) as a legacy encoding
+    like windows-1251, producing mojibake. Defaults to utf-8 if chardet gives up.
+
+    Resets the file cursor to 0 after sampling so callers can still read the full file.
+    """
     raw_data = file.read(50000)
     file.seek(0)
-    encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
-    return encoding
+    try:
+        raw_data.decode("utf-8")
+        return "utf-8"
+    except UnicodeDecodeError:
+        # utf-8 failed — bytes are genuinely non-UTF-8, let chardet guess
+        encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
+        return encoding
 
 
 def is_macos_resource_fork_file(file_name: str) -> bool:
@@ -577,7 +591,7 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
         return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.error(
+            logger.warning(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
             return []

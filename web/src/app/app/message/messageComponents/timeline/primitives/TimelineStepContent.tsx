@@ -1,5 +1,5 @@
 import React, { FunctionComponent } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button } from "@opal/components";

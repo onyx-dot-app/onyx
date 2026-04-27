@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";

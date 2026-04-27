@@ -409,9 +409,9 @@ def connector_external_group_sync_generator_task(
 
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        msg = f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
-        emit_background_error(msg, cc_pair_id=cc_pair_id)
-        task_logger.error(msg)
+        task_logger.warning(
+            f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
+        )
         return None
 
     try:

@@ -87,6 +87,7 @@ export { default as SvgHardDrive } from "@opal/icons/hard-drive";
 export { default as SvgHashSmall } from "@opal/icons/hash-small";
 export { default as SvgHash } from "@opal/icons/hash";
 export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
+export { default as SvgHelpCircle } from "@opal/icons/help-circle";
 export { default as SvgHistory } from "@opal/icons/history";
 export { default as SvgShareWebhook } from "@opal/icons/share-webhook";
 export { default as SvgHourglass } from "@opal/icons/hourglass";

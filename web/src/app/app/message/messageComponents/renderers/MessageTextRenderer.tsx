@@ -27,7 +27,8 @@ import { extractCodeText } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
-import { cn, transformLinkUri } from "@/lib/utils";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,

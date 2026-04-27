@@ -10,7 +10,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export type ConnectorStatus =
   | "not_connected"

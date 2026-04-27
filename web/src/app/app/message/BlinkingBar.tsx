@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export function BlinkingBar({ addMargin = false }: { addMargin?: boolean }) {
   return (

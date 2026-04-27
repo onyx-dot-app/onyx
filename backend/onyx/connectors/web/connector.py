@@ -602,26 +602,38 @@ class WebConnector(LoadConnector, SlimConnector):
 
             # If we got here, the request was successful
             if not slim and self.scroll_before_scraping:
-                scroll_attempts = 0
-                previous_height = page.evaluate("document.body.scrollHeight")
-                while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    # Wait for content to load, but catch timeout if page never reaches networkidle
-                    # (e.g., CloudFlare protection keeps making requests)
-                    try:
-                        page.wait_for_load_state(
-                            "networkidle", timeout=PAGE_RENDER_TIMEOUT_MS
-                        )
-                    except TimeoutError:
-                        # If networkidle times out, just give it a moment for content to render
-                        time.sleep(1)
-                    time.sleep(0.5)  # let javascript run
+                try:
+                    # document.body can be null for non-HTML responses,
+                    # transient frame-nav states, or pages rendered without
+                    # a body (e.g. pure XML, some SPAs mid-navigation). That
+                    # surfaces as "Page.evaluate: TypeError: Cannot read
+                    # properties of null (reading 'scrollHeight')"
+                    # (ONYX-BACKEND-H6G5). Skip auto-scroll in that case and
+                    # fall back to whatever content the initial load gave us.
+                    scroll_attempts = 0
+                    previous_height = page.evaluate("document.body.scrollHeight")
+                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        # Wait for content to load, but catch timeout if page never reaches networkidle
+                        # (e.g., CloudFlare protection keeps making requests)
+                        try:
+                            page.wait_for_load_state(
+                                "networkidle", timeout=PAGE_RENDER_TIMEOUT_MS
+                            )
+                        except TimeoutError:
+                            # If networkidle times out, just give it a moment for content to render
+                            time.sleep(1)
+                        time.sleep(0.5)  # let javascript run
 
-                    new_height = page.evaluate("document.body.scrollHeight")
-                    if new_height == previous_height:
-                        break  # Stop scrolling when no more content is loaded
-                    previous_height = new_height
-                    scroll_attempts += 1
+                        new_height = page.evaluate("document.body.scrollHeight")
+                        if new_height == previous_height:
+                            break  # Stop scrolling when no more content is loaded
+                        previous_height = new_height
+                        scroll_attempts += 1
+                except Exception as scroll_err:
+                    logger.warning(
+                        f"{index}: auto-scroll skipped for {initial_url}: {scroll_err}"
+                    )
 
             content = page.content()
             soup = BeautifulSoup(content, "html.parser")

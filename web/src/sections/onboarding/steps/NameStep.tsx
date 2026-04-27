@@ -9,7 +9,7 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";

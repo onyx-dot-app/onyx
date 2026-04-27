@@ -185,7 +185,17 @@ def _process_file(
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection | TabularSection] = []
-    # Only set the file id if it is a tabular document
+    # `Document.file_id` doubles as the "stage these bytes into the
+    # code-interpreter sandbox" signal read by
+    # `build_python_chat_files_from_search_docs`, which has no tabular
+    # gate of its own — stamping every file would auto-stage every cited
+    # PDF/TXT/DOCX. Trade-off: non-tabular uploads keep
+    # `Document.file_id=NULL`, forcing `_user_can_access_connector_file`
+    # into a JSONB scan (see TODO there).
+    # TODO: stamp `Document.file_id` unconditionally here and add the
+    # tabular check to `build_python_chat_files_from_search_docs` (keyed
+    # off `FileRecord.display_name`). Combined with a backfill, that lets
+    # us drop the JSONB fallback entirely.
     doc_file_id = None
     if is_tabular_file(file_name):
         doc_file_id = file_id

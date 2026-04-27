@@ -138,6 +138,7 @@ autoscaling:
   engine: hpa
 
 inferenceCapability:
+  extraEnv: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -192,6 +193,7 @@ inferenceCapability:
 
 
 indexCapability:
+  extraEnv: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -332,6 +334,7 @@ nginx:
         http: http
 
 webserver:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-web-server
@@ -419,6 +422,7 @@ webserver:
   affinity: {}
 
 api:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -556,6 +560,7 @@ celery_shared:
     runAsUser: 0
 
 celery_beat:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   podAnnotations: {}
@@ -577,6 +582,7 @@ celery_beat:
   affinity: {}
 
 celery_worker_heavy:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -611,6 +617,7 @@ celery_worker_heavy:
   affinity: {}
 
 celery_worker_docprocessing:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -645,6 +652,7 @@ celery_worker_docprocessing:
   affinity: {}
 
 celery_worker_light:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -679,6 +687,7 @@ celery_worker_light:
   affinity: {}
 
 celery_worker_monitoring:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -713,6 +722,7 @@ celery_worker_monitoring:
   affinity: {}
 
 celery_worker_primary:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -747,6 +757,7 @@ celery_worker_primary:
   affinity: {}
 
 celery_worker_user_file_processing:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:
@@ -783,6 +794,7 @@ celery_worker_user_file_processing:
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
+  extraEnv: []
   enabled: false  # Disabled by default - requires bot token configuration
   # Bot token can be provided directly or via a Kubernetes secret
   # Option 1: Direct token (not recommended for production)
@@ -818,6 +830,7 @@ discordbot:
   affinity: {}
 
 slackbot:
+  extraEnv: []
   enabled: true
   replicaCount: 1
   image:
@@ -846,6 +859,7 @@ slackbot:
 # Onyx Model Context Protocol (MCP) Server
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
+  extraEnv: []
   enabled: false  # Disabled by default
   replicaCount: 1
   image:
@@ -892,6 +906,7 @@ mcpServer:
   affinity: {}
 
 celery_worker_docfetching:
+  extraEnv: []
   replicaCount: 1
   logLevel: INFO
   autoscaling:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { formatElapsedTime } from "@/lib/dateUtils";
 import { Button } from "@opal/components";
 import {

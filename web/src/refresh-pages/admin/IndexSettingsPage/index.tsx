@@ -106,9 +106,8 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         title="Self-hosted"
         sizePreset="secondary"
         variant="body"
-        prominence="muted"
+        color="muted"
         width="fit"
-        nonInteractive
       />
     );
   }
@@ -123,9 +122,8 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         title="Cloud Provider"
         sizePreset="secondary"
         variant="body"
-        prominence="muted"
+        color="muted"
         width="fit"
-        nonInteractive
       />
       {cloudProvider.costslink && (
         <LinkButton href={cloudProvider.costslink} target="_blank">
@@ -345,8 +343,7 @@ function ProviderGroup({
               title={`Add configs for your ${provider.displayName} embedding providers.`}
               sizePreset="secondary"
               variant="body"
-              prominence="muted"
-              nonInteractive
+              color="muted"
               padding="md"
               rightChildren={
                 <Button

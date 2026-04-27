@@ -1072,6 +1072,9 @@ def extract_text_from_confluence_html(
 
     _remove_macro_stylings(soup=soup)
 
+    for date_span in soup.findAll("span", {"class": "date-lozenger-container"}):
+        date_span.replaceWith(date_span.get_text())
+
     for user in soup.findAll("ri:user"):
         user_id = (
             user.attrs["ri:account-id"]

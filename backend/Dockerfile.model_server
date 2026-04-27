@@ -9,7 +9,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 RUN mkdir -p /app/.cache/huggingface
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade \
+
+# Install torch + CUDA/GPU deps in a dedicated layer: together they are ~3GB,
+# and isolating them avoids a single oversized layer that is unreliable to push.
+RUN grep -E '^(torch|nvidia-[a-z0-9-]+|triton)==' /tmp/requirements.txt \
+        | uv pip install --system --no-cache-dir -r /dev/stdin && \
+    rm -rf ~/.cache/uv
+
+RUN uv pip install --system --no-cache-dir \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 

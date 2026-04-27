@@ -546,6 +546,9 @@ def get_latest_index_attempts_parallel(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
 ) -> Sequence[IndexAttempt]:
+    # The session closes before returning, so only set eager_load_cc_pair=True if the
+    # caller actually accesses those relationships — otherwise it loads data for nothing
+    # and error_rows in particular can be very expensive on large deployments.
     with get_session_with_current_tenant() as db_session:
         return get_latest_index_attempts(
             secondary_index,

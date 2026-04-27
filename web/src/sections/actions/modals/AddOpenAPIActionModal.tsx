@@ -238,7 +238,11 @@ function FormContent({
           withLabel="definition"
           title="OpenAPI Schema Definition"
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
+              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
+              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
+              `current request's values at call time. ` +
+              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
           )}
         >
           <Hoverable.Root group="definitionField" width="full">

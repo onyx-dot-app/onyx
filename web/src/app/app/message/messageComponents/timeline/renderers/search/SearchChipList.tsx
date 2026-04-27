@@ -1,6 +1,6 @@
 import React, { JSX, useState, useEffect, useRef, useMemo } from "react";
 import { SourceTag, SourceInfo } from "@/refresh-components/buttons/source-tag";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export type { SourceInfo };
 

@@ -1,19 +1,23 @@
 "use client";
 
-import useSWR from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { Notification, NotificationType } from "@/interfaces/settings";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import Text from "@/refresh-components/texts/Text";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
+import useNotifications from "@/hooks/useNotifications";
+import {
+  SvgSparkle,
+  SvgRefreshCw,
+  SvgX,
+  SvgNotificationBubble,
+} from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, LineItemButton } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
+import { ContentAction, IllustrationContent } from "@opal/layouts";
+import { SvgEmpty } from "@opal/illustrations";
+import { markdown } from "@opal/utils";
 
 function getNotificationIcon(
   notifType: string
@@ -39,10 +43,11 @@ export default function NotificationsPopover({
 }: NotificationsPopoverProps) {
   const router = useRouter();
   const {
-    data: notifications,
-    mutate,
+    notifications,
+    undismissedCount,
     isLoading,
-  } = useSWR<Notification[]>(SWR_KEYS.notifications, errorHandlingFetcher);
+    refresh: mutate,
+  } = useNotifications();
 
   const handleNotificationClick = (notification: Notification) => {
     // Handle build_mode feature announcement specially - show intro animation
@@ -101,58 +106,77 @@ export default function NotificationsPopover({
   };
 
   return (
-    <Section gap={0.5} padding={0.25}>
-      <Section flexDirection="row" justifyContent="between" padding={0.5}>
-        <Text headingH3>Notifications</Text>
-        <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
-      </Section>
+    <Section gap={0}>
+      <div className="w-full p-2">
+        <ContentAction
+          title="Notifications"
+          sizePreset="main-content"
+          tag={{
+            title: `${undismissedCount} unread`,
+            color: "blue",
+          }}
+          rightChildren={
+            <Button
+              icon={SvgX}
+              onClick={onClose}
+              size="sm"
+              prominence="tertiary"
+            />
+          }
+          padding="fit"
+        />
+      </div>
 
       <Divider paddingPerpendicular="fit" />
 
-      <Section>
-        {isLoading ? (
-          <div className="h-48">
-            <Section>
-              <SimpleLoader />
-            </Section>
-          </div>
-        ) : !notifications || notifications.length === 0 ? (
-          <div className="h-48">
-            <Section>
-              <Text as="p" text03>
-                No notifications
-              </Text>
-            </Section>
-          </div>
-        ) : (
-          <div className="max-h-96 overflow-y-auto w-full">
-            <Section alignItems="stretch" gap={0}>
-              {notifications.map((notification) => (
-                <LineItem
-                  key={notification.id}
-                  icon={getNotificationIcon(notification.notif_type)}
-                  description={notification.description ?? undefined}
-                  onClick={() => handleNotificationClick(notification)}
-                  strikethrough={notification.dismissed}
-                  rightChildren={
-                    !notification.dismissed ? (
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgX}
-                        onClick={(e) => handleDismiss(notification.id, e)}
-                        tooltip="Dismiss"
-                      />
-                    ) : undefined
-                  }
-                >
-                  {notification.title}
-                </LineItem>
-              ))}
-            </Section>
-          </div>
-        )}
-      </Section>
+      {isLoading ? (
+        <div className="h-[var(--notifications-popover)]">
+          <Section>
+            <SimpleLoader />
+          </Section>
+        </div>
+      ) : !notifications || notifications.length === 0 ? (
+        <div className="h-[var(--notifications-popover)]">
+          <Section>
+            <IllustrationContent
+              title="No notifications"
+              illustration={SvgEmpty}
+            />
+          </Section>
+        </div>
+      ) : (
+        <div className="max-h-[var(--notifications-popover)] overflow-y-auto pt-1 px-0 flex flex-col gap-1">
+          {/* TODO(@raunakab): make dismissed notifications have greyed out text */}
+          {notifications.map((notification) => (
+            <LineItemButton
+              key={notification.id}
+              icon={getNotificationIcon(notification.notif_type)}
+              title={markdown(
+                notification.dismissed
+                  ? `~~${notification.title}~~`
+                  : notification.title
+              )}
+              selectVariant="select-heavy"
+              sizePreset="main-ui"
+              rounding="sm"
+              state={notification.dismissed ? undefined : "selected"}
+              description={notification.description ?? undefined}
+              onClick={() => handleNotificationClick(notification)}
+              rightChildren={
+                !notification.dismissed ? (
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    icon={SvgX}
+                    onClick={(e) => handleDismiss(notification.id, e)}
+                    tooltip="Dismiss"
+                  />
+                ) : undefined
+              }
+            />
+          ))}
+        </div>
+      )}
     </Section>
   );
 }

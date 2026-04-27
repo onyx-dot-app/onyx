@@ -1,4 +1,5 @@
 import type { MinimalUserSnapshot } from "@/lib/types";
+import type { ToolSnapshot } from "@/lib/tools/interfaces";
 
 export interface AgentRow {
   id: number;
@@ -12,6 +13,7 @@ export interface AgentRow {
   owner: MinimalUserSnapshot | null;
   groups: number[];
   users: MinimalUserSnapshot[];
+  tools: ToolSnapshot[];
   uploaded_image_id?: string;
   icon_name?: string;
 }

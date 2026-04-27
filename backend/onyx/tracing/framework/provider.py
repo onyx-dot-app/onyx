@@ -270,9 +270,11 @@ class DefaultTraceProvider(TraceProvider):
             current_span = Scope.get_current_span()
             current_trace = Scope.get_current_trace()
             if current_trace is None:
-                logger.error(
-                    "No active trace. Make sure to start a trace with `trace()` first Returning NoOpSpan."
-                )
+                # Expected when tracing is disabled or a caller creates a span
+                # outside an active trace context (e.g. celery tasks with
+                # SENTRY_CELERY_TRACES_SAMPLE_RATE=0). Fall through to NoOpSpan
+                # silently — matches the other no-op branches below.
+                logger.debug("No active trace; returning NoOpSpan for %s", span_data)
                 return NoOpSpan(span_data)
             elif isinstance(current_trace, NoOpTrace) or isinstance(
                 current_span, NoOpSpan

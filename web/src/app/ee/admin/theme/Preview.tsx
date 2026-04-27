@@ -4,7 +4,8 @@ import React from "react";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { cn, ensureHrefProtocol } from "@/lib/utils";
+import { ensureHrefProtocol } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
