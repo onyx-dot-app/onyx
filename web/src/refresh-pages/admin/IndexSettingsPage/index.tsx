@@ -82,7 +82,19 @@ import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPag
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
-const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud";
+const MODEL_TAB_CLOUD = "cloud-based";
+const MODEL_TAB_SELF = "self-hosted";
+const SWITCHOVER_NONE = "none";
+const SELECT_CARD_STATE: Record<
+  EmbeddingModelState,
+  "empty" | "filled" | "selected"
+> = {
+  unconnected: "filled",
+  connected: "filled",
+  current: "filled",
+  selected: "selected",
+};
+const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
 
 /**
  * Wrapper that disables its children when either:
@@ -108,19 +120,6 @@ function CloudDisabled({
     </Disabled>
   );
 }
-
-const MODEL_TAB_CLOUD = "cloud-based";
-const MODEL_TAB_SELF = "self-hosted";
-const SWITCHOVER_NONE = "none";
-const SELECT_CARD_STATE: Record<
-  EmbeddingModelState,
-  "empty" | "filled" | "selected"
-> = {
-  unconnected: "filled",
-  connected: "filled",
-  current: "filled",
-  selected: "selected",
-};
 
 interface EmbeddingProviderInfoProps {
   providerType: EmbeddingProviderName | null;
