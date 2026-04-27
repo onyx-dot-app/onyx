@@ -89,19 +89,21 @@ const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud";
  * 1. The app is running on Onyx Cloud (`NEXT_PUBLIC_CLOUD_ENABLED`), or
  * 2. A local `disabled` condition is true (e.g. a parent toggle is off).
  */
+interface CloudDisabledProps {
+  disabled?: boolean;
+  tooltip?: string;
+  children: React.ReactNode;
+}
 function CloudDisabled({
   disabled = false,
+  tooltip: tooltipProp,
   children,
-}: {
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
+}: CloudDisabledProps) {
   const isDisabled = NEXT_PUBLIC_CLOUD_ENABLED || disabled;
+  const tooltip = NEXT_PUBLIC_CLOUD_ENABLED ? CLOUD_TOOLTIP : tooltipProp;
+
   return (
-    <Disabled
-      disabled={isDisabled}
-      tooltip={NEXT_PUBLIC_CLOUD_ENABLED ? CLOUD_TOOLTIP : undefined}
-    >
+    <Disabled disabled={isDisabled} tooltip={tooltip}>
       {children}
     </Disabled>
   );
