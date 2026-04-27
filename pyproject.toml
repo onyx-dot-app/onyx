@@ -59,7 +59,6 @@ backend = [
     "httpcore==1.0.9",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
-    "huggingface-hub==1.10.2",
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
