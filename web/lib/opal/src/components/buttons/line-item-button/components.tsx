@@ -13,7 +13,7 @@ import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
 type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
-  "padding" | "width" | "color" | "ref"
+  "padding" | "width" | "ref"
 >;
 
 type LineItemButtonOwnProps = Pick<
@@ -89,8 +89,8 @@ function LineItemButton({
       >
         <div className="w-full p-2">
           <ContentAction
-            {...(contentActionProps as ContentActionProps)}
             color="interactive"
+            {...(contentActionProps as ContentActionProps)}
             padding="fit"
           />
         </div>
