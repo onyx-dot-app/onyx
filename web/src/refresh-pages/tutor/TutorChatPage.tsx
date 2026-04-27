@@ -31,6 +31,7 @@ import TutorChatHeader from "@/refresh-pages/tutor/TutorChatHeader";
 import TutorHistoryPanel from "@/refresh-pages/tutor/TutorHistoryPanel";
 import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
+import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Button } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
@@ -40,13 +41,16 @@ import { cn } from "@/lib/utils";
 export default function TutorChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user, isAdmin, isCurator } = useUser();
+  const isInstructor = isAdmin || isCurator;
 
   // URL params from LTI launch
   const assistantIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const assistantId = assistantIdRaw ? parseInt(assistantIdRaw) : null;
   const projectIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PROJECT_ID);
   const projectId = projectIdRaw ? parseInt(projectIdRaw) : null;
+  const ltiContextId =
+    searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
 
   // State
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -172,8 +176,19 @@ export default function TutorChatPage() {
     if (assistantId)
       params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(assistantId));
     if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+    if (ltiContextId)
+      params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
     router.push(`/tutor?${params.toString()}`);
-  }, [router, assistantId, projectId]);
+  }, [router, assistantId, projectId, ltiContextId]);
+
+  // Manage tutors: jump back to the picker for the current course.
+  const handleManageTutors = useCallback(() => {
+    if (!ltiContextId) return;
+    const params = new URLSearchParams();
+    params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
+    if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+    router.push(`/tutor?${params.toString()}`);
+  }, [router, ltiContextId, projectId]);
 
   // Select a session from history
   const handleSelectSession = useCallback(
@@ -184,10 +199,12 @@ export default function TutorChatPage() {
         params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(assistantId));
       if (projectId)
         params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+      if (ltiContextId)
+        params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
       router.push(`/tutor?${params.toString()}`);
       setHistoryOpen(false);
     },
-    [router, assistantId, projectId]
+    [router, assistantId, projectId, ltiContextId]
   );
 
   // Submit message handler
@@ -226,7 +243,20 @@ export default function TutorChatPage() {
   // Loading state
   if (!isReady) return <OnyxInitializingLoader />;
 
-  // No agent configured
+  // No agentId chosen yet — render the picker if we know the course context,
+  // otherwise fall back to the legacy no-agent state.
+  if (!assistantId) {
+    if (ltiContextId) {
+      return (
+        <TutorPickerView ltiContextId={ltiContextId} projectId={projectId} />
+      );
+    }
+    if (!isLoadingAgents) {
+      return <TutorNoAgent />;
+    }
+  }
+
+  // We have an agentId but the agent itself failed to resolve.
   if (!effectiveAgent && !isLoadingAgents) {
     return <TutorNoAgent />;
   }
@@ -256,6 +286,9 @@ export default function TutorChatPage() {
           onNewConversation={handleNewConversation}
           onToggleHistory={toggleHistory}
           historyOpen={historyOpen}
+          onManageTutors={
+            isInstructor && ltiContextId ? handleManageTutors : null
+          }
         />
 
         <Dropzone

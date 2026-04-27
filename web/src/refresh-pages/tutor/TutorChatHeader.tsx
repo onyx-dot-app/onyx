@@ -4,6 +4,7 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import SvgPlus from "@opal/icons/plus";
 import SvgHistory from "@opal/icons/history";
+import SvgUsers from "@opal/icons/users";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 
 interface TutorChatHeaderProps {
@@ -12,6 +13,7 @@ interface TutorChatHeaderProps {
   onNewConversation: () => void;
   onToggleHistory: () => void;
   historyOpen: boolean;
+  onManageTutors: (() => void) | null;
 }
 
 export default function TutorChatHeader({
@@ -20,6 +22,7 @@ export default function TutorChatHeader({
   onNewConversation,
   onToggleHistory,
   historyOpen,
+  onManageTutors,
 }: TutorChatHeaderProps) {
   const displayName = agent?.name ?? "Tutor";
 
@@ -45,15 +48,28 @@ export default function TutorChatHeader({
           )}
         </div>
       </div>
-      <Button
-        variant="default"
-        prominence="secondary"
-        icon={SvgPlus}
-        size="sm"
-        onClick={onNewConversation}
-      >
-        New Chat
-      </Button>
+      <div className="flex items-center gap-2">
+        {onManageTutors && (
+          <Button
+            variant="default"
+            prominence="tertiary"
+            icon={SvgUsers}
+            size="sm"
+            onClick={onManageTutors}
+          >
+            Manage tutors
+          </Button>
+        )}
+        <Button
+          variant="default"
+          prominence="secondary"
+          icon={SvgPlus}
+          size="sm"
+          onClick={onNewConversation}
+        >
+          New Chat
+        </Button>
+      </div>
     </header>
   );
 }

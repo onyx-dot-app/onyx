@@ -1,4 +1,11 @@
-"""Utilities for LTI 1.3 JWT validation and user extraction."""
+"""Utilities for LTI 1.3 launches and Canvas course → Onyx tutor binding.
+
+Tutors are bound to courses entirely *inside Onyx*. We never ask the admin
+to type a course ID — the binding label name is the LTI `context.id` from
+the live launch, captured by the editor via the `lti_context_id` URL param
+that the launch handler threads through. `find_tutor_personas_for_course`
+is the runtime side of that contract.
+"""
 
 import contextlib
 import json
@@ -19,24 +26,20 @@ from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import get_user_db
 from onyx.auth.users import get_user_manager
-from onyx.configs.constants import DocumentSource
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.configs.lti_configs import LTI_NONCE_TTL_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import User
 from onyx.db.models import UserProject
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.lti.constants import VIRTUAL_TUTOR_LABEL
 from onyx.utils.logger import setup_logger
-
-# Must match the label name used by the tutor admin page
-_VIRTUAL_TUTOR_LABEL = "Virtual Tutor"
 
 
 logger = setup_logger()
@@ -358,48 +361,37 @@ async def get_or_create_lti_course_project(
         return project.id
 
 
-async def find_tutor_persona_for_course(course_id: str) -> int | None:
-    """Find a Virtual Tutor persona linked to a Canvas course.
+async def find_tutor_personas_for_course(lti_context_id: str) -> list[int]:
+    """Find every Virtual Tutor persona bound to an LTI course context.
 
-    Searches for personas that:
-    1. Have the "Virtual Tutor" label
-    2. Are linked to any Canvas hierarchy node belonging to this course
+    A persona qualifies when it carries both:
+    1. The "Virtual Tutor" label
+    2. A label whose name equals the LTI `context.id` for the course
 
-    Canvas hierarchy nodes use the pattern:
-      - Course node:  "canvas-course-{course_id}"
-      - Module nodes: "canvas-module-{course_id}-{module_id}"
-
-    So we match any node whose raw_node_id contains the course_id
-    as a suffix or component, scoped to the CANVAS source.
-
-    Returns the persona ID, or None if no tutor is configured.
+    Returns persona IDs ordered by display_priority (nulls last) then id.
+    May be empty if no tutors are bound to this course.
     """
-    # All Canvas hierarchy nodes for a given course start with
-    # "canvas-course-{id}" or "canvas-module-{id}-..."
-    course_node_prefix = f"canvas-course-{course_id}"
-    module_node_prefix = f"canvas-module-{course_id}-"
-
     async with get_async_session_context_manager() as session:
         result = await session.execute(
             select(Persona.id)
-            .join(Persona.hierarchy_nodes)
-            .join(Persona.labels)
             .where(
-                HierarchyNode.source == DocumentSource.CANVAS,
-                (HierarchyNode.raw_node_id == course_node_prefix)
-                | (HierarchyNode.raw_node_id.startswith(module_node_prefix)),
-                PersonaLabel.name == _VIRTUAL_TUTOR_LABEL,
                 Persona.deleted.is_(False),
+                Persona.labels.any(PersonaLabel.name == VIRTUAL_TUTOR_LABEL),
+                Persona.labels.any(PersonaLabel.name == lti_context_id),
             )
-            .limit(1)
+            .order_by(
+                Persona.display_priority.asc().nullslast(),
+                Persona.id.asc(),
+            )
         )
-        persona_id = result.scalar_one_or_none()
+        persona_ids = [row[0] for row in result.all()]
 
-        if persona_id is not None:
+        if persona_ids:
             logger.info(
-                "Found tutor persona %d for Canvas course %s",
-                persona_id,
-                course_id,
+                "Found %d tutor persona(s) for LTI context %s: %s",
+                len(persona_ids),
+                lti_context_id,
+                persona_ids,
             )
 
-        return persona_id
+        return persona_ids

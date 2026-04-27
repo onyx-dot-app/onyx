@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -156,6 +157,7 @@ export default function TutorEditorPage({
   refreshTutor,
 }: TutorEditorPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refresh: refreshAgents } = useAgents();
   const vectorDbEnabled = useVectorDbEnabled();
   const deleteModal = useCreateModal();
@@ -163,6 +165,15 @@ export default function TutorEditorPage({
   const { allRecentFiles, beginUpload } = useProjectsContext();
   const { data: documentSets } = useDocumentSets();
   const { labels, createLabel } = useLabels();
+
+  // The course this tutor is being created/edited for, sourced from the live
+  // LTI launch via a URL param. Required for new tutors — the editor refuses
+  // to create a tutor that isn't bound to a course. Existing tutors keep
+  // whatever course label they already carry.
+  const ltiContextId =
+    searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
+  const isCreating = !existingTutor;
+  const missingLtiContextOnCreate = isCreating && !ltiContextId;
 
   const { tools: availableTools, isLoading: isToolsLoading } =
     useAvailableTools();
@@ -179,6 +190,28 @@ export default function TutorEditorPage({
     const created = await createLabel(VIRTUAL_TUTOR_LABEL_NAME);
     return created?.id ?? null;
   }, [labels, createLabel]);
+
+  // Resolve or create the label whose name is the LTI `context.id`. That
+  // label is what `find_tutor_personas_for_course` matches on at launch
+  // time; we never let the admin type it.
+  const getOrCreateCourseLabelId = useCallback(
+    async (contextId: string): Promise<number | null> => {
+      const trimmed = contextId.trim();
+      if (!trimmed) return null;
+      const existing = labels?.find((l) => l.name === trimmed);
+      if (existing) return existing.id;
+      const created = await createLabel(trimmed);
+      return created?.id ?? null;
+    },
+    [labels, createLabel]
+  );
+
+  // The existing course label on a tutor being edited is whatever label
+  // isn't the Virtual Tutor marker. It is preserved untouched on edit —
+  // the editor never strips a course label.
+  const existingCourseLabel = existingTutor?.labels?.find(
+    (l) => l.name !== VIRTUAL_TUTOR_LABEL_NAME
+  );
 
   const detectedStyle = detectTeachingStyle(
     existingTutor?.system_prompt ?? null
@@ -255,14 +288,33 @@ export default function TutorEditorPage({
         toolIds.push(searchTool.id);
       }
 
-      // Get or create the Virtual Tutor label
+      // Resolve labels to attach. The Virtual Tutor marker is always added.
+      // For new tutors, the course label is the LTI context.id from the URL.
+      // For existing tutors, we preserve every label as-is — the editor
+      // never re-binds a tutor to a different course.
       const tutorLabelId = await getOrCreateTutorLabelId();
-      const existingLabelIds = existingTutor?.labels?.map((l) => l.id) ?? [];
-      const labelIds = tutorLabelId
-        ? Array.from(new Set([...existingLabelIds, tutorLabelId]))
-        : existingLabelIds.length > 0
-          ? existingLabelIds
-          : null;
+      const labelIdSet = new Set<number>();
+      if (tutorLabelId !== null) labelIdSet.add(tutorLabelId);
+
+      if (existingTutor) {
+        for (const label of existingTutor.labels ?? []) {
+          labelIdSet.add(label.id);
+        }
+      } else {
+        if (!ltiContextId) {
+          toast.error(
+            "Cannot create a tutor without a course context. Launch the Onyx tool from the Canvas course you want to bind it to."
+          );
+          return;
+        }
+        const courseLabelId = await getOrCreateCourseLabelId(ltiContextId);
+        if (courseLabelId === null) {
+          toast.error("Failed to create the course label for this tutor.");
+          return;
+        }
+        labelIdSet.add(courseLabelId);
+      }
+      const labelIds = labelIdSet.size > 0 ? Array.from(labelIdSet) : null;
 
       const submissionData: PersonaUpsertParameters = {
         name: values.name,
@@ -321,7 +373,20 @@ export default function TutorEditorPage({
         refreshTutor();
       }
 
-      router.push("/admin/tutor");
+      // Send the user back where the editor was opened from. The editor is
+      // launched from two places: from the in-app picker on `/tutor` (with
+      // an `lti_context_id` URL param) and from the admin tutor list.
+      const courseLabelName = existingTutor
+        ? existingCourseLabel?.name
+        : ltiContextId;
+      if (courseLabelName) {
+        const params = new URLSearchParams({
+          [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
+        });
+        router.push(`/tutor?${params.toString()}`);
+      } else {
+        router.push("/admin/tutor");
+      }
     } catch (error) {
       console.error("Submit error:", error);
       toast.error(`An error occurred: ${error}`);
@@ -336,7 +401,15 @@ export default function TutorEditorPage({
       toast.success("Tutor deleted successfully");
       deleteModal.toggle(false);
       await refreshAgents();
-      router.push("/admin/tutor");
+      const courseLabelName = existingCourseLabel?.name;
+      if (courseLabelName) {
+        const params = new URLSearchParams({
+          [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
+        });
+        router.push(`/tutor?${params.toString()}`);
+      } else {
+        router.push("/admin/tutor");
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to delete tutor"
@@ -467,13 +540,15 @@ export default function TutorEditorPage({
                             tooltip={
                               isSubmitting
                                 ? "Saving..."
-                                : !isValid
-                                  ? "Please fix the errors before saving."
-                                  : !dirty
-                                    ? "No changes have been made."
-                                    : hasUploadingFiles
-                                      ? "Please wait for files to finish uploading."
-                                      : undefined
+                                : missingLtiContextOnCreate
+                                  ? "Launch the Onyx tool from Canvas to bind this tutor to a course."
+                                  : !isValid
+                                    ? "Please fix the errors before saving."
+                                    : !dirty
+                                      ? "No changes have been made."
+                                      : hasUploadingFiles
+                                        ? "Please wait for files to finish uploading."
+                                        : undefined
                             }
                             side="bottom"
                           >
@@ -482,7 +557,8 @@ export default function TutorEditorPage({
                                 isSubmitting ||
                                 !isValid ||
                                 !dirty ||
-                                hasUploadingFiles
+                                hasUploadingFiles ||
+                                missingLtiContextOnCreate
                               }
                             >
                               <Button type="submit">
@@ -497,6 +573,20 @@ export default function TutorEditorPage({
                     />
 
                     <SettingsLayouts.Body>
+                      {missingLtiContextOnCreate && (
+                        <div className="rounded-12 border border-status-warning-02 bg-status-warning-00 p-4">
+                          <Text as="p" mainUiAction text05>
+                            Launch the Onyx tool from Canvas to create a tutor
+                          </Text>
+                          <Text as="p" secondaryBody text03>
+                            New tutors are bound to a Canvas course at creation.
+                            To create one, open the Onyx tool from inside the
+                            Canvas course you want to bind it to — the binding
+                            is captured automatically from the launch.
+                          </Text>
+                        </div>
+                      )}
+
                       {/* Section 1: Basics */}
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical name="name" title="Tutor Name">

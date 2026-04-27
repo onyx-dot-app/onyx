@@ -2,6 +2,12 @@
 
 Implements the OIDC login initiation and launch callback required by the
 LTI 1.3 spec, following the same session-issuance pattern as the SAML flow.
+
+On launch, the LTI `context.id` from the JWT is what we use to discover
+which Virtual Tutor personas a course is bound to. The binding is created
+inside Onyx (see `TutorEditorPage` on the frontend) so admins never have
+to type or paste a course ID — the launch handler threads `lti_context_id`
+through to the editor and picker views via URL params.
 """
 
 import secrets
@@ -11,12 +17,15 @@ from urllib.parse import urlencode
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Form
+from fastapi import Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import Strategy
+from sqlalchemy.orm import Session
 
 from onyx.auth.users import auth_backend
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -24,14 +33,17 @@ from onyx.configs.lti_configs import LTI_AUTH_LOGIN_URL
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_DEPLOYMENT_ID
 from onyx.configs.lti_configs import LTI_ISSUER
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.db.persona import get_tutor_persona_snapshots_for_course
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
+from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.lti.jwks import get_public_jwks
 from onyx.server.lti.utils import _extract_email_from_claims
 from onyx.server.lti.utils import extract_lti_context
-from onyx.server.lti.utils import find_tutor_persona_for_course
+from onyx.server.lti.utils import find_tutor_personas_for_course
 from onyx.server.lti.utils import get_or_create_lti_course_project
 from onyx.server.lti.utils import store_lti_state
 from onyx.server.lti.utils import upsert_lti_user
@@ -42,6 +54,26 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 router = APIRouter(prefix="/auth/lti")
+
+
+@router.get("/tutors-for-course")
+def lti_tutors_for_course(
+    context_id: str = Query(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> list[MinimalPersonaSnapshot]:
+    """Return Virtual Tutor personas bound to a given LTI course context.
+
+    Used by the in-app picker (`TutorPickerView`) and the instructor manage
+    view to list every tutor available for the current course. Access is
+    filtered by the standard persona access rules — students only see
+    tutors they can already reach.
+    """
+    return get_tutor_persona_snapshots_for_course(
+        user=user,
+        lti_context_id=context_id,
+        db_session=db_session,
+    )
 
 
 @router.get("/jwks")
@@ -201,17 +233,25 @@ async def lti_launch(
     # Build redirect URL — send students to /tutor, not /app
     redirect_params: dict[str, str] = {}
 
-    # Resolve which tutor persona to use:
-    # 1. Explicit assistant_id from Canvas custom claim (admin-configured)
-    # 2. Auto-discover by finding a Virtual Tutor persona linked to
-    #    this course's hierarchy node
+    # The LTI `context.id` is the canonical, stable identifier we bind tutors
+    # against. We always pass it through so the picker view and editor can
+    # find / create / list tutors for this course without any admin typing.
     course_id = context.get("course_id")
+    if course_id:
+        redirect_params["lti_context_id"] = course_id
+
+    # Resolve which tutor persona to use:
+    # 1. Explicit assistant_id from a Canvas custom claim (rare; admin override).
+    # 2. Auto-discover Virtual Tutor personas bound to this `context.id`.
+    #    - 0 matches → no `agentId` set; picker view handles it.
+    #    - 1 match → set `agentId` and drop the user straight into the chat.
+    #    - 2+ matches → no `agentId` set; picker view lets the student choose.
     if assistant_id:
         redirect_params["assistantId"] = str(assistant_id)
     elif course_id:
-        discovered_id = await find_tutor_persona_for_course(course_id)
-        if discovered_id is not None:
-            redirect_params["assistantId"] = str(discovered_id)
+        discovered_ids = await find_tutor_personas_for_course(course_id)
+        if len(discovered_ids) == 1:
+            redirect_params["assistantId"] = str(discovered_ids[0])
 
     # Create/find a UserProject for the Canvas course so conversations
     # are scoped per-course

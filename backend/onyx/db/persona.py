@@ -44,6 +44,7 @@ from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.server.lti.constants import VIRTUAL_TUTOR_LABEL
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -69,6 +70,31 @@ class PersonaLoadType(Enum):
     NONE = "none"
     MINIMAL = "minimal"
     FULL = "full"
+
+
+def _resolve_and_validate_labels(
+    label_ids: list[int], db_session: Session
+) -> list[PersonaLabel]:
+    """Fetch labels by ID and enforce the Virtual Tutor invariant.
+
+    Any persona that carries the Virtual Tutor label must also carry at
+    least one other label, whose name is the LTI `context.id` of the
+    course it is bound to. That label is what
+    `find_tutor_personas_for_course` matches on at LTI launch time.
+    """
+    labels = db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
+    if len(labels) != len(label_ids):
+        raise ValueError("Some label IDs were not found in the database")
+
+    label_names = {label.name for label in labels}
+    if VIRTUAL_TUTOR_LABEL in label_names and len(label_names) < 2:
+        raise ValueError(
+            f"A persona labeled '{VIRTUAL_TUTOR_LABEL}' must also have a "
+            "label whose name is the LTI context.id of the course it "
+            "should be matched against on LTI launch."
+        )
+
+    return labels
 
 
 def _add_user_filters(
@@ -369,11 +395,7 @@ def update_persona_shared(
     )
 
     if label_ids is not None:
-        labels = (
-            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
-        )
-        if len(labels) != len(label_ids):
-            raise ValueError("Some label IDs were not found in the database")
+        labels = _resolve_and_validate_labels(label_ids, db_session)
         persona.labels.clear()
         persona.labels = labels
 
@@ -420,6 +442,54 @@ def _build_persona_filters(
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
     return stmt
+
+
+def get_tutor_persona_snapshots_for_course(
+    user: User,
+    lti_context_id: str,
+    db_session: Session,
+) -> list[MinimalPersonaSnapshot]:
+    """Return Virtual Tutor personas bound to the given LTI course context.
+
+    A persona qualifies when it has both:
+    1. The Virtual Tutor label
+    2. A label whose name equals `lti_context_id`
+
+    Results are filtered through the standard access controls so the caller
+    only sees tutors they are allowed to see, and ordered by display_priority
+    (nulls last) then id.
+    """
+    stmt = select(Persona).where(
+        Persona.deleted.is_(False),
+        Persona.labels.any(PersonaLabel.name == VIRTUAL_TUTOR_LABEL),
+        Persona.labels.any(PersonaLabel.name == lti_context_id),
+    )
+    stmt = _add_user_filters(stmt, user, get_editable=False)
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets).options(
+            selectinload(DocumentSet.connector_credential_pairs).selectinload(
+                ConnectorCredentialPair.connector
+            ),
+            selectinload(DocumentSet.users),
+            selectinload(DocumentSet.groups),
+            selectinload(DocumentSet.federated_connectors).selectinload(
+                FederatedConnector__DocumentSet.federated_connector
+            ),
+        ),
+        selectinload(Persona.hierarchy_nodes),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
+        selectinload(Persona.user),
+    )
+    stmt = stmt.order_by(
+        Persona.display_priority.asc().nullslast(),
+        Persona.id.asc(),
+    )
+    results = db_session.scalars(stmt).unique().all()
+    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
 
 
 def get_minimal_persona_snapshots_for_user(
@@ -991,11 +1061,7 @@ def upsert_persona(
 
     labels = None
     if label_ids is not None:
-        labels = (
-            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
-        )
-        if len(labels) != len(label_ids):
-            raise ValueError("Some label IDs were not found in the database")
+        labels = _resolve_and_validate_labels(label_ids, db_session)
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None

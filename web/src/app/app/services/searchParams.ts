@@ -6,6 +6,7 @@ export const SEARCH_PARAM_NAMES = {
   SEARCH_ID: "searchId",
   PERSONA_ID: "agentId",
   PROJECT_ID: "projectId",
+  LTI_CONTEXT_ID: "lti_context_id",
   ALL_MY_DOCUMENTS: "allMyDocuments",
   // overrides
   TEMPERATURE: "temperature",
