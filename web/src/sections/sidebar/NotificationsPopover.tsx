@@ -10,15 +10,15 @@ import { getNotificationIcon } from "@/lib/notifications";
 import { timeAgo } from "@/lib/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
-  SvgX,
   SvgCheckAll,
   SvgNotificationBubble,
   SvgCheckSquare,
+  SvgChevronLeft,
 } from "@opal/icons";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
-import { ContentAction, IllustrationContent } from "@opal/layouts";
+import { IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
@@ -53,31 +53,35 @@ function NotificationItem({
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}
         rightChildren={
-          <Section flexDirection="row" alignItems="start" gap={0.5} padding={0}>
-            <Text font="secondary-body" color="text-02">
-              {timeAgo(notification.first_shown) ?? ""}
-            </Text>
-            {state === "new" && (
-              <div className="w-4 flex flex-col items-center justify-center">
-                <Hoverable.Item
-                  group="notifications-popover/NotificationItem"
-                  variant="replace-on-hover"
-                  resting={
-                    <div className="w-full h-full p-1">
-                      <SvgNotificationBubble size={6} />
-                    </div>
-                  }
-                >
-                  <Button
-                    icon={SvgCheckSquare}
-                    size="2xs"
-                    prominence="tertiary"
-                    onClick={noProp(dismiss)}
-                    tooltip="Mark as read"
-                  />
-                </Hoverable.Item>
-              </div>
-            )}
+          <Section justifyContent="start">
+            <Section height="fit" gap={0.5} flexDirection="row">
+              <Text font="secondary-body" color="text-02">
+                {timeAgo(notification.first_shown) ?? ""}
+              </Text>
+              {state === "new" && (
+                <div className="w-4 flex flex-col items-center justify-center">
+                  <Hoverable.Item
+                    group="notifications-popover/NotificationItem"
+                    variant="replace-on-hover"
+                    resting={
+                      <div className="w-full h-full p-2">
+                        <div className="p-px">
+                          <SvgNotificationBubble size={6} />
+                        </div>
+                      </div>
+                    }
+                  >
+                    <Button
+                      icon={SvgCheckSquare}
+                      size="sm"
+                      prominence="tertiary"
+                      onClick={noProp(dismiss)}
+                      tooltip="Mark as read"
+                    />
+                  </Hoverable.Item>
+                </div>
+              )}
+            </Section>
           </Section>
         }
       />
@@ -191,35 +195,27 @@ export default function NotificationsPopover({
   }, [newNotifications, handleDismiss]);
 
   return (
-    <Section>
-      <ContentAction
-        title="Notifications"
-        sizePreset="main-content"
-        tag={{
-          title: `${undismissedCount} unread`,
-          color: "blue",
-        }}
-        rightChildren={
-          <div className="flex flex-row items-center gap-1">
-            {newNotifications.length > 0 && (
-              <Button
-                icon={SvgCheckAll}
-                onClick={handleDismissAll}
-                size="sm"
-                prominence="tertiary"
-                tooltip="Mark all as read"
-              />
-            )}
-            <Button
-              icon={SvgX}
-              onClick={onClose}
-              size="sm"
-              prominence="tertiary"
-            />
-          </div>
-        }
-        padding="fit"
-      />
+    <Section gap={0}>
+      <Section flexDirection="row" padding={0.325}>
+        <Section flexDirection="row" gap={0.25} justifyContent="start">
+          <Button
+            icon={SvgChevronLeft}
+            size="sm"
+            prominence="tertiary"
+            onClick={onClose}
+          />
+          <Text color="text-02">Notifications</Text>
+        </Section>
+
+        <Section flexDirection="row" gap={0.25} justifyContent="end">
+          <Button
+            icon={SvgCheckAll}
+            size="sm"
+            prominence="tertiary"
+            onClick={handleDismissAll}
+          />
+        </Section>
+      </Section>
 
       {isLoading ? (
         <div className="h-[var(--notifications-popover)]">
