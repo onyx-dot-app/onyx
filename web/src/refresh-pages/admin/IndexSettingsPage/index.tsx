@@ -82,6 +82,31 @@ import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPag
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
+const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud";
+
+/**
+ * Wrapper that disables its children when either:
+ * 1. The app is running on Onyx Cloud (`NEXT_PUBLIC_CLOUD_ENABLED`), or
+ * 2. A local `disabled` condition is true (e.g. a parent toggle is off).
+ */
+function CloudDisabled({
+  disabled = false,
+  children,
+}: {
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const isDisabled = NEXT_PUBLIC_CLOUD_ENABLED || disabled;
+  return (
+    <Disabled
+      disabled={isDisabled}
+      tooltip={NEXT_PUBLIC_CLOUD_ENABLED ? CLOUD_TOOLTIP : undefined}
+    >
+      {children}
+    </Disabled>
+  );
+}
+
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const SWITCHOVER_NONE = "none";
@@ -675,10 +700,7 @@ export default function IndexSettingsPage() {
         />
 
         <SettingsLayouts.Body>
-          <Disabled
-            disabled={NEXT_PUBLIC_CLOUD_ENABLED}
-            tooltip="This setting is managed by Onyx Cloud"
-          >
+          <CloudDisabled>
             <MessageCard
               variant={statusVariant}
               headerPadding="sm"
@@ -992,7 +1014,7 @@ export default function IndexSettingsPage() {
               />
 
               <Card border="solid" rounding="lg">
-                <Disabled disabled>
+                <CloudDisabled>
                   <InputHorizontal
                     title="Multipass Indexing"
                     description="Index documents as chunks of varying sizes to better identify relevant sources."
@@ -1007,7 +1029,7 @@ export default function IndexSettingsPage() {
                       disabled
                     />
                   </InputHorizontal>
-                </Disabled>
+                </CloudDisabled>
               </Card>
 
               {/* TODO(@raunakab): enable_contextual_rag is in PRESERVED_SEARCH_FIELDS
@@ -1031,7 +1053,9 @@ export default function IndexSettingsPage() {
                     />
                   </InputHorizontal>
 
-                  <Disabled disabled={!searchSettings?.enable_contextual_rag}>
+                  <CloudDisabled
+                    disabled={!searchSettings?.enable_contextual_rag}
+                  >
                     <InputHorizontal
                       title="Contextual Retrieval LLM"
                       description="This model will be used to generate context for chunks."
@@ -1065,7 +1089,7 @@ export default function IndexSettingsPage() {
                         </InputSelect.Content>
                       </InputSelect>
                     </InputHorizontal>
-                  </Disabled>
+                  </CloudDisabled>
                 </GeneralLayouts.Section>
               </Card>
             </GeneralLayouts.Section>
@@ -1103,7 +1127,7 @@ export default function IndexSettingsPage() {
                     />
                   </InputHorizontal>
 
-                  <Disabled disabled={!imageProcessingEnabled}>
+                  <CloudDisabled disabled={!imageProcessingEnabled}>
                     <InputHorizontal
                       title="Captioning LLM"
                       description="This model will be used to analyze images during indexing."
@@ -1120,9 +1144,9 @@ export default function IndexSettingsPage() {
                         <InputSelect.Content />
                       </InputSelect>
                     </InputHorizontal>
-                  </Disabled>
+                  </CloudDisabled>
 
-                  <Disabled disabled={!imageProcessingEnabled}>
+                  <CloudDisabled disabled={!imageProcessingEnabled}>
                     <InputHorizontal
                       title="Max Image Size for Analysis"
                       suffix="(MB)"
@@ -1151,11 +1175,11 @@ export default function IndexSettingsPage() {
                         </InputSelect.Content>
                       </InputSelect>
                     </InputHorizontal>
-                  </Disabled>
+                  </CloudDisabled>
                 </GeneralLayouts.Section>
               </Card>
             </GeneralLayouts.Section>
-          </Disabled>
+          </CloudDisabled>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     </>
