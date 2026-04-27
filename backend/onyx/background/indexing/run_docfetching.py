@@ -847,12 +847,15 @@ def connector_document_extraction(
                     ):
                         batch_storage.store_batch(batch_num, doc_batch_cleaned)
 
-                    # Create processing task data
+                    # Create processing task data. ``enqueue_time_ms`` is captured
+                    # right before send so QUEUE_WAIT measures the broker latency
+                    # and any docprocessing scheduling delay (not our own bookkeeping).
                     processing_batch_data = {
                         "index_attempt_id": index_attempt_id,
                         "cc_pair_id": cc_pair_id,
                         "tenant_id": tenant_id,
                         "batch_num": batch_num,  # 0-indexed
+                        "enqueue_time_ms": int(time.time() * 1000),
                     }
 
                     # Queue document processing task
@@ -1057,6 +1060,10 @@ def reissue_old_batches(
                 "cc_pair_id": cc_pair_id,
                 "tenant_id": tenant_id,
                 "batch_num": path_info.batch_num,  # use same batch num as previously
+                # Use current time (not the original send time) so QUEUE_WAIT
+                # measures wait time for *this* reissue, not stale latency from
+                # the prior attempt.
+                "enqueue_time_ms": int(time.time() * 1000),
             },
             queue=OnyxCeleryQueues.DOCPROCESSING,
             priority=priority,

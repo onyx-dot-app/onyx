@@ -194,6 +194,42 @@ def safe_record_single_event(
         )
 
 
+def safe_record_single_event_if_set(
+    stage: IndexAttemptStage,
+    index_attempt_id: int | None,
+    duration_ms: int,
+) -> None:
+    """No-op when ``index_attempt_id`` is None, otherwise delegates to
+    ``safe_record_single_event``.
+
+    Use from pipeline call sites that may run outside the context of an
+    ``IndexAttempt`` (e.g. the direct ingestion API), where there's no
+    attempt to attribute the metric to.
+    """
+    if index_attempt_id is None:
+        return
+    safe_record_single_event(stage, index_attempt_id, duration_ms)
+
+
+@contextmanager
+def time_stage_if_set(
+    stage: IndexAttemptStage,
+    index_attempt_id: int | None,
+) -> Generator[None, None, None]:
+    """No-op context manager when ``index_attempt_id`` is None, otherwise
+    behaves like ``time_stage``.
+
+    Use from pipeline call sites that may run outside the context of an
+    ``IndexAttempt`` (e.g. the direct ingestion API), where there's no
+    attempt to attribute the metric to.
+    """
+    if index_attempt_id is None:
+        yield
+        return
+    with time_stage(stage, index_attempt_id):
+        yield
+
+
 @contextmanager
 def time_stage(
     stage: IndexAttemptStage,
