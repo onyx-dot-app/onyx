@@ -3,7 +3,7 @@
 import React, { useState, memo } from "react";
 import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -11,10 +11,8 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { DRAG_TYPES } from "./constants";
-import { SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Button } from "@opal/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -85,22 +83,24 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
   }
 
   const popoverItems = [
-    <LineItem
+    <LineItemButton
       key="rename-project"
+      sizePreset="main-ui"
+      rounding="sm"
       icon={SvgEdit}
+      title="Rename Project"
       onClick={noProp(() => setIsEditing(true))}
-    >
-      Rename Project
-    </LineItem>,
+    />,
     null,
-    <LineItem
+    <LineItemButton
       key="delete-project"
+      sizePreset="main-ui"
+      rounding="sm"
+      color="danger"
       icon={SvgTrash}
+      title="Delete Project"
       onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-      danger
-    >
-      Delete Project
-    </LineItem>,
+    />,
   ];
 
   return (
