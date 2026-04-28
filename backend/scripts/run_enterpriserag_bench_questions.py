@@ -545,6 +545,7 @@ async def generate_answers(
                     q_start = time.monotonic()
                     try:
                         async with semaphore:
+                            q_start = time.monotonic()
                             if search_only:
                                 coro: Any = submit_search_only_question(
                                     session=session,
