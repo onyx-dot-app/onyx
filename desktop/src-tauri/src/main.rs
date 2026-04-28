@@ -43,6 +43,7 @@ const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
+#[cfg(target_os = "linux")]
 const MENU_HIDE_DECORATIONS_ID: &str = "hide_window_decorations";
 const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
 (() => {
@@ -912,6 +913,7 @@ fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
     if !config.show_menu_bar {
         let _ = window.hide_menu();
     }
+    #[cfg(target_os = "linux")]
     if config.hide_window_decorations {
         let _ = window.set_decorations(false);
     }
@@ -938,10 +940,8 @@ fn handle_menu_bar_toggle(app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn handle_decorations_toggle(app: &AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
     let state = app.state::<ConfigState>();
     let hide = {
         let mut config = state.config.write().unwrap();
@@ -1026,6 +1026,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
             None::<&str>,
         )?;
 
+        #[cfg(target_os = "linux")]
         let hide_decorations_item = CheckMenuItem::with_id(
             app,
             MENU_HIDE_DECORATIONS_ID,
@@ -1044,12 +1045,17 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
             .find(|submenu| submenu.text().ok().as_deref() == Some("Window"))
         {
             window_menu.append(&show_menu_bar_item)?;
+            #[cfg(target_os = "linux")]
             window_menu.append(&hide_decorations_item)?;
         } else {
-            let window_menu = SubmenuBuilder::new(app, "Window")
-                .item(&show_menu_bar_item)
-                .item(&hide_decorations_item)
-                .build()?;
+            #[allow(unused_mut)]
+            let mut window_menu_builder =
+                SubmenuBuilder::new(app, "Window").item(&show_menu_bar_item);
+            #[cfg(target_os = "linux")]
+            {
+                window_menu_builder = window_menu_builder.item(&hide_decorations_item);
+            }
+            let window_menu = window_menu_builder.build()?;
 
             let items = menu.items()?;
             let help_idx = items
@@ -1263,6 +1269,7 @@ fn main() {
             "new_window" => trigger_new_window(app),
             "open_settings" => open_settings(app),
             "show_menu_bar" => handle_menu_bar_toggle(app),
+            #[cfg(target_os = "linux")]
             "hide_window_decorations" => handle_decorations_toggle(app),
             MENU_TOGGLE_DEVTOOLS_ID => handle_toggle_devtools(app),
             MENU_OPEN_DEBUG_LOG_ID => handle_open_debug_log(),
