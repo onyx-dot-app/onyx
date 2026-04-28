@@ -1,7 +1,7 @@
 "use client";
 
 import { Text } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@/lib/time";
 import { cn } from "@opal/utils";
@@ -24,7 +24,7 @@ export default function AvgTimeCell({ stage, maxAvgMs }: AvgTimeCellProps) {
   const avgPct = avg !== null && maxAvgMs > 0 ? (avg / maxAvgMs) * 100 : 0;
 
   return (
-    <GeneralLayouts.Section
+    <Section
       alignItems="start"
       justifyContent="center"
       width="full"
@@ -50,6 +50,6 @@ export default function AvgTimeCell({ stage, maxAvgMs }: AvgTimeCellProps) {
           />
         </div>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

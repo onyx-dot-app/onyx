@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button, Text } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@/lib/time";
 import { PIPELINE_ORDER, STAGE_LABELS } from "./constants";
@@ -27,12 +27,7 @@ export default function AttemptOverhead({
   }, [attemptStages]);
 
   return (
-    <GeneralLayouts.Section
-      alignItems="start"
-      height="fit"
-      width="full"
-      gap={0.25}
-    >
+    <Section alignItems="start" height="fit" width="full" gap={0.25}>
       <Button
         prominence="tertiary"
         size="sm"
@@ -41,7 +36,7 @@ export default function AttemptOverhead({
         {open ? "Hide attempt overhead" : "Show attempt overhead"}
       </Button>
       {open && <AttemptOverheadList stages={sorted} />}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -51,16 +46,11 @@ interface AttemptOverheadListProps {
 
 function AttemptOverheadList({ stages }: AttemptOverheadListProps) {
   return (
-    <GeneralLayouts.Section
-      alignItems="stretch"
-      height="fit"
-      width="full"
-      gap={0.125}
-    >
+    <Section alignItems="stretch" height="fit" width="full" gap={0.125}>
       {stages.map((stage) => (
         <AttemptOverheadRow key={stage.stage} stage={stage} />
       ))}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -70,7 +60,7 @@ interface AttemptOverheadRowProps {
 
 function AttemptOverheadRow({ stage }: AttemptOverheadRowProps) {
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="between"
       alignItems="center"
@@ -84,6 +74,6 @@ function AttemptOverheadRow({ stage }: AttemptOverheadRowProps) {
       <Text font="secondary-body" color="text-03">
         {formatDurationMs(stage.total_duration_ms)}
       </Text>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

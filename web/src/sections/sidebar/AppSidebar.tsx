@@ -47,9 +47,9 @@ import { cn } from "@opal/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
-  FEATURE_FLAGS,
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";

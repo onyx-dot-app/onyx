@@ -2,7 +2,7 @@
 
 import { Button, Text } from "@opal/components";
 import { SvgQuestionMarkSmall } from "@opal/icons";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStage } from "@/lib/types";
 import { cn } from "@opal/utils";
 import { STAGE_DESCRIPTIONS, STAGE_LABELS } from "./constants";
@@ -14,7 +14,7 @@ interface StageLabelCellProps {
 
 export default function StageLabelCell({ stage }: StageLabelCellProps) {
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
@@ -40,6 +40,6 @@ export default function StageLabelCell({ stage }: StageLabelCellProps) {
         size="sm"
         tooltip={STAGE_DESCRIPTIONS[stage]}
       />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

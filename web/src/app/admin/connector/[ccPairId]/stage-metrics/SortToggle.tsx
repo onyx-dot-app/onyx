@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Text } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { SortMode } from "./interfaces";
 
 interface SortToggleProps {
@@ -11,7 +11,7 @@ interface SortToggleProps {
 
 export default function SortToggle({ sortMode, onChange }: SortToggleProps) {
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
@@ -36,6 +36,6 @@ export default function SortToggle({ sortMode, onChange }: SortToggleProps) {
       >
         Time taken
       </Button>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

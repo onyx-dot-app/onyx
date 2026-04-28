@@ -1,11 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import useSWR from "swr";
 import { MessageCard, Text } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
-import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import { IndexAttemptStageMetricsResponse } from "@/lib/types";
+import { Section } from "@/layouts/general-layouts";
+import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import { SortMode } from "./interfaces";
 import BatchTotalHeader from "./BatchTotalHeader";
 import PerBatchSection from "./PerBatchSection";
@@ -20,14 +18,8 @@ export default function StageMetricsPanel({
 }: StageMetricsPanelProps) {
   const [sortMode, setSortMode] = useState<SortMode>("pipeline");
 
-  const { data, error, isLoading } = useSWR<IndexAttemptStageMetricsResponse>(
-    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+  const { data, error, isLoading } =
+    useIndexAttemptStageMetrics(indexAttemptId);
 
   const { batchTotal, perBatchStages, attemptStages } = useMemo(() => {
     const stages = data?.stages ?? [];
@@ -72,12 +64,7 @@ export default function StageMetricsPanel({
   }
 
   return (
-    <GeneralLayouts.Section
-      alignItems="start"
-      height="fit"
-      width="full"
-      gap={0.75}
-    >
+    <Section alignItems="start" height="fit" width="full" gap={0.75}>
       <BatchTotalHeader batchTotal={batchTotal} />
       <PerBatchSection
         perBatchStages={perBatchStages}
@@ -87,6 +74,6 @@ export default function StageMetricsPanel({
       {attemptStages.length > 0 && (
         <AttemptOverhead attemptStages={attemptStages} />
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

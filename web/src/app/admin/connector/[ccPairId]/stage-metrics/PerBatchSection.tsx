@@ -1,7 +1,7 @@
 "use client";
 
 import { Text } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { SortMode } from "./interfaces";
 import SortToggle from "./SortToggle";
@@ -26,14 +26,9 @@ export default function PerBatchSection({
     );
   }
   return (
-    <GeneralLayouts.Section
-      alignItems="start"
-      height="fit"
-      width="full"
-      gap={0.75}
-    >
+    <Section alignItems="start" height="fit" width="full" gap={0.75}>
       <SortToggle sortMode={sortMode} onChange={onSortModeChange} />
       <PerBatchTable perBatchStages={perBatchStages} sortMode={sortMode} />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
