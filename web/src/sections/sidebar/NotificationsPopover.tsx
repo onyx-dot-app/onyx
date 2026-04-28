@@ -117,6 +117,28 @@ export default function NotificationsPopover({
     new Set()
   );
 
+  const handleDismiss = useCallback(
+    async (notificationId: number) => {
+      try {
+        const response = await fetch(
+          `/api/notifications/${notificationId}/dismiss`,
+          { method: "POST" }
+        );
+        if (response.ok) {
+          setSessionDismissedIds((prev) => {
+            const next = new Set(prev);
+            next.add(notificationId);
+            return next;
+          });
+          mutate();
+        }
+      } catch (error) {
+        console.error("Error dismissing notification:", error);
+      }
+    },
+    [mutate]
+  );
+
   const handleNotificationClick = useCallback(
     (notification: NotificationData) => {
       if (
@@ -149,25 +171,7 @@ export default function NotificationsPopover({
       onNavigate();
       router.push(link as Route);
     },
-    [onNavigate, onShowBuildIntro, router]
-  );
-
-  const handleDismiss = useCallback(
-    async (notificationId: number) => {
-      try {
-        const response = await fetch(
-          `/api/notifications/${notificationId}/dismiss`,
-          { method: "POST" }
-        );
-        if (response.ok) {
-          setSessionDismissedIds((prev) => new Set([...prev, notificationId]));
-          mutate();
-        }
-      } catch (error) {
-        console.error("Error dismissing notification:", error);
-      }
-    },
-    [mutate]
+    [handleDismiss, onNavigate, onShowBuildIntro, router]
   );
 
   const getState = useCallback(
@@ -180,11 +184,11 @@ export default function NotificationsPopover({
   );
 
   const newNotifications = useMemo(
-    () => notifications?.filter((n) => getState(n) === "new") ?? [],
+    () => notifications.filter((n) => getState(n) === "new"),
     [notifications, getState]
   );
   const olderNotifications = useMemo(
-    () => notifications?.filter((n) => getState(n) === "older") ?? [],
+    () => notifications.filter((n) => getState(n) === "older"),
     [notifications, getState]
   );
 
