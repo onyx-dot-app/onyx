@@ -46,7 +46,9 @@ from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
 from onyx.db.models import CloudEmbeddingProvider  # noqa: E402
 from onyx.db.models import LLMProvider  # noqa: E402
 from onyx.db.models import VoiceProvider  # noqa: E402
-from onyx.utils.variable_functionality import global_version  # noqa: E402
+from onyx.utils.variable_functionality import (  # noqa: E402
+    set_is_ee_based_on_env_variable,
+)
 
 PROVIDER_ALIASES: dict[str, set[str]] = {
     "openai": {"openai", "openai_compatible"},
@@ -190,17 +192,10 @@ def main() -> None:
         help="Also rotate keys in the voice_provider table.",
     )
 
-    tenant_group = parser.add_mutually_exclusive_group()
-    tenant_group.add_argument(
+    parser.add_argument(
         "--tenant-id",
         default=None,
-        help="Target a specific tenant schema.",
-    )
-    tenant_group.add_argument(
-        "--all-tenants",
-        action="store_true",
-        default=True,
-        help="Iterate all tenants (default).",
+        help="Target a specific tenant schema. Omit to rotate across all tenants.",
     )
 
     args = parser.parse_args()
@@ -209,7 +204,7 @@ def main() -> None:
     for p in args.provider:
         provider_names |= PROVIDER_ALIASES[p]
 
-    global_version.set_ee()
+    set_is_ee_based_on_env_variable()
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
 
     if args.dry_run:
