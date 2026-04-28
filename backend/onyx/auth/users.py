@@ -82,7 +82,6 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import has_permission
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS

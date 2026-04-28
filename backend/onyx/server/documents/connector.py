@@ -26,9 +26,6 @@ from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES

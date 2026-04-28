@@ -110,7 +110,7 @@ function GroupPermissionsSection({
                     description={entry.description}
                     sizePreset="main-ui"
                     variant="section"
-                    paddingVariant="md"
+                    padding="md"
                     rightChildren={
                       <Switch
                         checked={isRowEnabled(entry)}

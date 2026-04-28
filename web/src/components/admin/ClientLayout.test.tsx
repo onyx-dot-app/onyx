@@ -105,9 +105,11 @@ describe("ClientLayout — admin permission redirect", () => {
     );
 
     // First permitted admin route in declaration order for a MANAGE_LLMS-only
-    // user is /admin/configuration/llm.
+    // user is /admin/configuration/language-models.
     expect(mockRouter.replace).toHaveBeenCalledTimes(1);
-    expect(mockRouter.replace).toHaveBeenCalledWith("/admin/configuration/llm");
+    expect(mockRouter.replace).toHaveBeenCalledWith(
+      "/admin/configuration/language-models"
+    );
   });
 
   it("does not redirect when the user holds the exact required permission", () => {
