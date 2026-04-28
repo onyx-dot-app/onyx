@@ -222,7 +222,21 @@ class HubSpotConnector(LoadConnector, PollConnector):
             )
             return
 
-        next_start = datetime.fromtimestamp(int(last_ts_ms) / 1000, tz=timezone.utc)
+        try:
+            # Search API returns ISO 8601 strings; filter values use ms epoch.
+            next_start = datetime.fromisoformat(last_ts_ms.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            try:
+                next_start = datetime.fromtimestamp(
+                    int(last_ts_ms) / 1000, tz=timezone.utc
+                )
+            except (ValueError, TypeError):
+                logger.error(
+                    f"HubSpot search limit reached but last modified timestamp "
+                    f"has unrecognized format ({last_ts_ms!r}); records after "
+                    "the 10,000th may be missing."
+                )
+                return
         if next_start <= start:
             logger.error(
                 "HubSpot search limit reached but timestamp did not advance; "

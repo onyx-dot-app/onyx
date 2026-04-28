@@ -268,9 +268,9 @@ class TestSearchPaginatedResults:
 
 
 class TestSearchWithTimeSplit:
-    def _make_result(self, ts_ms: int, prop: str = "hs_lastmodifieddate") -> MagicMock:
+    def _make_result(self, ts_iso: str, prop: str = "hs_lastmodifieddate") -> MagicMock:
         r = MagicMock()
-        r.properties = {prop: str(ts_ms)}
+        r.properties = {prop: ts_iso}
         return r
 
     def test_yields_all_when_under_limit(self) -> None:
@@ -279,7 +279,10 @@ class TestSearchWithTimeSplit:
         connector = _make_connector()
         start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end = datetime(2024, 2, 1, tzinfo=timezone.utc)
-        items = [self._make_result(i) for i in range(HUBSPOT_SEARCH_LIMIT - 1)]
+        items = [
+            self._make_result("2024-01-15T00:00:00.000Z")
+            for _ in range(HUBSPOT_SEARCH_LIMIT - 1)
+        ]
 
         with patch.object(
             connector, "_search_paginated_results", return_value=iter(items)
@@ -299,10 +302,11 @@ class TestSearchWithTimeSplit:
         start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end = datetime(2024, 2, 1, tzinfo=timezone.utc)
 
-        # Last item has a timestamp clearly after start
-        last_ts_ms = int(datetime(2024, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
-        first_batch = [self._make_result(last_ts_ms)] * HUBSPOT_SEARCH_LIMIT
-        continuation = [self._make_result(last_ts_ms + 1)]
+        # Last item has a timestamp clearly after start (ISO 8601 format, as HubSpot returns)
+        last_dt = datetime(2024, 1, 15, tzinfo=timezone.utc)
+        last_ts_iso = last_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        first_batch = [self._make_result(last_ts_iso)] * HUBSPOT_SEARCH_LIMIT
+        continuation = [self._make_result("2024-01-15T00:00:00.001Z")]
 
         search_calls: list[tuple[datetime, datetime]] = []
         original = connector._search_time_range
@@ -326,6 +330,4 @@ class TestSearchWithTimeSplit:
         assert results[-1] is continuation[0]
         # Second call starts from last_ts_ms
         assert len(search_calls) == 2
-        assert search_calls[1][0] == datetime.fromtimestamp(
-            last_ts_ms / 1000, tz=timezone.utc
-        )
+        assert search_calls[1][0] == last_dt
