@@ -1,4 +1,8 @@
-import { preprocessLaTeX, escapeIncompleteBlockMath } from "./codeUtils";
+import {
+  preprocessLaTeX,
+  escapeIncompleteBlockMath,
+  escapeIncompleteInlineMath,
+} from "./codeUtils";
 
 describe("preprocessLaTeX", () => {
   describe("currency formatting", () => {
@@ -183,5 +187,72 @@ describe("escapeIncompleteBlockMath", () => {
   it("does not affect currency-only content", () => {
     const input = "I have $5 and you have $10.";
     expect(escapeIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("does not escape $$ inside an unclosed trailing fenced code block", () => {
+    const input = "Hello\n```\nfoo $$x = y$$ bar";
+    expect(escapeIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("leaves balanced $$ untouched when an unclosed code block opens later", () => {
+    const input = "Done: $$x = y$$ then ```\nfoo";
+    expect(escapeIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("preserves input that literally contains a fixed-shape placeholder token", () => {
+    // Input contains the OLD placeholder shape; the new nonce-based
+    // placeholder won't collide, so the sentinel must survive intact.
+    const input = "See ___MATHESC_CB_0___ and $$x = y$$ done.";
+    expect(escapeIncompleteBlockMath(input)).toBe(input);
+  });
+});
+
+describe("escapeIncompleteInlineMath", () => {
+  it("returns empty content unchanged", () => {
+    expect(escapeIncompleteInlineMath("")).toBe("");
+  });
+
+  it("returns content with no $ unchanged", () => {
+    const input = "Just some text with no math at all.";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("returns a balanced single-$ inline expression unchanged", () => {
+    const input = "Before $x = y$ after.";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("escapes a trailing unmatched single $", () => {
+    const input = "The cost is $\\frac{a}{";
+    expect(escapeIncompleteInlineMath(input)).toBe("The cost is \\$\\frac{a}{");
+  });
+
+  it("does not double-escape an already-escaped \\$", () => {
+    const input = "Maria has \\$5 and \\$10.";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("ignores $ inside a balanced $$...$$ block", () => {
+    // Stray `$` between the `$$` fences is part of block math and
+    // should not perturb inline parity.
+    const input = "Block: $$x$y$$ done.";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("ignores $ inside a closed fenced code block", () => {
+    const input = "```\nlet x = $5;\n``` done.";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("ignores $ inside an unclosed trailing fenced code block", () => {
+    const input = "Hello\n```\nlet x = $foo";
+    expect(escapeIncompleteInlineMath(input)).toBe(input);
+  });
+
+  it("escapes the trailing $ outside protected regions", () => {
+    const input = "Block: $$x = y$$ then $z";
+    expect(escapeIncompleteInlineMath(input)).toBe(
+      "Block: $$x = y$$ then \\$z"
+    );
   });
 });

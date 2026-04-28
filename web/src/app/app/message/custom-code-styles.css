@@ -1,9 +1,8 @@
-/* Soft fade-in for KaTeX math elements during streaming. At the moment a
-   `$$...$$` block flips from streamed plain-text source to a rendered
-   formula the DOM swaps + the block's height changes — the fade smooths
-   what would otherwise read as a hard pop. Animation only fires on
-   element mount, so already-rendered formulas don't re-flicker on each
-   typewriter tick. */
+/* Soft fade-in for KaTeX math elements that mount during streaming. The
+   `.streaming-katex` wrapper is only applied to the in-flight markdown
+   subtree, so the fade fires when a `$$...$$` flips from streamed
+   plain-text source to a rendered formula — and never on already-loaded
+   chats, search panels, or route navigations. */
 @keyframes onyx-math-appear {
   from {
     opacity: 0;
@@ -13,12 +12,12 @@
   }
 }
 
-.katex {
+.streaming-katex .katex {
   animation: onyx-math-appear 120ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .katex {
+  .streaming-katex .katex {
     animation: none;
   }
 }

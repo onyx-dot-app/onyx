@@ -400,7 +400,10 @@ export const MessageTextRenderer: MessageRenderer<
             Thinking
           </Text>
         ) : displayedContent.length > 0 ? (
-          <div dir="auto">
+          <div
+            dir="auto"
+            className={cn(!streamFullyDisplayed && "streaming-katex")}
+          >
             <ReactMarkdown
               className="prose prose-onyx font-main-content-body max-w-full"
               components={markdownComponents}

@@ -15,6 +15,7 @@ import {
   extractCodeText,
   preprocessLaTeX,
   escapeIncompleteBlockMath,
+  escapeIncompleteInlineMath,
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
@@ -113,12 +114,12 @@ export const processContent = (content: string): string => {
 
     const lastMatch = matches[matches.length - 1];
     if (lastMatch && !lastMatch.endsWith("```")) {
-      return preprocessLaTeX(content);
+      return escapeIncompleteInlineMath(preprocessLaTeX(content));
     }
   }
 
   const processed = preprocessLaTeX(content);
-  return processed;
+  return escapeIncompleteInlineMath(processed);
 };
 
 /**
