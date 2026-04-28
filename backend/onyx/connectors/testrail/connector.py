@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -154,6 +155,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                 url,
                 auth=(self.username, self.api_key),
                 params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
