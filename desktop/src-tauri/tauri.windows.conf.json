@@ -10,15 +10,7 @@
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
-        "backgroundColor": "#1a1a2e",
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "acceptFirstMouse": true,
-        "tabbingIdentifier": "onyx"
+        "transparent": false
       }
     ]
   }
