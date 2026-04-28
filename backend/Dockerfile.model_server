@@ -20,12 +20,9 @@ RUN uv pip install --system --no-cache-dir \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
-# Stage for downloading embedding models
+# Stage for downloading embedding models. Instantiating SentenceTransformer
+# pulls down both the weights and the custom architecture code.
 FROM base AS embedding-models
-RUN python -c "from huggingface_hub import snapshot_download; \
-snapshot_download('nomic-ai/nomic-embed-text-v1');"
-
-# Initialize SentenceTransformer to cache the custom architecture
 RUN python -c "from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 

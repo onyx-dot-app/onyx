@@ -130,7 +130,7 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 logger = setup_logger()
 
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
-DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
+DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 48
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
@@ -226,7 +226,10 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if fresh_attempt.total_batches and fresh_attempt.completed_batches == 0:
+            if (
+                fresh_attempt.total_batches
+                and fresh_attempt.completed_batches < fresh_attempt.total_batches
+            ):
                 heartbeat_timeout_seconds = (
                     HEARTBEAT_TIMEOUT_SECONDS
                     * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
