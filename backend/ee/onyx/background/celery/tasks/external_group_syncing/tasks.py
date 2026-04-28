@@ -758,24 +758,20 @@ def validate_external_group_sync_fence(
     )
     if found:
         # the celery task exists in the redis queue
-        # redis_connector_index.set_active()
+        redis_connector.external_group_sync.set_active()
         return
 
     if payload.celery_task_id in reserved_tasks:
         # the celery task was prefetched and is reserved within the indexing worker
-        # redis_connector_index.set_active()
+        redis_connector.external_group_sync.set_active()
         return
-
-    # we may want to enable this check if using the active task list somehow isn't good enough
-    # if redis_connector_index.generator_locked():
-    #     logger.info(f"{payload.celery_task_id} is currently executing.")
 
     # if we get here, we didn't find any direct indication that the associated celery tasks exist,
     # but they still might be there due to gaps in our ability to check states during transitions
     # Checking the active signal safeguards us against these transition periods
     # (which has a duration that allows us to bridge those gaps)
-    # if redis_connector_index.active():
-    # return
+    if redis_connector.external_group_sync.active():
+        return
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
     emit_background_error(
