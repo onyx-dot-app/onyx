@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/onyx-dot-app-onyx-badge.png)](https://mseep.ai/app/onyx-dot-app-onyx)
+
 <a name="readme-top"></a>
 
 <h2 align="center">
