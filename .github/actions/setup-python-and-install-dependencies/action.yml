@@ -25,7 +25,7 @@ runs:
     # NOTE: This comes before Setup uv since clean-ups run in reverse chronological order
     # such that Setup uv's prune-cache is able to prune the cache before we upload.
     - name: Cache uv cache directory
-      uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed~ # ratchet:runs-on/cache@v4
+      uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
       with:
         path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}

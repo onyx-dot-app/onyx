@@ -72,7 +72,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0 # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -133,7 +133,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0 # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -194,7 +194,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0 # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -263,7 +263,7 @@ jobs:
       matrix:
         project: [admin, exclusive]
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0 # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -284,7 +284,7 @@ jobs:
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
@@ -616,7 +616,7 @@ jobs:
       - "extras=ecr-cache"
     timeout-minutes: 30
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0 # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -637,7 +637,7 @@ jobs:
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
