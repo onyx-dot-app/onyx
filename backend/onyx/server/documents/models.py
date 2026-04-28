@@ -247,7 +247,7 @@ class IndexAttemptStageMetricSnapshot(BaseModel):
             else None
         )
         std_dev = (
-            (metric.m2_duration_ms / (metric.event_count - 1)) ** 0.5
+            max(0.0, metric.m2_duration_ms / (metric.event_count - 1)) ** 0.5
             if metric.event_count > 1
             else None
         )

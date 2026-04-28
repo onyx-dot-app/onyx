@@ -135,7 +135,7 @@ def get_index_attempt_stage_metrics(
     if index_attempt is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Index attempt not found")
 
-    if user and not verify_user_has_access_to_cc_pair(
+    if not verify_user_has_access_to_cc_pair(
         index_attempt.connector_credential_pair_id,
         db_session,
         user,
