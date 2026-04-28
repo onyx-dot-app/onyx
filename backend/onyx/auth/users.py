@@ -1759,6 +1759,7 @@ def get_anonymous_user() -> User:
         account_type=AccountType.ANONYMOUS,
         use_memories=False,
         enable_memory_tool=False,
+        effective_permissions=[],
     )
     return user
 

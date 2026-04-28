@@ -53,6 +53,7 @@ class TestResolveEffectivePermissions:
             "manage:document_sets",
             "read:document_sets",
             "read:connectors",
+            "read:user_groups",
         }
 
     def test_manage_user_groups_implies_all_reads(self) -> None:
