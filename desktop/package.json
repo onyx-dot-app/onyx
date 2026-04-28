@@ -7,6 +7,7 @@
     "debug": "tauri dev -- -- --debug",
     "build": "tauri build",
     "build:dmg": "tauri build --target universal-apple-darwin",
+    "build:windows": "tauri build -- --runner cargo-xwin --target x86_64-pc-windows-msvc",
     "build:linux": "tauri build --bundles deb,rpm"
   },
   "dependencies": {

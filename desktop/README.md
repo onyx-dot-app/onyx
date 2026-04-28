@@ -83,6 +83,16 @@ npm run build:dmg
 
 The built `.dmg` will be in `src-tauri/target/release/bundle/dmg/`.
 
+### Cross-compiling for Windows
+
+Follow [Build Windows apps on Linux and macOS](https://v2.tauri.app/distribute/windows-installer/#build-windows-apps-on-linux-and-macos).
+
+Once the first-time setup is completed,
+
+```bash
+npm run build:windows
+```
+
 ## Project Structure
 
 ```
