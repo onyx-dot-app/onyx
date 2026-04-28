@@ -14,7 +14,7 @@ import {
 import {
   extractCodeText,
   preprocessLaTeX,
-  stripIncompleteBlockMath,
+  escapeIncompleteBlockMath,
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
@@ -95,9 +95,10 @@ export const processContent = (content: string): string => {
   // Also strip a lone [[ or [[N] or [[N]] at the very end (before the URL part arrives)
   content = content.replace(/\[\[(?:\d+\]?\]?)?$/, "");
 
-  // Drop a trailing unclosed `$$...` so rehype-katex doesn't briefly
-  // render KaTeX error text mid-stream.
-  content = stripIncompleteBlockMath(content);
+  // Escape a trailing unclosed `$$` so remark-math skips it mid-stream and
+  // the user sees the LaTeX source streaming as plain text. The block swaps
+  // to a rendered formula the moment the closing `$$` arrives.
+  content = escapeIncompleteBlockMath(content);
 
   const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
   const matches = content.match(codeBlockRegex);

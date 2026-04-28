@@ -142,23 +142,31 @@ export const preprocessLaTeX = (content: string) => {
   return restoredCodeBlocks;
 };
 
-// Drop a trailing unclosed `$$...` block so rehype-katex doesn't render
-// KaTeX error text mid-stream. Closed fenced code blocks are protected so
-// a literal `$$` quoted inside ```...``` isn't counted as a math fence.
-export const stripIncompleteBlockMath = (content: string): string => {
+// Escape a trailing unclosed `$$` so remark-math skips it mid-stream while
+// the user still sees `$$` literally — the LaTeX source streams as plain
+// text, then swaps to a rendered formula the moment the closing `$$`
+// arrives. Closed fenced code blocks are protected so a literal `$$`
+// quoted inside ```...``` isn't counted as a math fence.
+export const escapeIncompleteBlockMath = (content: string): string => {
   const codeBlocks: string[] = [];
   const protectedContent = content.replace(/```[\s\S]*?```/g, (match) => {
     codeBlocks.push(match);
-    return `___MATHSTRIP_CB_${codeBlocks.length - 1}___`;
+    return `___MATHESC_CB_${codeBlocks.length - 1}___`;
   });
 
   // Even array length ⇔ odd `$$` count ⇔ trailing unmatched fence.
   const parts = protectedContent.split("$$");
-  if (parts.length % 2 === 0) parts.pop();
-  const stripped = parts.join("$$");
+  let result: string;
+  if (parts.length % 2 === 0) {
+    const tail = parts[parts.length - 1] ?? "";
+    const head = parts.slice(0, -1).join("$$");
+    result = `${head}\\$\\$${tail}`;
+  } else {
+    result = parts.join("$$");
+  }
 
-  return stripped.replace(
-    /___MATHSTRIP_CB_(\d+)___/g,
+  return result.replace(
+    /___MATHESC_CB_(\d+)___/g,
     (_, i) => codeBlocks[Number(i)] ?? ""
   );
 };
