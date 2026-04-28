@@ -87,7 +87,9 @@ The built `.dmg` will be in `src-tauri/target/release/bundle/dmg/`.
 
 Follow [Build Windows apps on Linux and macOS](https://v2.tauri.app/distribute/windows-installer/#build-windows-apps-on-linux-and-macos).
 
-Once the first-time setup is completed,
+_TIP: if facing `Error failed to build app: 'cargo-xwin' command not found.`, try `uv tool install cargo-xwin`._
+
+Once the first-time setup is complete,
 
 ```bash
 npm run build:windows
