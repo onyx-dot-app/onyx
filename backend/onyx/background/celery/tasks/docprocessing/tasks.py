@@ -435,9 +435,16 @@ def check_indexing_completion(
     # Update progress tracking and check for stalls
     with get_session_with_current_tenant() as db_session:
         stalled_timeout_hours = INDEXING_PROGRESS_TIMEOUT_HOURS
-        # Index attempts that are waiting between docfetching and
-        # docprocessing get a generous stalling timeout
-        if batches_total is not None and batches_processed == 0:
+        # Two phases get the generous stalling timeout, since neither produces
+        # forward motion in `batches_processed`:
+        #   1. Docfetching is still running (batches_total is None). A slow-but-
+        #      alive connector (large directory walks, paginated APIs, big
+        #      checkpoint resumption) can legitimately go hours before queueing
+        #      its first batch.
+        #   2. Docfetching has finished but no batches have been processed yet
+        #      (batches_total set, batches_processed == 0). This is the existing
+        #      "waiting between docfetching and docprocessing" case.
+        if batches_total is None or batches_processed == 0:
             stalled_timeout_hours = (
                 stalled_timeout_hours * DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER
             )
@@ -449,7 +456,8 @@ def check_indexing_completion(
             timeout_hours=stalled_timeout_hours,
         )
 
-        # Check for stalls (3-6 hour timeout). Only applies to in-progress attempts.
+        # Check for stalls. Only applies to in-progress attempts. The actual
+        # window is `stalled_timeout_hours / 2` to `stalled_timeout_hours`.
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt and timed_out:
             if attempt.status == IndexingStatus.IN_PROGRESS:
@@ -496,10 +504,12 @@ def check_indexing_completion(
                         )
             else:
                 logger.info(
-                    f"Indexing attempt {index_attempt_id} is {attempt.status}. 3-6 hours without heartbeat "
+                    f"Indexing attempt {index_attempt_id} is {attempt.status}. "
+                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without heartbeat "
                     "but task is in the queue. Likely underprovisioned docfetching worker."
                 )
-                # Update last progress time so we won't time out again for another 3 hours
+                # Update last progress time so we won't time out again for
+                # another `stalled_timeout_hours / 2` window.
                 IndexingCoordination.update_progress_tracking(
                     db_session,
                     index_attempt_id,
