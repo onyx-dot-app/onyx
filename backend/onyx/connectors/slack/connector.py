@@ -1243,9 +1243,9 @@ class SlackConnector(
                 raise CredentialExpiredError(
                     f"Invalid or expired Slack bot token ({slack_error})."
                 )
-            elif slack_error == "account_inactive":
+            elif slack_error in ("account_inactive", "token_revoked"):
                 raise CredentialExpiredError(
-                    f"Slack workspace or bot user is deactivated ({slack_error})."
+                    f"Slack workspace or bot user is deactivated or token was revoked ({slack_error})."
                 )
             raise UnexpectedValidationError(
                 f"Unexpected Slack error '{slack_error}' during settings validation."
