@@ -45,7 +45,7 @@ interface HoverableItemProps
   variant?: HoverableItemVariant;
   /**
    * Content shown at rest when `variant="replace-on-hover"`.
-   * On hover, `resting` fades out and `children` fades in.
+   * On hover, `resting` is removed and `children` is inserted (instant display swap, no transition).
    * Ignored for other variants.
    */
   resting?: React.ReactNode;

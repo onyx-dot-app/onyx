@@ -139,6 +139,16 @@
   display: contents;
 }
 
+/* Local focus */
+.hoverable-replace:focus-within
+  > .hoverable-replace-rest[data-hoverable-local="true"] {
+  display: none;
+}
+.hoverable-replace:focus-within
+  > .hoverable-replace-hover[data-hoverable-local="true"] {
+  display: contents;
+}
+
 /* Focus ring on keyboard focus */
 .hoverable-item:focus-visible {
   outline: 2px solid var(--border-04);
