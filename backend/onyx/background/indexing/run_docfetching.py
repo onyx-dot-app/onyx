@@ -58,7 +58,7 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.index_attempt import transition_attempt_to_in_progress
 from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import safe_record_single_event
+from onyx.db.index_attempt_metrics import StageEventBuffer
 from onyx.db.index_attempt_metrics import time_stage
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
@@ -172,6 +172,11 @@ def _get_connector_runner(
 
 _TimedYield = TypeVar("_TimedYield")
 
+# Connectors can produce hundreds of batches per run; flushing the
+# CONNECTOR_FETCH buffer every N events keeps the DB-write rate bounded
+# while still surfacing per-run aggregates with low latency.
+_CONNECTOR_FETCH_FLUSH_EVERY = 8
+
 
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
@@ -183,21 +188,31 @@ def _timed_connector_runs(
     Time is measured between consecutive ``next()`` calls so the metric
     reflects "how slow is the source itself" rather than "how slow is each
     iteration of the docfetching loop body".
+
+    Events are accumulated in a ``StageEventBuffer`` and flushed in small
+    batches (and once on terminal exit, including when the connector
+    raises) so we don't pay one DB round-trip per yielded batch.
     """
+    buffer = StageEventBuffer(IndexAttemptStage.CONNECTOR_FETCH, index_attempt_id)
     runner_iter = iter(runner_iterable)
-    while True:
-        fetch_start = time.monotonic()
-        try:
-            item = next(runner_iter)
-        except StopIteration:
-            return
-        duration_ms = max(0, int((time.monotonic() - fetch_start) * 1000))
-        safe_record_single_event(
-            IndexAttemptStage.CONNECTOR_FETCH,
-            index_attempt_id,
-            duration_ms,
-        )
-        yield item
+    try:
+        while True:
+            fetch_start = time.monotonic()
+            try:
+                item = next(runner_iter)
+            except StopIteration:
+                return
+            except Exception:
+                # Record the partial duration of the failing fetch so the
+                # terminal error iteration isn't lost from the metric.
+                buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+                raise
+            buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+            if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
+                buffer.flush()
+            yield item
+    finally:
+        buffer.flush()
 
 
 def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
