@@ -11,7 +11,11 @@ import {
   MemoizedAnchor,
   MemoizedParagraph,
 } from "@/app/app/message/MemoizedTextComponents";
-import { extractCodeText, preprocessLaTeX } from "@/app/app/message/codeUtils";
+import {
+  extractCodeText,
+  preprocessLaTeX,
+  stripIncompleteBlockMath,
+} from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -90,6 +94,10 @@ export const processContent = (content: string): string => {
   content = content.replace(/\[\[\d+\]\]\([^)]*$/, "");
   // Also strip a lone [[ or [[N] or [[N]] at the very end (before the URL part arrives)
   content = content.replace(/\[\[(?:\d+\]?\]?)?$/, "");
+
+  // Drop a trailing unclosed `$$...` so rehype-katex doesn't briefly
+  // render KaTeX error text mid-stream.
+  content = stripIncompleteBlockMath(content);
 
   const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
   const matches = content.match(codeBlockRegex);

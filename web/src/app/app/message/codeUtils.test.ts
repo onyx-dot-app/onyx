@@ -1,4 +1,4 @@
-import { preprocessLaTeX } from "./codeUtils";
+import { preprocessLaTeX, stripIncompleteBlockMath } from "./codeUtils";
 
 describe("preprocessLaTeX", () => {
   describe("currency formatting", () => {
@@ -129,5 +129,55 @@ describe("preprocessLaTeX", () => {
       // LaTeX within code blocks should remain untouched
       expect(processed).toContain("```latex\nE = mc^2\n```");
     });
+  });
+});
+
+describe("stripIncompleteBlockMath", () => {
+  it("returns empty content unchanged", () => {
+    expect(stripIncompleteBlockMath("")).toBe("");
+  });
+
+  it("returns content with no $$ unchanged", () => {
+    const input = "Just some text with no math at all.";
+    expect(stripIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("returns a single balanced $$math$$ unchanged", () => {
+    const input = "Before $$x = y$$ after.";
+    expect(stripIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("returns two balanced $$ blocks unchanged", () => {
+    const input = "First $$a = b$$ then $$c = d$$ done.";
+    expect(stripIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("strips a single trailing unmatched $$ block", () => {
+    const input = "Some prose then $$\\frac{a}{b";
+    expect(stripIncompleteBlockMath(input)).toBe("Some prose then ");
+  });
+
+  it("strips a trailing unmatched $$ after a balanced pair", () => {
+    const input = "Done: $$x = y$$ next: $$\\frac{c}{d";
+    expect(stripIncompleteBlockMath(input)).toBe("Done: $$x = y$$ next: ");
+  });
+
+  it("does not count $$ inside a closed fenced code block", () => {
+    const input =
+      "Real math: $$x = y$$\n```latex\n$$\\frac{a}{b}$$\n```\nDone.";
+    expect(stripIncompleteBlockMath(input)).toBe(input);
+  });
+
+  it("strips trailing unmatched $$ outside a closed code block without truncating the code block", () => {
+    const input =
+      "Real math: $$x = y$$\n```latex\n$$\\frac{a}{b}$$\n``` then $$\\frac{c";
+    expect(stripIncompleteBlockMath(input)).toBe(
+      "Real math: $$x = y$$\n```latex\n$$\\frac{a}{b}$$\n``` then "
+    );
+  });
+
+  it("does not affect currency-only content", () => {
+    const input = "I have $5 and you have $10.";
+    expect(stripIncompleteBlockMath(input)).toBe(input);
   });
 });
