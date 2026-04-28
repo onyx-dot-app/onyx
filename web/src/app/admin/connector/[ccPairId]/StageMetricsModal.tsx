@@ -2,7 +2,7 @@
 
 import Modal from "@/refresh-components/Modal";
 import { SvgBarChartSmall } from "@opal/icons";
-import StageMetricsPanel from "./StageMetricsPanel";
+import StageMetricsPanel from "./stage-metrics/StageMetricsPanel";
 
 interface StageMetricsModalProps {
   indexAttemptId: number;

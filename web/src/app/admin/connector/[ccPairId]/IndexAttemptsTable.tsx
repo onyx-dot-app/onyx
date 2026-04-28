@@ -20,7 +20,7 @@ import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { SvgBarChartSmall, SvgClock, SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { Tooltip } from "@opal/components";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import StageMetricsModal from "./StageMetricsModal";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -121,7 +121,7 @@ export function IndexAttemptsTable({
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  <GeneralLayouts.Section
+                  <Section
                     alignItems="start"
                     width="fit"
                     height="fit"
@@ -131,7 +131,7 @@ export function IndexAttemptsTable({
                       status={indexAttempt.status || "not_started"}
                     />
                     {docsPerMinute ? (
-                      <GeneralLayouts.Section
+                      <Section
                         flexDirection="row"
                         justifyContent="start"
                         alignItems="center"
@@ -139,9 +139,9 @@ export function IndexAttemptsTable({
                         height="fit"
                         gap={0.25}
                         // Stack above the row-wide trace overlay button so
-                        // the metrics button is actually clickable on rows
-                        // that have a full exception trace.
-                        className="relative z-10"
+                        // the metrics button stays clickable on rows with
+                        // a full exception trace.
+                        className="relative z-content"
                       >
                         <Text font="secondary-body" color="text-03">
                           {`${docsPerMinute} docs / min`}
@@ -153,7 +153,7 @@ export function IndexAttemptsTable({
                           tooltip="View stage metrics"
                           onClick={() => setMetricsAttemptId(indexAttempt.id)}
                         />
-                      </GeneralLayouts.Section>
+                      </Section>
                     ) : (
                       indexAttempt.status === "success" && (
                         <Text font="secondary-body" color="text-03">
@@ -161,7 +161,7 @@ export function IndexAttemptsTable({
                         </Text>
                       )
                     )}
-                  </GeneralLayouts.Section>
+                  </Section>
                 </TableCell>
                 <TableCell>
                   <div className="flex">
