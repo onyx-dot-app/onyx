@@ -452,8 +452,13 @@ fn trigger_new_window(app: &AppHandle) {
         )
         .title("Onyx")
         .inner_size(1200.0, 800.0)
-        .min_inner_size(800.0, 600.0)
-        .transparent(true);
+        .min_inner_size(800.0, 600.0);
+
+        // Windows draws its own title bar in the system theme; a transparent
+        // window leaves any unpainted region see-through, which produces the
+        // translucent-bar artifact reported on Windows.
+        #[cfg(not(target_os = "windows"))]
+        let builder = builder.transparent(true);
 
         #[cfg(target_os = "macos")]
         let builder = builder
@@ -817,8 +822,10 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     )
     .title("Onyx")
     .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .transparent(true);
+    .min_inner_size(800.0, 600.0);
+
+    #[cfg(not(target_os = "windows"))]
+    let builder = builder.transparent(true);
 
     #[cfg(target_os = "macos")]
     let builder = builder
