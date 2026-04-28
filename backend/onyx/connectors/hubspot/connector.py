@@ -9,6 +9,9 @@ from typing import TypeVar
 
 import requests
 from hubspot import HubSpot
+from hubspot.crm.contacts.models import Filter
+from hubspot.crm.contacts.models import FilterGroup
+from hubspot.crm.contacts.models import PublicObjectSearchRequest
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -30,6 +33,8 @@ HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
 
 HUBSPOT_PAGE_SIZE = 100
+# HubSpot Search API rejects cursors beyond this offset.
+HUBSPOT_SEARCH_LIMIT = 10_000
 
 T = TypeVar("T")
 
@@ -116,6 +121,118 @@ class HubSpotConnector(LoadConnector, PollConnector):
             after = getattr(next_page, "after", None)
             if after is None:
                 break
+
+    def _build_time_filter_group(
+        self,
+        start: datetime | None,
+        end: datetime | None,
+        property_name: str,
+    ) -> FilterGroup:
+        filters: list[Filter] = []
+        if start is not None:
+            filters.append(
+                Filter(
+                    property_name=property_name,
+                    operator="GTE",
+                    value=str(int(start.timestamp() * 1000)),
+                )
+            )
+        if end is not None:
+            filters.append(
+                Filter(
+                    property_name=property_name,
+                    operator="LTE",
+                    value=str(int(end.timestamp() * 1000)),
+                )
+            )
+        return FilterGroup(filters=filters)
+
+    def _search_paginated_results(
+        self,
+        search_fn: Callable[..., Any],
+        properties: list[str],
+        filter_group: FilterGroup,
+        sorts: list[str] | None = None,
+    ) -> Generator[Any, None, None]:
+        after: str | None = None
+        while True:
+            request = PublicObjectSearchRequest(
+                filter_groups=[filter_group],
+                limit=HUBSPOT_PAGE_SIZE,
+                properties=properties,
+                after=after,
+                sorts=sorts,
+            )
+            page = self._call_hubspot(search_fn, public_object_search_request=request)
+            results = getattr(page, "results", [])
+            for result in results:
+                yield result
+
+            paging = getattr(page, "paging", None)
+            next_page = getattr(paging, "next", None) if paging else None
+            if next_page is None:
+                break
+            after = getattr(next_page, "after", None)
+            if after is None:
+                break
+
+    def _search_time_range(
+        self,
+        search_fn: Callable[..., Any],
+        properties: list[str],
+        start: datetime,
+        end: datetime,
+        modified_date_prop: str,
+    ) -> Generator[Any, None, None]:
+        """Search [start, end] sorted by modified date ASC.
+
+        If results hit the 10,000-record hard cap, yield all fetched results
+        and continue from the last seen modified timestamp. Documents sharing
+        that exact timestamp may be yielded twice (acceptable — re-indexing is
+        idempotent).
+
+        Note: PublicObjectSearchRequest does not support an `associations`
+        parameter, so objects returned here will not have inline association
+        data. _extract_inline_association_ids will return None for each object,
+        falling back to a v4 associations API call per association type per
+        record (O(N×M) extra calls). This is acceptable for poll windows, which
+        are small by design (typically tens to low hundreds of changed objects
+        per 15-second window).
+        """
+        filter_group = self._build_time_filter_group(start, end, modified_date_prop)
+        results: list[Any] = []
+        for result in self._search_paginated_results(
+            search_fn, properties, filter_group, sorts=[modified_date_prop]
+        ):
+            results.append(result)
+            if len(results) >= HUBSPOT_SEARCH_LIMIT:
+                break
+
+        yield from results
+
+        if len(results) < HUBSPOT_SEARCH_LIMIT:
+            return
+
+        # Hit the cap — continue from the last seen modified timestamp.
+        last_ts_ms = (results[-1].properties or {}).get(modified_date_prop)
+        if last_ts_ms is None:
+            logger.error(
+                "HubSpot search limit reached but last modified timestamp is "
+                "unavailable; records after the 10,000th may be missing."
+            )
+            return
+
+        next_start = datetime.fromtimestamp(int(last_ts_ms) / 1000, tz=timezone.utc)
+        if next_start <= start:
+            logger.error(
+                "HubSpot search limit reached but timestamp did not advance; "
+                "records after the 10,000th may be missing."
+            )
+            return
+
+        yield from self._search_time_range(
+            search_fn, properties, next_start, end, modified_date_prop
+        )
 
     def _clean_html_content(self, html_content: str) -> str:
         """Clean HTML content and extract raw text"""
@@ -432,27 +549,32 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        tickets_iter = self._paginated_results(
-            api_client.crm.tickets.basic_api.get_page,
-            properties=[
-                "subject",
-                "content",
-                "hs_ticket_priority",
-                "createdate",
+        ticket_properties = [
+            "subject",
+            "content",
+            "hs_ticket_priority",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            tickets_iter = self._search_time_range(
+                api_client.crm.tickets.search_api.do_search,
+                ticket_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "companies", "deals"],
-        )
+            )
+        else:
+            tickets_iter = self._paginated_results(
+                api_client.crm.tickets.basic_api.get_page,
+                properties=ticket_properties,
+                associations=["contacts", "companies", "deals"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for ticket in tickets_iter:
-            updated_at = ticket.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = ticket.properties.get("subject") or f"Ticket {ticket.id}"
             link = self._get_object_url("tickets", ticket.id)
             content_text = ticket.properties.get("content") or ""
@@ -560,30 +682,35 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        companies_iter = self._paginated_results(
-            api_client.crm.companies.basic_api.get_page,
-            properties=[
-                "name",
-                "domain",
-                "industry",
-                "city",
-                "state",
-                "description",
-                "createdate",
+        company_properties = [
+            "name",
+            "domain",
+            "industry",
+            "city",
+            "state",
+            "description",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            companies_iter = self._search_time_range(
+                api_client.crm.companies.search_api.do_search,
+                company_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "deals", "tickets"],
-        )
+            )
+        else:
+            companies_iter = self._paginated_results(
+                api_client.crm.companies.basic_api.get_page,
+                properties=company_properties,
+                associations=["contacts", "deals", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for company in companies_iter:
-            updated_at = company.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = company.properties.get("name") or f"Company {company.id}"
             link = self._get_object_url("companies", company.id)
 
@@ -710,30 +837,35 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        deals_iter = self._paginated_results(
-            api_client.crm.deals.basic_api.get_page,
-            properties=[
-                "dealname",
-                "amount",
-                "dealstage",
-                "closedate",
-                "pipeline",
-                "description",
-                "createdate",
+        deal_properties = [
+            "dealname",
+            "amount",
+            "dealstage",
+            "closedate",
+            "pipeline",
+            "description",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            deals_iter = self._search_time_range(
+                api_client.crm.deals.search_api.do_search,
+                deal_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "companies", "tickets"],
-        )
+            )
+        else:
+            deals_iter = self._paginated_results(
+                api_client.crm.deals.basic_api.get_page,
+                properties=deal_properties,
+                associations=["contacts", "companies", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for deal in deals_iter:
-            updated_at = deal.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = deal.properties.get("dealname") or f"Deal {deal.id}"
             link = self._get_object_url("deals", deal.id)
 
@@ -858,32 +990,37 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        contacts_iter = self._paginated_results(
-            api_client.crm.contacts.basic_api.get_page,
-            properties=[
-                "firstname",
-                "lastname",
-                "email",
-                "company",
-                "jobtitle",
-                "phone",
-                "city",
-                "state",
-                "createdate",
+        contact_properties = [
+            "firstname",
+            "lastname",
+            "email",
+            "company",
+            "jobtitle",
+            "phone",
+            "city",
+            "state",
+            "createdate",
+            "lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            contacts_iter = self._search_time_range(
+                api_client.crm.contacts.search_api.do_search,
+                contact_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "lastmodifieddate",
-            ],
-            associations=["companies", "deals", "tickets"],
-        )
+            )
+        else:
+            contacts_iter = self._paginated_results(
+                api_client.crm.contacts.basic_api.get_page,
+                properties=contact_properties,
+                associations=["companies", "deals", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for contact in contacts_iter:
-            updated_at = contact.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             # Build contact name
             name_parts = []
             if contact.properties.get("firstname"):
