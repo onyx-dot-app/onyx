@@ -1005,6 +1005,8 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
     if not is_running_in_container():
         return
 
+    # In k8s each worker runs in its own pod with an isolated pid namespace,
+    # so psutil.process_iter() only sees the local worker.
     if is_running_in_kubernetes():
         return
 
