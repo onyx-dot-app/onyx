@@ -16,7 +16,14 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
+
+# EE is considered enabled when either ENTERPRISE_EDITION_ENABLED or
+# LICENSE_ENFORCEMENT_ENABLED is set (see set_is_ee_based_on_env_variable).
+# The block below schedules EE-only permission sync tasks, so it must use
+# the same combined check.
+_EE_FEATURES_ENABLED = ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
 # we might be able to reduce this greatly if we can run a unified
@@ -175,7 +182,7 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-if ENTERPRISE_EDITION_ENABLED:
+if _EE_FEATURES_ENABLED:
     beat_task_templates.extend(
         [
             {
