@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import {

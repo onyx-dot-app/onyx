@@ -4,7 +4,7 @@ import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState, RenderType } from "../interfaces";
 import { TurnGroup } from "./transformers";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineExpansion } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineExpansion";

@@ -8,7 +8,7 @@ import React, {
   JSX,
 } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 // Create a context for the tooltip group
 const TooltipGroupContext = createContext<{

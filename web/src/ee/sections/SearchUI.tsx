@@ -25,7 +25,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 

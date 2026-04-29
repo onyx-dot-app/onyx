@@ -1,5 +1,6 @@
-/* Disabled — baseline disabled visuals via Radix Slot (no extra DOM node).
+/* Disabled — baseline disabled visuals applied via a wrapper <div>.
  *
+ * .opal-disabled                         → wrapper stretches to fill parent cross-axis
  * [data-opal-disabled]                   → cursor + pointer-events for all
  * [data-opal-disabled]:not(.interactive) → opacity for non-Interactive elements
  * [data-opal-disabled][data-allow-click] → re-enables clicks
@@ -9,8 +10,15 @@
  * re-enabled so the JS layer can suppress onClick.
  */
 
+.opal-disabled {
+  @apply self-stretch;
+}
+
 [data-opal-disabled] {
   @apply cursor-not-allowed select-none;
+}
+
+[data-opal-disabled] > * {
   pointer-events: none;
 }
 

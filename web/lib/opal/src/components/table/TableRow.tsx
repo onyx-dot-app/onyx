@@ -2,7 +2,7 @@
 
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SvgHandle } from "@opal/icons";

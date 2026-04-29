@@ -8,7 +8,7 @@ import {
   useRef,
   useLayoutEffect,
 } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { Tooltip as OpalTooltip } from "@opal/components";

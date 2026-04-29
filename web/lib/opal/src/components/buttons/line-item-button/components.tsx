@@ -89,6 +89,7 @@ function LineItemButton({
       >
         <div className="w-full p-2">
           <ContentAction
+            color="interactive"
             {...(contentActionProps as ContentActionProps)}
             padding="fit"
           />

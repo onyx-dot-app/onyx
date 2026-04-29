@@ -5,7 +5,7 @@ import { SettingsContext } from "@/providers/SettingsProvider";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
