@@ -163,7 +163,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       await page.goto("/admin/configuration/llm");
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/configuration/llm");
+      expect(page.url()).toContain("/admin/configuration/language-models");
       await expect(
         page.getByLabel("admin-page-title").getByText("Language Models")
       ).toBeVisible({

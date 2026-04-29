@@ -79,7 +79,7 @@ test("group permissions apply immediately when a user is added to the group", as
       "manage:llms should imply read:users for LLM sharing UI"
     );
 
-    await page.goto("/admin/configuration/llm");
+    await page.goto("/admin/configuration/language-models");
     await expect(page.getByLabel("admin-page-title")).toContainText(
       "Language Models"
     );
@@ -90,7 +90,7 @@ test("group permissions apply immediately when a user is added to the group", as
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
 
     await page.goto("/admin/users");
-    await expect(page).toHaveURL(/\/admin\/configuration\/llm/);
+    await expect(page).toHaveURL(/\/admin\/configuration\/language-models/);
   } finally {
     await page.context().clearCookies();
     await loginAs(page, "admin");

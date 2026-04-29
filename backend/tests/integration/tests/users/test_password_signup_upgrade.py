@@ -42,7 +42,7 @@ def test_password_signup_upgrade(
     assigned to the Basic default group."""
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
-    test_email = f"{seeded_account_type.value}_upgrade@example.com"
+    test_email = f"{seeded_account_type.value.lower()}_upgrade@example.com"
     UserManager.seed_non_web_user(seeded_account_type, test_email)
 
     # Non-web users should not be in the Basic default group before upgrade

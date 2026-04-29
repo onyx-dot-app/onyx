@@ -29,11 +29,10 @@ class TestBotConfigIsolationCloudMode:
     def test_cannot_create_bot_config_in_cloud_mode(self) -> None:
         """Bot config creation is blocked in cloud mode."""
         with patch("onyx.configs.app_configs.AUTH_TYPE", AuthType.CLOUD):
-            from fastapi import HTTPException
-
+            from onyx.error_handling.exceptions import OnyxError
             from onyx.server.manage.discord_bot.api import _check_bot_config_api_access
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 _check_bot_config_api_access()
 
             assert exc_info.value.status_code == 403

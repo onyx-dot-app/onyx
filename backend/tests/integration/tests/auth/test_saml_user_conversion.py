@@ -65,7 +65,7 @@ def test_saml_converts_non_web_user(
     """SAML login converts a non-web user (BOT or EXT_PERM_USER) to STANDARD."""
     admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
-    test_email = f"{seeded_account_type.value}_saml@example.com"
+    test_email = f"{seeded_account_type.value.lower()}_saml@example.com"
     UserManager.seed_non_web_user(seeded_account_type, test_email)
 
     # Pre-condition: non-web users are not in Basic default group
