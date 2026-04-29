@@ -90,6 +90,17 @@ class IndexingMode(str, PyEnum):
     REINDEX = "reindex"
 
 
+class IndexAttemptType(str, PyEnum):
+    """Discriminator on `index_attempt`. `FULL_RUN` rows are real indexing
+    attempts spawned by the scheduler or `run-once`. `TARGETED_RETRY` rows
+    are synthetic attempts created when an admin retries specific failed
+    documents — they reuse the indexing pipeline but are excluded from
+    freshness, scheduling, and swap-gating queries."""
+
+    FULL_RUN = "full_run"
+    TARGETED_RETRY = "targeted_retry"
+
+
 class ProcessingMode(str, PyEnum):
     """Determines how documents are processed after fetching."""
 

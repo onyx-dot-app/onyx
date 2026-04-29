@@ -68,6 +68,7 @@ from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
+from onyx.db.enums import IndexAttemptType
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -2183,6 +2184,66 @@ class SearchSettings(Base):
         )
 
 
+class RetryJob(Base):
+    """
+    Lifecycle row for a single user-initiated targeted-retry request.
+
+    A request can span multiple `(cc_pair, search_settings)` tuples; one
+    synthetic `IndexAttempt` is created per tuple and links back via
+    `IndexAttempt.retry_job_id`. The FE polls this row for aggregate
+    status. Per-cc_pair execution state lives on the linked attempts.
+    """
+
+    __tablename__ = "retry_job"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    requested_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+        nullable=False,
+    )
+    status: Mapped[IndexingStatus] = mapped_column(
+        Enum(IndexingStatus, native_enum=False),
+        nullable=False,
+        server_default=IndexingStatus.NOT_STARTED.name,
+        index=True,
+    )
+
+    # Snapshot of the IndexAttemptError ids the request targeted. Used for
+    # idempotency on Celery redelivery and for the resolved_summary join
+    # at completion.
+    error_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, server_default="{}"
+    )
+
+    resolved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    still_failing_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Snapshot of resolved error rows captured at completion. Survives
+    # later cleanup of the underlying `index_attempt_errors` rows.
+    resolved_summary: Mapped[list[dict[str, Any]]] = mapped_column(
+        PGJSONB, nullable=False, server_default="[]"
+    )
+
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    index_attempts: Mapped[list["IndexAttempt"]] = relationship(
+        "IndexAttempt",
+        back_populates="retry_job",
+        primaryjoin="RetryJob.id == IndexAttempt.retry_job_id",
+    )
+
+
 class IndexAttempt(Base):
     """
     Represents an attempt to index a group of 0 or more documents from a
@@ -2204,6 +2265,23 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
+    # Discriminator separating real indexing runs from synthetic
+    # `targeted_retry` attempts created by the per-document retry path.
+    # Existing rows backfill to FULL_RUN; freshness, scheduling, and
+    # swap-gating queries filter on this column.
+    attempt_type: Mapped[IndexAttemptType] = mapped_column(
+        Enum(IndexAttemptType, native_enum=False),
+        nullable=False,
+        server_default=IndexAttemptType.FULL_RUN.name,
+        index=True,
+    )
+    # Set on synthetic retry attempts; links back to the `retry_job` row
+    # the FE polls for aggregate status.
+    retry_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("retry_job.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2282,6 +2360,10 @@ class IndexAttempt(Base):
 
     search_settings: Mapped[SearchSettings | None] = relationship(
         "SearchSettings", back_populates="index_attempts"
+    )
+
+    retry_job: Mapped["RetryJob | None"] = relationship(
+        "RetryJob", back_populates="index_attempts"
     )
 
     error_rows = relationship(
@@ -2434,6 +2516,41 @@ class IndexAttemptError(Base):
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+    )
+
+    # Targeted-retry audit columns. All nullable / additive; existing rows
+    # leave them null. Original `failure_message` and `error_type` are
+    # preserved across retries — per-attempt outcomes are appended to
+    # `retry_history` instead.
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_retry_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_retry_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("retry_job.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # JSON array; each retry appends an entry shaped like
+    # {retry_job_id, retried_at, new_error_type, new_failure_message, succeeded}.
+    # Caller responsibility to bound length (most-recent-N).
+    retry_history: Mapped[list[dict[str, Any]]] = mapped_column(
+        PGJSONB, nullable=False, server_default="[]"
+    )
+    # Connector-specific keys required for a retry round-trip (e.g.
+    # Sharepoint stores `{site_id, drive_id}` because Graph API needs both
+    # to refetch by `driveItemId`). Other connectors leave it null.
+    connector_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB, nullable=True
     )
 
     # This is the reverse side of the relationship
