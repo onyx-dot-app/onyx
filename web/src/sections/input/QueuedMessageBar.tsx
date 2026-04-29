@@ -1,6 +1,6 @@
 import { Text, Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/interfaces";
 
 interface QueuedMessageBarProps {

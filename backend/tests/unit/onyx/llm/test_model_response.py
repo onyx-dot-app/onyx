@@ -13,10 +13,8 @@ from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 
 if TYPE_CHECKING:
-    from litellm.types.utils import (
-        ModelResponse as LiteLLMModelResponse,
-        ModelResponseStream as LiteLLMModelResponseStream,
-    )
+    from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+    from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
 
 
 class _LiteLLMStreamDouble:

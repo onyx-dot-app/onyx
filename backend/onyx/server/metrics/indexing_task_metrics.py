@@ -32,7 +32,6 @@ from prometheus_client import Histogram
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.server.metrics.celery_task_metrics import _MAX_START_TIME_AGE_SECONDS
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -113,20 +112,21 @@ def _evict_stale_start_times() -> None:
         _indexing_start_times.pop(tid, None)
 
 
-def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
+def _resolve_connector(cc_pair_id: int, tenant_id: str) -> ConnectorInfo:
     """Resolve cc_pair_id to ConnectorInfo, using cache when possible.
 
     On cache miss, does a single DB query with eager connector load.
     On any failure, returns _UNKNOWN_CONNECTOR without caching, so that
     subsequent calls can retry the lookup once the DB is available.
 
-    Note on tenant_id source: we read CURRENT_TENANT_ID_CONTEXTVAR for the
-    cache key. The Celery tenant-aware middleware sets this contextvar before
-    task execution, and it always matches kwargs["tenant_id"] (which is set
-    at task dispatch time). They are guaranteed to agree for a given task
-    execution context.
+    tenant_id must be passed in explicitly. The signal callbacks that call
+    this run outside the TenantAwareTask body (prerun fires before, postrun
+    fires after the contextvar is cleared), so CURRENT_TENANT_ID_CONTEXTVAR
+    is not reliably set at this point.
     """
-    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get("") or ""
+    if not tenant_id or tenant_id == "unknown":
+        return _UNKNOWN_CONNECTOR
+
     cache_key = (tenant_id, cc_pair_id)
 
     with _connector_cache_lock:
@@ -138,9 +138,9 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
         from onyx.db.connector_credential_pair import (
             get_connector_credential_pair_from_id,
         )
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+        from onyx.db.engine.sql_engine import get_session_with_tenant
 
-        with get_session_with_current_tenant() as db_session:
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session,
                 cc_pair_id,
@@ -190,7 +190,7 @@ def on_indexing_task_prerun(
         if cc_pair_id is None:
             return
 
-        info = _resolve_connector(cc_pair_id)
+        info = _resolve_connector(cc_pair_id, tenant_id)
 
         INDEXING_TASK_STARTED.labels(
             task_name=task_name,
@@ -230,7 +230,7 @@ def on_indexing_task_postrun(
         if cc_pair_id is None:
             return
 
-        info = _resolve_connector(cc_pair_id)
+        info = _resolve_connector(cc_pair_id, tenant_id)
         outcome = "success" if state == "SUCCESS" else "failure"
 
         INDEXING_TASK_COMPLETED.labels(

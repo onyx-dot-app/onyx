@@ -229,8 +229,8 @@ class MCPTool(Tool[None]):
                         f"Re-authentication may be required after token expiry."
                     )
                 else:
-                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
                     from onyx.server.features.mcp.api import make_oauth_provider
+                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
 
                     # user_id is the requesting user's UUID; safe here because
                     # UNUSED_RETURN_PATH ensures redirect_handler raises immediately

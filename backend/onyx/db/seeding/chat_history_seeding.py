@@ -75,6 +75,9 @@ def seed_chat_history(
                     minutes=random.randint(0, 10)
                 )
 
+                if current_message_type == MessageType.ASSISTANT:
+                    chat_message.model_display_name = "pytest-model"
+
                 db_session.commit()
 
                 current_message_type = (

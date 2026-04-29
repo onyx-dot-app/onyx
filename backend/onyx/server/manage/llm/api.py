@@ -47,6 +47,7 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
+from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -176,21 +177,6 @@ def _sync_fetched_models(
         logger.warning(f"Failed to sync {source_label} models to DB: {e}")
 
 
-# Keys in custom_config that contain sensitive credentials
-_SENSITIVE_CONFIG_KEYS = {
-    "vertex_credentials",
-    "aws_secret_access_key",
-    "aws_access_key_id",
-    "aws_bearer_token_bedrock",
-    "private_key",
-    "api_key",
-    "secret",
-    "password",
-    "token",
-    "credential",
-}
-
-
 def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
     """Mask sensitive credentials in provider view including api_key and custom_config."""
     # Mask the API key
@@ -201,28 +187,18 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
     if provider_view.custom_config:
         masked_config: dict[str, Any] = {}
         for key, value in provider_view.custom_config.items():
-            # Check if key matches any sensitive pattern (case-insensitive)
-            key_lower = key.lower()
-            is_sensitive = any(
-                sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS
-            )
-            if is_sensitive and isinstance(value, str) and value:
+            if is_sensitive_custom_config_key(key) and isinstance(value, str) and value:
                 masked_config[key] = _mask_string(value)
             else:
                 masked_config[key] = value
         provider_view.custom_config = masked_config
 
 
-def _is_sensitive_custom_config_key(key: str) -> bool:
-    key_lower = key.lower()
-    return any(sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS)
-
-
 def _is_masked_value_for_existing(
     incoming_value: str, existing_value: str, key: str
 ) -> bool:
     """Return True when incoming_value is a masked round-trip of existing_value."""
-    if not _is_sensitive_custom_config_key(key):
+    if not is_sensitive_custom_config_key(key):
         return False
 
     masked_candidates = {

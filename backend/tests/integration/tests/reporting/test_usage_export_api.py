@@ -315,6 +315,7 @@ class TestUsageExportAPI:
                     "assistant_name",
                     "user_email",
                     "number_of_tokens",
+                    "llm_model",
                 }
                 actual_columns = set(csv_reader.fieldnames or [])
                 assert (
@@ -342,6 +343,9 @@ class TestUsageExportAPI:
                 assert (
                     int(first_row["number_of_tokens"]) >= 0
                 ), "number_of_tokens should be non-negative"
+                assert (
+                    first_row["llm_model"] == "pytest-model"
+                ), "llm_model should reflect the assistant reply's model"
 
     def test_read_nonexistent_report(
         self,

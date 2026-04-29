@@ -141,3 +141,102 @@ export const preprocessLaTeX = (content: string) => {
 
   return restoredCodeBlocks;
 };
+
+// Hides code blocks behind temporary markers so the caller can count `$`
+// or `$$` without including ones that live inside code. Closed
+// ```...``` blocks become markers. A leftover ``` (mid-stream, no closer
+// yet) is sliced off as `tail` so the caller skips it entirely.
+// `restore` puts the original code blocks back.
+const protectCodeFences = (
+  content: string,
+  label: string
+): {
+  head: string;
+  tail: string;
+  restore: (s: string) => string;
+} => {
+  const nonce = Math.random().toString(36).slice(2);
+  const blocks: string[] = [];
+  const replaced = content.replace(/```[\s\S]*?```/g, (match) => {
+    blocks.push(match);
+    return `___${label}_${nonce}_CB_${blocks.length - 1}___`;
+  });
+
+  const lastOpen = replaced.lastIndexOf("```");
+  const head = lastOpen >= 0 ? replaced.slice(0, lastOpen) : replaced;
+  const tail = lastOpen >= 0 ? replaced.slice(lastOpen) : "";
+
+  return {
+    head,
+    tail,
+    restore: (s) =>
+      s.replace(
+        new RegExp(`___${label}_${nonce}_CB_(\\d+)___`, "g"),
+        (_, i) => blocks[Number(i)] ?? ""
+      ),
+  };
+};
+
+// Mid-stream the buffer can hold `$$x = y` with no closing `$$` yet.
+// Escape the lone `$$` to `\$\$` so the renderer shows it as literal
+// text instead of broken math. Once the closing `$$` arrives, the count
+// is balanced again and we leave it alone — the formula renders.
+export const escapeIncompleteBlockMath = (content: string): string => {
+  const { head, tail, restore } = protectCodeFences(content, "MATHESC");
+
+  // split on `$$`. Even number of pieces ⇒ odd number of `$$` ⇒ one is
+  // unmatched. Replace the last separator with an escaped `\$\$`.
+  const parts = head.split("$$");
+  let processedHead = head;
+  if (parts.length % 2 === 0) {
+    const last = parts[parts.length - 1] ?? "";
+    const before = parts.slice(0, -1).join("$$");
+    processedHead = `${before}\\$\\$${last}`;
+  }
+
+  return restore(processedHead + tail);
+};
+
+// Same idea as escapeIncompleteBlockMath, but for single `$` (inline
+// math). Mid-stream `The cost is $\frac{a}{` has one unmatched `$` —
+// escape it to `\$` so the renderer doesn't open a broken inline-math
+// span. Runs AFTER preprocessLaTeX so currency dollars are already
+// `\$5` (and won't be miscounted as inline-math openers).
+export const escapeIncompleteInlineMath = (content: string): string => {
+  const {
+    head: rawHead,
+    tail,
+    restore: restoreFences,
+  } = protectCodeFences(content, "INLMATH");
+
+  // Hide balanced `$$...$$` blocks too — their interior `$` is part of
+  // block math, not a separate inline delimiter.
+  const blockMath: string[] = [];
+  const blockNonce = Math.random().toString(36).slice(2);
+  let working = rawHead.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+    blockMath.push(match);
+    return `___INLMATH_${blockNonce}_BM_${blockMath.length - 1}___`;
+  });
+
+  // Walk the string; collect positions of `$` that aren't already
+  // escaped (i.e. preceding char isn't `\`). Odd count → escape the
+  // last one.
+  const indices: number[] = [];
+  for (let i = 0; i < working.length; i++) {
+    if (working[i] === "$" && (i === 0 || working[i - 1] !== "\\")) {
+      indices.push(i);
+    }
+  }
+  if (indices.length % 2 === 1) {
+    const last = indices[indices.length - 1] as number;
+    working = working.slice(0, last) + "\\$" + working.slice(last + 1);
+  }
+
+  // Restore in reverse order: block-math markers first (they may
+  // contain code-fence markers inside them), then code fences.
+  const restoredBlocks = working.replace(
+    new RegExp(`___INLMATH_${blockNonce}_BM_(\\d+)___`, "g"),
+    (_, i) => blockMath[Number(i)] ?? ""
+  );
+  return restoreFences(restoredBlocks + tail);
+};

@@ -7,7 +7,6 @@ from datetime import timezone
 
 from openai import OpenAI
 
-
 ASSISTANT_NAME = "Topic Analyzer"
 SYSTEM_PROMPT = """
 You are a helpful assistant that analyzes topics by searching through available \

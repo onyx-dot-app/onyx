@@ -35,9 +35,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.document import DocumentSource
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.document_index_utils import (
-    get_multipass_config,
-)
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder

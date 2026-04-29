@@ -40,6 +40,8 @@ from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
+from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -83,9 +85,7 @@ from onyx.server.features.hierarchy.api import router as hierarchy_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
-from onyx.server.features.input_prompt.api import (
-    basic_router as input_prompt_router,
-)
+from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.notifications.api import router as notification_router
@@ -127,9 +127,7 @@ from onyx.server.manage.users import router as user_router
 from onyx.server.manage.voice.api import admin_router as voice_admin_router
 from onyx.server.manage.voice.user_api import router as voice_router
 from onyx.server.manage.voice.websocket_api import router as voice_websocket_router
-from onyx.server.manage.web_search.api import (
-    admin_router as web_search_admin_router,
-)
+from onyx.server.manage.web_search.api import admin_router as web_search_admin_router
 from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
@@ -141,20 +139,17 @@ from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
-from onyx.server.query_and_chat.query_backend import (
-    admin_router as admin_query_router,
-)
+from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml import router as saml_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
-from onyx.server.token_rate_limits.api import (
-    router as token_rate_limit_settings_router,
-)
+from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_endpoint_context_middleware
@@ -563,10 +558,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
         AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
     ):
+        google_login_scopes = list(
+            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
+        )
+
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,
-            scopes=["openid", "email", "profile"],
+            scopes=google_login_scopes,
         )
         include_auth_router_with_prefix(
             application,
@@ -664,6 +663,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # (requires CAPTCHA_ENABLED=true and RECAPTCHA_SECRET_KEY set).
     application.add_middleware(CaptchaCookieMiddleware)
     application.add_middleware(LoginCaptchaMiddleware)
+
+    # Registered last so it is the outermost middleware and the client-IP
+    # contextvar is set before any downstream middleware, handler, or telemetry
+    # call runs. Added in place once — downstream capture sites read it via
+    # ``current_client_ip()`` rather than threading the request through.
+    application.add_middleware(ClientIPMiddleware)
+
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 

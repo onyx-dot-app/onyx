@@ -9,7 +9,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 

@@ -7,7 +7,6 @@ from pywikibot.family import Family
 
 from onyx.connectors.mediawiki import family
 
-
 # Disabling these tests as they are flaky and rely on external wikis that are maintained by just fan communities
 
 

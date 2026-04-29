@@ -447,13 +447,15 @@ def monitor_document_set_taskset(
 
 
 @shared_task(
-    name=OnyxCeleryTask.VESPA_METADATA_SYNC_TASK,
+    name=OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
     bind=True,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
     time_limit=LIGHT_TIME_LIMIT,
     max_retries=3,
 )
-def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) -> bool:
+def document_index_metadata_sync_task(
+    self: Task, document_id: str, *, tenant_id: str
+) -> bool:
     start = time.monotonic()
 
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
@@ -547,7 +549,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                 break
 
             task_logger.exception(
-                f"vespa_metadata_sync_task exceptioned: doc={document_id}"
+                f"document_index_metadata_sync_task exceptioned: doc={document_id}"
             )
 
             completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
@@ -565,7 +567,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             break  # we won't hit this, but it looks weird not to have it
     finally:
         task_logger.info(
-            f"vespa_metadata_sync_task completed: status={completion_status.value} doc={document_id}"
+            f"document_index_metadata_sync_task completed: status={completion_status.value} doc={document_id}"
         )
 
     return completion_status == OnyxCeleryTaskCompletionStatus.SUCCEEDED

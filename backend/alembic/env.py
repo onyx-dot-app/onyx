@@ -25,6 +25,7 @@ from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA,
     TENANT_ID_PREFIX,
 )
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from onyx.db.models import Base
 from celery.backends.database.session import (  # ty: ignore[unresolved-import]
     ResultModelBase,
@@ -218,8 +219,15 @@ def do_run_migrations(
         script_location=config.get_main_option("script_location"),
     )
 
-    with context.begin_transaction():
-        context.run_migrations()
+    # Migrations may call into code that reads CURRENT_TENANT_ID_CONTEXTVAR
+    # (e.g. get_kv_store().load() in 4ee1287bd26a). search_path alone is not
+    # enough — set the Python contextvar to match.
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(schema_name)
+    try:
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def provide_iam_token_for_alembic(

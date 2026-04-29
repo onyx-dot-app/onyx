@@ -181,6 +181,28 @@ async def test_unexpected_environment_reason_rejects() -> None:
 
 
 @pytest.mark.asyncio
+async def test_low_confidence_score_reason_rejects() -> None:
+    client = _fake_client(_assessment(score=0.9, reasons=["LOW_CONFIDENCE_SCORE"]))
+    with (
+        patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+    ):
+        with pytest.raises(CaptchaVerificationError, match="LOW_CONFIDENCE_SCORE"):
+            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+
+
+@pytest.mark.asyncio
+async def test_suspected_carding_reason_rejects() -> None:
+    client = _fake_client(_assessment(score=0.9, reasons=["SUSPECTED_CARDING"]))
+    with (
+        patch.object(captcha_module, "is_captcha_enabled", return_value=True),
+        patch.object(captcha_module.httpx, "AsyncClient", return_value=client),
+    ):
+        with pytest.raises(CaptchaVerificationError, match="SUSPECTED_CARDING"):
+            await verify_captcha_token("tok", CaptchaAction.SIGNUP)
+
+
+@pytest.mark.asyncio
 async def test_score_below_floor_rejects() -> None:
     client = _fake_client(_assessment(score=0.1))
     with (
@@ -193,9 +215,15 @@ async def test_score_below_floor_rejects() -> None:
 
 @pytest.mark.asyncio
 async def test_soft_reason_alone_does_not_reject() -> None:
-    """LOW_CONFIDENCE_SCORE is not in the hard-reject set; if the score is
-    above floor and nothing else fails, the request passes."""
-    client = _fake_client(_assessment(score=0.9, reasons=["LOW_CONFIDENCE_SCORE"]))
+    """Reasons outside the hard-reject set (e.g. SUSPECTED_CHARGEBACK,
+    UNEXPECTED_USAGE_PATTERNS) do not by themselves reject — if the score is
+    above floor and nothing else fails, the request passes.
+    """
+    client = _fake_client(
+        _assessment(
+            score=0.9, reasons=["SUSPECTED_CHARGEBACK", "UNEXPECTED_USAGE_PATTERNS"]
+        )
+    )
     with (
         patch.object(captcha_module, "is_captcha_enabled", return_value=True),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=client),

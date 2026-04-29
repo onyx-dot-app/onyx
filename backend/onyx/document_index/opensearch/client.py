@@ -29,8 +29,8 @@ from onyx.server.metrics.opensearch_search import track_opensearch_search_in_pro
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
-
 CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
+DEFAULT_INDEX_SETTINGS_TIMEOUT_S = 15
 
 
 logger = setup_logger(__name__)
@@ -342,7 +342,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "mappings": mappings,
             "settings": settings,
         }
-        logger.debug(f"Creating index {self._index_name} with body {body}.")
+        logger.debug(f"Creating index {self._index_name}.")
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -369,10 +369,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
             return False
 
-        logger.debug(f"Deleting index {self._index_name}.")
+        logger.info(f"Deleting index {self._index_name}.")
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
+        logger.info(f"Index {self._index_name} deleted successfully.")
         return True
 
     @log_function_time(print_only=True, debug_only=True)
@@ -407,9 +408,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             Exception: There was an error updating the mappings, such as
                 attempting to change the type of an existing field.
         """
-        logger.debug(
-            f"Putting mappings for index {self._index_name} with mappings {mappings}."
-        )
+        logger.debug(f"Putting mappings for index {self._index_name}.")
         response = self._client.indices.put_mapping(
             index=self._index_name, body=mappings
         )
@@ -448,9 +447,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 f"Tried to validate index {self._index_name} but it does not exist."
             )
             return False
-        logger.debug(
-            f"Validating index {self._index_name} with expected mappings {expected_mappings}."
-        )
+        logger.debug(f"Validating index {self._index_name}.")
 
         get_result = self._client.indices.get(index=self._index_name)
         index_info: dict[str, Any] = get_result.get(self._index_name, {})
@@ -495,7 +492,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         return True
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
-    def update_settings(self, settings: dict[str, Any]) -> None:
+    def update_settings(
+        self,
+        settings: dict[str, Any],
+        timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S,
+    ) -> None:
         """Updates the settings of the index.
 
         See the OpenSearch documentation for more information on the index
@@ -508,9 +509,12 @@ class OpenSearchIndexClient(OpenSearchClient):
         Raises:
             Exception: There was an error updating the settings of the index.
         """
-        logger.debug(f"Updating settings of index {self._index_name} with {settings}.")
+        logger.debug(f"Updating settings of index {self._index_name}.")
+        params = {
+            "timeout": timeout,
+        }
         response = self._client.indices.put_settings(
-            index=self._index_name, body=settings
+            index=self._index_name, body=settings, params=params
         )
         if not response.get("acknowledged", False):
             raise RuntimeError(
@@ -525,6 +529,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         flat_settings: bool = False,
         pretty: bool = False,
         human: bool = False,
+        timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """Gets the settings of the index.
 
@@ -551,6 +556,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "flat_settings": str(flat_settings).lower(),
             "pretty": str(pretty).lower(),
             "human": str(human).lower(),
+            "timeout": timeout,
         }
         response = self._client.indices.get_settings(
             index=self._index_name, params=params
@@ -560,27 +566,33 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
 
     @log_function_time(print_only=True, debug_only=True)
-    def open_index(self) -> None:
+    def open_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
         """Opens the index.
 
         Raises:
             Exception: There was an error opening the index.
         """
         logger.debug(f"Opening index {self._index_name}.")
-        response = self._client.indices.open(index=self._index_name)
+        params = {
+            "timeout": timeout,
+        }
+        response = self._client.indices.open(index=self._index_name, params=params)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to open index {self._index_name}.")
         logger.debug(f"Index {self._index_name} opened successfully.")
 
     @log_function_time(print_only=True, debug_only=True)
-    def close_index(self) -> None:
+    def close_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
         """Closes the index.
 
         Raises:
             Exception: There was an error closing the index.
         """
         logger.debug(f"Closing index {self._index_name}.")
-        response = self._client.indices.close(index=self._index_name)
+        params = {
+            "timeout": timeout,
+        }
+        response = self._client.indices.close(index=self._index_name, params=params)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to close index {self._index_name}.")
         logger.debug(f"Index {self._index_name} closed successfully.")
@@ -697,6 +709,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             Exception: There was an error during the bulk index. This
                 includes the case where a document with the same ID already
                 exists if update_if_exists is False.
+            BulkIndexError: There was an error during the bulk index. This is a
+                known specific error type that is raised by the opensearchpy
+                library's bulk function.
         """
         if not documents:
             return

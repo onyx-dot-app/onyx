@@ -1,6 +1,6 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { OptionsList } from "./OptionsList";
 import { ComboBoxOption } from "../types";
 

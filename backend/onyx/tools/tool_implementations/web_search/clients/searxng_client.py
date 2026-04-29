@@ -1,12 +1,8 @@
 import requests
 from fastapi import HTTPException
 
-from onyx.tools.tool_implementations.web_search.models import (
-    WebSearchProvider,
-)
-from onyx.tools.tool_implementations.web_search.models import (
-    WebSearchResult,
-)
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 

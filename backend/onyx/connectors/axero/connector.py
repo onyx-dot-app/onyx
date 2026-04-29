@@ -7,14 +7,11 @@ import requests
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    process_in_batches,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import process_in_batches
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -24,7 +21,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-
 
 logger = setup_logger()
 
@@ -42,7 +38,9 @@ def _rate_limited_request(
     endpoint: str, headers: dict, params: dict | None = None
 ) -> Any:
     # https://my.axerosolutions.com/spaces/5/communifire-documentation/wiki/view/370/rest-api
-    return requests.get(endpoint, headers=headers, params=params)
+    return requests.get(
+        endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
 
 # https://my.axerosolutions.com/spaces/5/communifire-documentation/wiki/view/595/rest-api-get-content-list

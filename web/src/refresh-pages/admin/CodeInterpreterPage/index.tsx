@@ -72,8 +72,7 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
         sizePreset="main-ui"
         variant="body"
         orientation="reverse"
-        prominence="muted"
-        nonInteractive
+        color="muted"
       />
     </div>
   );

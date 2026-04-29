@@ -3,9 +3,9 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
 import requests
 
-import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus

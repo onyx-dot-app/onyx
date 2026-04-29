@@ -41,7 +41,6 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
-
 logger = setup_logger()
 
 
