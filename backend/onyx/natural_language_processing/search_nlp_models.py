@@ -368,7 +368,7 @@ class CloudEmbedding:
         location = (
             service_account_info.get("location")
             or os.environ.get("GOOGLE_CLOUD_LOCATION")
-            or "us-central1"
+            or "global"
         )
 
         client = genai.Client(
