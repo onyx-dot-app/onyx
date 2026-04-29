@@ -24,7 +24,6 @@ from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.file_record import get_filerecord_by_prefix
 from onyx.db.file_record import upsert_filerecord
 from onyx.db.models import FileRecord
-from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
@@ -74,17 +73,25 @@ class GCSBackedFileStore(FileStore):
                 if self._service_account_key_path:
                     from google.oauth2 import service_account
 
-                    credentials = service_account.Credentials.from_service_account_file(self._service_account_key_path)
-                    self._gcs_client = storage.Client(credentials=credentials, **client_kwargs)
+                    credentials = service_account.Credentials.from_service_account_file(
+                        self._service_account_key_path
+                    )
+                    self._gcs_client = storage.Client(
+                        credentials=credentials, **client_kwargs
+                    )
                 elif self._service_account_key_json:
                     from google.oauth2 import service_account
 
                     info = json.loads(self._service_account_key_json)
-                    credentials = service_account.Credentials.from_service_account_info(info)
+                    credentials = service_account.Credentials.from_service_account_info(
+                        info
+                    )
                     # Fall back to the project_id embedded in the SA JSON
                     if "project" not in client_kwargs and info.get("project_id"):
                         client_kwargs["project"] = info["project_id"]
-                    self._gcs_client = storage.Client(credentials=credentials, **client_kwargs)
+                    self._gcs_client = storage.Client(
+                        credentials=credentials, **client_kwargs
+                    )
                 else:
                     # ADC: Workload Identity, metadata server, or gcloud CLI.
                     # Project ID is resolved from the environment automatically.
@@ -114,10 +121,11 @@ class GCSBackedFileStore(FileStore):
         if len(key) == 1024:
             logger.info(f"File name was too long and was truncated: {file_name}")
         return key
-    
+
     def initialize(self) -> None:
         """Initialize the GCS file store by ensuring the bucket exists."""
-        from google.api_core.exceptions import Forbidden, NotFound
+        from google.api_core.exceptions import Forbidden
+        from google.api_core.exceptions import NotFound
 
         client = self._get_gcs_client()
         try:
@@ -128,8 +136,12 @@ class GCSBackedFileStore(FileStore):
             client.create_bucket(self._bucket_name)
             logger.info(f"Successfully created GCS bucket '{self._bucket_name}'")
         except Forbidden:
-            logger.warning(f"GCS bucket '{self._bucket_name}' exists but access is forbidden")
-            raise RuntimeError(f"Access denied to GCS bucket '{self._bucket_name}'. Check permissions.")
+            logger.warning(
+                f"GCS bucket '{self._bucket_name}' exists but access is forbidden"
+            )
+            raise RuntimeError(
+                f"Access denied to GCS bucket '{self._bucket_name}'. Check permissions."
+            )
 
     def has_file(
         self,
@@ -139,8 +151,14 @@ class GCSBackedFileStore(FileStore):
         db_session: Session | None = None,
     ) -> bool:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
-        return file_record is not None and file_record.file_origin == file_origin and file_record.file_type == file_type
+            file_record = get_filerecord_by_file_id_optional(
+                file_id=file_id, db_session=db_session
+            )
+        return (
+            file_record is not None
+            and file_record.file_origin == file_origin
+            and file_record.file_type == file_type
+        )
 
     def save_file(
         self,
@@ -170,18 +188,29 @@ class GCSBackedFileStore(FileStore):
 
         blob.upload_from_string(file_content, content_type=file_type)
 
-        with get_session_with_current_tenant_if_none(db_session) as db_session:
-            upsert_filerecord(
-                file_id=file_id,
-                display_name=display_name or file_id,
-                file_origin=file_origin,
-                file_type=file_type,
-                bucket_name=self._bucket_name,
-                object_key=object_key,
-                db_session=db_session,
-                file_metadata=file_metadata,
-            )
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant_if_none(db_session) as db_session:
+                upsert_filerecord(
+                    file_id=file_id,
+                    display_name=display_name or file_id,
+                    file_origin=file_origin,
+                    file_type=file_type,
+                    bucket_name=self._bucket_name,
+                    object_key=object_key,
+                    db_session=db_session,
+                    file_metadata=file_metadata,
+                )
+                db_session.commit()
+        except Exception:
+            try:
+                blob.delete()
+            except Exception:
+                logger.warning(
+                    f"Failed to clean up orphaned GCS blob {self._bucket_name}/{object_key} "
+                    f"after DB persistence failure for file {file_id}",
+                    exc_info=True,
+                )
+            raise
 
         return file_id
 
@@ -193,7 +222,9 @@ class GCSBackedFileStore(FileStore):
         db_session: Session | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
 
         client = self._get_gcs_client()
         bucket = client.bucket(file_record.bucket_name)
@@ -208,16 +239,24 @@ class GCSBackedFileStore(FileStore):
             content = blob.download_as_bytes()
             return BytesIO(content)
 
-    def read_file_record(self, file_id: str, db_session: Session | None = None) -> FileStoreModel:
+    def read_file_record(
+        self, file_id: str, db_session: Session | None = None
+    ) -> FileRecord:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
         return file_record
 
-    def get_file_size(self, file_id: str, db_session: Session | None = None) -> int | None:
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
         """Get the size of a file in bytes by querying GCS blob metadata."""
         try:
             with get_session_with_current_tenant_if_none(db_session) as db_session:
-                file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
 
             client = self._get_gcs_client()
             bucket = client.bucket(file_record.bucket_name)
@@ -236,10 +275,14 @@ class GCSBackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
+                file_record = get_filerecord_by_file_id_optional(
+                    file_id=file_id, db_session=db_session
+                )
                 if file_record is None:
                     if error_on_missing:
-                        raise RuntimeError(f"File by id {file_id} does not exist or was deleted")
+                        raise RuntimeError(
+                            f"File by id {file_id} does not exist or was deleted"
+                        )
                     return
                 if not file_record.bucket_name:
                     logger.error(
@@ -279,7 +322,9 @@ class GCSBackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                old_file_record = get_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
+                old_file_record = get_filerecord_by_file_id(
+                    file_id=old_file_id, db_session=db_session
+                )
                 new_object_key = self._get_object_key(new_file_id)
 
                 client = self._get_gcs_client()
@@ -289,7 +334,9 @@ class GCSBackedFileStore(FileStore):
 
                 source_bucket.copy_blob(source_blob, dest_bucket, new_object_key)
 
-                file_metadata = cast(dict[Any, Any] | None, old_file_record.file_metadata)
+                file_metadata = cast(
+                    dict[Any, Any] | None, old_file_record.file_metadata
+                )
 
                 upsert_filerecord(
                     file_id=new_file_id,
@@ -305,11 +352,21 @@ class GCSBackedFileStore(FileStore):
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()
-                source_blob.delete()
+
+                try:
+                    source_blob.delete()
+                except Exception:
+                    logger.warning(
+                        f"Failed to delete old GCS blob after changing file ID from "
+                        f"{old_file_id} to {new_file_id}; blob may be orphaned",
+                        exc_info=True,
+                    )
 
             except Exception as e:
                 db_session.rollback()
-                logger.exception(f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}")
+                logger.exception(
+                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                )
                 raise
 
     def get_file_with_mime_type(self, file_id: str) -> FileWithMimeType | None:
@@ -327,5 +384,7 @@ class GCSBackedFileStore(FileStore):
     def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
         """List all file IDs that start with the given prefix."""
         with get_session_with_current_tenant() as db_session:
-            file_records = get_filerecord_by_prefix(prefix=prefix, db_session=db_session)
+            file_records = get_filerecord_by_prefix(
+                prefix=prefix, db_session=db_session
+            )
         return file_records

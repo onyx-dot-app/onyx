@@ -1304,7 +1304,7 @@ S3_GENERATE_LOCAL_CHECKSUM = (
 )
 
 # GCS (Google Cloud Storage) Configuration
-GCS_FILE_STORE_BUCKET_NAME = os.environ.get("GCS_FILE_STORE_BUCKET_NAME") or ""
+GCS_FILE_STORE_BUCKET_NAME = os.environ.get("GCS_FILE_STORE_BUCKET_NAME") or None
 GCS_FILE_STORE_PREFIX = os.environ.get("GCS_FILE_STORE_PREFIX") or "onyx-files"
 GCS_PROJECT_ID = os.environ.get("GCS_PROJECT_ID") or None
 # Path to a service account JSON key file. When empty/unset, Application Default

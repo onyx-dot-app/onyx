@@ -94,12 +94,16 @@ GCS_SERVICE_ACCOUNT_KEY_PATH=/path/to/service-account-key.json
 GCS_SERVICE_ACCOUNT_KEY_JSON='{"type":"service_account","project_id":"...","private_key":"..."}'
 ```
 
-**Required IAM permissions (bucket-level + project-level for optional bucket creation):**
-- `storage.objects.create`, `storage.objects.get`, `storage.objects.delete` (object CRUD on the target bucket)
-- `storage.buckets.get` (to check whether the target bucket exists)
-- `storage.buckets.create` (project-level permission, only needed if `initialize()` may create the bucket)
+**Required IAM permissions:**
 
-The predefined role `roles/storage.objectAdmin` covers object operations on a bucket. If automatic bucket creation is needed, also grant a project-level role that includes `storage.buckets.create` (for example `roles/storage.admin`).
+On the GCS bucket (object operations + existence check):
+- `storage.objects.create`, `storage.objects.get`, `storage.objects.delete` (CRUD operations)
+- `storage.buckets.get` (for `initialize()` to check bucket existence)
+
+At the project level (only if `initialize()` should auto-create the bucket):
+- `storage.buckets.create`
+
+The predefined role `roles/storage.objectAdmin` (granted on the bucket) covers all object operations. For initial bucket creation, `roles/storage.admin` at the project level is needed.
 
 ### Other S3-Compatible Services
 
