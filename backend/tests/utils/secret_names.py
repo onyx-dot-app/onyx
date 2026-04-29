@@ -27,6 +27,7 @@ class TestSecret(StrEnum):
     LITELLM_API_KEY = "LITELLM_API_KEY"
     LITELLM_API_URL = "LITELLM_API_URL"
     OLLAMA_API_KEY = "OLLAMA_API_KEY"
+    BEDROCK_API_KEY = "bedrock-api-key"
 
     @classmethod
     def aws_prefix(cls) -> str:
