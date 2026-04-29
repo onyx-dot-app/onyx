@@ -88,10 +88,9 @@ class TestGetAssociatedObjectsSkipsV4Call:
             m.to_dict.return_value = {"id": id_, "properties": {"firstname": "A"}}
             return m
 
-        mock_client.crm.contacts.basic_api.get_by_id.side_effect = [
-            make_contact("11"),
-            make_contact("22"),
-        ]
+        batch_response = MagicMock()
+        batch_response.results = [make_contact("11"), make_contact("22")]
+        mock_client.crm.contacts.batch_api.read.return_value = batch_response
 
         with patch.object(connector, "_paginated_results") as mock_paginated:
             result = connector._get_associated_objects(
@@ -103,7 +102,7 @@ class TestGetAssociatedObjectsSkipsV4Call:
             )
 
         mock_paginated.assert_not_called()
-        assert mock_client.crm.contacts.basic_api.get_by_id.call_count == 2
+        assert mock_client.crm.contacts.batch_api.read.call_count == 1
         assert [r["id"] for r in result] == ["11", "22"]
 
     def test_v4_api_called_when_inline_ids_is_none(self) -> None:
