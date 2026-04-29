@@ -1065,6 +1065,10 @@ export default function IndexSettingsPage() {
                     title="Contextual Retrieval"
                     description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
                     withLabel
+                    tag={{
+                      title: "temporarily unavailable",
+                      color: "gray",
+                    }}
                   >
                     <Switch
                       checked={searchSettings?.enable_contextual_rag ?? false}
