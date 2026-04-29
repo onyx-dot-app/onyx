@@ -11,6 +11,7 @@ import requests
 from hubspot import HubSpot
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -144,7 +145,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             "Content-Type": "application/json",
         }
 
-        response = requests.get(HUBSPOT_API_URL, headers=headers)
+        response = requests.get(
+            HUBSPOT_API_URL, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+        )
         if response.status_code != 200:
             raise Exception("Error fetching portal ID")
 
