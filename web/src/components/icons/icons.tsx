@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { StaticImageData } from "next/image";
+import canvasIcon from "@public/Canvas.png";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
 import highspotIcon from "@public/Highspot.png";
 import openSourceIcon from "@public/OpenSource.png";
@@ -236,6 +237,7 @@ export const WindowsIcon = ({
 // Only icons that don't yet have opal logo equivalents remain here.
 // ============================================================================
 export const BoxIcon = createLogoIcon(boxIcon);
+export const CanvasIcon = createLogoIcon(canvasIcon);
 export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",

@@ -1,4 +1,5 @@
 import {
+  CanvasIcon,
   LoopioIcon,
   R2Icon,
   S3Icon,
@@ -109,6 +110,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/sharepoint`,
     isPopular: true,
+  },
+  canvas: {
+    icon: CanvasIcon,
+    displayName: "Canvas",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/canvas`,
   },
   coda: {
     icon: SvgCoda,
