@@ -561,23 +561,37 @@ export default function ChatPreferencesPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <Disabled
-                disabled={uniqueSources.length === 0}
-                allowClick
-                tooltip="Set up connectors to use Search Mode"
+                disabled={!enterpriseEnabled || uniqueSources.length === 0}
+                allowClick={enterpriseEnabled}
+                tooltip={
+                  !enterpriseEnabled
+                    ? "Search Mode is an Enterprise Plan feature."
+                    : "Set up connectors to use Search Mode"
+                }
               >
                 <InputHorizontal
                   title="Search Mode"
-                  tag={{ title: "beta", color: "blue" }}
+                  tag={
+                    !enterpriseEnabled
+                      ? {
+                          title: "Enterprise Plan",
+                          color: "amber",
+                          icon: SvgOrganization,
+                        }
+                      : { title: "beta", color: "blue" }
+                  }
                   description="UI mode for quick document search across your organization."
-                  disabled={uniqueSources.length === 0}
+                  disabled={!enterpriseEnabled || uniqueSources.length === 0}
                   withLabel
                 >
                   <Switch
-                    checked={s.search_ui_enabled ?? true}
+                    checked={
+                      enterpriseEnabled ? s.search_ui_enabled ?? true : false
+                    }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
                     }}
-                    disabled={uniqueSources.length === 0}
+                    disabled={!enterpriseEnabled || uniqueSources.length === 0}
                   />
                 </InputHorizontal>
               </Disabled>

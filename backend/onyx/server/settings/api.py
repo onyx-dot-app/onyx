@@ -59,12 +59,36 @@ def admin_put_settings(
             OnyxErrorCode.INVALID_INPUT,
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
+
+    check_ee_fn = fetch_versioned_implementation_with_fallback(
+        "onyx.server.settings.api",
+        "check_ee_features_enabled",
+        check_ee_features_enabled,
+    )
+    if not check_ee_fn():
+        existing = load_settings()
+        if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
+            raise OnyxError(
+                OnyxErrorCode.EE_REQUIRED,
+                "Chat history retention is an Enterprise Plan feature.",
+            )
+        if settings.search_ui_enabled != existing.search_ui_enabled:
+            raise OnyxError(
+                OnyxErrorCode.EE_REQUIRED,
+                "Search Mode is an Enterprise Plan feature.",
+            )
+
     store_settings(settings)
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """MIT version: no-op, returns settings unchanged."""
     return settings
+
+
+def check_ee_features_enabled() -> bool:
+    """MIT version: EE features are never enabled."""
+    return False
 
 
 @basic_router.get("")
