@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { MessageCard } from "@opal/components";
 import type { StatusVariants } from "@opal/types";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";

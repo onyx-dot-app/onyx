@@ -6,6 +6,7 @@ from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
+from onyx.llm.utils import model_is_reasoning_model
 
 
 def test_partial_match_in_model_map() -> None:
@@ -81,6 +82,39 @@ def test_no_overwrite_in_model_map() -> None:
         assert result["is_correct"] is True
 
     get_model_map.cache_clear()
+
+
+def test_model_is_reasoning_model_handles_none_in_model_map() -> None:
+    """Regression: litellm may set supports_reasoning=None for some models.
+    model_is_reasoning_model must always return a bool, never None."""
+    mock_model_cost = {
+        "openai/gpt-4o": {
+            "supports_reasoning": None,
+        },
+        "openai/o3": {
+            "supports_reasoning": True,
+        },
+        "openai/gpt-4o-mini": {
+            # key missing entirely
+        },
+    }
+
+    with patch.object(litellm, "model_cost", mock_model_cost):
+        get_model_map.cache_clear()
+        try:
+            # None in map — should fall through to litellm.supports_reasoning
+            result = model_is_reasoning_model("gpt-4o", "openai")
+            assert result is False or result is True  # must be a bool, not None
+
+            # True in map — should return True
+            result = model_is_reasoning_model("o3", "openai")
+            assert result is True
+
+            # Missing key — should fall through to litellm.supports_reasoning
+            result = model_is_reasoning_model("gpt-4o-mini", "openai")
+            assert result is False or result is True
+        finally:
+            get_model_map.cache_clear()
 
 
 def test_twelvelabs_pegasus_override_present() -> None:

@@ -1,10 +1,6 @@
 import "@opal/components/buttons/link-button/styles.css";
 import type { RichStr } from "@opal/types";
-import type { TooltipSide } from "@opal/components/tooltip/components";
-
-// Direct file imports to avoid circular resolution through the @opal/components
-// and @opal/icons barrels, which break CJS-based test runners (jest).
-import { Tooltip } from "@opal/components/tooltip/components";
+import { Tooltip, type TooltipSide } from "@opal/components/tooltip/components";
 import SvgExternalLink from "@opal/icons/external-link";
 
 // ---------------------------------------------------------------------------

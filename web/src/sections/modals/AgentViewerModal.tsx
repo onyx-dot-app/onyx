@@ -262,7 +262,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               title={agent.owner?.email ?? "Onyx"}
               sizePreset="main-ui"
               variant="body"
-              prominence="muted"
+              color="muted"
               width="fit"
             />
             {agent.is_public && (
@@ -271,7 +271,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 title="Public to your organization"
                 sizePreset="main-ui"
                 variant="body"
-                prominence="muted"
+                color="muted"
                 width="fit"
               />
             )}
@@ -410,7 +410,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         title={starter.message}
                         sizePreset="main-ui"
                         variant="body"
-                        prominence="muted"
+                        color="muted"
                         width="full"
                       />
                     </Interactive.Container>

@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem

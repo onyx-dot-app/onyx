@@ -168,7 +168,12 @@ def wrap_stream(
     """Wrap a concrete ``LLM.stream`` implementation with a fallback generation_span.
 
     Accumulates content, final usage, and tool-call deltas across yielded
-    chunks and records them on the span when the stream is fully consumed.
+    chunks and records them on the span on every exit path — clean
+    completion, ``Exception`` propagation, or ``GeneratorExit`` from an
+    abandoned consumer. Recording in ``finally`` is required because
+    Anthropic / OpenAI bill for every token streamed up to the point of
+    abandonment, so cost attribution would silently zero out without it.
+
     Tool-call deltas arrive as partial fragments keyed on ``index`` — this
     wrap reassembles them via ``_merge_tool_call_delta`` before logging so
     Braintrust shows one complete tool-call entry per invocation rather than
@@ -217,17 +222,22 @@ def wrap_stream(
                         }
                     )
                 raise
-
-            # Only reached on clean stream completion. If the consumer abandons
-            # the generator or an exception propagates, the context manager
-            # exits via __exit__ without output set.
-            if span is not None:
-                record_llm_span_output(
-                    span,
-                    output="".join(accumulated_content) or None,
-                    usage=final_usage,
-                    tool_calls=_finalize_tool_calls(tool_call_buffer),
-                )
+            finally:
+                # Anthropic / OpenAI bill for every token streamed up to the
+                # point of consumer abandonment, so the span must capture
+                # whatever usage and content was seen — not only on clean
+                # completion. Recording in ``finally`` covers three exit
+                # paths: normal end, ``Exception`` re-raised above, and
+                # ``GeneratorExit`` from an abandoned consumer (which does
+                # not go through the ``except Exception`` branch since it
+                # subclasses ``BaseException`` rather than ``Exception``).
+                if span is not None:
+                    record_llm_span_output(
+                        span,
+                        output="".join(accumulated_content) or None,
+                        usage=final_usage,
+                        tool_calls=_finalize_tool_calls(tool_call_buffer),
+                    )
 
     setattr(wrapper, _ALREADY_WRAPPED_ATTR, True)
     return wrapper

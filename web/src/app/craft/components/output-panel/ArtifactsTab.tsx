@@ -23,7 +23,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];

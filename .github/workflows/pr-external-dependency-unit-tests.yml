@@ -161,6 +161,7 @@ jobs:
             -o junit_family=xunit2 \
             -xv \
             --ff \
+            -m "not nightly" \
             backend/tests/external_dependency_unit/${TEST_DIR}
 
       - name: Collect Docker logs on failure

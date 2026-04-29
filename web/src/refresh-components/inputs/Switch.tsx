@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { cn } from "@/lib/utils";
-import { WithoutStyles } from "@/types";
+import { cn } from "@opal/utils";
+import type { WithoutStyles } from "@opal/types";
 
 export interface SwitchProps
   extends WithoutStyles<

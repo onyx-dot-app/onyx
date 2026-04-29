@@ -284,9 +284,14 @@ def sleep_and_retry(
                 time.sleep(sleep_time)
                 continue
 
-            # Non-retryable error or retries exhausted — log details and raise.
+            # Non-retryable error or retries exhausted. The exception is
+            # re-raised for the caller to handle — several callers already
+            # swallow expected statuses (e.g. 404 for deleted Azure AD
+            # groups in permission_utils.py:503). Log at warning so the
+            # helper isn't the source of Sentry events for conditions the
+            # caller intentionally handles.
             if e.response is not None:
-                logger.error(
+                logger.warning(
                     f"SharePoint request failed for {method_name}: status={status}, "
                 )
             raise e
