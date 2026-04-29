@@ -1,0 +1,74 @@
+name: Nightly External Dependency Unit Tests
+concurrency:
+  group: Nightly-External-Dependency-Unit-Tests-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    # Runs daily at 10:30 UTC (2:30 AM PST / 3:30 AM PDT) — same slot as
+    # nightly-llm-provider-chat.yml.
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly-external-dependency-unit-tests:
+    # Runs every test under backend/tests/external_dependency_unit marked
+    # with `@pytest.mark.nightly` — i.e. tests that are too slow, expensive,
+    # or flaky to run on every PR but should still be exercised daily.
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - ${{ format('run-id={0}-nightly-external-dependency-unit-tests', github.run_id) }}
+    timeout-minutes: 30
+    environment: ci-protected
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC-based AWS credential exchange
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/ee.txt
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Run nightly external dependency unit tests
+        env:
+          PYTHONPATH: ./backend
+        run: |
+          uv run pytest -m nightly \
+            backend/tests/external_dependency_unit
+
+  notify-slack-on-failure:
+    needs: [nightly-external-dependency-unit-tests]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          failed-jobs: nightly-external-dependency-unit-tests
+          title: "🚨 Nightly External Dependency Unit Tests failed!"
+          ref-name: ${{ github.ref_name }}

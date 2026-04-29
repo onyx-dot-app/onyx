@@ -381,16 +381,14 @@ def create_new_chat_session(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
-    user_id = user.id
-
     try:
         new_chat_session = create_chat_session_from_request(
             chat_session_request=chat_session_creation_request,
-            user_id=user_id,
+            user=user,
             db_session=db_session,
         )
     except ValueError as e:
-        # Project access denied
+        # Project or persona access denied
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.exception(e)

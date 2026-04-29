@@ -39,13 +39,13 @@ admin_router = APIRouter(prefix="/admin/image-generation")
 def _get_test_quality_for_model(model_name: str) -> str | None:
     """Returns the fastest quality setting for credential testing.
 
-    - gpt-image-1: 'low' (fastest)
+    - gpt-image-*: 'low' (fastest)
     - dall-e-3: 'standard' (faster than 'hd')
     - Other models: None (use API default)
     """
     model_lower = model_name.lower()
 
-    if "gpt-image-1" in model_lower:
+    if "gpt-image-" in model_lower:
         return "low"
     elif "dall-e-3" in model_lower or "dalle-3" in model_lower:
         return "standard"

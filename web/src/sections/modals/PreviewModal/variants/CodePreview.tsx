@@ -2,7 +2,7 @@
 
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import "@/app/app/message/custom-code-styles.css";
 
 interface CodePreviewProps {

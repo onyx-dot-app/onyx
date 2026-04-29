@@ -13,7 +13,7 @@ import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";

@@ -2,7 +2,7 @@ import { useState, ReactNode, forwardRef } from "react";
 import { Folder } from "@/app/app/components/folders/interfaces";
 import { ChatSession } from "@/app/app/interfaces";
 import { SvgChevronRight } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface FolderDropdownProps {
   folder: Folder;

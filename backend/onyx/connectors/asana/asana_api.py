@@ -82,9 +82,12 @@ class AsanaAPI:
                 logger.info(f"Processed {project_count} projects")
 
         logger.info(f"Found {len(projects_list)} projects to process")
+        # Asana tasks can belong to multiple projects and thus tasks
+        # can get reported multiple times
+        seen_task_gids: set[str] = set()
         for project_gid in projects_list:
             for task in self._get_tasks_for_project(
-                project_gid, start_date, start_seconds
+                project_gid, start_date, start_seconds, seen_task_gids
             ):
                 yield task
         logger.info(f"Completed fetching {self.task_count} tasks from Asana")
@@ -94,7 +97,11 @@ class AsanaAPI:
             )
 
     def _get_tasks_for_project(
-        self, project_gid: str, start_date: str, start_seconds: int
+        self,
+        project_gid: str,
+        start_date: str,
+        start_seconds: int,
+        seen_task_gids: set[str],
     ) -> Iterator[AsanaTask]:
         project = self.project_api.get_project(project_gid, opts={})
         project_name = project.get("name", project_gid)
@@ -133,6 +140,15 @@ class AsanaAPI:
         }
         tasks_from_api = self.tasks_api.get_tasks_for_project(project_gid, opts)
         for data in tasks_from_api:
+            gid = data["gid"]
+            if gid in seen_task_gids:
+                logger.debug(
+                    f"Skipping duplicate Asana task {gid} "
+                    f"(already yielded for another project)"
+                )
+                continue
+            seen_task_gids.add(gid)
+
             self.task_count += 1
             if self.task_count % 10 == 0:
                 end_seconds = time.mktime(datetime.now().timetuple())

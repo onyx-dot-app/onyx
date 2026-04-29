@@ -180,4 +180,8 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+
+  // ── Index Attempts ────────────────────────────────────────────────────────
+  indexAttemptStageMetrics: (indexAttemptId: number) =>
+    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 } as const;

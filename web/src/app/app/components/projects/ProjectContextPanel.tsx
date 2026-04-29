@@ -152,10 +152,7 @@ export default function ProjectContextPanel({
                     {projectName}
                   </Text>
                   {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                  <Hoverable.Item
-                    group="projectName"
-                    variant="opacity-on-hover"
-                  >
+                  <Hoverable.Item group="projectName" variant="appear-on-hover">
                     <IconButton
                       icon={SvgEdit}
                       internal

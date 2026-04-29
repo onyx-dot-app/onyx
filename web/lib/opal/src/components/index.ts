@@ -102,6 +102,12 @@ export {
   type PaginationSize,
 } from "@opal/components/pagination/components";
 
+/* Checkbox */
+export {
+  Checkbox,
+  type CheckboxProps,
+} from "@opal/components/checkbox/components";
+
 /* Table */
 export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
