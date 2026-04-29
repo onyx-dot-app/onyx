@@ -125,7 +125,7 @@ def get_cc_pair_index_attempts(
 @router.get("/admin/index-attempt/{index_attempt_id}/stage-metrics")
 def get_index_attempt_stage_metrics(
     index_attempt_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> IndexAttemptStageMetricsResponse:
     """Return the per-stage timing breakdown for a single ``IndexAttempt``.
