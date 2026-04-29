@@ -1113,7 +1113,7 @@ xlrd==2.0.2
     # via markitdown
 xlsxwriter==3.2.9
     # via python-pptx
-xmlsec==1.3.14
+xmlsec==1.3.17
     # via python3-saml
 xxhash==3.6.0
     # via langsmith
