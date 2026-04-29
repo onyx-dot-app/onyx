@@ -63,7 +63,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
           title={title}
           sizePreset="secondary"
           variant="body"
-          prominence="muted"
+          color="muted"
         />
       ) : (
         <Content

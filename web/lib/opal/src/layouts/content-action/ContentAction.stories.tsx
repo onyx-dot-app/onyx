@@ -2,20 +2,12 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const meta = {
   title: "Layouts/ContentAction",
   component: ContentAction,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },

@@ -55,7 +55,7 @@ function ErrorLogRow({
               {formatDateTimeLog(log.created_at)}
             </Text>
           </span>
-          <Hoverable.Item group={group} variant="opacity-on-hover">
+          <Hoverable.Item group={group} variant="appear-on-hover">
             <CopyIconButton
               size="xs"
               getCopyText={() => log.error_message ?? ""}

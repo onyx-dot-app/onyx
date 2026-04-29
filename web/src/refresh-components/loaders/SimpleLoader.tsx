@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgLoader } from "@opal/icons";
 
 export default function SimpleLoader({ className, ...props }: IconProps) {

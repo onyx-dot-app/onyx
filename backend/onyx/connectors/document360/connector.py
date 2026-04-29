@@ -7,6 +7,7 @@ from typing import Optional
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.document360.utils import flatten_child_categories
@@ -63,7 +64,10 @@ class Document360Connector(LoadConnector, PollConnector):
         headers = {"accept": "application/json", "api_token": self.api_token}
 
         response = requests.get(
-            f"{DOCUMENT360_API_BASE_URL}/{endpoint}", headers=headers, params=params
+            f"{DOCUMENT360_API_BASE_URL}/{endpoint}",
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
 

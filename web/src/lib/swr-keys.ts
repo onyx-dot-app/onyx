@@ -10,8 +10,9 @@ export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
 
-  // ── Health ────────────────────────────────────────────────────────────────
+  // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
@@ -179,4 +180,8 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+
+  // ── Index Attempts ────────────────────────────────────────────────────────
+  indexAttemptStageMetrics: (indexAttemptId: number) =>
+    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 } as const;

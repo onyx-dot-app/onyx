@@ -11,8 +11,13 @@ from typing import Optional
 import redis
 from fastapi import Request
 from redis import asyncio as aioredis
+from redis.backoff import ExponentialBackoff
 from redis.client import Redis
+from redis.exceptions import BusyLoadingError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
+from redis.retry import Retry
 
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
@@ -37,6 +42,24 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 SCAN_ITER_COUNT_DEFAULT = 4096
+
+# Retry transient Redis errors — in particular BusyLoadingError, which is
+# raised while Redis is loading its RDB snapshot after a restart or
+# failover. redis-py's default retry policy only covers ConnectionError,
+# so these surface as uncaught exceptions and ship to Sentry
+# (ONYX-BACKEND-H4NT / H43M).
+_RETRYABLE_ERRORS: list[type[Exception]] = [
+    BusyLoadingError,
+    RedisConnectionError,
+    RedisTimeoutError,
+]
+
+
+def _client_retry_kwargs() -> dict[str, Any]:
+    return {
+        "retry": Retry(ExponentialBackoff(cap=2.0, base=0.1), retries=3),
+        "retry_on_error": _RETRYABLE_ERRORS,
+    }
 
 
 class TenantRedis(redis.Redis):
@@ -167,24 +190,28 @@ class RedisPool:
         )
 
     def get_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(tenant_id, connection_pool=self._pool)
+        return TenantRedis(
+            tenant_id, connection_pool=self._pool, **_client_retry_kwargs()
+        )
 
     def get_replica_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(tenant_id, connection_pool=self._replica_pool)
+        return TenantRedis(
+            tenant_id, connection_pool=self._replica_pool, **_client_retry_kwargs()
+        )
 
     def get_raw_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the primary connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._pool)
+        return redis.Redis(connection_pool=self._pool, **_client_retry_kwargs())
 
     def get_raw_replica_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the replica connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._replica_pool)
+        return redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs())
 
     @staticmethod
     def create_pool(

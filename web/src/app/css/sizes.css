@@ -1,6 +1,7 @@
 :root {
   --app-page-main-content-width: 45rem;
   --block-width-form-input-min: 10rem;
+  --notifications-popover: 20rem;
 
   --container-sm: 42rem;
   --container-sm-md: 47rem;

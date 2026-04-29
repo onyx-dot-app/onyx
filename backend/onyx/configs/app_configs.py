@@ -440,8 +440,13 @@ POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
 
-# defaults to False
-POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
+# defaults to True — pre-pings pooled connections with SELECT 1 at checkout
+# to avoid `psycopg2.OperationalError: server closed the connection
+# unexpectedly` when PgBouncer / Postgres drops an idle connection that's
+# still in the pool. Set POSTGRES_POOL_PRE_PING=false to opt out.
+POSTGRES_POOL_PRE_PING = (
+    os.environ.get("POSTGRES_POOL_PRE_PING", "true").lower() == "true"
+)
 
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes

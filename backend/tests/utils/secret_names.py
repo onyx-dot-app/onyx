@@ -26,6 +26,7 @@ class TestSecret(StrEnum):
     AZURE_API_URL = "AZURE_API_URL"
     LITELLM_API_KEY = "LITELLM_API_KEY"
     LITELLM_API_URL = "LITELLM_API_URL"
+    OLLAMA_API_KEY = "OLLAMA_API_KEY"
 
     @classmethod
     def aws_prefix(cls) -> str:

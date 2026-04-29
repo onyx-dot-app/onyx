@@ -7,7 +7,7 @@ import {
   InputPadder,
   InputErrorText,
 } from "@opal/layouts/inputs/components";
-import { Button } from "@opal/components/buttons/button/components";
+import { Button } from "@opal/components";
 
 const meta: Meta = {
   title: "opal/layouts/InputLayouts",

@@ -7,9 +7,10 @@ no-op when an outer `generation_span` is already active — callers that
 explicitly wrap their calls (via `llm_generation_span`) continue to work and
 are not double-counted.
 
-Imports from `onyx.tracing.*` are performed lazily inside the wrappers to
-avoid an import cycle between `onyx.llm.interfaces` and
-`onyx.tracing.llm_utils` (which itself imports `LLM`).
+Imports from `onyx.tracing.llm_utils` stay lazy (inside the wrappers) because
+it imports `onyx.llm.interfaces`, which imports this module — loading it at
+module level would deadlock the import graph. Everything else is imported
+at the top of the file.
 """
 
 from __future__ import annotations
@@ -21,10 +22,17 @@ from collections.abc import Iterator
 from typing import Any
 from typing import TYPE_CHECKING
 
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
+from onyx.llm.model_response import Usage
+from onyx.tracing.framework.create import get_current_span
+from onyx.tracing.framework.span_data import GenerationSpanData
+
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
     from onyx.llm.model_response import ModelResponse
     from onyx.llm.model_response import ModelResponseStream
+    from onyx.llm.models import ToolCall
 
 
 _ALREADY_WRAPPED_ATTR = "_onyx_tracing_wrapped"
@@ -48,9 +56,6 @@ def _outer_generation_span_active() -> bool:
       always has ``started_at = None``. The ``started_at`` check prevents a
       stale ``NoOpSpan`` from suppressing fallback tracing.
     """
-    from onyx.tracing.framework.create import get_current_span
-    from onyx.tracing.framework.span_data import GenerationSpanData
-
     current = get_current_span()
     return (
         current is not None
@@ -162,11 +167,17 @@ def wrap_stream(
 ) -> Callable[..., Iterator["ModelResponseStream"]]:
     """Wrap a concrete ``LLM.stream`` implementation with a fallback generation_span.
 
-    Accumulates content + final usage across yielded chunks and records them on
-    the span when the stream is fully consumed. Tool-call deltas are
-    intentionally NOT accumulated — streaming deltas are partial fragments
-    keyed on ``index`` that need ``litellm.stream_chunk_builder``-style
-    reassembly before being safe to log.
+    Accumulates content, final usage, and tool-call deltas across yielded
+    chunks and records them on the span on every exit path — clean
+    completion, ``Exception`` propagation, or ``GeneratorExit`` from an
+    abandoned consumer. Recording in ``finally`` is required because
+    Anthropic / OpenAI bill for every token streamed up to the point of
+    abandonment, so cost attribution would silently zero out without it.
+
+    Tool-call deltas arrive as partial fragments keyed on ``index`` — this
+    wrap reassembles them via ``_merge_tool_call_delta`` before logging so
+    Braintrust shows one complete tool-call entry per invocation rather than
+    fragmented duplicates.
     """
     if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):
         return stream_fn
@@ -181,7 +192,6 @@ def wrap_stream(
             yield from stream_fn(self, *args, **kwargs)
             return
 
-        from onyx.llm.model_response import Usage
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_span_output
 
@@ -191,6 +201,7 @@ def wrap_stream(
         ) as span:
             accumulated_content: list[str] = []
             final_usage: Usage | None = None
+            tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
 
             try:
                 for chunk in stream_fn(self, *args, **kwargs):
@@ -198,6 +209,9 @@ def wrap_stream(
                         final_usage = chunk.usage
                     if span is not None and chunk.choice.delta.content:
                         accumulated_content.append(chunk.choice.delta.content)
+                    if span is not None and chunk.choice.delta.tool_calls:
+                        for delta_tc in chunk.choice.delta.tool_calls:
+                            _merge_tool_call_delta(tool_call_buffer, delta_tc)
                     yield chunk
             except Exception as exc:
                 if span is not None:
@@ -208,17 +222,110 @@ def wrap_stream(
                         }
                     )
                 raise
-
-            # Only reached on clean stream completion. If the consumer abandons
-            # the generator or an exception propagates, the context manager
-            # exits via __exit__ without output set.
-            if span is not None:
-                record_llm_span_output(
-                    span,
-                    output="".join(accumulated_content) or None,
-                    usage=final_usage,
-                    tool_calls=None,
-                )
+            finally:
+                # Anthropic / OpenAI bill for every token streamed up to the
+                # point of consumer abandonment, so the span must capture
+                # whatever usage and content was seen — not only on clean
+                # completion. Recording in ``finally`` covers three exit
+                # paths: normal end, ``Exception`` re-raised above, and
+                # ``GeneratorExit`` from an abandoned consumer (which does
+                # not go through the ``except Exception`` branch since it
+                # subclasses ``BaseException`` rather than ``Exception``).
+                if span is not None:
+                    record_llm_span_output(
+                        span,
+                        output="".join(accumulated_content) or None,
+                        usage=final_usage,
+                        tool_calls=_finalize_tool_calls(tool_call_buffer),
+                    )
 
     setattr(wrapper, _ALREADY_WRAPPED_ATTR, True)
     return wrapper
+
+
+def _merge_tool_call_delta(
+    buffer: dict[int, "ChatCompletionDeltaToolCall"],
+    delta: "ChatCompletionDeltaToolCall",
+) -> None:
+    """Merge a single streaming tool-call delta into the per-``index`` buffer.
+
+    Streaming tool calls from LiteLLM arrive as partial fragments:
+    - Early chunks for a given ``index`` usually carry ``id`` and
+      ``function.name`` (and possibly the first slice of ``function.arguments``).
+    - Subsequent chunks for the same ``index`` carry additional
+      ``function.arguments`` fragments with ``id`` / ``name`` set to ``None``.
+
+    This helper merges them in place: it preserves the first seen ``id`` and
+    ``function.name`` and concatenates ``function.arguments`` fragments. The
+    result is a dict of complete ``ChatCompletionDeltaToolCall`` objects
+    keyed by ``index`` that can be converted to fully-formed ``ToolCall``
+    objects via :func:`_finalize_tool_calls`.
+    """
+    existing = buffer.get(delta.index)
+    if existing is None:
+        # Copy into a fresh pydantic model so later mutations don't leak back
+        # into the caller's chunk object.
+        delta_fn = delta.function
+        buffer[delta.index] = ChatCompletionDeltaToolCall(
+            id=delta.id,
+            index=delta.index,
+            type=delta.type,
+            function=(
+                DeltaFunctionCall(
+                    name=delta_fn.name if delta_fn else None,
+                    arguments=delta_fn.arguments if delta_fn else None,
+                )
+                if delta_fn is not None
+                else None
+            ),
+        )
+        return
+
+    if delta.id and not existing.id:
+        existing.id = delta.id
+    if delta.function is not None:
+        if existing.function is None:
+            existing.function = DeltaFunctionCall(
+                name=delta.function.name,
+                arguments=delta.function.arguments,
+            )
+        else:
+            if delta.function.name and not existing.function.name:
+                existing.function.name = delta.function.name
+            if delta.function.arguments:
+                existing.function.arguments = (
+                    existing.function.arguments or ""
+                ) + delta.function.arguments
+
+
+def _finalize_tool_calls(
+    buffer: dict[int, "ChatCompletionDeltaToolCall"],
+) -> list["ToolCall"] | None:
+    """Convert a reassembled delta buffer into a list of complete ``ToolCall``.
+
+    Entries missing a required field (``id`` or ``function.name``) are skipped
+    — these would indicate a truncated / malformed stream, and it's safer to
+    log nothing for that index than to fabricate a partial record.
+    """
+    if not buffer:
+        return None
+
+    from onyx.llm.models import FunctionCall as ModelFunctionCall
+    from onyx.llm.models import ToolCall
+
+    finalized: list[ToolCall] = []
+    for idx in sorted(buffer.keys()):
+        delta = buffer[idx]
+        if delta.id is None or delta.function is None or delta.function.name is None:
+            continue
+        finalized.append(
+            ToolCall(
+                id=delta.id,
+                type="function",
+                function=ModelFunctionCall(
+                    name=delta.function.name,
+                    arguments=delta.function.arguments or "",
+                ),
+            )
+        )
+    return finalized or None

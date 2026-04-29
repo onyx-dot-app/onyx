@@ -16,7 +16,7 @@ import MultiModelPanel from "@/app/app/message/MultiModelPanel";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
 import { setPreferredResponse } from "@/app/app/services/lib";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface MultiModelResponseViewProps {
   responses: MultiModelResponse[];

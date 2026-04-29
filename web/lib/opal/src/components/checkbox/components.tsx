@@ -1,32 +1,17 @@
 "use client";
 
+import "@opal/components/checkbox/styles.css";
 import React, { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgCheck, SvgMinus } from "@opal/icons";
-const getRootClasses = (checked: boolean, indeterminate: boolean) => ({
-  main:
-    checked || indeterminate
-      ? [
-          "bg-action-link-05",
-          "hover:bg-action-link-04",
-          "focus-visible:border-border-05",
-          "focus-visible:focus-shadow",
-        ]
-      : [
-          "bg-background-neutral-00",
-          "border",
-          "border-border-02",
-          "hover:border-border-03",
-          "focus-visible:border-border-05",
-          "focus-visible:focus-shadow",
-        ],
-  disabled:
-    checked || indeterminate
-      ? ["bg-background-neutral-04"]
-      : ["bg-background-neutral-03", "border", "border-border-02"],
-});
 
-export interface CheckboxProps
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type CheckboxState = "unchecked" | "checked" | "indeterminate";
+
+interface CheckboxProps
   extends Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size"> {
   checked?: boolean;
   defaultChecked?: boolean;
@@ -34,6 +19,20 @@ export interface CheckboxProps
   indeterminate?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Checkbox
+// ---------------------------------------------------------------------------
+
+/**
+ * Custom checkbox built on a dual-element pattern:
+ *
+ * 1. Hidden `<input type="checkbox">` — form state, native validation,
+ *    indeterminate property.
+ * 2. Visible `<div role="checkbox">` — custom styling via `data-state` and
+ *    `data-disabled` attributes, keyboard interaction.
+ *
+ * All visual states are driven by CSS in `styles.css`.
+ */
 function CheckboxInner(
   {
     checked: controlledChecked,
@@ -99,23 +98,20 @@ function CheckboxInner(
     onCheckedChange?.(newChecked);
   }
 
-  const variant = disabled ? "disabled" : "main";
-  const rootClasses = getRootClasses(checked, indeterminate);
+  const state: CheckboxState = indeterminate
+    ? "indeterminate"
+    : checked
+      ? "checked"
+      : "unchecked";
 
   return (
-    <div className="relative inline-flex shrink-0">
-      {/*
-        Dual-element pattern for custom checkbox:
-        1. Hidden input: Maintains form state, enables form submission, supports indeterminate property
-        2. Visible div: Provides custom styling, handles user interaction, accessible via role="checkbox"
-        The div's click handler triggers the input's native click, preserving standard checkbox behavior.
-      */}
+    <div className="opal-checkbox">
       <input
         ref={inputRef}
         id={id}
         type="checkbox"
         role="presentation"
-        className="sr-only peer"
+        className="opal-checkbox-input"
         checked={checked}
         disabled={disabled}
         onChange={handleChange}
@@ -129,12 +125,9 @@ function CheckboxInner(
         aria-labelledby={ariaLabelledby}
         aria-describedby={ariaDescribedby}
         tabIndex={disabled ? -1 : 0}
-        className={cn(
-          "flex h-4 w-4 shrink-0 items-center justify-center rounded-04 transition-colors",
-          disabled ? "cursor-not-allowed" : "cursor-pointer",
-          rootClasses[variant],
-          className
-        )}
+        data-state={state}
+        data-disabled={disabled || undefined}
+        className={cn("opal-checkbox-surface", className)}
         onClick={(e) => {
           if (!disabled && inputRef.current) {
             inputRef.current.click();
@@ -155,9 +148,9 @@ function CheckboxInner(
         {(checked || indeterminate) && (
           <div>
             {indeterminate ? (
-              <SvgMinus className="h-3 w-3 stroke-text-light-05" />
+              <SvgMinus className="opal-checkbox-icon" />
             ) : (
-              <SvgCheck className="h-3 w-3 stroke-text-light-05" />
+              <SvgCheck className="opal-checkbox-icon" />
             )}
           </div>
         )}
@@ -169,3 +162,4 @@ function CheckboxInner(
 const Checkbox = React.forwardRef(CheckboxInner);
 Checkbox.displayName = "Checkbox";
 export default Checkbox;
+export { Checkbox, type CheckboxProps };

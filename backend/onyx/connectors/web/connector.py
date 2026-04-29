@@ -24,6 +24,7 @@ from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
@@ -354,7 +355,9 @@ def extract_urls_from_sitemap(sitemap_url: str) -> dict[str, datetime | None]:
     # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
     # import brotli
     try:
-        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
+        response = requests.get(
+            sitemap_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+        )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
 
@@ -558,7 +561,10 @@ class WebConnector(LoadConnector, PollConnector, SlimConnector):
             head_headers["If-Modified-Since"] = formatdate(poll_start, usegmt=True)
 
         head_response = requests.head(
-            initial_url, headers=head_headers, allow_redirects=True
+            initial_url,
+            headers=DEFAULT_HEADERS,
+            allow_redirects=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         if poll_start is not None and head_response.status_code == 304:
@@ -581,7 +587,9 @@ class WebConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 return result
 
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+            response = requests.get(
+                initial_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+            )
             page_text, metadata = extract_pdf_text(response.content)
             last_modified = response.headers.get("Last-Modified")
 
@@ -648,26 +656,38 @@ class WebConnector(LoadConnector, PollConnector, SlimConnector):
 
             # If we got here, the request was successful
             if not slim and self.scroll_before_scraping:
-                scroll_attempts = 0
-                previous_height = page.evaluate("document.body.scrollHeight")
-                while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    # Wait for content to load, but catch timeout if page never reaches networkidle
-                    # (e.g., CloudFlare protection keeps making requests)
-                    try:
-                        page.wait_for_load_state(
-                            "networkidle", timeout=PAGE_RENDER_TIMEOUT_MS
-                        )
-                    except TimeoutError:
-                        # If networkidle times out, just give it a moment for content to render
-                        time.sleep(1)
-                    time.sleep(0.5)  # let javascript run
+                try:
+                    # document.body can be null for non-HTML responses,
+                    # transient frame-nav states, or pages rendered without
+                    # a body (e.g. pure XML, some SPAs mid-navigation). That
+                    # surfaces as "Page.evaluate: TypeError: Cannot read
+                    # properties of null (reading 'scrollHeight')"
+                    # (ONYX-BACKEND-H6G5). Skip auto-scroll in that case and
+                    # fall back to whatever content the initial load gave us.
+                    scroll_attempts = 0
+                    previous_height = page.evaluate("document.body.scrollHeight")
+                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        # Wait for content to load, but catch timeout if page never reaches networkidle
+                        # (e.g., CloudFlare protection keeps making requests)
+                        try:
+                            page.wait_for_load_state(
+                                "networkidle", timeout=PAGE_RENDER_TIMEOUT_MS
+                            )
+                        except TimeoutError:
+                            # If networkidle times out, just give it a moment for content to render
+                            time.sleep(1)
+                        time.sleep(0.5)  # let javascript run
 
-                    new_height = page.evaluate("document.body.scrollHeight")
-                    if new_height == previous_height:
-                        break  # Stop scrolling when no more content is loaded
-                    previous_height = new_height
-                    scroll_attempts += 1
+                        new_height = page.evaluate("document.body.scrollHeight")
+                        if new_height == previous_height:
+                            break  # Stop scrolling when no more content is loaded
+                        previous_height = new_height
+                        scroll_attempts += 1
+                except Exception as scroll_err:
+                    logger.warning(
+                        f"{index}: auto-scroll skipped for {initial_url}: {scroll_err}"
+                    )
 
             content = page.content()
             soup = BeautifulSoup(content, "html.parser")
