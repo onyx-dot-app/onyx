@@ -7,9 +7,6 @@ Contains utilities for:
 """
 
 from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_knowledge_sources_section,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section,
 )
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -24,16 +21,19 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     get_provider_display_name,
 )
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    render_company_search_skill_md,
+)
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
 
 __all__ = [
-    "build_knowledge_sources_section",
     "build_opencode_config",
     "build_skills_section",
     "build_user_context",
     "extract_skill_description",
     "generate_agent_instructions",
     "get_provider_display_name",
+    "render_company_search_skill_md",
 ]

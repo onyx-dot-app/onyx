@@ -176,6 +176,7 @@ def build_session_record(
         id=uuid4(),
         user_id=test_user.id,
         status=BuildSessionStatus.ACTIVE,
+        sandbox_token="test-sandbox-token",
     )
     db_session.add(build_session)
     db_session.commit()
@@ -221,6 +222,9 @@ def session_workspace(
         session_id=session_id,
         llm_config=llm_config,
         nextjs_port=nextjs_port,
+        sandbox_session_token="test-sandbox-token",
+        backend_url="http://localhost:8080",
+        tenant_id=TEST_TENANT_ID,
         file_system_path=SANDBOX_BASE_PATH,
     )
 

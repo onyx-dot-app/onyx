@@ -203,6 +203,9 @@ def test_kubernetes_sandbox_provision() -> None:
             session_id=session_id,
             llm_config=llm_config,
             nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            sandbox_session_token="test-sandbox-token",
+            backend_url="http://localhost:8080",
+            tenant_id="test-tenant",
             file_system_path=None,
             snapshot_path=None,
             user_name="Test User",
@@ -361,7 +364,13 @@ def test_kubernetes_sandbox_send_message() -> None:
         print("DEBUG: Sandbox agent is healthy")
 
         manager.setup_session_workspace(
-            sandbox_id, session_id, llm_config, nextjs_port=SANDBOX_NEXTJS_PORT_START
+            sandbox_id,
+            session_id,
+            llm_config,
+            nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            sandbox_session_token="test-sandbox-token",
+            backend_url="http://localhost:8080",
+            tenant_id="test-tenant",
         )
 
         # Send a simple message
@@ -483,6 +492,9 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             session_id=session_id,
             llm_config=llm_config,
             nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            sandbox_session_token="test-sandbox-token",
+            backend_url="http://localhost:8080",
+            tenant_id="test-tenant",
             file_system_path=None,
             snapshot_path=None,
             user_name="Test User",

@@ -142,14 +142,15 @@ def build_opencode_config(
         "webfetch": "allow",
         # External directory permissions:
         # - dev_mode: Allow all external directories for local development
-        # - Docker/Kubernetes: Whitelist only specific directories
+        # - Docker/Kubernetes: Whitelist only specific directories. The
+        #   legacy /workspace/files corpus is gone — company knowledge is
+        #   now reached via the company_search skill, which calls back into
+        #   Onyx and never touches the filesystem.
         "external_directory": (
             "allow"
             if dev_mode
             else {
                 "*": "deny",  # Deny all external directories by default
-                "/workspace/files": "allow",  # Allow files directory
-                "/workspace/files/**": "allow",  # Allow files directory contents
                 "/workspace/demo_data": "allow",  # Allow demo data directory
                 "/workspace/demo_data/**": "allow",  # Allow demo data directory contents
             }

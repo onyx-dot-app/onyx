@@ -38,6 +38,7 @@ from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SANDBOX_BACKEND_URL
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
@@ -493,12 +494,18 @@ def restore_session(
                         db_session.commit()
                         raise
                 else:
-                    # No snapshot - set up fresh workspace
+                    # No snapshot - set up fresh workspace.
+                    # Restore reuses the session's existing sandbox token; we
+                    # re-thread the search-tool env so company_search keeps
+                    # working after a re-provision.
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
+                        sandbox_session_token=session.sandbox_token,
+                        backend_url=SANDBOX_BACKEND_URL,
+                        tenant_id=tenant_id,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()

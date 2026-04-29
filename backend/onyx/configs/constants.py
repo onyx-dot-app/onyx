@@ -723,3 +723,73 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }
+
+
+# One-line, agent-facing description of each source. Surfaced to the Craft
+# agent inside the rendered company_search SKILL.md so it can reason about
+# what kinds of documents live behind each source. Connector authors add an
+# entry here as part of landing a new connector — see the unit test in
+# backend/tests/unit/onyx/server/features/build/test_sandbox_auth.py which
+# enforces coverage.
+DocumentSourceCraftDescription: dict[DocumentSource, str] = {
+    DocumentSource.SLACK: ("Channel and DM messages from the company Slack workspace"),
+    DocumentSource.WEB: "Indexed pages from configured public/internal web sources",
+    DocumentSource.GOOGLE_DRIVE: (
+        "Google Drive — internal docs, meeting notes, draft specs, spreadsheets"
+    ),
+    DocumentSource.GMAIL: "Email threads from the user's Gmail mailbox",
+    DocumentSource.GITHUB: (
+        "GitHub pull requests, issues, and code review discussions"
+    ),
+    DocumentSource.GITBOOK: "GitBook spaces and documentation pages",
+    DocumentSource.GITLAB: "GitLab merge requests, issues, and project content",
+    DocumentSource.BITBUCKET: "Bitbucket pull requests and repository content",
+    DocumentSource.GURU: "Guru cards and knowledge base content",
+    DocumentSource.BOOKSTACK: "BookStack pages and shelves",
+    DocumentSource.OUTLINE: "Outline knowledge-base pages",
+    DocumentSource.CONFLUENCE: "Confluence pages and spaces",
+    DocumentSource.JIRA: "Jira issues, tickets, and projects",
+    DocumentSource.SLAB: "Slab posts and topics",
+    DocumentSource.PRODUCTBOARD: "Productboard insights, features, and roadmap notes",
+    DocumentSource.NOTION: "Notion pages and databases",
+    DocumentSource.LINEAR: "Linear issues and project tickets across teams",
+    DocumentSource.HUBSPOT: "HubSpot CRM records — contacts, companies, deals",
+    DocumentSource.DOCUMENT360: "Document360 knowledge-base articles",
+    DocumentSource.GONG: "Gong call transcripts and summaries",
+    DocumentSource.GOOGLE_SITES: "Google Sites pages",
+    DocumentSource.ZENDESK: "Zendesk support tickets and help-center articles",
+    DocumentSource.LOOPIO: "Loopio RFP/security questionnaire content",
+    DocumentSource.DROPBOX: "Files stored in the company Dropbox",
+    DocumentSource.SHAREPOINT: "SharePoint sites, lists, and document libraries",
+    DocumentSource.TEAMS: "Microsoft Teams chats and channel messages",
+    DocumentSource.SALESFORCE: (
+        "Salesforce CRM records — accounts, opportunities, contacts"
+    ),
+    DocumentSource.DISCOURSE: "Discourse forum topics and posts",
+    DocumentSource.AXERO: "Axero intranet content",
+    DocumentSource.CLICKUP: "ClickUp tasks and project content",
+    DocumentSource.MEDIAWIKI: "MediaWiki pages",
+    DocumentSource.WIKIPEDIA: "Wikipedia articles",
+    DocumentSource.ASANA: "Asana tasks and projects",
+    DocumentSource.S3: "Files synced from an S3 bucket",
+    DocumentSource.R2: "Files synced from a Cloudflare R2 bucket",
+    DocumentSource.GOOGLE_CLOUD_STORAGE: "Files synced from Google Cloud Storage",
+    DocumentSource.OCI_STORAGE: "Files synced from Oracle Cloud object storage",
+    DocumentSource.XENFORO: "XenForo forum threads",
+    DocumentSource.DISCORD: "Discord channel messages",
+    DocumentSource.FRESHDESK: "Freshdesk support tickets",
+    DocumentSource.FIREFLIES: "Fireflies meeting transcripts and summaries",
+    DocumentSource.EGNYTE: "Files stored in the company Egnyte",
+    DocumentSource.AIRTABLE: "Airtable bases and records",
+    DocumentSource.HIGHSPOT: "Highspot enablement content",
+    DocumentSource.DRUPAL_WIKI: "Drupal Wiki pages and attachments",
+    DocumentSource.IMAP: "Email messages synced via IMAP",
+    DocumentSource.TESTRAIL: "TestRail test cases and runs",
+    DocumentSource.REQUESTTRACKER: "Request Tracker tickets",
+    DocumentSource.CODA: "Coda docs, tables, and pages",
+    DocumentSource.CANVAS: "Canvas LMS courses, pages, and announcements",
+    DocumentSource.ZULIP: "Zulip stream messages",
+    DocumentSource.FILE: "Files uploaded directly to Onyx",
+    DocumentSource.USER_FILE: "Files uploaded by the user to their Onyx library",
+    DocumentSource.CRAFT_FILE: "Raw user files (xlsx, pptx, docx, etc.)",
+}

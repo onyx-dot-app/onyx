@@ -50,6 +50,7 @@ from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SANDBOX_BACKEND_URL
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
@@ -78,6 +79,9 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.tasks.tasks import (
     _get_disabled_user_library_paths,
+)
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    render_company_search_skill_md,
 )
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -574,11 +578,39 @@ class SessionManager:
                     f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
                 )
 
+        # Render the per-session company-search SKILL.md from the user's
+        # accessible connectors. We render here (not inside the sandbox
+        # manager) to keep the SandboxManager interface free of DB access.
+        company_search_skill_md: str | None = None
+        if user is not None:
+            company_search_skill_template = (
+                Path(__file__).parent.parent
+                / "sandbox"
+                / "kubernetes"
+                / "docker"
+                / "skills"
+                / "company-search"
+                / "SKILL.md.template"
+            )
+            try:
+                company_search_skill_md = render_company_search_skill_md(
+                    user=user,
+                    db_session=self._db_session,
+                    skill_template_path=company_search_skill_template,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to render company-search SKILL.md for session {session_id}: {e}"
+                )
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
+            sandbox_session_token=build_session.sandbox_token,
+            backend_url=SANDBOX_BACKEND_URL,
+            tenant_id=tenant_id,
             file_system_path=user_file_system_path,
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
@@ -587,6 +619,7 @@ class SessionManager:
             user_level=user_level,
             use_demo_data=demo_data_enabled,
             excluded_user_library_paths=excluded_user_library_paths,
+            company_search_skill_md=company_search_skill_md,
         )
 
         sandbox_id = sandbox.id

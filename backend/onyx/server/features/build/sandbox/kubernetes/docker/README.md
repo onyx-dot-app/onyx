@@ -12,7 +12,6 @@ docker/
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
-├── generate_agents_md.py   # Script to generate AGENTS.md for sessions
 └── README.md               # This file
 ```
 

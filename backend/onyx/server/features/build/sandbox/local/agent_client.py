@@ -154,6 +154,7 @@ class ACPAgentClient:
         client_info: dict[str, Any] | None = None,
         client_capabilities: dict[str, Any] | None = None,
         auto_start: bool = True,
+        extra_env: dict[str, str] | None = None,
     ) -> None:
         """Initialize the ACP client.
 
@@ -164,6 +165,10 @@ class ACPAgentClient:
             client_info: Client identification info (name, title, version)
             client_capabilities: Client capabilities to advertise
             auto_start: If True and cwd is provided, start the agent immediately
+            extra_env: Additional environment variables to inject into the
+                opencode subprocess (merged on top of os.environ). Used to
+                propagate the per-session sandbox token + backend URL down
+                to skills like company_search.
         """
         self._opencode_path = opencode_path or _find_opencode_binary()
         self._client_info = client_info or DEFAULT_CLIENT_INFO
@@ -178,6 +183,7 @@ class ACPAgentClient:
         self._process: subprocess.Popen[str] | None = None
         self._read_lock = threading.Lock()
         self._cwd: str | None = None
+        self._extra_env: dict[str, str] = dict(extra_env) if extra_env else {}
 
         # Auto-start if cwd provided
         if cwd and auto_start:
@@ -225,6 +231,12 @@ class ACPAgentClient:
 
         self._cwd = cwd or os.getcwd()
 
+        # Inherit current env and merge in any session-specific overrides
+        # (sandbox token, backend URL, tenant id) so skills can authenticate
+        # back to Onyx.
+        env = os.environ.copy()
+        env.update(self._extra_env)
+
         # Start the opencode acp process
         self._process = subprocess.Popen(
             [self._opencode_path, "acp", "--cwd", self._cwd],
@@ -232,6 +244,7 @@ class ACPAgentClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=env,
         )
 
         try:
