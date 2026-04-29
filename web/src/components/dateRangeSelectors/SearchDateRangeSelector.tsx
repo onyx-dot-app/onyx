@@ -3,7 +3,7 @@ import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
 import { timeRangeValues } from "@/app/config/timeRange";
 import { TimeRangeSelector } from "@/components/filters/TimeRangeSelector";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export function SearchDateRangeSelector({
   value,

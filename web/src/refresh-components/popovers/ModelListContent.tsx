@@ -184,7 +184,7 @@ export default function ModelListContent({
                               <ContentAction
                                 sizePreset="secondary"
                                 variant="body"
-                                prominence="muted"
+                                color="muted"
                                 icon={group.Icon}
                                 title={group.displayName}
                                 padding="fit"

@@ -18,7 +18,7 @@ import {
   MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";

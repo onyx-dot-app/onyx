@@ -38,7 +38,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         </Text>
         {onFilter && (
           <div className="absolute right-1 top-1">
-            <Hoverable.Item group="stat" variant="opacity-on-hover">
+            <Hoverable.Item group="stat" variant="appear-on-hover">
               <IconButton
                 tertiary
                 icon={SvgFilterPlus}

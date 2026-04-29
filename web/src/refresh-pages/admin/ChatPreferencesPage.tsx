@@ -292,7 +292,7 @@ function NumericLimitField({
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
-            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
+            <Hoverable.Item group="numericLimit" variant="appear-on-hover">
               <IconButton
                 icon={SvgRefreshCw}
                 tooltip="Restore default"

@@ -43,6 +43,7 @@ const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
+#[cfg(target_os = "linux")]
 const MENU_HIDE_DECORATIONS_ID: &str = "hide_window_decorations";
 const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
 (() => {
@@ -181,54 +182,20 @@ const MENU_KEY_HANDLER_SCRIPT: &str = r#"
   if (window.__ONYX_MENU_KEY_HANDLER__) return;
   window.__ONYX_MENU_KEY_HANDLER__ = true;
 
-  let altHeld = false;
-
-  function invoke(cmd) {
-    const fn_ =
-      window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-    if (typeof fn_ === 'function') fn_(cmd);
-  }
-
-  function releaseAltAndHideMenu() {
-    if (!altHeld) {
-      return;
-    }
-    altHeld = false;
-    invoke('hide_menu_bar_temporary');
-  }
+  let altPressedAlone = false;
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Alt') {
-      if (!altHeld) {
-        altHeld = true;
-        invoke('show_menu_bar_temporarily');
-      }
-      return;
-    }
-    if (e.altKey && e.key === 'F1') {
-      e.preventDefault();
-      e.stopPropagation();
-      altHeld = false;
-      invoke('toggle_menu_bar');
-      return;
-    }
+    altPressedAlone = e.key === 'Alt' && !e.repeat;
   }, true);
 
   document.addEventListener('keyup', (e) => {
-    if (e.key === 'Alt' && altHeld) {
-      releaseAltAndHideMenu();
-    }
+    if (e.key !== 'Alt' || !altPressedAlone) return;
+    altPressedAlone = false;
+    e.preventDefault();
+    const invoke =
+      window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke === 'function') invoke('toggle_menu_bar');
   }, true);
-
-  window.addEventListener('blur', () => {
-    releaseAltAndHideMenu();
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      releaseAltAndHideMenu();
-    }
-  });
 })();
 "#;
 
@@ -448,7 +415,6 @@ struct ConfigState {
     config: RwLock<AppConfig>,
     config_initialized: RwLock<bool>,
     app_base_url: RwLock<Option<Url>>,
-    menu_temporarily_visible: RwLock<bool>,
     debug_mode: bool,
     debug_log_file: Mutex<Option<fs::File>>,
 }
@@ -487,8 +453,13 @@ fn trigger_new_window(app: &AppHandle) {
         )
         .title("Onyx")
         .inner_size(1200.0, 800.0)
-        .min_inner_size(800.0, 600.0)
-        .transparent(true);
+        .min_inner_size(800.0, 600.0);
+
+        // Windows draws its own title bar in the system theme; a transparent
+        // window leaves any unpainted region see-through, which produces the
+        // translucent-bar artifact reported on Windows.
+        #[cfg(not(target_os = "windows"))]
+        let builder = builder.transparent(true);
 
         #[cfg(target_os = "macos")]
         let builder = builder
@@ -852,8 +823,10 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     )
     .title("Onyx")
     .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .transparent(true);
+    .min_inner_size(800.0, 600.0);
+
+    #[cfg(not(target_os = "windows"))]
+    let builder = builder.transparent(true);
 
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -937,10 +910,10 @@ fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
     }
     let state = app.state::<ConfigState>();
     let config = state.config.read().unwrap();
-    let temp_visible = *state.menu_temporarily_visible.read().unwrap();
-    if !config.show_menu_bar && !temp_visible {
+    if !config.show_menu_bar {
         let _ = window.hide_menu();
     }
+    #[cfg(target_os = "linux")]
     if config.hide_window_decorations {
         let _ = window.set_decorations(false);
     }
@@ -958,8 +931,6 @@ fn handle_menu_bar_toggle(app: &AppHandle) {
         config.show_menu_bar
     };
 
-    *state.menu_temporarily_visible.write().unwrap() = false;
-
     for (_, window) in app.webview_windows() {
         if show {
             let _ = window.show_menu();
@@ -969,10 +940,8 @@ fn handle_menu_bar_toggle(app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn handle_decorations_toggle(app: &AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
     let state = app.state::<ConfigState>();
     let hide = {
         let mut config = state.config.write().unwrap();
@@ -997,50 +966,6 @@ fn toggle_menu_bar(app: AppHandle) {
     let checked = state.config.read().unwrap().show_menu_bar;
     if let Some(check) = find_check_menu_item(&app, MENU_SHOW_MENU_BAR_ID) {
         let _ = check.set_checked(checked);
-    }
-}
-
-#[tauri::command]
-fn show_menu_bar_temporarily(app: AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    let state = app.state::<ConfigState>();
-    if state.config.read().unwrap().show_menu_bar {
-        return;
-    }
-
-    let mut temp = state.menu_temporarily_visible.write().unwrap();
-    if *temp {
-        return;
-    }
-    *temp = true;
-    drop(temp);
-
-    for (_, window) in app.webview_windows() {
-        let _ = window.show_menu();
-    }
-}
-
-#[tauri::command]
-fn hide_menu_bar_temporary(app: AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    let state = app.state::<ConfigState>();
-    let mut temp = state.menu_temporarily_visible.write().unwrap();
-    if !*temp {
-        return;
-    }
-    *temp = false;
-    drop(temp);
-
-    if state.config.read().unwrap().show_menu_bar {
-        return;
-    }
-
-    for (_, window) in app.webview_windows() {
-        let _ = window.hide_menu();
     }
 }
 
@@ -1101,6 +1026,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
             None::<&str>,
         )?;
 
+        #[cfg(target_os = "linux")]
         let hide_decorations_item = CheckMenuItem::with_id(
             app,
             MENU_HIDE_DECORATIONS_ID,
@@ -1119,12 +1045,17 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
             .find(|submenu| submenu.text().ok().as_deref() == Some("Window"))
         {
             window_menu.append(&show_menu_bar_item)?;
+            #[cfg(target_os = "linux")]
             window_menu.append(&hide_decorations_item)?;
         } else {
-            let window_menu = SubmenuBuilder::new(app, "Window")
-                .item(&show_menu_bar_item)
-                .item(&hide_decorations_item)
-                .build()?;
+            #[allow(unused_mut)]
+            let mut window_menu_builder =
+                SubmenuBuilder::new(app, "Window").item(&show_menu_bar_item);
+            #[cfg(target_os = "linux")]
+            {
+                window_menu_builder = window_menu_builder.item(&hide_decorations_item);
+            }
+            let window_menu = window_menu_builder.build()?;
 
             let items = menu.items()?;
             let help_idx = items
@@ -1310,7 +1241,6 @@ fn main() {
             config: RwLock::new(config),
             config_initialized: RwLock::new(config_initialized),
             app_base_url: RwLock::new(None),
-            menu_temporarily_visible: RwLock::new(false),
             debug_mode,
             debug_log_file: Mutex::new(debug_log_file),
         })
@@ -1331,8 +1261,6 @@ fn main() {
             reset_config,
             start_drag_window,
             toggle_menu_bar,
-            show_menu_bar_temporarily,
-            hide_menu_bar_temporary,
             log_from_frontend
         ])
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1341,6 +1269,7 @@ fn main() {
             "new_window" => trigger_new_window(app),
             "open_settings" => open_settings(app),
             "show_menu_bar" => handle_menu_bar_toggle(app),
+            #[cfg(target_os = "linux")]
             "hide_window_decorations" => handle_decorations_toggle(app),
             MENU_TOGGLE_DEVTOOLS_ID => handle_toggle_devtools(app),
             MENU_OPEN_DEBUG_LOG_ID => handle_open_debug_log(),
@@ -1400,19 +1329,9 @@ fn main() {
                 let _ = webview.eval(MENU_KEY_HANDLER_SCRIPT);
 
                 let app = webview.app_handle();
-                let state = app.state::<ConfigState>();
-                let config = state.config.read().unwrap();
-                let temp_visible = *state.menu_temporarily_visible.read().unwrap();
                 let label = webview.label().to_string();
-                if !config.show_menu_bar && !temp_visible {
-                    if let Some(win) = app.get_webview_window(&label) {
-                        let _ = win.hide_menu();
-                    }
-                }
-                if config.hide_window_decorations {
-                    if let Some(win) = app.get_webview_window(&label) {
-                        let _ = win.set_decorations(false);
-                    }
+                if let Some(win) = app.get_webview_window(&label) {
+                    apply_settings_to_window(&app, &win);
                 }
             }
 

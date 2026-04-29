@@ -2,7 +2,7 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "../utils/aria";
 

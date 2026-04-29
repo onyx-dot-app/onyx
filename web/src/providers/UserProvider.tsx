@@ -61,7 +61,8 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
-  const { authTypeMetadata } = useAuthTypeMetadata();
+  const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
+    useAuthTypeMetadata();
   const updatedSettings = useContext(SettingsContext);
   const posthog = usePostHog();
 
@@ -116,7 +117,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(upToDateUser, authTypeMetadata, onRefreshFail);
+  useTokenRefresh(
+    upToDateUser,
+    authTypeMetadata,
+    authTypeMetadataLoading,
+    onRefreshFail
+  );
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();

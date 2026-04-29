@@ -11,7 +11,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { useActionCardContext } from "@/sections/actions/ActionCardContext";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface ActionsProps {
   status: ActionStatus;

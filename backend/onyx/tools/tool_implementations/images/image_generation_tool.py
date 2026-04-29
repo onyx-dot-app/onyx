@@ -170,12 +170,12 @@ class ImageGenerationTool(Tool[None]):
         reference_images: list[ReferenceImage] | None = None,
     ) -> tuple[ImageGenerationResponse, Any]:
         if shape == ImageShape.LANDSCAPE:
-            if "gpt-image-1" in self.model:
+            if "gpt-image-" in self.model:
                 size = "1536x1024"
             else:
                 size = "1792x1024"
         elif shape == ImageShape.PORTRAIT:
-            if "gpt-image-1" in self.model:
+            if "gpt-image-" in self.model:
                 size = "1024x1536"
             else:
                 size = "1024x1792"
@@ -189,8 +189,8 @@ class ImageGenerationTool(Tool[None]):
                 size=size,
                 n=1,
                 reference_images=reference_images,
-                # response_format parameter is not supported for gpt-image-1
-                response_format=None if "gpt-image-1" in self.model else "b64_json",
+                # response_format parameter is not supported for gpt-image-* models
+                response_format=None if "gpt-image-" in self.model else "b64_json",
             )
 
             if not response.data or len(response.data) == 0:

@@ -5,6 +5,10 @@ export function buildImgUrl(fileId: string) {
   return `/api/chat/file/${fileId}`;
 }
 
+export function buildAgentAvatarUrl(agentId: number) {
+  return `/api/persona/${agentId}/avatar`;
+}
+
 /**
  * If `href` points to a chat file and `linkText` ends with an image extension,
  * returns the file ID. Otherwise returns null.
