@@ -20,9 +20,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
@@ -30,9 +28,6 @@ from onyx.server.features.build.db.build_session import (
 )
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
-)
 
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
@@ -63,10 +58,10 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
-    # Skip cleanup for local backend - sandboxes persist until manual termination
-    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+    sandbox_manager = get_sandbox_manager()
+    if not sandbox_manager.supports_idle_cleanup():
         task_logger.debug(
-            "cleanup_idle_sandboxes_task skipped (local backend - cleanup disabled)"
+            "cleanup_idle_sandboxes_task skipped (backend does not support idle cleanup)"
         )
         return
 
@@ -92,15 +87,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             update_sandbox_status__no_commit,
         )
 
-        sandbox_manager = get_sandbox_manager()
-
-        # Type guard for kubernetes-specific methods
-        if not isinstance(sandbox_manager, KubernetesSandboxManager):
-            task_logger.debug(
-                "cleanup_idle_sandboxes_task skipped (not kubernetes backend)"
-            )
-            return
-
         with get_session_with_current_tenant() as db_session:
             idle_sandboxes = get_idle_sandboxes(
                 db_session, SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -124,16 +110,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
 
                 try:
-                    # List session directories in the pod
-                    session_ids = _list_session_directories(sandbox_manager, sandbox_id)
+                    # List session directories inside the sandbox (backend-specific)
+                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
                     task_logger.info(
                         f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
                     )
 
                     # Snapshot each session
-                    for session_id_str in session_ids:
+                    for session_id in session_ids:
+                        session_id_str = str(session_id)
                         try:
-                            session_id = UUID(session_id_str)
                             task_logger.debug(
                                 f"Creating snapshot for session {session_id_str}"
                             )
@@ -196,64 +182,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
-
-
-def _list_session_directories(
-    sandbox_manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-) -> list[str]:
-    """List session directory names in the pod's /workspace/sessions/.
-
-    Args:
-        sandbox_manager: The kubernetes sandbox manager
-        sandbox_id: The sandbox ID
-
-    Returns:
-        List of session ID strings (directory names)
-    """
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream as k8s_stream
-
-    pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
-
-    # List directories in /workspace/sessions/
-    exec_command = [
-        "/bin/sh",
-        "-c",
-        'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
-    ]
-
-    try:
-        resp = k8s_stream(
-            sandbox_manager._core_api.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=sandbox_manager._namespace,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-
-        # Parse output - one directory name per line
-        session_ids = []
-        for line in resp.strip().split("\n"):
-            line = line.strip()
-            if line:
-                # Validate it looks like a UUID
-                try:
-                    UUID(line)
-                    session_ids.append(line)
-                except ValueError:
-                    # Not a valid UUID, skip
-                    pass
-
-        return session_ids
-
-    except ApiException as e:
-        task_logger.warning(f"Failed to list session directories: {e}")
-        return []
 
 
 @contextmanager

@@ -6,17 +6,23 @@ from pathlib import Path
 class SandboxBackend(str, Enum):
     """Backend mode for sandbox operations.
 
-    LOCAL: Development mode - no snapshots, no automatic cleanup
-    KUBERNETES: Production mode - full snapshots and cleanup
+    LOCAL: Development mode only - no container isolation, no snapshots, no cleanup.
+    DOCKER: Self-hosted production mode - one container per user via the Docker
+        Engine API, snapshots through FileStore, idle cleanup enabled.
+    KUBERNETES: Cloud production mode - one pod per user, S3-based snapshots via
+        s5cmd sidecar, idle cleanup enabled.
     """
 
     LOCAL = "local"
+    DOCKER = "docker"
     KUBERNETES = "kubernetes"
 
 
-# Sandbox backend mode (controls snapshot and cleanup behavior)
-# "local" = no snapshots, no cleanup (for development)
-# "kubernetes" = full snapshots and cleanup (for production)
+# Sandbox backend selection. Defaults to "local" (no isolation) so that running
+# the api_server outside any container keeps working unchanged. Deployment defaults:
+# - docker compose deployments set SANDBOX_BACKEND=docker explicitly
+# - the helm chart sets SANDBOX_BACKEND=kubernetes
+# - dev / ad-hoc invocations stay on "local"
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
 
 # Base directory path for persistent document storage (local filesystem)
@@ -106,6 +112,28 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
     "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
 )
+
+# ============================================================================
+# Docker Sandbox Configuration
+# Only used when SANDBOX_BACKEND = "docker"
+# ============================================================================
+
+# Docker daemon URL. None / empty means use docker.from_env() (the default
+# /var/run/docker.sock or DOCKER_HOST env var). Set to e.g. "tcp://docker:2375"
+# to talk to a remote daemon.
+SANDBOX_DOCKER_HOST = os.environ.get("SANDBOX_DOCKER_HOST", "") or None
+
+# Docker bridge network the api_server and all sandbox containers join. The
+# api_server reaches sandbox containers by hostname over this network, mirroring
+# Kubernetes ClusterIP service discovery.
+SANDBOX_DOCKER_NETWORK = os.environ.get("SANDBOX_DOCKER_NETWORK", "onyx_craft_sandbox")
+
+# Resource limits for each sandbox container. Mirror the Kubernetes pod limits
+# in `kubernetes_sandbox_manager.py` so behavior matches across deployments.
+# Memory accepts docker-style suffixes (e.g. "10g", "512m"). CPU is fractional
+# cores; nano_cpus = SANDBOX_DOCKER_CPU_LIMIT * 1e9.
+SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "2.0"))
+SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "10g")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 

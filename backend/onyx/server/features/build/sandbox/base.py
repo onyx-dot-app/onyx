@@ -491,6 +491,31 @@ class SandboxManager(ABC):
             nextjs_port: The port the Next.js server should be listening on
         """
 
+    def supports_idle_cleanup(self) -> bool:
+        """Whether this backend participates in idle-sandbox cleanup.
+
+        Local sandboxes persist on disk and are not torn down on idle.
+        Container-backed sandboxes (docker, kubernetes) are idled to free
+        compute and resumed from snapshots on the next message.
+        """
+        return False
+
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:  # noqa: ARG002
+        """List session workspace UUIDs that exist inside the sandbox.
+
+        Used by the idle-cleanup task to enumerate sessions to snapshot.
+        Default: backends that don't support idle cleanup return [].
+        Container-backed managers override this to exec a directory listing
+        inside the container/pod.
+
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            List of session UUIDs found under sessions/ inside the sandbox.
+        """
+        return []
+
 
 # Singleton instance cache for the factory
 _sandbox_manager_instance: SandboxManager | None = None
@@ -502,8 +527,9 @@ def get_sandbox_manager() -> SandboxManager:
 
     Returns:
         SandboxManager instance:
-        - LocalSandboxManager for local backend (development)
-        - KubernetesSandboxManager for kubernetes backend (production)
+        - LocalSandboxManager for local backend (development only)
+        - DockerSandboxManager for docker backend (self-hosted)
+        - KubernetesSandboxManager for kubernetes backend (cloud)
     """
     global _sandbox_manager_instance
 
@@ -516,6 +542,13 @@ def get_sandbox_manager() -> SandboxManager:
                     )
 
                     _sandbox_manager_instance = LocalSandboxManager()
+                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
+                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+                        DockerSandboxManager,
+                    )
+
+                    _sandbox_manager_instance = DockerSandboxManager()
+                    logger.info("Using DockerSandboxManager for sandbox operations")
                 elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
                         KubernetesSandboxManager,
