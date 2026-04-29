@@ -1190,15 +1190,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
-        # Process each object type with time filtering based on configuration
+        # Epoch 0 means no prior successful sync — full scan using get_page with
+        # inline associations (avoids O(N×M) v4 association calls on initial load).
+        is_full_scan = start == 0
+        effective_start = None if is_full_scan else start_datetime
+        effective_end = None if is_full_scan else end_datetime
+
         if "tickets" in self.object_types:
-            yield from self._process_tickets(start_datetime, end_datetime)
+            yield from self._process_tickets(effective_start, effective_end)
         if "companies" in self.object_types:
-            yield from self._process_companies(start_datetime, end_datetime)
+            yield from self._process_companies(effective_start, effective_end)
         if "deals" in self.object_types:
-            yield from self._process_deals(start_datetime, end_datetime)
+            yield from self._process_deals(effective_start, effective_end)
         if "contacts" in self.object_types:
-            yield from self._process_contacts(start_datetime, end_datetime)
+            yield from self._process_contacts(effective_start, effective_end)
 
 
 if __name__ == "__main__":
