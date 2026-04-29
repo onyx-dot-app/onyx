@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Interactive } from "@opal/core";
 import type { IconProps } from "@opal/types";

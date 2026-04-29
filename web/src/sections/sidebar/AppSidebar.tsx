@@ -43,13 +43,13 @@ import type { Project } from "@/app/app/projects/projectsService";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
 import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { Button as OpalButton } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
-  FEATURE_FLAGS,
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
@@ -73,7 +73,7 @@ import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
-import { NotificationType } from "@/interfaces/settings";
+import { NotificationType } from "@/lib/notifications/interfaces";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";

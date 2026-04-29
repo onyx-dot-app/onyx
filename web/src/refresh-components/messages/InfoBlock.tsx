@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 

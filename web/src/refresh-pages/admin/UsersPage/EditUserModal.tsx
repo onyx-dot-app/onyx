@@ -18,7 +18,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
-import { cn } from "../../../lib/utils";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Constants

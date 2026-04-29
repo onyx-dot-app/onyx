@@ -34,9 +34,9 @@
  */
 
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Divider } from "@opal/components";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";

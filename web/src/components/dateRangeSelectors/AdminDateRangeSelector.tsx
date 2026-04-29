@@ -3,7 +3,7 @@ import Calendar from "@/refresh-components/Calendar";
 import Popover from "@/refresh-components/Popover";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
 import { SvgCalendar } from "@opal/icons";

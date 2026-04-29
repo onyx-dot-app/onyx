@@ -145,7 +145,7 @@ export default function AgentRowActions({
 
       <div className="flex items-center gap-0.5">
         {/* TODO(@raunakab): abstract a more standardized way of doing this
-            opacity-on-hover animation. Making Hoverable more extensible
+            appear-on-hover animation. Making Hoverable more extensible
             (e.g. supporting table row groups) would let us use it here
             instead of raw Tailwind group-hover. */}
         {!agent.builtin_persona && (

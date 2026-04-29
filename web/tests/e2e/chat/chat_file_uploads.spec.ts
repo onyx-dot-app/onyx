@@ -1,5 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
 import {
@@ -12,15 +13,6 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_AI_RESPONSE = "I've reviewed the file you uploaded.";
 const IMAGE_GEN_AI_MESSAGE = "Here is the image I generated for you.";
-
-// 50x50 black/white checkered PNG — clearly a test artifact, used both as a
-// user-uploaded image and as the mocked response for LLM-generated image
-// fetches. The bytes pass PIL validation (which the upload endpoint runs to
-// reject malformed images).
-const CHECKERED_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAVElEQVR42u3WwQkAIAwDQOP+O9cN+lJUuHylcFApyWhTVc1rkkOzczwZLCwsrN9YuXXH+1lLxMLCwtpz5XV5fwsLC0uX1+WxsLCwdHldHgsLC+uxLK9hJFqMAN43AAAAAElFTkSuQmCC",
-  "base64"
-);
 
 const PYTHON_CODE = `def greet(name: str) -> str:
     return f"Hello, {name}!"

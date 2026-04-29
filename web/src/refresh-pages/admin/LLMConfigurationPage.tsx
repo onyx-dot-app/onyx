@@ -152,7 +152,7 @@ function ExistingProviderCard({
               <div className="flex flex-row">
                 <Hoverable.Item
                   group="ExistingProviderCard"
-                  variant="opacity-on-hover"
+                  variant="appear-on-hover"
                 >
                   <Button
                     icon={SvgTrash}

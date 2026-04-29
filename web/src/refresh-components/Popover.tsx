@@ -2,10 +2,10 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 
 /**
@@ -107,13 +107,14 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger";
+type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "2xl" | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   sm: "w-[10rem]",
   md: "w-[12rem]",
   lg: "w-[15rem]",
   xl: "w-[18rem]",
+  "2xl": "w-[25rem]",
   trigger: "w-[var(--radix-popover-trigger-width)]",
 };
 interface PopoverContentProps

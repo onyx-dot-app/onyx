@@ -22,6 +22,7 @@ from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -318,6 +319,7 @@ def confluence_refresh_tokens(
             "client_secret": client_secret,
             "refresh_token": refresh_token,
         },
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
 
     try:

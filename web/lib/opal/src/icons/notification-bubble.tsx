@@ -46,7 +46,7 @@ const SvgNotificationBubble = ({
         }}
       >
         <span
-          className="text-text-inverted-05 font-medium leading-none"
+          className="text-text-light-05 font-medium leading-none"
           style={{ fontSize: 10 }}
         >
           {displayCount}

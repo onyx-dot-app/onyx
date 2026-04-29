@@ -1,7 +1,7 @@
 "use client";
 
 import { DocumentSetSummary } from "@/lib/types";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
 import { Interactive } from "@opal/core";

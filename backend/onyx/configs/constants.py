@@ -603,7 +603,7 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
-    VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

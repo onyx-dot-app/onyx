@@ -591,7 +591,7 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
         return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.error(
+            logger.warning(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
             return []

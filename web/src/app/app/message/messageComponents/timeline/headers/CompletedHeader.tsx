@@ -73,7 +73,7 @@ function MemoryTagWithTooltip({
                 sizePreset="secondary"
                 padding="sm"
                 variant="body"
-                prominence="muted"
+                color="muted"
                 rightChildren={
                   <Button
                     prominence="tertiary"

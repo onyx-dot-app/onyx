@@ -57,6 +57,7 @@ def generate_chat_messages_report(
                 "assistant_name",
                 "user_email",
                 "number_of_tokens",
+                "llm_model",
             ]
         )
         for chat_message_skeleton_batch in get_all_empty_chat_message_entries(
@@ -72,6 +73,7 @@ def generate_chat_messages_report(
                         chat_message_skeleton.assistant_name,
                         chat_message_skeleton.user_email,
                         chat_message_skeleton.number_of_tokens,
+                        chat_message_skeleton.llm_model,
                     ]
                 )
 

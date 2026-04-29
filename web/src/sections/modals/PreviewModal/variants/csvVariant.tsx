@@ -7,7 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import {
