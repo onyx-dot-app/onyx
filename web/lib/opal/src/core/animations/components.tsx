@@ -33,13 +33,22 @@ interface HoverableRootProps
   ref?: React.Ref<HTMLDivElement>;
 }
 
-type HoverableItemVariant = "opacity-on-hover";
+type HoverableItemVariant =
+  | "appear-on-hover"
+  | "appear-on-rest"
+  | "replace-on-hover";
 
 interface HoverableItemProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   children: React.ReactNode;
   group?: string;
   variant?: HoverableItemVariant;
+  /**
+   * Content shown at rest when `variant="replace-on-hover"`.
+   * On hover, `resting` is removed and `children` is inserted (instant display swap, no transition).
+   * Ignored for other variants.
+   */
+  resting?: React.ReactNode;
   /** Ref forwarded to the item `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -60,7 +69,7 @@ interface HoverableItemProps
  * ```tsx
  * <Hoverable.Root group="card">
  *   <Card>
- *     <Hoverable.Item group="card" variant="opacity-on-hover">
+ *     <Hoverable.Item group="card" variant="appear-on-hover">
  *       <TrashIcon />
  *     </Hoverable.Item>
  *   </Card>
@@ -104,13 +113,13 @@ function HoverableRoot({
  * @example
  * ```tsx
  * // Local mode — hover on the item itself
- * <Hoverable.Item variant="opacity-on-hover">
+ * <Hoverable.Item variant="appear-on-hover">
  *   <TrashIcon />
  * </Hoverable.Item>
  *
  * // Group mode — hover on the Root reveals the item
  * <Hoverable.Root group="card">
- *   <Hoverable.Item group="card" variant="opacity-on-hover">
+ *   <Hoverable.Item group="card" variant="appear-on-hover">
  *     <TrashIcon />
  *   </Hoverable.Item>
  * </Hoverable.Root>
@@ -118,12 +127,32 @@ function HoverableRoot({
  */
 function HoverableItem({
   group,
-  variant = "opacity-on-hover",
+  variant = "appear-on-hover",
+  resting,
   children,
   ref,
   ...props
 }: HoverableItemProps) {
   const isLocal = group === undefined;
+
+  if (variant === "replace-on-hover") {
+    return (
+      <div {...props} ref={ref} className="hoverable-replace">
+        <div
+          className="hoverable-replace-rest"
+          data-hoverable-local={isLocal ? "true" : undefined}
+        >
+          {resting}
+        </div>
+        <div
+          className="hoverable-replace-hover"
+          data-hoverable-local={isLocal ? "true" : undefined}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -164,14 +193,14 @@ function HoverableItem({
  * <Hoverable.Root group="card">
  *   <Card>
  *     <span>Card content</span>
- *     <Hoverable.Item group="card" variant="opacity-on-hover">
+ *     <Hoverable.Item group="card" variant="appear-on-hover">
  *       <TrashIcon />
  *     </Hoverable.Item>
  *   </Card>
  * </Hoverable.Root>
  *
  * // Local mode — hovering the item itself reveals it
- * <Hoverable.Item variant="opacity-on-hover">
+ * <Hoverable.Item variant="appear-on-hover">
  *   <TrashIcon />
  * </Hoverable.Item>
  * ```

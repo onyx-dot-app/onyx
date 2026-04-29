@@ -368,6 +368,8 @@ def _construct_tools_impl(
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
+                        user_id=user.id,
+                        user_email="anonymous" if user.is_anonymous else user.email,
                     ),
                     custom_headers=(db_tool_model.custom_headers or [])
                     + (

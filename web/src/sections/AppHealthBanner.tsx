@@ -22,8 +22,12 @@ export default function AppHealthBanner() {
   const [expired, setExpired] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
-  const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
+  const expirationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
   // Latches true once we see an authed user — separates mid-session logout
   // from a fresh unauth load.
   const hasSeenAuthenticatedUserRef = useRef(false);

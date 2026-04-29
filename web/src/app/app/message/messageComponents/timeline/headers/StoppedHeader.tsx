@@ -2,7 +2,8 @@ import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface StoppedHeaderProps {
   totalSteps: number;

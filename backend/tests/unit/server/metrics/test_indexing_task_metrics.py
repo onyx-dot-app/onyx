@@ -18,20 +18,12 @@ from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
 
 @pytest.fixture(autouse=True)
 def reset_state() -> Iterator[None]:
-    """Clear caches and state between tests.
-
-    Sets CURRENT_TENANT_ID_CONTEXTVAR to a realistic value so cache keys
-    are never keyed on an empty string.
-    """
-    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set("test_tenant")
+    """Clear caches and state between tests."""
     _connector_cache.clear()
     _indexing_start_times.clear()
     yield
     _connector_cache.clear()
     _indexing_start_times.clear()
-    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _make_task(name: str) -> MagicMock:
@@ -48,7 +40,7 @@ def _mock_db_lookup(
     mock_cc_pair.name = name
     mock_cc_pair.connector.source.value = source
 
-    session_patch = patch("onyx.db.engine.sql_engine.get_session_with_current_tenant")
+    session_patch = patch("onyx.db.engine.sql_engine.get_session_with_tenant")
     cc_pair_patch = patch(
         "onyx.db.connector_credential_pair.get_connector_credential_pair_from_id",
         return_value=mock_cc_pair,
@@ -65,7 +57,7 @@ class TestIndexingTaskPrerun:
 
     def test_emits_started_for_docfetching(self) -> None:
         # Pre-populate cache to avoid DB lookup (tenant-scoped key)
-        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
+        _connector_cache[("tenant-1", 42)] = ConnectorInfo(
             source="google_drive", name="My Google Drive"
         )
 
@@ -92,7 +84,7 @@ class TestIndexingTaskPrerun:
         assert "task-1" in _indexing_start_times
 
     def test_emits_started_for_docprocessing(self) -> None:
-        _connector_cache[("test_tenant", 10)] = ConnectorInfo(
+        _connector_cache[("public", 10)] = ConnectorInfo(
             source="slack", name="Slack Connector"
         )
 
@@ -103,7 +95,7 @@ class TestIndexingTaskPrerun:
         assert "task-2" in _indexing_start_times
 
     def test_cache_hit_avoids_db_call(self) -> None:
-        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
+        _connector_cache[("public", 42)] = ConnectorInfo(
             source="confluence", name="Engineering Confluence"
         )
 
@@ -137,7 +129,7 @@ class TestIndexingTaskPrerun:
             kwargs = {"cc_pair_id": 77, "tenant_id": "public"}
 
             on_indexing_task_prerun("task-1", task, kwargs)
-            mock_resolve.assert_called_once_with(77)
+            mock_resolve.assert_called_once_with(77, "public")
 
     def test_missing_cc_pair_returns_unknown(self) -> None:
         """When _resolve_connector can't find the cc_pair, uses 'unknown'."""
@@ -177,7 +169,7 @@ class TestIndexingTaskPostrun:
         # Should not raise
 
     def test_emits_completed_and_duration(self) -> None:
-        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
+        _connector_cache[("public", 42)] = ConnectorInfo(
             source="google_drive", name="Marketing Drive"
         )
 
@@ -221,9 +213,7 @@ class TestIndexingTaskPostrun:
         assert after_duration > before_duration
 
     def test_failure_outcome(self) -> None:
-        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
-            source="slack", name="Slack"
-        )
+        _connector_cache[("public", 42)] = ConnectorInfo(source="slack", name="Slack")
 
         task = _make_task("connector_doc_fetching_task")
         kwargs = {"cc_pair_id": 42, "tenant_id": "public"}
@@ -252,9 +242,7 @@ class TestIndexingTaskPostrun:
 
     def test_handles_postrun_without_prerun(self) -> None:
         """Postrun for an indexing task without a matching prerun should not crash."""
-        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
-            source="slack", name="Slack"
-        )
+        _connector_cache[("public", 42)] = ConnectorInfo(source="slack", name="Slack")
 
         task = _make_task("docprocessing_task")
         kwargs = {"cc_pair_id": 42, "tenant_id": "public"}
@@ -266,70 +254,66 @@ class TestIndexingTaskPostrun:
 class TestResolveConnector:
     def test_failed_lookup_not_cached(self) -> None:
         """When DB lookup returns None, result should NOT be cached."""
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+        with (
+            patch("onyx.db.engine.sql_engine.get_session_with_tenant"),
+            patch(
+                "onyx.db.connector_credential_pair"
+                ".get_connector_credential_pair_from_id",
+                return_value=None,
+            ),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
 
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set("test-tenant")
-        try:
-            with (
-                patch("onyx.db.engine.sql_engine.get_session_with_current_tenant"),
-                patch(
-                    "onyx.db.connector_credential_pair"
-                    ".get_connector_credential_pair_from_id",
-                    return_value=None,
-                ),
-            ):
-                from onyx.server.metrics.indexing_task_metrics import _resolve_connector
-
-                result = _resolve_connector(999)
-                assert result.source == "unknown"
-                # Should NOT be cached so subsequent calls can retry
-                assert ("test-tenant", 999) not in _connector_cache
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            result = _resolve_connector(999, "test-tenant")
+            assert result.source == "unknown"
+            # Should NOT be cached so subsequent calls can retry
+            assert ("test-tenant", 999) not in _connector_cache
 
     def test_exception_not_cached(self) -> None:
         """When DB lookup raises, result should NOT be cached."""
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+        with patch(
+            "onyx.db.engine.sql_engine.get_session_with_tenant",
+            side_effect=Exception("DB down"),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
 
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set("test-tenant")
-        try:
-            with (
-                patch(
-                    "onyx.db.engine.sql_engine.get_session_with_current_tenant",
-                    side_effect=Exception("DB down"),
-                ),
-            ):
-                from onyx.server.metrics.indexing_task_metrics import _resolve_connector
-
-                result = _resolve_connector(888)
-                assert result.source == "unknown"
-                assert ("test-tenant", 888) not in _connector_cache
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            result = _resolve_connector(888, "test-tenant")
+            assert result.source == "unknown"
+            assert ("test-tenant", 888) not in _connector_cache
 
     def test_successful_lookup_is_cached(self) -> None:
         """When DB lookup succeeds, result should be cached."""
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+        mock_cc_pair = MagicMock()
+        mock_cc_pair.name = "My Drive"
+        mock_cc_pair.connector.source.value = "google_drive"
 
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set("test-tenant")
-        try:
-            mock_cc_pair = MagicMock()
-            mock_cc_pair.name = "My Drive"
-            mock_cc_pair.connector.source.value = "google_drive"
+        with (
+            patch("onyx.db.engine.sql_engine.get_session_with_tenant"),
+            patch(
+                "onyx.db.connector_credential_pair"
+                ".get_connector_credential_pair_from_id",
+                return_value=mock_cc_pair,
+            ),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
 
-            with (
-                patch("onyx.db.engine.sql_engine.get_session_with_current_tenant"),
-                patch(
-                    "onyx.db.connector_credential_pair"
-                    ".get_connector_credential_pair_from_id",
-                    return_value=mock_cc_pair,
-                ),
-            ):
-                from onyx.server.metrics.indexing_task_metrics import _resolve_connector
+            result = _resolve_connector(777, "test-tenant")
+            assert result.source == "google_drive"
+            assert result.name == "My Drive"
+            assert ("test-tenant", 777) in _connector_cache
 
-                result = _resolve_connector(777)
-                assert result.source == "google_drive"
-                assert result.name == "My Drive"
-                assert ("test-tenant", 777) in _connector_cache
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    def test_unknown_tenant_skips_db_lookup(self) -> None:
+        """When tenant_id is missing or 'unknown', return early without
+        hitting the DB. This is the regression path for the
+        UndefinedTable: public.connector_credential_pair errors that fired
+        when callbacks ran outside tenant context."""
+        with patch(
+            "onyx.db.engine.sql_engine.get_session_with_tenant",
+            side_effect=AssertionError("DB should not be touched"),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
+
+            assert _resolve_connector(1, "unknown").source == "unknown"
+            assert _resolve_connector(2, "").source == "unknown"
+            assert (1, "unknown") not in _connector_cache
+            assert (2, "") not in _connector_cache

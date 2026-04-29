@@ -269,10 +269,14 @@ def test_openai_prompt_caching_reduces_costs(
     ), f"Expected at least one success. 0 of {attempts} attempts used prompt caching."
 
 
-@pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="Anthropic API key not available",
+@pytest.mark.xfail(
+    strict=True,
+    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause a CI run to fail if this test passes, acting as a reminder to re-enable this test.",
 )
+# @pytest.mark.skipif(
+#     not os.environ.get("ANTHROPIC_API_KEY"),
+#     reason="Anthropic API key not available",
+# )
 def test_anthropic_prompt_caching_reduces_costs(
     db_session: Session,  # noqa: ARG001
 ) -> None:

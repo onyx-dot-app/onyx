@@ -28,6 +28,8 @@ from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
+from onyx.tools.models import USER_EMAIL_PLACEHOLDER
+from onyx.tools.models import USER_ID_PLACEHOLDER
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -279,12 +281,30 @@ def build_custom_tools_from_openapi_schema_and_headers(
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     user_oauth_token: str | None = None,
 ) -> list[CustomTool]:
+    """Build CustomTool instances from an OpenAPI schema.
+
+    Placeholder substitution: when ``dynamic_schema_info`` is provided, the
+    JSON-serialized schema is scanned for the following literal strings and
+    each is replaced with the corresponding per-request value before the tool
+    is built:
+
+      - ``CHAT_SESSION_ID``  -> current chat session UUID
+      - ``MESSAGE_ID``       -> current chat message id
+      - ``USER_ID``          -> current user UUID (skipped for anonymous users)
+      - ``USER_EMAIL``       -> current user email (skipped for anonymous users)
+
+    Placeholders whose value is ``None`` (e.g. an anonymous user's identity)
+    are left untouched in the schema rather than substituted with an empty
+    string. Substitution only happens inside the OpenAPI schema; static
+    ``custom_headers`` are not templated.
+    """
     if dynamic_schema_info:
-        # Process dynamic schema information
         schema_str = json.dumps(openapi_schema)
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
             MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
+            USER_ID_PLACEHOLDER: dynamic_schema_info.user_id,
+            USER_EMAIL_PLACEHOLDER: dynamic_schema_info.user_email,
         }
 
         for placeholder, value in placeholders.items():

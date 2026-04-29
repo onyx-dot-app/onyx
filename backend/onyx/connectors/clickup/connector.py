@@ -6,6 +6,7 @@ from typing import Optional
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -53,7 +54,10 @@ class ClickupConnector(LoadConnector, PollConnector):
         headers = {"Authorization": self.api_token}
 
         response = requests.get(
-            f"{CLICKUP_API_BASE_URL}/{endpoint}", headers=headers, params=params
+            f"{CLICKUP_API_BASE_URL}/{endpoint}",
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()

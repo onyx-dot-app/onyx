@@ -30,7 +30,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning] test-only workflow; no deploy artifacts
           cache-dependency-path: ./web/package-lock.json
 

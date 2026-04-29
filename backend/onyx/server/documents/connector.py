@@ -1134,14 +1134,14 @@ def get_connector_indexing_status(
         # Get most recent index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, False
+                request.secondary_index, False, False
             ),
             (),
         ),
         # Get most recent finished index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, True
+                request.secondary_index, False, True
             ),
             (),
         ),

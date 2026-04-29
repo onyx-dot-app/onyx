@@ -20,7 +20,8 @@ import {
   fetchArtifacts,
   exportDocx,
 } from "@/app/craft/services/apiServices";
-import { cn, getFileIcon } from "@/lib/utils";
+import { getFileIcon } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,

@@ -14,7 +14,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
 import { Text } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";

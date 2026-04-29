@@ -65,7 +65,7 @@ def redis_shared_lock(
         if acquired:
             assert (
                 lock is not None
-            ), "[BUG] Redis lock should have been initialized by now."
+            ), "Bug: Redis lock should have been initialized by now."
             if lock.owned():
                 lock.release()
                 logger.debug(

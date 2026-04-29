@@ -86,6 +86,9 @@ spec:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_docprocessing.enableMiniChunk }}"
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with .Values.celery_worker_docprocessing.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- with .Values.celery_worker_docprocessing.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

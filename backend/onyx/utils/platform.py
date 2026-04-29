@@ -24,7 +24,12 @@ def _resolve_container_flag() -> bool:
 
 
 _IS_RUNNING_IN_CONTAINER: bool = _resolve_container_flag()
+_IS_RUNNING_IN_KUBERNETES: bool = os.getenv("KUBERNETES_SERVICE_HOST") is not None
 
 
 def is_running_in_container() -> bool:
     return _IS_RUNNING_IN_CONTAINER
+
+
+def is_running_in_kubernetes() -> bool:
+    return _IS_RUNNING_IN_KUBERNETES

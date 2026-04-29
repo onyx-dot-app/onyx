@@ -42,7 +42,7 @@ import {
   type SetStateAction,
 } from "react";
 import Cookies from "js-cookie";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import OverflowDiv from "@/refresh-components/OverflowDiv";

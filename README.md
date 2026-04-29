@@ -25,6 +25,10 @@
   </a>
 </p>
 
+<p align="center">
+  <b>English</b> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 # Onyx - The Open Source AI Platform
 
 **[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the application layer for LLMs - bringing a feature-rich interface that can be easily hosted by anyone.

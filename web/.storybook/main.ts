@@ -36,6 +36,13 @@ const config: StorybookConfig = {
     config.css = config.css ?? {};
     config.css.postcss = path.resolve(__dirname, "..");
 
+    // Provide `process.env` for modules that reference it at the top level
+    // (e.g. src/lib/constants.ts). Vite doesn't polyfill Node globals.
+    config.define = {
+      ...config.define,
+      "process.env": JSON.stringify({}),
+    };
+
     return config;
   },
 };
