@@ -90,9 +90,13 @@ class UserGroupManager:
     def get_permissions(
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
+        include_non_toggleable: bool = False,
     ) -> list[str]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
+            params=(
+                {"include_non_toggleable": "true"} if include_non_toggleable else None
+            ),
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

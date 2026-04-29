@@ -643,9 +643,12 @@ def test_scim_created_group_has_basic_permission(
     )
     admin = UserManager.login_as_user(admin)
 
-    # Verify the group itself was granted the basic permission
+    # Verify the group itself was granted the basic permission. BASIC_ACCESS
+    # is non-toggleable so the default GET response hides it; pass
+    # include_non_toggleable=true to surface all grants for this assertion.
     perms_resp = requests.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
+        params={"include_non_toggleable": "true"},
         headers=admin.headers,
     )
     perms_resp.raise_for_status()

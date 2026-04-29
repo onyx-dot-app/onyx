@@ -90,6 +90,7 @@ def get_permission_registry(
 @router.get("/admin/user-group/{user_group_id}/permissions")
 def get_user_group_permissions(
     user_group_id: int,
+    include_non_toggleable: bool = False,
     _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> list[Permission]:
@@ -99,7 +100,10 @@ def get_user_group_permissions(
     return [
         grant.permission
         for grant in group.permission_grants
-        if not grant.is_deleted and grant.permission not in NON_TOGGLEABLE_PERMISSIONS
+        if not grant.is_deleted
+        and (
+            include_non_toggleable or grant.permission not in NON_TOGGLEABLE_PERMISSIONS
+        )
     ]
 
 

@@ -5,6 +5,7 @@ import requests
 from onyx.server.api_key.models import APIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -17,9 +18,18 @@ class APIKeyManager:
         group_ids: list[int] | None = None,
     ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
+        # Default to the Admin default group so API keys created without
+        # explicit groups inherit admin-level permissions, matching the
+        # pre-permission-migration default of UserRole.ADMIN.
+        if group_ids is None:
+            admin_group = UserGroupManager.get_default(
+                user_performing_action=user_performing_action,
+                name="Admin",
+            )
+            group_ids = [admin_group.id]
         api_key_request = APIKeyArgs(
             name=name,
-            group_ids=group_ids or [],
+            group_ids=group_ids,
         )
         api_key_response = requests.post(
             f"{API_SERVER_URL}/admin/api-key",

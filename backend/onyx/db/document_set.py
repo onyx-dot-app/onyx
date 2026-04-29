@@ -26,8 +26,10 @@ from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import DocumentSet__ConnectorCredentialPair
+from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
 from onyx.utils.logger import setup_logger
@@ -40,15 +42,28 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     # MANAGE → always return all
     if has_permission(user, Permission.MANAGE_DOCUMENT_SETS):
         return stmt
-    # READ → return all when reading, nothing when editing
-    if has_permission(user, Permission.READ_DOCUMENT_SETS):
-        if get_editable:
-            return stmt.where(sa_false())
-        return stmt
-
+    # Editing requires MANAGE; readers and group-members cannot edit.
     if get_editable:
         return stmt.where(sa_false())
-    return stmt.where(DocumentSetDBModel.is_public.is_(True))
+    # READ → return all when reading, nothing when editing
+    if has_permission(user, Permission.READ_DOCUMENT_SETS):
+        return stmt
+
+    # Otherwise: public document sets, plus those owned by groups the user
+    # is a member of (so a user can use a private group-owned document set
+    # they have access to via group membership in chat / search).
+    user_group_ids = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == user.id
+    )
+    accessible_via_group = select(DocumentSet__UserGroup.document_set_id).where(
+        DocumentSet__UserGroup.user_group_id.in_(user_group_ids)
+    )
+    return stmt.where(
+        or_(
+            DocumentSetDBModel.is_public.is_(True),
+            DocumentSetDBModel.id.in_(accessible_via_group),
+        )
+    )
 
 
 def _delete_document_set_cc_pairs__no_commit(

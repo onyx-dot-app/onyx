@@ -191,10 +191,9 @@ def list_accepted_users(
     )
 
     if not filtered_accepted_users:
-        logger.info("No users found")
         return PaginatedReturn(
             items=[],
-            total_items=0,
+            total_items=total_accepted_users_count,
         )
 
     user_ids = [user.id for user in filtered_accepted_users]
