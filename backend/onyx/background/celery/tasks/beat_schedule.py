@@ -9,7 +9,6 @@ from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
@@ -18,12 +17,6 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
-
-# EE is considered enabled when either ENTERPRISE_EDITION_ENABLED or
-# LICENSE_ENFORCEMENT_ENABLED is set (see set_is_ee_based_on_env_variable).
-# The block below schedules EE-only permission sync tasks, so it must use
-# the same combined check.
-_EE_FEATURES_ENABLED = ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
 # we might be able to reduce this greatly if we can run a unified
@@ -182,7 +175,7 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-if _EE_FEATURES_ENABLED:
+if _LICENSE_ENFORCEMENT_ENABLED:
     beat_task_templates.extend(
         [
             {
