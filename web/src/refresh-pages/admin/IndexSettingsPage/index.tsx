@@ -34,6 +34,7 @@ import {
   SvgSettings,
   SvgSlowTime,
   SvgUnplug,
+  SvgVector,
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -115,7 +116,7 @@ function CloudDisabled({
   const tooltip = NEXT_PUBLIC_CLOUD_ENABLED ? CLOUD_TOOLTIP : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip}>
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
       {children}
     </Disabled>
   );
@@ -701,7 +702,7 @@ export default function IndexSettingsPage() {
         />
 
         <SettingsLayouts.Body>
-          <CloudDisabled>
+          {!NEXT_PUBLIC_CLOUD_ENABLED && (
             <MessageCard
               variant={statusVariant}
               headerPadding="sm"
@@ -787,22 +788,35 @@ export default function IndexSettingsPage() {
                 ) : undefined
               }
             />
+          )}
 
-            {/* ── Embedding Model ── */}
-            <GeneralLayouts.Section
-              gap={0.75}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
-            >
-              <Content
-                title="Embedding Model"
-                description="Onyx uses this model to encode documents for search and retrieval."
-                sizePreset="main-content"
-                variant="section"
-              />
+          {/* ── Embedding Model ── */}
+          <GeneralLayouts.Section
+            gap={0.75}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title="Embedding Model"
+              description="Onyx uses this model to encode documents for search and retrieval."
+              sizePreset="main-content"
+              variant="section"
+            />
 
-              {currentEmbeddingModel && (
+            {NEXT_PUBLIC_CLOUD_ENABLED ? (
+              <Card border="solid" rounding="lg" padding="sm">
+                <GeneralLayouts.Section padding={0.5}>
+                  <Content
+                    icon={SvgVector}
+                    title="Embedding model and settings are managed by Onyx Cloud."
+                    sizePreset="main-ui"
+                    variant="section"
+                  />
+                </GeneralLayouts.Section>
+              </Card>
+            ) : (
+              currentEmbeddingModel && (
                 <Tabs value={activeModelTab} onValueChange={setActiveModelTab}>
                   <Card
                     expandable
@@ -995,48 +1009,56 @@ export default function IndexSettingsPage() {
                     )}
                   </Card>
                 </Tabs>
-              )}
-            </GeneralLayouts.Section>
+              )
+            )}
+          </GeneralLayouts.Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-            {/* ── Retrieval Optimization ── */}
-            <GeneralLayouts.Section
-              gap={0.75}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
+          {/* ── Retrieval Optimization ── */}
+          <GeneralLayouts.Section
+            gap={0.75}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title="Retrieval Optimization"
+              description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
+              sizePreset="main-content"
+              variant="section"
+            />
+
+            <CloudDisabled
+              disabled
+              tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
             >
-              <Content
-                title="Retrieval Optimization"
-                description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
-                sizePreset="main-content"
-                variant="section"
-              />
-
               <Card border="solid" rounding="lg">
-                <CloudDisabled>
-                  <InputHorizontal
-                    title="Multipass Indexing"
-                    description="Index documents as chunks of varying sizes to better identify relevant sources."
-                    tag={{
-                      title: "temporarily unavailable",
-                      color: "gray",
-                    }}
-                    withLabel
-                  >
-                    <Switch
-                      checked={searchSettings?.multipass_indexing ?? false}
-                      disabled
-                    />
-                  </InputHorizontal>
-                </CloudDisabled>
+                <InputHorizontal
+                  title="Multipass Indexing"
+                  description="Index documents as chunks of varying sizes to better identify relevant sources."
+                  tag={{
+                    title: "temporarily unavailable",
+                    color: "gray",
+                  }}
+                  withLabel
+                >
+                  <Switch
+                    checked={searchSettings?.multipass_indexing ?? false}
+                    disabled
+                  />
+                </InputHorizontal>
               </Card>
+            </CloudDisabled>
 
-              {/* TODO(@raunakab): enable_contextual_rag is in PRESERVED_SEARCH_FIELDS
+            {/* TODO(@raunakab): enable_contextual_rag is in PRESERVED_SEARCH_FIELDS
              (backend/shared_configs/configs.py), so the update-inference-settings
              endpoint silently ignores it. The backend returns 200 but never persists
              the change. Needs a backend fix to remove it from the preserved list. */}
+            <CloudDisabled
+              disabled
+              tooltip="Updating contextual retrieval is disabled temporarily and will be available in the future."
+            >
               <Card border="solid" borderColor={statusVariant} rounding="lg">
                 <GeneralLayouts.Section width="full">
                   <InputHorizontal
@@ -1046,71 +1068,65 @@ export default function IndexSettingsPage() {
                   >
                     <Switch
                       checked={searchSettings?.enable_contextual_rag ?? false}
-                      onCheckedChange={(checked) => {
-                        void saveSearchSettings({
-                          enable_contextual_rag: checked,
-                        });
-                      }}
+                      disabled
                     />
                   </InputHorizontal>
 
-                  <CloudDisabled
+                  <InputHorizontal
+                    title="Contextual Retrieval LLM"
+                    description="This model will be used to generate context for chunks."
                     disabled={!searchSettings?.enable_contextual_rag}
+                    withLabel
                   >
-                    <InputHorizontal
-                      title="Contextual Retrieval LLM"
-                      description="This model will be used to generate context for chunks."
+                    <InputSelect
+                      value={searchSettings?.contextual_rag_llm_name ?? ""}
+                      onValueChange={(value) => {
+                        const selectedModel = contextualCosts?.find(
+                          (cost) => cost.model_name === value
+                        );
+                        void saveSearchSettings({
+                          contextual_rag_llm_name: value,
+                          contextual_rag_llm_provider:
+                            selectedModel?.provider ?? null,
+                        });
+                      }}
                       disabled={!searchSettings?.enable_contextual_rag}
-                      withLabel
                     >
-                      <InputSelect
-                        value={searchSettings?.contextual_rag_llm_name ?? ""}
-                        onValueChange={(value) => {
-                          const selectedModel = contextualCosts?.find(
-                            (cost) => cost.model_name === value
-                          );
-                          void saveSearchSettings({
-                            contextual_rag_llm_name: value,
-                            contextual_rag_llm_provider:
-                              selectedModel?.provider ?? null,
-                          });
-                        }}
-                        disabled={!searchSettings?.enable_contextual_rag}
-                      >
-                        <InputSelect.Trigger placeholder="Select a model" />
-                        <InputSelect.Content>
-                          {(contextualCosts ?? []).map((cost) => (
-                            <InputSelect.Item
-                              key={cost.model_name}
-                              value={cost.model_name}
-                            >
-                              {cost.model_name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
-                  </CloudDisabled>
+                      <InputSelect.Trigger placeholder="Select a model" />
+                      <InputSelect.Content>
+                        {(contextualCosts ?? []).map((cost) => (
+                          <InputSelect.Item
+                            key={cost.model_name}
+                            value={cost.model_name}
+                          >
+                            {cost.model_name}
+                          </InputSelect.Item>
+                        ))}
+                      </InputSelect.Content>
+                    </InputSelect>
+                  </InputHorizontal>
                 </GeneralLayouts.Section>
               </Card>
-            </GeneralLayouts.Section>
+            </CloudDisabled>
+          </GeneralLayouts.Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-            {/* ── Image Processing ── */}
-            <GeneralLayouts.Section
-              gap={0.75}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
-            >
-              <Content
-                title="Image Processing"
-                description="Use LLM model to analyze and add descriptions to images during indexing."
-                sizePreset="main-content"
-                variant="section"
-              />
+          {/* ── Image Processing ── */}
+          <GeneralLayouts.Section
+            gap={0.75}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title="Image Processing"
+              description="Use LLM model to analyze and add descriptions to images during indexing."
+              sizePreset="main-content"
+              variant="section"
+            />
 
+            <CloudDisabled>
               <Card border="solid" borderColor={statusVariant} rounding="lg">
                 <GeneralLayouts.Section width="full">
                   <InputHorizontal
@@ -1128,7 +1144,7 @@ export default function IndexSettingsPage() {
                     />
                   </InputHorizontal>
 
-                  <CloudDisabled disabled={!imageProcessingEnabled}>
+                  <Disabled disabled={!imageProcessingEnabled}>
                     <InputHorizontal
                       title="Captioning LLM"
                       description="This model will be used to analyze images during indexing."
@@ -1145,9 +1161,9 @@ export default function IndexSettingsPage() {
                         <InputSelect.Content />
                       </InputSelect>
                     </InputHorizontal>
-                  </CloudDisabled>
+                  </Disabled>
 
-                  <CloudDisabled disabled={!imageProcessingEnabled}>
+                  <Disabled disabled={!imageProcessingEnabled}>
                     <InputHorizontal
                       title="Max Image Size for Analysis"
                       suffix="(MB)"
@@ -1176,11 +1192,11 @@ export default function IndexSettingsPage() {
                         </InputSelect.Content>
                       </InputSelect>
                     </InputHorizontal>
-                  </CloudDisabled>
+                  </Disabled>
                 </GeneralLayouts.Section>
               </Card>
-            </GeneralLayouts.Section>
-          </CloudDisabled>
+            </CloudDisabled>
+          </GeneralLayouts.Section>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     </>
