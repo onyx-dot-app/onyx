@@ -264,7 +264,7 @@ fsspec==2025.10.0
     #   huggingface-hub
 gitdb==4.0.12
     # via gitpython
-gitpython==3.1.45
+gitpython==3.1.47
     # via braintrust
 google-api-core==2.28.1
     # via
