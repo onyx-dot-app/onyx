@@ -20,6 +20,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgOrganization,
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -64,6 +65,7 @@ import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -375,6 +377,7 @@ export default function ChatPreferencesPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const s = settings.settings;
+  const enterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -918,40 +921,61 @@ export default function ChatPreferencesPage() {
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
                   <Section>
-                    <InputHorizontal
-                      title="Keep Chat History"
-                      description="Specify how long Onyx should retain chats in your organization."
-                      withLabel
+                    <Disabled
+                      disabled={!enterpriseEnabled}
+                      tooltip="Chat history retention is an Enterprise Plan feature."
                     >
-                      <InputSelect
-                        value={
-                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                      <InputHorizontal
+                        title="Keep Chat History"
+                        description="Specify how long Onyx should retain chats in your organization."
+                        tag={
+                          !enterpriseEnabled
+                            ? {
+                                title: "Enterprise Plan",
+                                color: "amber",
+                                icon: SvgOrganization,
+                              }
+                            : undefined
                         }
-                        onValueChange={(value) => {
-                          void saveSettings({
-                            maximum_chat_retention_days:
-                              value === "forever" ? null : parseInt(value, 10),
-                          });
-                        }}
+                        disabled={!enterpriseEnabled}
+                        withLabel
                       >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          <InputSelect.Item value="forever">
-                            Forever
-                          </InputSelect.Item>
-                          <InputSelect.Item value="7">7 days</InputSelect.Item>
-                          <InputSelect.Item value="30">
-                            30 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="90">
-                            90 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="365">
-                            365 days
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
+                        <InputSelect
+                          value={
+                            s.maximum_chat_retention_days?.toString() ??
+                            "forever"
+                          }
+                          onValueChange={(value) => {
+                            void saveSettings({
+                              maximum_chat_retention_days:
+                                value === "forever"
+                                  ? null
+                                  : parseInt(value, 10),
+                            });
+                          }}
+                          disabled={!enterpriseEnabled}
+                        >
+                          <InputSelect.Trigger />
+                          <InputSelect.Content>
+                            <InputSelect.Item value="forever">
+                              Forever
+                            </InputSelect.Item>
+                            <InputSelect.Item value="7">
+                              7 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="30">
+                              30 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="90">
+                              90 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="365">
+                              365 days
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
+                      </InputHorizontal>
+                    </Disabled>
 
                     <InputHorizontal
                       title="Query History Visibility"
