@@ -66,7 +66,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         </span>
         {/* 3. Copy button */}
         <Section width="fit" height="fit" alignItems="center">
-          <Hoverable.Item group={group} variant="opacity-on-hover">
+          <Hoverable.Item group={group} variant="appear-on-hover">
             <CopyIconButton
               size="xs"
               getCopyText={() => log.error_message ?? ""}

@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "react";
 
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
@@ -39,7 +40,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
-      <Hoverable.Item group="fileTile" variant="opacity-on-hover">
+      <Hoverable.Item group="fileTile" variant="appear-on-hover">
         <button
           type="button"
           onClick={(e) => {

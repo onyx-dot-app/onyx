@@ -7,7 +7,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface ExpandableTextDisplayProps {
   /** Title shown in header and modal */

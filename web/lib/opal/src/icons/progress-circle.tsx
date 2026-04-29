@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import SvgCheckCircle from "@opal/icons/check-circle";
 import type { IconProps } from "@opal/types";
 

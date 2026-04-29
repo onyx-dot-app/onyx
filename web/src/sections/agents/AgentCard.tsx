@@ -7,7 +7,8 @@ import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -202,7 +203,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 title={agent.owner?.email || "Onyx"}
                 sizePreset="secondary"
                 variant="body"
-                prominence="muted"
+                color="muted"
               />
               <Content
                 icon={SvgActions}
@@ -215,7 +216,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 }
                 sizePreset="secondary"
                 variant="body"
-                prominence="muted"
+                color="muted"
               />
             </div>
 

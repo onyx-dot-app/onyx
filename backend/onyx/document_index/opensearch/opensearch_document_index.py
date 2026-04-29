@@ -88,6 +88,10 @@ class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
 
 
+class ChunkCountZeroError(ValueError):
+    """Raised when a document has a chunk count of 0."""
+
+
 def generate_opensearch_filtered_access_control_list(
     access: DocumentAccess,
 ) -> list[str]:
@@ -473,10 +477,15 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             )
             return
         except ChunkCountNotFoundError:
-            logger.exception(
+            logger.warning(
                 f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
                 "but this will not be an acceptable state once OpenSearch is the primary document index and the "
                 "indexing/updating race condition is fixed."
+            )
+            return
+        except ChunkCountZeroError:
+            logger.warning(
+                f"Tried to update document {doc_id} but its chunk count was 0."
             )
             return
 
@@ -749,7 +758,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             except BulkIndexError as e:
                 # There are several reasons why this might be raised, but the
                 # most likely one is if the deletion has not had enough time to
-                # propogate throughout the index, in which case this would be
+                # propagate throughout the index, in which case this would be
                 # raised with some form of "version_conflict_engine_exception
                 # version conflict, document already exists" messaging.
                 # Refresh the index and try one more time. We do not refresh
@@ -910,8 +919,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         "updated shortly."
                     )
                 if doc_chunk_count == 0:
-                    raise ValueError(
-                        f"Bug: Tried to update document {doc_id} but its chunk count was 0."
+                    raise ChunkCountZeroError(
+                        f"Tried to update document {doc_id} but its chunk count was 0."
                     )
 
                 for chunk_index in range(doc_chunk_count):

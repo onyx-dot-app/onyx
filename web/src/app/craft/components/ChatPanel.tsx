@@ -40,7 +40,7 @@ import { SvgSidebar, SvgChevronDown } from "@opal/icons";
 import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
 
 interface BuildChatPanelProps {

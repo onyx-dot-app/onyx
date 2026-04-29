@@ -14,7 +14,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { cn, isImageFile } from "@/lib/utils";
+import { isImageFile } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
   useUploadFilesContext,

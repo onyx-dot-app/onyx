@@ -28,7 +28,9 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -111,34 +113,47 @@ def build_file_context(
 
 def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
-    user_id: UUID | None,
+    user: User,
     db_session: Session,
 ) -> ChatSession:
     """Create a chat session from a ChatSessionCreationRequest.
 
-    Includes project ownership validation when project_id is provided.
+    Includes project ownership and persona access validation.
 
     Args:
         chat_session_request: The request containing persona_id, description, and project_id
-        user_id: The ID of the user creating the session (can be None for anonymous)
+        user: The user creating the session. Anonymous users are represented as a
+            User with is_anonymous=True (never None); the access-check helpers
+            handle that case. A real User is required so the persona access check
+            always runs — do not introduce a None-tolerant caller.
         db_session: The database session
 
     Returns:
         The newly created ChatSession
 
     Raises:
-        ValueError: If user lacks access to the specified project
+        ValueError: If user lacks access to the specified project or persona
         Exception: If the persona is invalid
     """
     project_id = chat_session_request.project_id
     if project_id:
-        if not check_project_ownership(project_id, user_id, db_session):
+        if not check_project_ownership(project_id, user.id, db_session):
             raise ValueError("User does not have access to project")
+
+    persona_id = chat_session_request.persona_id
+    if persona_id != DEFAULT_PERSONA_ID:
+        if not user_can_access_persona(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        ):
+            raise ValueError("User does not have access to persona")
 
     return create_chat_session(
         db_session=db_session,
         description=chat_session_request.description or "",
-        user_id=user_id,
+        user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
     )
