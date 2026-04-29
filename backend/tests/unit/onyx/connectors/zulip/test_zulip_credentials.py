@@ -9,7 +9,6 @@ def test_load_credentials_uses_resolved_tempdir(monkeypatch, tmp_path: Path) -> 
 
     client_mock = Mock()
     monkeypatch.setattr("onyx.connectors.zulip.connector.Client", client_mock)
-    monkeypatch.setattr("onyx.connectors.zulip.connector.tempfile.tempdir", None)
     monkeypatch.setattr(
         "onyx.connectors.zulip.connector.tempfile.gettempdir", lambda: str(tmp_path)
     )
@@ -23,5 +22,12 @@ def test_load_credentials_uses_resolved_tempdir(monkeypatch, tmp_path: Path) -> 
 
     config_file = tmp_path / "zuliprc-acme"
     assert config_file.exists()
-    assert "\n" in config_file.read_text()
+    assert config_file.read_text() == "\n".join(
+        [
+            "[api]",
+            "email=bot@example.com",
+            "key=secret",
+            "site=https://zulip.example.com",
+        ]
+    )
     client_mock.assert_called_once_with(config_file=str(config_file))
