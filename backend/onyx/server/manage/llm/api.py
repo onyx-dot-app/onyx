@@ -301,6 +301,12 @@ def _validate_and_normalize_vertex_auth(
     )
 
     if auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY:
+        if MULTI_TENANT:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Workload Identity is not supported in multi-tenant deployments; "
+                "use Service Account JSON instead.",
+            )
         if not (custom_config.get(VERTEX_PROJECT_KWARG) or "").strip():
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,

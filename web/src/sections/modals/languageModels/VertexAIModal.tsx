@@ -236,10 +236,7 @@ export default function VertexAIModal({
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(
-            ([key, v]) =>
-              key === "vertex_auth_method" ||
-              key === "vertex_credentials" ||
-              v !== ""
+            ([key, v]) => key === "vertex_auth_method" || v !== ""
           )
         );
 
