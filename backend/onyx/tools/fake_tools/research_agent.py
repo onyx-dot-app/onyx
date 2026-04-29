@@ -243,6 +243,10 @@ def run_research_agent_call(
                     RESEARCH_AGENT_TASK_KEY,
                     research_agent_call.tool_args,
                 )
+                # No ResearchAgentStart packet has been emitted yet, so there is
+                # no client-side research slot to close with a PacketException.
+                # Returning None matches the orchestrator's existing invalid-call
+                # handling without surfacing an internal malformed tool call to users.
                 return None
             research_topic = research_topic.strip()
 
