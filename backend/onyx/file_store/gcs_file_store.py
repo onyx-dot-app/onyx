@@ -90,6 +90,9 @@ class GCSBackedFileStore(FileStore):
                     # Project ID is resolved from the environment automatically.
                     self._gcs_client = storage.Client(**client_kwargs)
 
+            except ImportError as e:
+                logger.error(f"Failed to import google-cloud-storage: {e}")
+                raise
             except Exception as e:
                 logger.error(f"Failed to initialize GCS client: {e}")
                 raise RuntimeError(f"Failed to initialize GCS client: {e}") from e
@@ -247,22 +250,19 @@ class GCSBackedFileStore(FileStore):
                     db_session.commit()
                     return
 
+                from google.api_core.exceptions import NotFound
+
                 client = self._get_gcs_client()
                 bucket = client.bucket(file_record.bucket_name)
                 blob = bucket.blob(file_record.object_key)
                 try:
                     blob.delete()
-                except Exception as e:
-                    from google.api_core.exceptions import NotFound
-
-                    if isinstance(e, NotFound):
-                        logger.warning(
-                            f"delete_file: File {file_id} not found in GCS "
-                            f"(key: {file_record.object_key}), "
-                            "cleaning up database record."
-                        )
-                    else:
-                        raise
+                except NotFound:
+                    logger.warning(
+                        f"delete_file: File {file_id} not found in GCS "
+                        f"(key: {file_record.object_key}), "
+                        "cleaning up database record."
+                    )
 
                 delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 db_session.commit()
@@ -302,10 +302,10 @@ class GCSBackedFileStore(FileStore):
                     file_metadata=file_metadata,
                 )
 
-                source_blob.delete()
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()
+                source_blob.delete()
 
             except Exception as e:
                 db_session.rollback()

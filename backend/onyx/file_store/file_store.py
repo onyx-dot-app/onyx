@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import hashlib
 import tempfile
 import uuid
@@ -110,7 +108,9 @@ class FileStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def read_file(self, file_id: str, mode: str | None = None, use_tempfile: bool = False) -> IO[bytes]:
+    def read_file(
+        self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+    ) -> IO[bytes]:
         """
         Read the content of a given file by the ID
 
@@ -131,7 +131,9 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def get_file_size(self, file_id: str, db_session: Session | None = None) -> int | None:
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
         """
         Get the size of a file in bytes.
         Optionally provide a db_session for database access.
@@ -214,7 +216,9 @@ class S3BackedFileStore(FileStore):
                     if not self._s3_verify_ssl:
                         import urllib3
 
-                        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                        urllib3.disable_warnings(
+                            urllib3.exceptions.InsecureRequestWarning
+                        )
                         client_kwargs["verify"] = False
 
                 if self._aws_access_key_id and self._aws_secret_access_key:
@@ -275,7 +279,11 @@ class S3BackedFileStore(FileStore):
                 logger.info("Creating S3 bucket '%s'", bucket_name)
 
                 # For AWS S3, we need to handle region-specific bucket creation
-                region = s3_client._client_config.region_name if hasattr(s3_client, "_client_config") else None
+                region = (
+                    s3_client._client_config.region_name  # ty: ignore[unresolved-attribute]
+                    if hasattr(s3_client, "_client_config")
+                    else None
+                )
 
                 if region and region != "us-east-1":
                     # For regions other than us-east-1, we need to specify LocationConstraint
@@ -290,8 +298,12 @@ class S3BackedFileStore(FileStore):
                 logger.info("Successfully created S3 bucket '%s'", bucket_name)
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
-                logger.warning(f"S3 bucket '{bucket_name}' exists but access is forbidden")
-                raise RuntimeError(f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions.")
+                logger.warning(
+                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                )
+                raise RuntimeError(
+                    f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+                )
             else:
                 # Some other error occurred
                 logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
@@ -305,8 +317,14 @@ class S3BackedFileStore(FileStore):
         db_session: Session | None = None,
     ) -> bool:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
-        return file_record is not None and file_record.file_origin == file_origin and file_record.file_type == file_type
+            file_record = get_filerecord_by_file_id_optional(
+                file_id=file_id, db_session=db_session
+            )
+        return (
+            file_record is not None
+            and file_record.file_origin == file_origin
+            and file_record.file_type == file_type
+        )
 
     def save_file(
         self,
@@ -381,11 +399,15 @@ class S3BackedFileStore(FileStore):
         db_session: Session | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
 
         s3_client = self._get_s3_client()
         try:
-            response = s3_client.get_object(Bucket=file_record.bucket_name, Key=file_record.object_key)
+            response = s3_client.get_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
         except ClientError:
             logger.error("Failed to read file %s from S3", file_id)
             raise
@@ -406,21 +428,31 @@ class S3BackedFileStore(FileStore):
             file_content = response["Body"].read()
             return BytesIO(file_content)
 
-    def read_file_record(self, file_id: str, db_session: Session | None = None) -> FileStoreModel:
+    def read_file_record(
+        self, file_id: str, db_session: Session | None = None
+    ) -> FileStoreModel:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
-            file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
         return file_record
 
-    def get_file_size(self, file_id: str, db_session: Session | None = None) -> int | None:
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
         """
         Get the size of a file in bytes by querying S3 metadata.
         """
         try:
             with get_session_with_current_tenant_if_none(db_session) as db_session:
-                file_record = get_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
 
             s3_client = self._get_s3_client()
-            response = s3_client.head_object(Bucket=file_record.bucket_name, Key=file_record.object_key)
+            response = s3_client.head_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
             return response.get("ContentLength")
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
@@ -434,10 +466,14 @@ class S3BackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
+                file_record = get_filerecord_by_file_id_optional(
+                    file_id=file_id, db_session=db_session
+                )
                 if file_record is None:
                     if error_on_missing:
-                        raise RuntimeError(f"File by id {file_id} does not exist or was deleted")
+                        raise RuntimeError(
+                            f"File by id {file_id} does not exist or was deleted"
+                        )
                     return
                 if not file_record.bucket_name:
                     logger.error(
@@ -452,7 +488,9 @@ class S3BackedFileStore(FileStore):
                 # Delete from external storage
                 s3_client = self._get_s3_client()
                 try:
-                    s3_client.delete_object(Bucket=file_record.bucket_name, Key=file_record.object_key)
+                    s3_client.delete_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    )
                 except ClientError as e:
                     # If the object doesn't exist in file store, treat it as success
                     # since the end goal (object not existing) is achieved
@@ -474,11 +512,15 @@ class S3BackedFileStore(FileStore):
                 db_session.rollback()
                 raise
 
-    def change_file_id(self, old_file_id: str, new_file_id: str, db_session: Session | None = None) -> None:
+    def change_file_id(
+        self, old_file_id: str, new_file_id: str, db_session: Session | None = None
+    ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
                 # Get the existing file record
-                old_file_record = get_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
+                old_file_record = get_filerecord_by_file_id(
+                    file_id=old_file_id, db_session=db_session
+                )
 
                 # Generate new S3 key for the new file ID
                 new_s3_key = self._get_s3_key(new_file_id)
@@ -487,7 +529,9 @@ class S3BackedFileStore(FileStore):
                 s3_client = self._get_s3_client()
                 bucket_name = self._get_bucket_name()
 
-                copy_source = f"{old_file_record.bucket_name}/{old_file_record.object_key}"
+                copy_source = (
+                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
+                )
 
                 s3_client.copy_object(
                     CopySource=copy_source,
@@ -498,7 +542,9 @@ class S3BackedFileStore(FileStore):
 
                 # Create new file record with new file_id
                 # Cast file_metadata to the expected type
-                file_metadata = cast(dict[Any, Any] | None, old_file_record.file_metadata)
+                file_metadata = cast(
+                    dict[Any, Any] | None, old_file_record.file_metadata
+                )
 
                 upsert_filerecord(
                     file_id=new_file_id,
@@ -512,7 +558,9 @@ class S3BackedFileStore(FileStore):
                 )
 
                 # Delete old S3 object
-                s3_client.delete_object(Bucket=old_file_record.bucket_name, Key=old_file_record.object_key)
+                s3_client.delete_object(
+                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
+                )
 
                 # Delete old file record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
@@ -546,7 +594,9 @@ class S3BackedFileStore(FileStore):
         List all file IDs that start with the given prefix.
         """
         with get_session_with_current_tenant() as db_session:
-            file_records = get_filerecord_by_prefix(prefix=prefix, db_session=db_session)
+            file_records = get_filerecord_by_prefix(
+                prefix=prefix, db_session=db_session
+            )
         return file_records
 
 
@@ -558,7 +608,9 @@ def get_s3_file_store() -> S3BackedFileStore:
     # Get bucket name - this is required
     bucket_name = S3_FILE_STORE_BUCKET_NAME
     if not bucket_name:
-        raise RuntimeError("S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store")
+        raise RuntimeError(
+            "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
+        )
 
     return S3BackedFileStore(
         bucket_name=bucket_name,
@@ -571,7 +623,7 @@ def get_s3_file_store() -> S3BackedFileStore:
     )
 
 
-def get_gcs_file_store() -> GCSBackedFileStore:
+def get_gcs_file_store() -> "GCSBackedFileStore":
     """Returns the GCS file store implementation."""
     from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
     from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX

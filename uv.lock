@@ -4730,7 +4730,7 @@ backend = [
     { name = "google-api-python-client", specifier = "==2.86.0" },
     { name = "google-auth-httplib2", specifier = "==0.1.0" },
     { name = "google-auth-oauthlib", specifier = "==1.0.0" },
-    { name = "google-cloud-storage", specifier = "==2.19.0" },
+    { name = "google-cloud-storage", specifier = ">=2.18.0,<3.0.0" },
     { name = "httpcore", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "httpx-oauth", specifier = "==0.15.1" },
