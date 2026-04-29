@@ -9,6 +9,8 @@ from fastapi import UploadFile
 from starlette.datastructures import Headers
 
 from onyx.configs.constants import FileOrigin
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
 
 
@@ -107,3 +109,26 @@ def test_upload_multiple_zips_rejected_when_unzip_false(
 
     with pytest.raises(Exception, match="Only one zip file"):
         upload_files([zip1, zip2], FileOrigin.CONNECTOR, unzip=False)
+
+
+@patch("onyx.server.documents.connector.MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES", 1024)
+@patch("onyx.server.documents.connector.get_default_file_store")
+def test_upload_zip_rejected_when_uncompressed_size_exceeds_limit(
+    mock_get_store: MagicMock,
+) -> None:
+    """An archive whose streamed uncompressed bytes exceed the configured
+    limit must be rejected before any per-entry data is forwarded to the
+    file store."""
+    mock_store = MagicMock()
+    mock_get_store.return_value = mock_store
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("payload.bin", b"\0" * 4096)
+    upload = _make_upload_file(buf.getvalue(), "big.zip", "application/zip")
+
+    with pytest.raises(OnyxError) as exc_info:
+        upload_files([upload], FileOrigin.CONNECTOR)
+
+    assert exc_info.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+    mock_store.save_file.assert_not_called()

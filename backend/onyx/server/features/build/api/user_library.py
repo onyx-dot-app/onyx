@@ -56,6 +56,7 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
+from onyx.file_processing.safe_zip import read_zip_entry_bounded
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
@@ -560,14 +561,18 @@ async def upload_zip(
                 if zip_info.is_dir():
                     continue
 
-                # Read file content
-                file_content = zip_file.read(zip_info.filename)
-                file_size = len(file_content)
-
-                # Validate individual file size
-                if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
+                # Stream-decompress with a per-entry cap. The zip header's
+                # `file_size` is attacker-controlled, so the per-file size
+                # check has to fire on the actually-decompressed stream rather
+                # than on the declared size in `_validate_zip_contents`.
+                bounded = read_zip_entry_bounded(
+                    zip_file, zip_info, USER_LIBRARY_MAX_FILE_SIZE_BYTES
+                )
+                if bounded is None:
                     logger.warning(f"Skipping '{zip_info.filename}' - exceeds max size")
                     continue
+                file_content = bounded
+                file_size = len(file_content)
 
                 # Skip PDFs that would trip the per-file or per-batch image
                 # cap (would OOM the user-file-processing worker). Matches

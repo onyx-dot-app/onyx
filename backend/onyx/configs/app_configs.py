@@ -879,6 +879,17 @@ MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
 
+# Bounds applied to archive uploads on the connector file-upload endpoint.
+# Decompression happens in-process before files are forwarded to object storage,
+# so an archive with too many entries or a very large total uncompressed size
+# can exhaust api_server memory/CPU. Both bounds are clamped to >= 1 so a
+# misconfigured env var cannot disable them entirely.
+MAX_ZIP_ENTRIES = max(1, int(os.environ.get("MAX_ZIP_ENTRIES") or 10_000))
+MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES = max(
+    1,
+    int(os.environ.get("MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES") or 2 * 1024 * 1024 * 1024),
+)  # 2 GiB
+
 # Maximum embedded images allowed in a single file. PDFs (and other formats)
 # with thousands of embedded images can OOM the user-file-processing worker
 # because every image is decoded with PIL and then sent to the vision LLM.

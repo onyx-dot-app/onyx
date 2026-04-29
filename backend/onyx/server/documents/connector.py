@@ -29,6 +29,8 @@ from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_genera
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
+from onyx.configs.app_configs import MAX_ZIP_ENTRIES
+from onyx.configs.app_configs import MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
@@ -97,8 +99,11 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
 from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
+from onyx.file_processing.safe_zip import read_zip_entry_bounded
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -411,38 +416,44 @@ def check_drive_tokens(
 
 
 def save_zip_metadata_to_file_store(
-    zf: zipfile.ZipFile, file_store: FileStore
-) -> str | None:
+    zf: zipfile.ZipFile, file_store: FileStore, remaining_budget: int
+) -> tuple[str | None, int]:
     """
     Extract .onyx_metadata.json from zip and save to file store.
-    Returns the file_id or None if no metadata file exists.
+    Returns (file_id, bytes_read) — file_id is None if no metadata file exists.
     """
     try:
         metadata_file_info = zf.getinfo(ONYX_METADATA_FILENAME)
-        with zf.open(metadata_file_info, "r") as metadata_file:
-            metadata_bytes = metadata_file.read()
-
-            # Validate that it's valid JSON before saving
-            try:
-                json.loads(metadata_bytes)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
-                )
-
-            # Save to file store
-            file_id = file_store.save_file(
-                content=BytesIO(metadata_bytes),
-                display_name=ONYX_METADATA_FILENAME,
-                file_origin=FileOrigin.CONNECTOR_METADATA,
-                file_type="application/json",
+        metadata_bytes = read_zip_entry_bounded(
+            zf, metadata_file_info, remaining_budget
+        )
+        if metadata_bytes is None:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                "Archive uncompressed size exceeds the allowed limit.",
             )
-            return file_id
+
+        # Validate that it's valid JSON before saving
+        try:
+            json.loads(metadata_bytes)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
+            )
+
+        # Save to file store
+        file_id = file_store.save_file(
+            content=BytesIO(metadata_bytes),
+            display_name=ONYX_METADATA_FILENAME,
+            file_origin=FileOrigin.CONNECTOR_METADATA,
+            file_type="application/json",
+        )
+        return file_id, len(metadata_bytes)
     except KeyError:
         logger.info(f"No {ONYX_METADATA_FILENAME} file")
-        return None
+        return None, 0
 
 
 def is_zip_file(file: UploadFile) -> bool:
@@ -495,9 +506,18 @@ def upload_files(
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
                     if unzip:
-                        zip_metadata_file_id = save_zip_metadata_to_file_store(
-                            zf, file_store
+                        if len(zf.infolist()) > MAX_ZIP_ENTRIES:
+                            raise OnyxError(
+                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                                "Archive contains too many entries.",
+                            )
+                        remaining_budget = MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES
+                        zip_metadata_file_id, metadata_bytes_read = (
+                            save_zip_metadata_to_file_store(
+                                zf, file_store, remaining_budget
+                            )
                         )
+                        remaining_budget -= metadata_bytes_read
                         for file_info in zf.namelist():
                             if zf.getinfo(file_info).is_dir():
                                 continue
@@ -505,7 +525,15 @@ def upload_files(
                             if not should_process_file(file_info):
                                 continue
 
-                            sub_file_bytes = zf.read(file_info)
+                            sub_file_bytes = read_zip_entry_bounded(
+                                zf, file_info, remaining_budget
+                            )
+                            if sub_file_bytes is None:
+                                raise OnyxError(
+                                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                                    "Archive uncompressed size exceeds the allowed limit.",
+                                )
+                            remaining_budget -= len(sub_file_bytes)
 
                             mime_type, __ = mimetypes.guess_type(file_info)
                             if mime_type is None:
