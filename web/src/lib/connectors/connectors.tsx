@@ -1629,6 +1629,27 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         description: `Only messages after this date will be indexed. Format: YYYY-MM-DD`,
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include forum channels?",
+        label: "Include Forum Channels",
+        name: "include_forum_channels",
+        description:
+          "Index posts and replies in Discord forum channels. Off by default to preserve existing connector behavior.",
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include archived threads?",
+        label: "Include Archived Threads",
+        name: "include_archived_threads",
+        description:
+          "Drain archived threads in addition to active ones. On by default. Disable on very large servers if archived-thread enumeration is too expensive.",
+        optional: true,
+        // Default `true` matches the backend Pydantic default; without it, the form
+        // submits `false` for new connectors and overrides the backend behavior.
+        default: true,
+      },
     ],
   },
   freshdesk: {
