@@ -37,6 +37,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
+from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -60,12 +61,7 @@ def admin_put_settings(
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
 
-    check_ee_fn = fetch_versioned_implementation_with_fallback(
-        "onyx.server.settings.api",
-        "check_ee_features_enabled",
-        check_ee_features_enabled,
-    )
-    if not check_ee_fn():
+    if not global_version.is_ee_version():
         existing = load_settings()
         if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
             raise OnyxError(
@@ -84,11 +80,6 @@ def admin_put_settings(
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """MIT version: no-op, returns settings unchanged."""
     return settings
-
-
-def check_ee_features_enabled() -> bool:
-    """MIT version: EE features are never enabled."""
-    return False
 
 
 @basic_router.get("")
