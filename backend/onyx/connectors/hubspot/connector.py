@@ -1,4 +1,5 @@
 import re
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
@@ -57,11 +58,16 @@ HUBSPOT_PAGE_SIZE = 100
 # HubSpot Search API rejects cursors beyond this offset.
 HUBSPOT_SEARCH_LIMIT = 10_000
 
-CONTACT_PROPERTIES = ["firstname", "lastname", "email", "company", "jobtitle"]
-COMPANY_PROPERTIES = ["name", "domain", "industry", "city", "state"]
-DEAL_PROPERTIES = ["dealname", "amount", "dealstage", "closedate", "pipeline"]
-TICKET_PROPERTIES = ["subject", "content", "hs_ticket_priority"]
-NOTE_PROPERTIES = ["hs_note_body", "hs_timestamp", "hs_created_by", "hubspot_owner_id"]
+ASSOC_CONTACT_PROPERTIES = ["firstname", "lastname", "email", "company", "jobtitle"]
+ASSOC_COMPANY_PROPERTIES = ["name", "domain", "industry", "city", "state"]
+ASSOC_DEAL_PROPERTIES = ["dealname", "amount", "dealstage", "closedate", "pipeline"]
+ASSOC_TICKET_PROPERTIES = ["subject", "content", "hs_ticket_priority"]
+ASSOC_NOTE_PROPERTIES = [
+    "hs_note_body",
+    "hs_timestamp",
+    "hs_created_by",
+    "hubspot_owner_id",
+]
 
 
 _T = TypeVar("_T")
@@ -149,6 +155,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     logger.warning(
                         f"Batch fetch of {len(chunk)} {object_type} failed, retrying: {e}"
                     )
+                    time.sleep(1)
         logger.warning(
             f"Failed to batch-fetch {len(chunk)} {object_type} {chunk} after retry: {last_exc}"
         )
@@ -429,7 +436,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         self._batch_read(
                             api_client.crm.contacts.batch_api.read,
                             ContactsBatchReadInput(
-                                properties=CONTACT_PROPERTIES,
+                                properties=ASSOC_CONTACT_PROPERTIES,
                                 inputs=[ContactObjectId(id=i) for i in chunk],
                             ),
                             "contacts",
@@ -443,7 +450,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         self._batch_read(
                             api_client.crm.companies.batch_api.read,
                             CompaniesBatchReadInput(
-                                properties=COMPANY_PROPERTIES,
+                                properties=ASSOC_COMPANY_PROPERTIES,
                                 inputs=[CompanyObjectId(id=i) for i in chunk],
                             ),
                             "companies",
@@ -457,7 +464,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         self._batch_read(
                             api_client.crm.deals.batch_api.read,
                             DealsBatchReadInput(
-                                properties=DEAL_PROPERTIES,
+                                properties=ASSOC_DEAL_PROPERTIES,
                                 inputs=[DealObjectId(id=i) for i in chunk],
                             ),
                             "deals",
@@ -471,7 +478,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         self._batch_read(
                             api_client.crm.tickets.batch_api.read,
                             TicketsBatchReadInput(
-                                properties=TICKET_PROPERTIES,
+                                properties=ASSOC_TICKET_PROPERTIES,
                                 inputs=[TicketObjectId(id=i) for i in chunk],
                             ),
                             "tickets",
@@ -511,7 +518,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     self._batch_read(
                         api_client.crm.objects.notes.batch_api.read,
                         NotesBatchReadInput(
-                            properties=NOTE_PROPERTIES,
+                            properties=ASSOC_NOTE_PROPERTIES,
                             inputs=[NoteObjectId(id=str(nid)) for nid in chunk],
                         ),
                         "notes",
