@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, Text, createTableColumns } from "@opal/components";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@/lib/time";
 import { SortMode } from "./interfaces";
@@ -16,10 +16,14 @@ interface PerBatchTableProps {
 
 const tc = createTableColumns<IndexAttemptStageMetric>();
 
-// Inline right-aligned text. Opal's data columns don't expose a column-level
-// alignment prop, so the cell renderer aligns its own content.
-function RightCell({ children }: { children: React.ReactNode }) {
-  return <span className="block w-full text-right">{children}</span>;
+// Plain left-aligned text cell. Matches the `secondary-body` font used by
+// `StageLabelCell`/`AvgTimeCell` so all cells share the same type style.
+function TextCell({ children }: { children: string | number }) {
+  return (
+    <Text font="secondary-body" color="text-05" nowrap>
+      {String(children)}
+    </Text>
+  );
 }
 
 function formatOptionalMs(value: number | null): string {
@@ -47,56 +51,71 @@ export default function PerBatchTable({
     [sorted]
   );
 
-  // Sorting is driven externally via SortToggle, so disable per-column sort.
+  // Use displayColumn (rather than tc.column) to set explicit minWidths.
+  // tc.column derives minWidth from header length only, which produces tight
+  // columns that wrap stage labels like "Permission validation" or numeric
+  // cells like "1.23s ± 456ms" onto a second line.
   const columns = useMemo(
     () => [
-      tc.column("stage", {
+      tc.displayColumn({
+        id: "stage",
         header: "Stage",
-        weight: 28,
-        enableSorting: false,
-        cell: (_value, row) => <StageLabelCell stage={row.stage} />,
+        width: { weight: 32, minWidth: 220 },
+        cell: (row) => <StageLabelCell stage={row.stage} />,
       }),
-      tc.column("avg_duration_ms", {
+      tc.displayColumn({
+        id: "avg",
         header: "Avg time",
-        weight: 26,
-        enableSorting: false,
-        cell: (_value, row) => <AvgTimeCell stage={row} maxAvgMs={maxAvgMs} />,
+        // The Modal "lg" width minus body padding is ~768px. Other columns'
+        // minWidths sum to 580, so capping avg at 170 keeps the total minWidth
+        // under the modal's inner width and prevents a horizontal scrollbar.
+        // The avg/std label only needs ~100px on a single line; the rest is
+        // for the bar (which is `w-full` and shrinks freely).
+        width: { weight: 30, minWidth: 170 },
+        cell: (row) => <AvgTimeCell stage={row} maxAvgMs={maxAvgMs} />,
       }),
-      tc.column("total_duration_ms", {
+      tc.displayColumn({
+        id: "total",
         header: "Total time",
-        weight: 12,
-        enableSorting: false,
-        cell: (value) => <RightCell>{formatDurationMs(value)}</RightCell>,
+        width: { weight: 14, minWidth: 110 },
+        cell: (row) => (
+          <TextCell>{formatDurationMs(row.total_duration_ms)}</TextCell>
+        ),
       }),
-      tc.column("event_count", {
+      tc.displayColumn({
+        id: "calls",
         header: "Calls",
-        weight: 8,
-        enableSorting: false,
-        cell: (value) => <RightCell>{value}</RightCell>,
+        width: { weight: 8, minWidth: 70 },
+        cell: (row) => <TextCell>{row.event_count}</TextCell>,
       }),
-      tc.column("min_duration_ms", {
+      tc.displayColumn({
+        id: "min",
         header: "Min",
-        weight: 10,
-        enableSorting: false,
-        cell: (value) => <RightCell>{formatOptionalMs(value)}</RightCell>,
+        width: { weight: 8, minWidth: 90 },
+        cell: (row) => (
+          <TextCell>{formatOptionalMs(row.min_duration_ms)}</TextCell>
+        ),
       }),
-      tc.column("max_duration_ms", {
+      tc.displayColumn({
+        id: "max",
         header: "Max",
-        weight: 10,
-        enableSorting: false,
-        cell: (value) => <RightCell>{formatOptionalMs(value)}</RightCell>,
+        width: { weight: 8, minWidth: 90 },
+        cell: (row) => (
+          <TextCell>{formatOptionalMs(row.max_duration_ms)}</TextCell>
+        ),
       }),
     ],
     [maxAvgMs]
   );
 
+  // Use the default `cards` variant (matches the Agents page table) for
+  // spacious, rounded-card rows rather than the boxy `rows` borders.
+  // Intentionally omit `pageSize` and `footer`: Opal's `Table` then sets
+  // its effective page size to `data.length`, which renders all rows in a
+  // single page without pagination. Passing `pageSize: Infinity` instead
+  // breaks TanStack's pagination row model (the `pageSize * pageIndex`
+  // slice math evaluates to `NaN` and the body renders zero rows).
   return (
-    <Table
-      data={sorted}
-      columns={columns}
-      getRowId={(row) => row.stage}
-      pageSize={Infinity}
-      variant="rows"
-    />
+    <Table data={sorted} columns={columns} getRowId={(row) => row.stage} />
   );
 }

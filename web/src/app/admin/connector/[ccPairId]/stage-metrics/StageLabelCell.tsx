@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Text } from "@opal/components";
-import { SvgQuestionMarkSmall } from "@opal/icons";
+import { SvgInfoSmall } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStage } from "@/lib/types";
 import { cn } from "@opal/utils";
@@ -27,15 +27,15 @@ export default function StageLabelCell({ stage }: StageLabelCellProps) {
       <span
         aria-hidden="true"
         className={cn(
-          "inline-block h-2 w-2 rounded-full shrink-0",
+          "inline-block h-2 w-2 rounded-full",
           colorClassForStage(stage)
         )}
       />
-      <Text font="secondary-body" color="text-05">
+      <Text font="secondary-body" color="text-05" nowrap>
         {STAGE_LABELS[stage]}
       </Text>
       <Button
-        icon={SvgQuestionMarkSmall}
+        icon={SvgInfoSmall}
         prominence="tertiary"
         size="sm"
         tooltip={STAGE_DESCRIPTIONS[stage]}
