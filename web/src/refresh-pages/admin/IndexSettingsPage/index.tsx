@@ -1055,60 +1055,62 @@ export default function IndexSettingsPage() {
              (backend/shared_configs/configs.py), so the update-inference-settings
              endpoint silently ignores it. The backend returns 200 but never persists
              the change. Needs a backend fix to remove it from the preserved list. */}
-            <CloudDisabled
-              disabled
-              tooltip="Updating contextual retrieval is disabled temporarily and will be available in the future."
-            >
+            <CloudDisabled>
               <Card border="solid" borderColor={statusVariant} rounding="lg">
                 <GeneralLayouts.Section width="full">
                   <InputHorizontal
                     title="Contextual Retrieval"
                     description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
                     withLabel
-                    tag={{
-                      title: "temporarily unavailable",
-                      color: "gray",
-                    }}
                   >
                     <Switch
                       checked={searchSettings?.enable_contextual_rag ?? false}
-                      disabled
+                      onCheckedChange={(checked) => {
+                        void saveSearchSettings({
+                          enable_contextual_rag: checked,
+                        });
+                      }}
                     />
                   </InputHorizontal>
 
-                  <InputHorizontal
-                    title="Contextual Retrieval LLM"
-                    description="This model will be used to generate context for chunks."
+                  <Disabled
                     disabled={!searchSettings?.enable_contextual_rag}
-                    withLabel
+                    tooltip="Cannot modify while Contextual Retrieval is off."
                   >
-                    <InputSelect
-                      value={searchSettings?.contextual_rag_llm_name ?? ""}
-                      onValueChange={(value) => {
-                        const selectedModel = contextualCosts?.find(
-                          (cost) => cost.model_name === value
-                        );
-                        void saveSearchSettings({
-                          contextual_rag_llm_name: value,
-                          contextual_rag_llm_provider:
-                            selectedModel?.provider ?? null,
-                        });
-                      }}
+                    <InputHorizontal
+                      title="Contextual Retrieval LLM"
+                      description="This model will be used to generate context for chunks."
                       disabled={!searchSettings?.enable_contextual_rag}
+                      withLabel
                     >
-                      <InputSelect.Trigger placeholder="Select a model" />
-                      <InputSelect.Content>
-                        {(contextualCosts ?? []).map((cost) => (
-                          <InputSelect.Item
-                            key={cost.model_name}
-                            value={cost.model_name}
-                          >
-                            {cost.model_name}
-                          </InputSelect.Item>
-                        ))}
-                      </InputSelect.Content>
-                    </InputSelect>
-                  </InputHorizontal>
+                      <InputSelect
+                        value={searchSettings?.contextual_rag_llm_name ?? ""}
+                        onValueChange={(value) => {
+                          const selectedModel = contextualCosts?.find(
+                            (cost) => cost.model_name === value
+                          );
+                          void saveSearchSettings({
+                            contextual_rag_llm_name: value,
+                            contextual_rag_llm_provider:
+                              selectedModel?.provider ?? null,
+                          });
+                        }}
+                        disabled={!searchSettings?.enable_contextual_rag}
+                      >
+                        <InputSelect.Trigger placeholder="Select a model" />
+                        <InputSelect.Content>
+                          {(contextualCosts ?? []).map((cost) => (
+                            <InputSelect.Item
+                              key={cost.model_name}
+                              value={cost.model_name}
+                            >
+                              {cost.model_name}
+                            </InputSelect.Item>
+                          ))}
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </InputHorizontal>
+                  </Disabled>
                 </GeneralLayouts.Section>
               </Card>
             </CloudDisabled>
