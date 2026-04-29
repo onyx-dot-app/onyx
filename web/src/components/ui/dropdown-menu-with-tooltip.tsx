@@ -3,7 +3,7 @@
 import * as React from "react";
 import { DropdownMenuItem } from "./dropdown-menu";
 import { Tooltip } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface DropdownMenuItemWithTooltipProps
   extends React.ComponentPropsWithoutRef<typeof DropdownMenuItem> {

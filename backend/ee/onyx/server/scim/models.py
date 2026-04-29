@@ -16,7 +16,6 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-
 # ---------------------------------------------------------------------------
 # SCIM Schema URIs (RFC 7643 §8)
 # Every SCIM JSON payload includes a "schemas" array identifying its type.

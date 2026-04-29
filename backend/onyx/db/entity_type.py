@@ -10,7 +10,6 @@ from onyx.db.models import KGEntityType
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.server.kg.models import EntityType
 
-
 UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 

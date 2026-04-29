@@ -21,7 +21,8 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgEditBig,

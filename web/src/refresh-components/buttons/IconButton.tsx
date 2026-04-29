@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import type { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
 
 const buttonClasses = (transient: boolean | undefined) =>

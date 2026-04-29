@@ -8,7 +8,6 @@ from onyx.document_index.opensearch.string_filtering import (
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
-
 SINGLE_TENANT_STATE = TenantState(
     tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
 )

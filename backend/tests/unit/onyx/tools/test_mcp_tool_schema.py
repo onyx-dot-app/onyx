@@ -14,9 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.tools.tool_implementations.mcp.mcp_tool import (
-    _normalize_parameters_schema,
-)
+from onyx.tools.tool_implementations.mcp.mcp_tool import _normalize_parameters_schema
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 

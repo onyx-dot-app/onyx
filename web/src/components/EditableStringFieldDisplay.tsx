@@ -1,7 +1,7 @@
-import { EditIcon } from "@/components/icons/icons";
+import { SvgEdit } from "@opal/icons";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheck, SvgX } from "@opal/icons";
 interface EditableStringFieldDisplayProps {
@@ -124,7 +124,7 @@ export function EditableStringFieldDisplay({
           style={{ fontSize: `${scale}rem` }}
         >
           {isEditable && (
-            <EditIcon className={`visible ml-2`} size={12 * scale} />
+            <SvgEdit className={`visible ml-2`} size={12 * scale} />
           )}
         </h1>
       )}

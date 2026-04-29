@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from onyx.llm.constants import LlmProviderNames
 
-
 _DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
@@ -66,6 +65,5 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
         response.status_code == 400
     ), f"Expected status code 400, but got {response.status_code}. Response: {response.text}"
     assert (
-        "Invalid credentials" in response.text
-        or "Invalid Authentication" in response.text
+        "Authentication failed" in response.text
     ), f"Expected error message about invalid credentials, but got: {response.text}"

@@ -6,9 +6,9 @@ import os
 import subprocess
 
 import requests
-
 from alembic import command
 from alembic.config import Config
+
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD

@@ -2,7 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { toast } from "@/hooks/useToast";
-import { EditIcon } from "@/components/icons/icons";
+import { SvgEdit } from "@opal/icons";
 import { SlackChannelConfig } from "@/lib/types";
 import {
   Table,
@@ -84,7 +84,7 @@ export default function SlackChannelConfigsTable({
                       <TableCell>
                         <div className="flex gap-x-2">
                           <div className="my-auto">
-                            <EditIcon className="text-muted-foreground" />
+                            <SvgEdit className="text-muted-foreground" />
                           </div>
                           <div className="my-auto">
                             {"#" +

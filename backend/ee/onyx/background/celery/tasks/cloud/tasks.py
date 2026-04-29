@@ -26,7 +26,6 @@ from onyx.redis.redis_tenant_work_gating import record_gate_decision
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 
-
 _FULL_FANOUT_TIMESTAMP_KEY_PREFIX = "tenant_work_gating_last_full_fanout_ms"
 
 

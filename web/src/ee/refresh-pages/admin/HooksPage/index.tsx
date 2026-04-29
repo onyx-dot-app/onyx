@@ -392,7 +392,7 @@ function ConnectedHookCard({
                     <>
                       <Hoverable.Item
                         group="connected-hook-card"
-                        variant="opacity-on-hover"
+                        variant="appear-on-hover"
                       >
                         <Button
                           prominence="tertiary"

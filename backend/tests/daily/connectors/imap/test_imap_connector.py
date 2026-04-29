@@ -7,9 +7,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.imap.connector import ImapConnector
 from tests.daily.connectors.imap.models import EmailDoc
-from tests.daily.connectors.utils import (
-    load_all_from_connector,
-)
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 @pytest.fixture

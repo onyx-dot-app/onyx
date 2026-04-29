@@ -200,6 +200,28 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
+# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
+# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
+# minimum required to identify the user via OpenID Connect.
+GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
+
+# Applicable for Google OAuth login, allows you to override the scopes that
+# are requested from Google. Mirrors OIDC_SCOPE_OVERRIDE; useful when the
+# access token needs to be passed through to tool calls that require
+# additional Google API scopes.
+GOOGLE_OAUTH_SCOPE_OVERRIDE: list[str] | None = None
+_GOOGLE_OAUTH_SCOPE_OVERRIDE = os.environ.get("GOOGLE_OAUTH_SCOPE_OVERRIDE")
+
+if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
+    try:
+        GOOGLE_OAUTH_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _GOOGLE_OAUTH_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        logger.exception(
+            f"Error configuring Google OAuth login scopes: {_GOOGLE_OAUTH_SCOPE_OVERRIDE}"
+        )
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
@@ -418,8 +440,13 @@ POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
 
-# defaults to False
-POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
+# defaults to True — pre-pings pooled connections with SELECT 1 at checkout
+# to avoid `psycopg2.OperationalError: server closed the connection
+# unexpectedly` when PgBouncer / Postgres drops an idle connection that's
+# still in the pool. Set POSTGRES_POOL_PRE_PING=false to opt out.
+POSTGRES_POOL_PRE_PING = (
+    os.environ.get("POSTGRES_POOL_PRE_PING", "true").lower() == "true"
+)
 
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes

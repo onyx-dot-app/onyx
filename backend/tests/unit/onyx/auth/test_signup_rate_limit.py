@@ -43,24 +43,37 @@ def _fake_pipeline_redis(incr_return: int) -> MagicMock:
     return redis
 
 
-def test_client_ip_uses_leftmost_when_first_entry_is_public() -> None:
+def test_client_ip_walks_xff_right_to_left() -> None:
+    """Proxies append the observed peer on the right of XFF. With only one
+    public IP in the chain, it's returned regardless of position.
+    """
     req = _make_request(xff="1.2.3.4, 10.0.0.42")
     assert _client_ip(req) == "1.2.3.4"
 
 
-def test_client_ip_falls_back_when_leftmost_is_private() -> None:
+def test_client_ip_ignores_left_side_spoof_returns_real_client() -> None:
+    """Client prepends a spoof at the left; ALB appends the real client
+    at the right; nginx appends its private peer at the end. RTL walk
+    skips the private hop and returns the real client — not the spoof.
+    """
     req = _make_request(xff="10.0.0.1, 1.2.3.4", client_host="5.6.7.8")
-    assert _client_ip(req) == "5.6.7.8"
+    assert _client_ip(req) == "1.2.3.4"
 
 
-def test_client_ip_falls_back_when_leftmost_is_loopback() -> None:
+def test_client_ip_falls_back_when_only_private_xff() -> None:
+    """All-private XFF means no routable hop was added by a proxy —
+    fall back to the TCP peer.
+    """
     req = _make_request(xff="127.0.0.1", client_host="5.6.7.8")
     assert _client_ip(req) == "5.6.7.8"
 
 
-def test_client_ip_falls_back_when_xff_is_malformed() -> None:
+def test_client_ip_tolerates_malformed_xff_entries() -> None:
+    """A junk leftmost entry is skipped in the RTL walk; the real
+    public hop at the right wins.
+    """
     req = _make_request(xff="not-an-ip, 1.2.3.4", client_host="10.0.0.1")
-    assert _client_ip(req) == "10.0.0.1"
+    assert _client_ip(req) == "1.2.3.4"
 
 
 def test_client_ip_falls_back_to_tcp_peer_when_xff_absent() -> None:

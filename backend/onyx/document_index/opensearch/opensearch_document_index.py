@@ -4,12 +4,14 @@ from typing import Any
 
 import httpx
 from opensearchpy import NotFoundError
+from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -68,18 +70,26 @@ from onyx.document_index.opensearch.search import (
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
+from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
 
-
 logger = setup_logger(__name__)
+
+
+VERIFY_INDEX_LOCK_TTL_S = 60
+VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
 
 class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
+
+
+class ChunkCountZeroError(ValueError):
+    """Raised when a document has a chunk count of 0."""
 
 
 def generate_opensearch_filtered_access_control_list(
@@ -467,10 +477,15 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             )
             return
         except ChunkCountNotFoundError:
-            logger.exception(
+            logger.warning(
                 f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
                 "but this will not be an acceptable state once OpenSearch is the primary document index and the "
                 "indexing/updating race condition is fixed."
+            )
+            return
+        except ChunkCountZeroError:
+            logger.warning(
+                f"Tried to update document {doc_id} but its chunk count was 0."
             )
             return
 
@@ -622,29 +637,37 @@ class OpenSearchDocumentIndex(DocumentIndex):
             f"necessary, with embedding dimension {embedding_dim}."
         )
 
-        if not self._tenant_state.multitenant:
-            set_cluster_state(self._client)
+        with redis_shared_lock(
+            lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
+            max_time_lock_held_s=VERIFY_INDEX_LOCK_TTL_S,
+            wait_for_lock_s=VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S,
+            logger=logger,
+        ):
+            if not self._tenant_state.multitenant:
+                set_cluster_state(self._client)
 
-        expected_mappings = DocumentSchema.get_document_schema(
-            embedding_dim, self._tenant_state.multitenant
-        )
-
-        if not self._client.index_exists():
-            index_settings = DocumentSchema.get_index_settings_based_on_environment()
-            self._client.create_index(
-                mappings=expected_mappings,
-                settings=index_settings,
+            expected_mappings = DocumentSchema.get_document_schema(
+                embedding_dim, self._tenant_state.multitenant
             )
-        else:
-            # Ensure schema is up to date by applying the current mappings.
-            try:
-                self._client.put_mapping(expected_mappings)
-            except Exception as e:
-                logger.error(
-                    f"Failed to update mappings for index {self._index_name}. This likely means a "
-                    f"field type was changed which requires reindexing. Error: {e}"
+
+            if not self._client.index_exists():
+                index_settings = (
+                    DocumentSchema.get_index_settings_based_on_environment()
                 )
-                raise
+                self._client.create_index(
+                    mappings=expected_mappings,
+                    settings=index_settings,
+                )
+            else:
+                # Ensure schema is up to date by applying the current mappings.
+                try:
+                    self._client.put_mapping(expected_mappings)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to update mappings for index {self._index_name}. This likely means a "
+                        f"field type was changed which requires reindexing. Error: {e}"
+                    )
+                    raise
 
     def index(
         self,
@@ -727,10 +750,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
-            self._client.bulk_index_documents(
-                documents=chunk_batch,
-                tenant_state=self._tenant_state,
-            )
+            try:
+                self._client.bulk_index_documents(
+                    documents=chunk_batch,
+                    tenant_state=self._tenant_state,
+                )
+            except BulkIndexError as e:
+                # There are several reasons why this might be raised, but the
+                # most likely one is if the deletion has not had enough time to
+                # propagate throughout the index, in which case this would be
+                # raised with some form of "version_conflict_engine_exception
+                # version conflict, document already exists" messaging.
+                # Refresh the index and try one more time. We do not refresh
+                # after every delete because this may become expensive.
+                logger.warning(
+                    f"Failed to bulk index documents: {e}. Refreshing index and trying again."
+                )
+                self._client.refresh_index()
+                self._client.bulk_index_documents(
+                    documents=chunk_batch,
+                    tenant_state=self._tenant_state,
+                    # At this point we know for sure some docs from this batch
+                    # may exist, so we don't want to fail in that case.
+                    update_if_exists=True,
+                )
 
         for chunk in chunks:
             doc_id = chunk.source_document.id
@@ -876,8 +919,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         "updated shortly."
                     )
                 if doc_chunk_count == 0:
-                    raise ValueError(
-                        f"Bug: Tried to update document {doc_id} but its chunk count was 0."
+                    raise ChunkCountZeroError(
+                        f"Tried to update document {doc_id} but its chunk count was 0."
                     )
 
                 for chunk_index in range(doc_chunk_count):

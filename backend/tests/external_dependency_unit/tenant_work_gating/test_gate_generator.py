@@ -23,7 +23,6 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import _SET_KEY
 from onyx.redis.redis_tenant_work_gating import mark_tenant_active
 
-
 _TENANT_A = "tenant_aaaa0000-0000-0000-0000-000000000001"
 _TENANT_B = "tenant_bbbb0000-0000-0000-0000-000000000002"
 _TENANT_C = "tenant_cccc0000-0000-0000-0000-000000000003"

@@ -41,7 +41,7 @@
  */
 
 import { Section, SectionProps } from "@/layouts/general-layouts";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 type CardVariant =
   // The main card variant.

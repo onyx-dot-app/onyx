@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
-import { WithoutStyles } from "@/types";
+import { cn } from "@opal/utils";
+import type { WithoutStyles } from "@opal/types";
 import React from "react";
 
 // ============================================================================

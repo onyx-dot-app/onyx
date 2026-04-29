@@ -5,7 +5,7 @@ import { FullImageModal } from "@/app/app/components/files/images/FullImageModal
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 const DEFAULT_SHAPE: ImageShape = "square";
 
@@ -103,7 +103,7 @@ export const InMessageImage = memo(function InMessageImage({
 
           {/* Download button - appears on hover */}
           <div className="absolute bottom-2 right-2 z-10">
-            <Hoverable.Item group="messageImage" variant="opacity-on-hover">
+            <Hoverable.Item group="messageImage" variant="appear-on-hover">
               <Button
                 icon={SvgDownload}
                 tooltip="Download"

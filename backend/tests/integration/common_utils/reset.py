@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import psycopg2
 import requests
-
 from alembic import command
 from alembic.config import Config
+
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT

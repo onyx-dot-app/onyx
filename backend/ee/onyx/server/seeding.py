@@ -7,16 +7,12 @@ from typing import Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import (
-    create_initial_default_standard_answer_category,
-)
+from ee.onyx.db.standard_answer import create_initial_default_standard_answer_category
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
 from ee.onyx.server.enterprise_settings.models import NavigationItem
 from ee.onyx.server.enterprise_settings.store import store_analytics_script
-from ee.onyx.server.enterprise_settings.store import (
-    store_settings as store_ee_settings,
-)
+from ee.onyx.server.enterprise_settings.store import store_settings as store_ee_settings
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_existing_llm_provider

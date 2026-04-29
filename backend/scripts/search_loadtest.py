@@ -24,7 +24,6 @@ from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import BaseFilters
 
-
 DEFAULT_TEST_QUERIES = [
     "onboarding checklist",
     "how do we handle refunds",

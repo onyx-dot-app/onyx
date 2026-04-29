@@ -18,9 +18,7 @@ from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
 from onyx.db.connector import fetch_connectors
 from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import (
-    get_connector_credential_pairs_for_user,
-)
+from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import fetch_credentials_for_user
 from onyx.db.enums import AccessType

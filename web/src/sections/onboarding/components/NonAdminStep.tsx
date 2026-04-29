@@ -9,7 +9,7 @@ import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -73,7 +73,7 @@ export default function NonAdminStep() {
             title="You're all set!"
             sizePreset="main-ui"
             variant="body"
-            prominence="muted"
+            color="muted"
             padding="fit"
             rightChildren={
               <Button
@@ -153,7 +153,7 @@ export default function NonAdminStep() {
             </div>
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Hoverable.Item group="nonAdminName" variant="opacity-on-hover">
+              <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
                 <IconButton internal icon={SvgEdit} tooltip="Edit" />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />

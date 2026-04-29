@@ -20,7 +20,6 @@ from onyx.configs.constants import FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.file_store import get_default_file_store
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

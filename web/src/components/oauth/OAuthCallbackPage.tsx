@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
-import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
+import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
 
@@ -216,7 +216,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     }
     if (isSuccess) {
       return (
-        <CheckmarkIcon
+        <SvgCheck
           size={64}
           className="text-green-500 dark:text-green-400 mx-auto mb-4"
         />
@@ -224,7 +224,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     }
     if (isError) {
       return (
-        <TriangleAlertIcon
+        <SvgAlertTriangle
           size={64}
           className="text-red-500 dark:text-red-400 mx-auto mb-4"
         />

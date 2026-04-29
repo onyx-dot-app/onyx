@@ -24,9 +24,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    FOLDER_3_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     get_expected_hierarchy_for_shared_drives,
 )
@@ -43,9 +41,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    PILL_FOLDER_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_ID,
@@ -53,9 +49,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_DRIVE_B_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
 )
@@ -68,15 +62,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_MY_DRIVE_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_2_MY_DRIVE,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_3_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
 
 
 def _build_connector(

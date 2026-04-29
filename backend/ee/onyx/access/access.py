@@ -20,7 +20,6 @@ from onyx.db.models import UserFile
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

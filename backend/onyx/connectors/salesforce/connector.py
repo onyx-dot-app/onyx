@@ -38,7 +38,6 @@ from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

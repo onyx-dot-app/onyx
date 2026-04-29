@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 from onyx.llm.factory import get_default_llm_with_vision
 
-
 _FACTORY = "onyx.llm.factory"
 
 

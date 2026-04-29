@@ -2,7 +2,7 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import { InfoIcon } from "@/components/icons/icons";
+import { SvgInfo } from "@opal/icons";
 import {
   Table,
   TableHead,

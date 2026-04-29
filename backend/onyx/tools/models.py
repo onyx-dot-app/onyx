@@ -23,7 +23,6 @@ from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
-
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
@@ -149,6 +148,8 @@ class ChatMinimalTextMessage(BaseModel):
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
+    user_id: UUID | None = None
+    user_email: str | None = None
 
 
 class WebSearchToolOverrideKwargs(BaseModel):
@@ -253,6 +254,8 @@ class ToolCallInfo(BaseModel):
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
 MESSAGE_ID_PLACEHOLDER = "MESSAGE_ID"
+USER_ID_PLACEHOLDER = "USER_ID"
+USER_EMAIL_PLACEHOLDER = "USER_EMAIL"
 
 
 class BaseCiteableToolResult(BaseModel):
