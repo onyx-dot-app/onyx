@@ -53,9 +53,8 @@ Status checked against LiteLLM v1.83.0 (2026-03-31):
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
      serialization warnings
    STATUS: STILL NEEDED - Our patch creates a deep copy before modification.
-   NOTE: In v1.83.0, this method also handles ResponseIncompleteEvent and
-         ResponseFailedEvent. Our patch only handles ResponseCompletedEvent and
-         returns None for the new types, which is acceptable.
+         Handles ResponseCompletedEvent, ResponseIncompleteEvent, and
+         ResponseFailedEvent (matching upstream behavior in v1.83.0).
 """
 
 import time
@@ -533,6 +532,8 @@ def _patch_logging_assembled_streaming_response() -> None:
     from litellm.responses.utils import ResponseAPILoggingUtils
     from litellm.types.llms.openai import ResponseAPIUsage
     from litellm.types.llms.openai import ResponseCompletedEvent
+    from litellm.types.llms.openai import ResponseFailedEvent
+    from litellm.types.llms.openai import ResponseIncompleteEvent
     from litellm.types.llms.openai import ResponsesAPIResponse
     from litellm.types.utils import ModelResponse
     from litellm.types.utils import TextCompletionResponse
@@ -562,7 +563,10 @@ def _patch_logging_assembled_streaming_response() -> None:
             return result
         elif isinstance(result, TextCompletionResponse):
             return result
-        elif isinstance(result, ResponseCompletedEvent):
+        elif isinstance(
+            result,
+            (ResponseCompletedEvent, ResponseIncompleteEvent, ResponseFailedEvent),
+        ):
             # Get the original response data
             original_response = result.response
             response_data = original_response.model_dump()
