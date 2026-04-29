@@ -162,7 +162,7 @@ export default function ProviderCard({
                       {onDisconnect && (
                         <Hoverable.Item
                           group="ProviderCard"
-                          variant="opacity-on-hover"
+                          variant="appear-on-hover"
                         >
                           <Button
                             icon={SvgUnplug}

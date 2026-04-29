@@ -235,7 +235,7 @@ export default function AccountPopover({
       <Popover.Content
         align="end"
         side="right"
-        width={popupState === "Notifications" ? "xl" : "lg"}
+        width={popupState === "Notifications" ? "2xl" : "lg"}
       >
         {popupState === "Settings" && (
           <SettingsPopover

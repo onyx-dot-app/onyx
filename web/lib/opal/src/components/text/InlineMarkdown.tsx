@@ -77,7 +77,17 @@ export function resolveStr(value: string | RichStr): ReactNode {
   return isRichStr(value) ? <InlineMarkdown content={value.raw} /> : value;
 }
 
-/** Extracts the plain string from `string | RichStr`. */
+/** Extracts the plain string from `string | RichStr`, stripping markdown syntax. */
 export function toPlainString(value: string | RichStr): string {
-  return isRichStr(value) ? value.raw : value;
+  if (!isRichStr(value)) return value;
+  return value.raw
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(?<!\w)__([^_]+)__(?!\w)/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s*\n\s*/g, " ")
+    .trim();
 }

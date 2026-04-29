@@ -1,10 +1,11 @@
 {
-  "version": "1.2",
-  "updated_at": "2026-04-16T00:00:00Z",
+  "version": "1.3",
+  "updated_at": "2026-04-28T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": { "name": "gpt-5.4" },
+      "default_model": "gpt-5.5",
       "additional_visible_models": [
+        { "name": "gpt-5.5" },
         { "name": "gpt-5.4" },
         { "name": "gpt-5.2" }
       ]
@@ -25,21 +26,17 @@
           "display_name": "Claude Sonnet 4.6"
         },
         {
-          "name": "claude-opus-4-5",
-          "display_name": "Claude Opus 4.5"
-        },
-        {
-          "name": "claude-sonnet-4-5",
-          "display_name": "Claude Sonnet 4.5"
+          "name": "claude-haiku-4-5",
+          "display_name": "Claude Haiku 4.5"
         }
       ]
     },
     "vertex_ai": {
-      "default_model": "gemini-3-pro-preview",
+      "default_model": "gemini-3.1-pro-preview",
       "additional_visible_models": [
         {
-          "name": "gemini-3-pro-preview",
-          "display_name": "Gemini 3 Pro"
+          "name": "gemini-3.1-pro-preview",
+          "display_name": "Gemini 3.1 Pro"
         },
         {
           "name": "gemini-3-flash-preview",
@@ -48,23 +45,23 @@
       ]
     },
     "openrouter": {
-      "default_model": "z-ai/glm-4.7",
+      "default_model": "z-ai/glm-5.1",
       "additional_visible_models": [
         {
-          "name": "z-ai/glm-4.7",
-          "display_name": "GLM 4.7"
+          "name": "z-ai/glm-5.1",
+          "display_name": "GLM 5.1"
         },
         {
-          "name": "deepseek/deepseek-v3.2",
-          "display_name": "DeepSeek V3.2"
+          "name": "deepseek/deepseek-v4-pro",
+          "display_name": "DeepSeek V4 Pro"
         },
         {
-          "name": "qwen/qwen3-235b-a22b-2507",
-          "display_name": "Qwen3 235B A22B Instruct 2507"
+          "name": "qwen/qwen3.6-plus",
+          "display_name": "Qwen3.6 Plus"
         },
         {
-          "name": "moonshotai/kimi-k2-0905",
-          "display_name": "Kimi K2 0905"
+          "name": "moonshotai/kimi-k2.6",
+          "display_name": "Kimi K2.6"
         }
       ]
     }

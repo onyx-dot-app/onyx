@@ -107,13 +107,14 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger";
+type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "2xl" | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   sm: "w-[10rem]",
   md: "w-[12rem]",
   lg: "w-[15rem]",
   xl: "w-[18rem]",
+  "2xl": "w-[25rem]",
   trigger: "w-[var(--radix-popover-trigger-width)]",
 };
 interface PopoverContentProps

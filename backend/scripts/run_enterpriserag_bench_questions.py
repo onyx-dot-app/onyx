@@ -30,6 +30,8 @@ RETRIABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 QUESTION_TIMEOUT_SECONDS = 300
 QUESTION_RETRY_PAUSE_SECONDS = 30
 MAX_QUESTION_ATTEMPTS = 3
+SEARCH_ONLY_TOP_K = 10
+SEARCH_ONLY_NUM_HITS = 50
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,12 @@ class QuestionRecord:
 class AnswerRecord:
     question_id: str
     answer: str
+    document_ids: list[str]
+
+
+@dataclass(frozen=True)
+class SearchOnlyRecord:
+    question_id: str
     document_ids: list[str]
 
 
@@ -101,6 +109,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Optional cap on how many questions to process. Defaults to all.",
+    )
+    parser.add_argument(
+        "--search-only",
+        action="store_true",
+        help=(
+            "If set, call /search/send-search-message and write records with only "
+            f"question_id and the top {SEARCH_ONLY_TOP_K} document_ids (no answer)."
+        ),
     )
     return parser.parse_args()
 
@@ -322,6 +338,62 @@ async def fetch_internal_search_tool_id(
     )
 
 
+async def submit_search_only_question(
+    session: aiohttp.ClientSession,
+    api_base: str,
+    headers: dict[str, str],
+    question_record: QuestionRecord,
+) -> SearchOnlyRecord:
+    payload = {
+        "search_query": question_record.question,
+        "num_hits": SEARCH_ONLY_NUM_HITS,
+        "stream": False,
+    }
+
+    response_payload = await request_json_with_retries(
+        session=session,
+        method="POST",
+        url=f"{api_base}/search/send-search-message",
+        headers=headers,
+        json_payload=payload,
+    )
+
+    if not isinstance(response_payload, dict):
+        raise RuntimeError(
+            "Expected `/search/send-search-message` to return an object when `stream=false`."
+        )
+
+    error = response_payload.get("error")
+    if isinstance(error, str) and error:
+        raise RuntimeError(f"Search failed: {error}")
+
+    search_docs = response_payload.get("search_docs")
+    if not isinstance(search_docs, list):
+        raise RuntimeError(
+            f"Response for question {question_record.question_id} is missing `search_docs`."
+        )
+
+    document_ids: list[str] = []
+    seen: set[str] = set()
+    for doc in search_docs:
+        if not isinstance(doc, dict):
+            continue
+        document_id = doc.get("document_id")
+        if not isinstance(document_id, str) or not document_id:
+            continue
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+        document_ids.append(document_id)
+        if len(document_ids) >= SEARCH_ONLY_TOP_K:
+            break
+
+    return SearchOnlyRecord(
+        question_id=question_record.question_id,
+        document_ids=document_ids,
+    )
+
+
 async def submit_question(
     session: aiohttp.ClientSession,
     api_base: str,
@@ -375,6 +447,7 @@ async def generate_answers(
     api_key: str,
     parallelism: int,
     skipped: int,
+    search_only: bool,
 ) -> None:
     if parallelism < 1:
         raise ValueError("`--parallelism` must be at least 1.")
@@ -397,12 +470,20 @@ async def generate_answers(
         async with aiohttp.ClientSession(
             timeout=timeout, connector=connector
         ) as session:
-            internal_search_tool_id = await fetch_internal_search_tool_id(
-                session=session,
-                api_base=api_base,
-                headers=headers,
-            )
-            logger.info("Using internal search tool id %s", internal_search_tool_id)
+            internal_search_tool_id: int | None = None
+            if not search_only:
+                internal_search_tool_id = await fetch_internal_search_tool_id(
+                    session=session,
+                    api_base=api_base,
+                    headers=headers,
+                )
+                logger.info("Using internal search tool id %s", internal_search_tool_id)
+            else:
+                logger.info(
+                    "Search-only mode: calling /search/send-search-message "
+                    "(top %s docs, no answer)",
+                    SEARCH_ONLY_TOP_K,
+                )
 
             semaphore = asyncio.Semaphore(parallelism)
             progress_lock = asyncio.Lock()
@@ -464,14 +545,25 @@ async def generate_answers(
                     q_start = time.monotonic()
                     try:
                         async with semaphore:
-                            result = await asyncio.wait_for(
-                                submit_question(
+                            q_start = time.monotonic()
+                            if search_only:
+                                coro: Any = submit_search_only_question(
+                                    session=session,
+                                    api_base=api_base,
+                                    headers=headers,
+                                    question_record=question_record,
+                                )
+                            else:
+                                assert internal_search_tool_id is not None
+                                coro = submit_question(
                                     session=session,
                                     api_base=api_base,
                                     headers=headers,
                                     internal_search_tool_id=internal_search_tool_id,
                                     question_record=question_record,
-                                ),
+                                )
+                            result = await asyncio.wait_for(
+                                coro,
                                 timeout=QUESTION_TIMEOUT_SECONDS,
                             )
                     except asyncio.TimeoutError:
@@ -634,6 +726,7 @@ def main() -> None:
             api_key=args.api_key,
             parallelism=args.parallelism,
             skipped=skipped,
+            search_only=args.search_only,
         )
     )
 

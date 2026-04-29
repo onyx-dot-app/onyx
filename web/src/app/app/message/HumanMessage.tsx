@@ -192,7 +192,7 @@ const HumanMessage = React.memo(function HumanMessage({
   );
 
   const copyEditButton = (
-    <Hoverable.Item group="humanMessage" variant="opacity-on-hover">
+    <Hoverable.Item group="humanMessage" variant="appear-on-hover">
       {copyEditButtonContent}
     </Hoverable.Item>
   );

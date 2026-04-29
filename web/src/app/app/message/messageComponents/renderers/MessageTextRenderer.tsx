@@ -73,14 +73,15 @@ function getRevealPosition(markdown: string, cleanChars: number): number {
   return mdIndex;
 }
 
-// Cheap streaming plugins (gfm only) → cheap per-frame parse. Full
-// pipeline flips in once, at the end, for syntax highlighting + math.
-const STREAMING_REMARK_PLUGINS: PluggableList = [remarkGfm];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [];
-const FULL_REMARK_PLUGINS: PluggableList = [
+// Streaming pipeline runs gfm + math so LaTeX renders live.
+// Syntax highlighting is the heavier of the two and stays deferred —
+// rehype-highlight only flips in once the stream is fully displayed.
+const STREAMING_REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
 ];
+const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
+const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 const FULL_REHYPE_PLUGINS: PluggableList = [rehypeHighlight, rehypeKatex];
 
 export const MessageTextRenderer: MessageRenderer<
@@ -399,7 +400,10 @@ export const MessageTextRenderer: MessageRenderer<
             Thinking
           </Text>
         ) : displayedContent.length > 0 ? (
-          <div dir="auto">
+          <div
+            dir="auto"
+            className={cn(!streamFullyDisplayed && "streaming-katex")}
+          >
             <ReactMarkdown
               className="prose prose-onyx font-main-content-body max-w-full"
               components={markdownComponents}

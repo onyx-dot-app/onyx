@@ -30,7 +30,7 @@ function Removable({ onRemove, children }: RemovableProps) {
             "pointer-events-none focus-within:pointer-events-auto"
           )}
         >
-          <Hoverable.Item group="fileCard" variant="opacity-on-hover">
+          <Hoverable.Item group="fileCard" variant="appear-on-hover">
             <button
               type="button"
               onClick={(e) => {

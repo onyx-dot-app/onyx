@@ -222,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               />
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
-                <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
+                <Hoverable.Item group="inputAvatar" variant="appear-on-hover">
                   <Button prominence="secondary" size="md">
                     Edit
                   </Button>
