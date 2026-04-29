@@ -40,7 +40,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
-      <Hoverable.Item group="fileTile" variant="opacity-on-hover">
+      <Hoverable.Item group="fileTile" variant="appear-on-hover">
         <button
           type="button"
           onClick={(e) => {

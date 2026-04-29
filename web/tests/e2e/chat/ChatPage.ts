@@ -56,7 +56,9 @@ export class ChatPage {
 
   async screenshotContainer(name: string): Promise<void> {
     await expect(this.container).toBeVisible();
-    await this.scrollTo("bottom");
+    if ((await this.scrollContainer.count()) > 0) {
+      await this.scrollTo("bottom");
+    }
     await expectElementScreenshot(this.container, { name });
   }
 

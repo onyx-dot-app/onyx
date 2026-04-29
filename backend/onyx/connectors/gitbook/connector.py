@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -33,7 +34,9 @@ class GitbookApiClient:
         }
 
         url = urljoin(GITBOOK_API_BASE, endpoint.lstrip("/"))
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(
+            url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+        )
         response.raise_for_status()
         return response.json()
 

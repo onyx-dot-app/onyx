@@ -16,12 +16,19 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "OpenAI",
     providers: [
       {
+        image_provider_id: "openai_gpt_image_2",
+        model_name: "gpt-image-2",
+        provider_name: "openai",
+        title: "GPT Image 2",
+        description:
+          "OpenAI's latest Image Generation model with the highest prompt fidelity.",
+      },
+      {
         image_provider_id: "openai_gpt_image_1_5",
         model_name: "gpt-image-1.5",
         provider_name: "openai",
         title: "GPT Image 1.5",
-        description:
-          "OpenAI's latest Image Generation model with the highest prompt fidelity.",
+        description: "OpenAI's previous flagship Image Generation model.",
       },
       {
         image_provider_id: "openai_gpt_image_1",
@@ -44,6 +51,14 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
   {
     name: "Azure OpenAI",
     providers: [
+      {
+        image_provider_id: "azure_gpt_image_2",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 2",
+        description:
+          "GPT Image 2 image generation model hosted on Microsoft Azure.",
+      },
       {
         image_provider_id: "azure_gpt_image_1_5",
         model_name: "", // Extracted from deployment in target URI

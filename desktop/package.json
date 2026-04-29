@@ -7,7 +7,9 @@
     "debug": "tauri dev -- -- --debug",
     "build": "tauri build",
     "build:dmg": "tauri build --target universal-apple-darwin",
-    "build:linux": "tauri build --bundles deb,rpm"
+    "build:windows": "tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc",
+    "build:linux": "tauri build --bundles deb,rpm",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1"

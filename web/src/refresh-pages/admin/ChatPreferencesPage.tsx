@@ -10,7 +10,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -37,7 +36,6 @@ import {
 } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { EmptyMessageCard } from "@opal/components";
 import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -48,14 +46,21 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
+import {
+  EmptyMessageCard,
+  Button,
+  Divider,
+  Text,
+  Card,
+  MessageCard,
+  Tooltip,
+} from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
@@ -292,12 +297,11 @@ function NumericLimitField({
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
-            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
-              <IconButton
+            <Hoverable.Item group="numericLimit" variant="appear-on-hover">
+              <Button
                 icon={SvgRefreshCw}
                 tooltip="Restore default"
-                internal
-                type="button"
+                prominence="internal"
                 onClick={handleRestore}
               />
             </Hoverable.Item>
@@ -1111,52 +1115,76 @@ export default function ChatPreferencesPage() {
               }
             }}
           >
-            {({ dirty, isSubmitting, submitForm }) => (
-              <Form>
-                <Modal.Header
-                  icon={SvgAddLines}
-                  title="System Prompt"
-                  description="This base prompt is prepended to all chats, agents, and projects."
-                  onClose={() => setSystemPromptModalOpen(false)}
-                />
-                <Modal.Body>
-                  <Section gap={0.25} alignItems="start">
-                    <InputTextAreaField
-                      name="system_prompt"
-                      placeholder="Enter your system prompt..."
-                      rows={8}
-                      maxRows={20}
-                      autoResize
-                    />
-                    <Text font="secondary-body" color="text-03">
-                      {markdown(
-                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
-                      )}
-                    </Text>
-                  </Section>
-                  <MessageCard
-                    title="Modify with caution."
-                    description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                    padding="xs"
+            {({ dirty, isSubmitting, submitForm, setFieldValue }) => {
+              const defaultPrompt =
+                defaultAgentConfig?.default_system_prompt ?? "";
+
+              const handleRestore = () => {
+                void setFieldValue("system_prompt", defaultPrompt);
+              };
+
+              return (
+                <Form>
+                  <Modal.Header
+                    icon={SvgAddLines}
+                    title="System Prompt"
+                    description="This base prompt is prepended to all chats, agents, and projects."
+                    onClose={() => setSystemPromptModalOpen(false)}
                   />
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    prominence="secondary"
-                    onClick={() => setSystemPromptModalOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    prominence="primary"
-                    onClick={submitForm}
-                    disabled={!dirty || isSubmitting}
-                  >
-                    Save
-                  </Button>
-                </Modal.Footer>
-              </Form>
-            )}
+                  <Modal.Body>
+                    <Section gap={0.25} alignItems="start">
+                      <Hoverable.Root group="systemPromptRestore" width="full">
+                        <InputTextAreaField
+                          name="system_prompt"
+                          placeholder="Enter your system prompt..."
+                          rows={8}
+                          maxRows={20}
+                          autoResize
+                          rightSection={
+                            <Hoverable.Item
+                              group="systemPromptRestore"
+                              variant="appear-on-hover"
+                            >
+                              <Button
+                                icon={SvgRefreshCw}
+                                tooltip="Restore default"
+                                prominence="internal"
+                                onClick={handleRestore}
+                              />
+                            </Hoverable.Item>
+                          }
+                        />
+                      </Hoverable.Root>
+                      <Text font="secondary-body" color="text-03">
+                        {markdown(
+                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used.\n`{{REMINDER_TAG_DESCRIPTION}}` - Instructions for how to interpret system reminders in user messages."
+                        )}
+                      </Text>
+                    </Section>
+                    <MessageCard
+                      title="Modify with caution."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                      padding="xs"
+                    />
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setSystemPromptModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      prominence="primary"
+                      onClick={submitForm}
+                      disabled={!dirty || isSubmitting}
+                    >
+                      Save
+                    </Button>
+                  </Modal.Footer>
+                </Form>
+              );
+            }}
           </Formik>
         </Modal.Content>
       </Modal>

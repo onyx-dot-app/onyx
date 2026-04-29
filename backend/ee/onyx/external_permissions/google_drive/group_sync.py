@@ -111,8 +111,16 @@ def _get_all_folders(
             _get_all_folders_for_user(
                 google_drive_connector, skip_folders_without_permissions, user_email
             )
-        except Exception:
-            logger.exception(f"Error getting folders for user {user_email}")
+        except Exception as e:
+            # 401 indicates a customer-side credential issue (token revoked /
+            # expired), not a bug — surface as a warning instead of an error.
+            if isinstance(e, HttpError) and e.status_code == 401:
+                logger.warning(
+                    f"Google Drive returned 401 for user {user_email}; "
+                    f"credentials may need to be reconnected. {e}"
+                )
+            else:
+                logger.exception(f"Error getting folders for user {user_email}")
             failed_count += 1
 
             if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):

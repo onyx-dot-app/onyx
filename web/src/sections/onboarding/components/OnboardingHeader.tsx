@@ -47,7 +47,7 @@ const OnboardingHeader = React.memo(
           title={STEP_CONFIG[onboardingState.currentStep].title}
           sizePreset="main-ui"
           variant="body"
-          prominence="muted"
+          color="muted"
           padding="sm"
           rightChildren={
             stepButtonText ? (

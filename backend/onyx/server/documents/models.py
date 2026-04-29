@@ -19,12 +19,16 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
+from onyx.db.index_attempt_metrics_models import StageScope
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
+from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
@@ -208,6 +212,70 @@ class IndexAttemptSnapshot(BaseModel):
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
         )
+
+
+class IndexAttemptStageMetricSnapshot(BaseModel):
+    """Per-stage timing aggregate for a single ``IndexAttempt``.
+
+    ``avg_duration_ms`` and ``std_dev_duration_ms`` are derived at
+    serialization time from the stored ``total_duration_ms`` and
+    ``m2_duration_ms`` (Welford / Chan accumulator). ``std_dev_duration_ms``
+    is undefined for ``event_count <= 1`` and is reported as ``None`` in
+    that case so the frontend can render "avg" without "± std dev".
+    """
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    stage: IndexAttemptStage
+    scope: StageScope
+    event_count: int
+    total_duration_ms: int
+    avg_duration_ms: float | None
+    std_dev_duration_ms: float | None
+    min_duration_ms: int | None
+    max_duration_ms: int | None
+    time_first_event: datetime | None
+    time_last_event: datetime | None
+
+    @classmethod
+    def from_db_model(
+        cls, metric: IndexAttemptStageMetric
+    ) -> "IndexAttemptStageMetricSnapshot":
+        avg = (
+            metric.total_duration_ms / metric.event_count
+            if metric.event_count > 0
+            else None
+        )
+        std_dev = (
+            max(0.0, metric.m2_duration_ms / (metric.event_count - 1)) ** 0.5
+            if metric.event_count > 1
+            else None
+        )
+        return IndexAttemptStageMetricSnapshot(
+            stage=metric.stage,
+            scope=STAGE_SCOPE[metric.stage],
+            event_count=metric.event_count,
+            total_duration_ms=metric.total_duration_ms,
+            avg_duration_ms=avg,
+            std_dev_duration_ms=std_dev,
+            min_duration_ms=metric.min_duration_ms,
+            max_duration_ms=metric.max_duration_ms,
+            time_first_event=metric.time_first_event,
+            time_last_event=metric.time_last_event,
+        )
+
+
+class IndexAttemptStageMetricsResponse(BaseModel):
+    """Response payload for the per-attempt stage-metrics endpoint.
+
+    ``stages`` is returned in the canonical pipeline order (the declaration
+    order of ``IndexAttemptStage``); the frontend renders that order
+    verbatim for the default "Pipeline order" sort and re-sorts client-side
+    for the "Time taken" sort.
+    """
+
+    index_attempt_id: int
+    stages: list[IndexAttemptStageMetricSnapshot]
 
 
 # These are the types currently supported by the pagination hook

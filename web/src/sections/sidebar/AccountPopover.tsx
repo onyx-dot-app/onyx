@@ -141,12 +141,12 @@ function SettingsPopover({
             onClick={handleLogin}
           />
         ),
-        // TODO(@raunakab): Add support for custom colour configuration for text
         showLogout && (
           <LineItemButton
             key="log-out"
             sizePreset="main-ui"
             variant="section"
+            color="danger"
             rounding="sm"
             icon={SvgLogOut}
             title="Log Out"
@@ -158,7 +158,7 @@ function SettingsPopover({
           <Content
             sizePreset="secondary"
             variant="body"
-            prominence="muted"
+            color="muted"
             orientation="reverse"
             icon={SvgOnyxLogo}
             title={markdown(
@@ -235,7 +235,7 @@ export default function AccountPopover({
       <Popover.Content
         align="end"
         side="right"
-        width={popupState === "Notifications" ? "xl" : "lg"}
+        width={popupState === "Notifications" ? "2xl" : "lg"}
       >
         {popupState === "Settings" && (
           <SettingsPopover
