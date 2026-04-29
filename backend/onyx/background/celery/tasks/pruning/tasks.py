@@ -425,6 +425,7 @@ def try_creating_prune_generator_task(
             queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,
+            headers={"enqueued_at": time.time()},
         )
 
         # fill in the celery task id
