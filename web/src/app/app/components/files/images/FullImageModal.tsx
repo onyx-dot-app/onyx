@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 
 interface FullImageModalProps {

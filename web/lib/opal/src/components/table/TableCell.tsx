@@ -1,6 +1,6 @@
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 interface TableCellProps
   extends WithoutStyles<React.TdHTMLAttributes<HTMLTableCellElement>> {

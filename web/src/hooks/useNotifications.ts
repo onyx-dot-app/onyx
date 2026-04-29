@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Notification } from "@/interfaces/settings";
+import type { Notification } from "@/lib/notifications/interfaces";
 
 /**
  * Fetches the current user's notifications.

@@ -23,6 +23,7 @@ from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
@@ -346,7 +347,9 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
     # import brotli
     try:
-        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
+        response = requests.get(
+            sitemap_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+        )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
         urls = [
@@ -519,7 +522,10 @@ class WebConnector(LoadConnector, SlimConnector):
 
         # First do a HEAD request to check content type without downloading the entire content
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
+            initial_url,
+            headers=DEFAULT_HEADERS,
+            allow_redirects=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         content_type = head_response.headers.get("content-type")
         is_pdf = is_pdf_resource(initial_url, content_type)
@@ -535,7 +541,9 @@ class WebConnector(LoadConnector, SlimConnector):
                 )
                 return result
 
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+            response = requests.get(
+                initial_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
+            )
             page_text, metadata = extract_pdf_text(response.content)
             last_modified = response.headers.get("Last-Modified")
 

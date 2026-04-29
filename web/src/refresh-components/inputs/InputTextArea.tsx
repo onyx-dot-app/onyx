@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn, mergeRefs } from "@/lib/utils";
+import { mergeRefs } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   innerClasses,
   textClasses,

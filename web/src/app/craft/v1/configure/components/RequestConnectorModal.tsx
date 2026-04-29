@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 interface RequestConnectorModalProps {

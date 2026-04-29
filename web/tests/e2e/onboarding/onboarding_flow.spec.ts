@@ -104,7 +104,13 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      await expect(chatInput).toBeVisible();
+      // Disabled wrapper is the parent div with data-opal-disabled
+      const disabledWrapper = chatInput.locator("..");
+      await expect(disabledWrapper).toHaveAttribute(
+        "data-opal-disabled",
+        "true"
+      );
 
       await expectElementScreenshot(chatInput, {
         name: "onboarding-chat-disabled",
@@ -239,7 +245,12 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      // Disabled wrapper is the parent div with data-opal-disabled
+      const disabledWrapper = chatInput.locator("..");
+      await expect(disabledWrapper).toHaveAttribute(
+        "data-opal-disabled",
+        "true"
+      );
     });
 
     test("can save name and see confirmation", async ({ page }) => {

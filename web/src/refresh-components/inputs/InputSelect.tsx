@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
@@ -15,7 +15,7 @@ import {
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
 import Separator, { SeparatorProps } from "@/refresh-components/Separator";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 // ============================================================================
 // Context

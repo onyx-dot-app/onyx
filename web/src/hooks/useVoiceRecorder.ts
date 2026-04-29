@@ -426,7 +426,7 @@ class VoiceRecorderSession {
     return output;
   }
 
-  private float32ToInt16(float32: Float32Array): Int16Array {
+  private float32ToInt16(float32: Float32Array): Int16Array<ArrayBuffer> {
     const int16 = new Int16Array(float32.length);
     for (let i = 0; i < float32.length; i++) {
       const s = Math.max(-1, Math.min(1, float32[i]!));

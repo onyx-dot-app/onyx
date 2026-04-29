@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Content } from "@opal/layouts";
 import { SvgSettings, SvgStar, SvgRefreshCw } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta = {
   title: "Layouts/Content",
@@ -10,13 +9,6 @@ const meta = {
   parameters: {
     layout: "centered",
   },
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 } satisfies Meta<typeof Content>;
 
 export default meta;

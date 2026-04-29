@@ -14,7 +14,7 @@ import { SvgServer, SvgTrash } from "@opal/icons";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;

@@ -2,25 +2,6 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "type": "austin",
-            "label": "Profile celery beat",
-            "envFile": "${workspaceFolder}/.env",
-            "options": {
-              "cwd": "${workspaceFolder}/backend"
-            },
-            "command": [
-                "sudo",
-                "-E"
-            ],
-            "args": [
-              "celery",
-              "-A",
-              "onyx.background.celery.versioned_apps.beat",
-              "beat",
-              "--loglevel=INFO"
-            ]
-        },
-        {
             "type": "shell",
             "label": "Generate Onyx OpenAPI Python client",
             "cwd": "${workspaceFolder}/backend",

@@ -115,6 +115,7 @@ function SidebarTab({
               title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
+              color="interactive"
               width="full"
               padding="fit"
               rightChildren={truncationSpacer}

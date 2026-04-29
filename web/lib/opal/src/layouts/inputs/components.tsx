@@ -6,8 +6,8 @@ import type {
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import type { TagProps } from "@opal/components/tag/components";
 import { Text, Divider } from "@opal/components";
+import type { TagProps } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
