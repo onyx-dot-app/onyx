@@ -10,7 +10,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -37,7 +36,6 @@ import {
 } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { EmptyMessageCard } from "@opal/components";
 import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -48,14 +46,21 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
+import {
+  EmptyMessageCard,
+  Button,
+  Divider,
+  Text,
+  Card,
+  MessageCard,
+  Tooltip,
+} from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
@@ -293,11 +298,10 @@ function NumericLimitField({
         rightSection={
           (value || "") !== defaultValue ? (
             <Hoverable.Item group="numericLimit" variant="appear-on-hover">
-              <IconButton
+              <Button
                 icon={SvgRefreshCw}
                 tooltip="Restore default"
-                internal
-                type="button"
+                prominence="internal"
                 onClick={handleRestore}
               />
             </Hoverable.Item>
@@ -1111,15 +1115,12 @@ export default function ChatPreferencesPage() {
               }
             }}
           >
-            {({ dirty, isSubmitting, submitForm, values, setFieldValue }) => {
+            {({ dirty, isSubmitting, submitForm, setFieldValue }) => {
               const defaultPrompt =
                 defaultAgentConfig?.default_system_prompt ?? "";
-              const showRestore =
-                !!defaultPrompt && values.system_prompt !== defaultPrompt;
 
-              const handleRestore = async () => {
-                await setFieldValue("system_prompt", defaultPrompt);
-                await submitForm();
+              const handleRestore = () => {
+                void setFieldValue("system_prompt", defaultPrompt);
               };
 
               return (
@@ -1140,26 +1141,23 @@ export default function ChatPreferencesPage() {
                           maxRows={20}
                           autoResize
                           rightSection={
-                            showRestore ? (
-                              <Hoverable.Item
-                                group="systemPromptRestore"
-                                variant="appear-on-hover"
-                              >
-                                <IconButton
-                                  icon={SvgRefreshCw}
-                                  tooltip="Restore default"
-                                  internal
-                                  type="button"
-                                  onClick={() => void handleRestore()}
-                                />
-                              </Hoverable.Item>
-                            ) : undefined
+                            <Hoverable.Item
+                              group="systemPromptRestore"
+                              variant="appear-on-hover"
+                            >
+                              <Button
+                                icon={SvgRefreshCw}
+                                tooltip="Restore default"
+                                prominence="internal"
+                                onClick={handleRestore}
+                              />
+                            </Hoverable.Item>
                           }
                         />
                       </Hoverable.Root>
                       <Text font="secondary-body" color="text-03">
                         {markdown(
-                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
+                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used.\n`{{REMINDER_TAG_DESCRIPTION}}` - Instructions for how to interpret system reminders in user messages."
                         )}
                       </Text>
                     </Section>
