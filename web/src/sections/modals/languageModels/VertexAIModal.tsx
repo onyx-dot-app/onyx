@@ -30,6 +30,7 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
@@ -61,6 +62,8 @@ function VertexAIModalInternals({
 }: VertexAIModalInternalsProps) {
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
+  const settingsContext = useSettingsContext();
+  const isMultiTenant = !settingsContext.settings.hooks_enabled;
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_WORKLOAD_IDENTITY) {
@@ -71,38 +74,44 @@ function VertexAIModalInternals({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
 
+  const showAuthMethodSelector = !isMultiTenant;
+
   return (
     <>
       <InputPadder>
         <Section gap={1}>
-          <InputVertical
-            withLabel={FIELD_VERTEX_AUTH_METHOD}
-            title="Authentication Method"
-            subDescription="Choose how Onyx should authenticate with Google Vertex AI."
-          >
-            <InputSelect
-              value={authMethod || AUTH_METHOD_SERVICE_ACCOUNT}
-              onValueChange={(value) =>
-                formikProps.setFieldValue(FIELD_VERTEX_AUTH_METHOD, value)
-              }
+          {showAuthMethodSelector && (
+            <InputVertical
+              withLabel={FIELD_VERTEX_AUTH_METHOD}
+              title="Authentication Method"
+              subDescription="Choose how Onyx should authenticate with Google Vertex AI."
             >
-              <InputSelect.Trigger defaultValue={AUTH_METHOD_SERVICE_ACCOUNT} />
-              <InputSelect.Content>
-                <InputSelect.Item
-                  value={AUTH_METHOD_SERVICE_ACCOUNT}
-                  description="Upload a GCP service account key JSON file"
-                >
-                  Service Account JSON
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                  description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
-                >
-                  Workload Identity (GKE)
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelect>
-          </InputVertical>
+              <InputSelect
+                value={authMethod || AUTH_METHOD_SERVICE_ACCOUNT}
+                onValueChange={(value) =>
+                  formikProps.setFieldValue(FIELD_VERTEX_AUTH_METHOD, value)
+                }
+              >
+                <InputSelect.Trigger
+                  defaultValue={AUTH_METHOD_SERVICE_ACCOUNT}
+                />
+                <InputSelect.Content>
+                  <InputSelect.Item
+                    value={AUTH_METHOD_SERVICE_ACCOUNT}
+                    description="Upload a GCP service account key JSON file"
+                  >
+                    Service Account JSON
+                  </InputSelect.Item>
+                  <InputSelect.Item
+                    value={AUTH_METHOD_WORKLOAD_IDENTITY}
+                    description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
+                  >
+                    Workload Identity (GKE)
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputVertical>
+          )}
 
           <InputVertical
             withLabel={FIELD_VERTEX_LOCATION}
