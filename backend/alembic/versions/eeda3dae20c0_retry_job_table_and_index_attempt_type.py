@@ -10,34 +10,15 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from onyx.db.enums import IndexAttemptType
+from onyx.db.enums import IndexingStatus
+
 
 # revision identifiers, used by Alembic.
 revision = "eeda3dae20c0"
 down_revision = "14162713706c"
 branch_labels = None
 depends_on = None
-
-
-INDEX_ATTEMPT_TYPE_ENUM = sa.Enum(
-    "FULL_RUN",
-    "TARGETED_RETRY",
-    name="indexattempttype",
-    native_enum=False,
-)
-# `retry_job.status` reuses the existing `IndexingStatus` enum
-# (NOT_STARTED → IN_PROGRESS → {SUCCESS,COMPLETED_WITH_ERRORS,FAILED,CANCELED}).
-# Since IndexingStatus is `native_enum=False` everywhere, the column is a
-# plain VARCHAR with a CHECK constraint — no shared Postgres TYPE to manage.
-INDEXING_STATUS_ENUM = sa.Enum(
-    "NOT_STARTED",
-    "IN_PROGRESS",
-    "SUCCESS",
-    "CANCELED",
-    "FAILED",
-    "COMPLETED_WITH_ERRORS",
-    name="indexingstatus",
-    native_enum=False,
-)
 
 
 def upgrade() -> None:
@@ -59,7 +40,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            INDEXING_STATUS_ENUM,
+            sa.Enum(IndexingStatus, native_enum=False),
             server_default="NOT_STARTED",
             nullable=False,
         ),
@@ -108,7 +89,7 @@ def upgrade() -> None:
         "index_attempt",
         sa.Column(
             "attempt_type",
-            INDEX_ATTEMPT_TYPE_ENUM,
+            sa.Enum(IndexAttemptType, native_enum=False),
             server_default="FULL_RUN",
             nullable=False,
         ),
