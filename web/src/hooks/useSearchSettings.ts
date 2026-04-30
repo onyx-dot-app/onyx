@@ -9,7 +9,6 @@ import {
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
-import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 /**
  * Fetches the currently-active search settings, including the embedding model
@@ -63,7 +62,7 @@ export function useCurrentEmbeddingModel() {
  */
 export function useLLMContextualCosts() {
   return useSWR<LLMContextualCost[]>(
-    LLM_CONTEXTUAL_COST_ADMIN_URL,
+    SWR_KEYS.llmContextualCost,
     errorHandlingFetcher
   );
 }
