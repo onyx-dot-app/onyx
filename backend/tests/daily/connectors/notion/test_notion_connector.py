@@ -46,7 +46,9 @@ def notion_connector(
     connector = NotionConnector()
     connector.load_credentials(
         {
-            "notion_integration_token": test_secrets[TestSecret.NOTION_INTEGRATION_TOKEN],
+            "notion_integration_token": test_secrets[
+                TestSecret.NOTION_INTEGRATION_TOKEN
+            ],
         }
     )
     return connector

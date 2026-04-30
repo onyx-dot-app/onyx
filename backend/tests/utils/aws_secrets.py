@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-2")
 
+# AWS BatchGetSecretValue accepts up to 20 secret IDs per request.
+_AWS_BATCH_GET_MAX_IDS = 20
+
 _DOTENV_PATH = os.path.join(
     os.path.dirname(__file__), os.pardir, os.pardir, os.pardir, ".vscode", ".env"
 )
@@ -85,11 +88,9 @@ def _get_aws_secrets(
 
     secret_ids = [f"{prefix}{name.value}" for name in keys]
 
-    # BatchGetSecretValue accepts up to 20 IDs per request.
-    BATCH_SIZE = 20
     secrets: dict[AnySecret, str] = {}
-    for batch_start in range(0, len(secret_ids), BATCH_SIZE):
-        batch = secret_ids[batch_start : batch_start + BATCH_SIZE]
+    for batch_start in range(0, len(secret_ids), _AWS_BATCH_GET_MAX_IDS):
+        batch = secret_ids[batch_start : batch_start + _AWS_BATCH_GET_MAX_IDS]
         try:
             response = client.batch_get_secret_value(SecretIdList=batch)
         except ClientError as e:

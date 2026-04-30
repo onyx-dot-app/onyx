@@ -48,7 +48,9 @@ def confluence_connector(
     space: str,
     test_secrets: dict[TestSecret, str],
 ) -> ConfluenceConnector:
-    return _make_connector(space, test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN].strip())
+    return _make_connector(
+        space, test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN].strip()
+    )
 
 
 @pytest.fixture

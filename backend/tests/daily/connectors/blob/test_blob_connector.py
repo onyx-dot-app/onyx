@@ -18,7 +18,6 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from tests.utils.secret_names import TestSecret
 
-
 pytestmark = pytest.mark.secrets(
     TestSecret.AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS,
     TestSecret.AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS,

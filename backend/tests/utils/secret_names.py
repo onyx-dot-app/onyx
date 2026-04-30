@@ -29,9 +29,8 @@ class TestSecret(StrEnum):
     OLLAMA_API_KEY = "OLLAMA_API_KEY"
     BEDROCK_API_KEY = "bedrock-api-key"
 
-    # Connector test secrets (mirrors .github/workflows/pr-python-connector-tests.yml).
-    # Member names match the CI env var; values match the AWS Secrets Manager
-    # key (the suffix after the ``test/`` prefix).
+    # Connector test secrets. Member names match the CI env var; values match
+    # the AWS Secrets Manager key (the suffix after the ``test/`` prefix).
     AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS = "aws-access-key-id"
     AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS = "aws-secret-access-key"
     R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS = "r2-access-key-id"

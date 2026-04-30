@@ -31,9 +31,9 @@ def bitbucket_connector_for_slim(
     )
 
     email = os.environ.get("BITBUCKET_EMAIL")
+    if not email:
+        pytest.skip("BITBUCKET_EMAIL not set in environment")
     token = test_secrets[TestSecret.BITBUCKET_API_TOKEN]
-    if not email or not token:
-        pytest.skip("BITBUCKET_EMAIL or BITBUCKET_API_TOKEN not set in environment")
 
     connector.load_credentials({"bitbucket_email": email, "bitbucket_api_token": token})
     return connector
