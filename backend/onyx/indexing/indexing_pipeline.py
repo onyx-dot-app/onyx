@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator

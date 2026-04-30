@@ -83,8 +83,8 @@ def track_image_summarization(
                 from PIL import Image
 
                 labels["size_bucket"] = _size_tier(len(image_data))
-                img = Image.open(io.BytesIO(image_data))
-                w, h = img.size
+                with Image.open(io.BytesIO(image_data)) as img:
+                    w, h = img.size
                 labels["width_bucket"] = _dim_tier(w)
                 labels["height_bucket"] = _dim_tier(h)
             except Exception:
