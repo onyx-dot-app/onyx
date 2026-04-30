@@ -28,6 +28,7 @@ class TestSecret(StrEnum):
     LITELLM_API_URL = "LITELLM_API_URL"
     OLLAMA_API_KEY = "OLLAMA_API_KEY"
     BEDROCK_API_KEY = "bedrock-api-key"
+    GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR = "google-drive-oauth-creds"
 
     @classmethod
     def aws_prefix(cls) -> str:

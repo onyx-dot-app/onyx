@@ -20,12 +20,22 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from tests.load_env_vars import load_env_vars
+from tests.utils.secret_names import TestSecret
 
 # Load environment variables at the module level
 load_env_vars()
 
 
-_USER_TO_OAUTH_CREDENTIALS_MAP = {
+# Maps email -> the TestSecret backing the OAuth credentials for that user.
+# Tests using `google_drive_oauth_uploaded_connector_factory` should declare the
+# corresponding @pytest.mark.secrets(...) so the secret is batch-fetched at
+# session start; for users without a TestSecret entry the factory falls back to
+# reading the env var directly (legacy path for unmigrated tests).
+_USER_TO_OAUTH_TESTSECRET_MAP: dict[str, TestSecret] = {
+    "admin@onyx-test.com": TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR,
+}
+
+_USER_TO_OAUTH_ENV_VAR_MAP: dict[str, str] = {
     "admin@onyx-test.com": "GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR",
     "test_user_1@onyx-test.com": "GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1",
 }
@@ -59,9 +69,26 @@ def parse_credentials(env_str: str) -> dict:
         return json.loads(unescaped)
 
 
-def get_credentials_from_env(email: str, oauth: bool) -> dict:
+def _resolve_oauth_credential_string(
+    email: str, test_secrets: dict[TestSecret, str]
+) -> str:
+    """Prefer test_secrets (batch-fetched via @pytest.mark.secrets); otherwise
+    fall back to the env var so unmigrated tests continue to work."""
+    secret = _USER_TO_OAUTH_TESTSECRET_MAP.get(email)
+    if secret is not None and secret in test_secrets:
+        return test_secrets[secret]
+    return os.environ[_USER_TO_OAUTH_ENV_VAR_MAP[email]]
+
+
+def get_credentials_from_env(
+    email: str,
+    oauth: bool,
+    test_secrets: dict[TestSecret, str] | None = None,
+) -> dict:
     if oauth:
-        raw_credential_string = os.environ[_USER_TO_OAUTH_CREDENTIALS_MAP[email]]
+        raw_credential_string = _resolve_oauth_credential_string(
+            email, test_secrets or {}
+        )
     else:
         raw_credential_string = os.environ[
             _USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP[email]
@@ -82,9 +109,9 @@ def get_credentials_from_env(email: str, oauth: bool) -> dict:
 
 
 @pytest.fixture
-def google_drive_oauth_uploaded_connector_factory() -> (
-    Callable[..., GoogleDriveConnector]
-):
+def google_drive_oauth_uploaded_connector_factory(
+    test_secrets: dict[TestSecret, str],
+) -> Callable[..., GoogleDriveConnector]:
     def _connector_factory(
         primary_admin_email: str,
         include_shared_drives: bool,
@@ -104,7 +131,9 @@ def google_drive_oauth_uploaded_connector_factory() -> (
             shared_folder_urls=shared_folder_urls,
         )
 
-        credentials_json = get_credentials_from_env(primary_admin_email, oauth=True)
+        credentials_json = get_credentials_from_env(
+            primary_admin_email, oauth=True, test_secrets=test_secrets
+        )
         connector.load_credentials(credentials_json)
         return connector
 
