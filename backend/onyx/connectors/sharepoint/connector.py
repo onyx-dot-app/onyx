@@ -271,10 +271,15 @@ RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
-    """Honor a Retry-After header when the server provides one, otherwise
-    fall back to capped exponential backoff (5s, 10s, 20s, …, max 30s)."""
+    """Honor a numeric Retry-After header when the server provides one,
+    otherwise fall back to capped exponential backoff (5s, 10s, 20s, …,
+    max 30s). The HTTP-date form of Retry-After is rare from SharePoint /
+    Graph in practice and falls through to exponential backoff."""
     if retry_after:
-        return int(retry_after)
+        try:
+            return int(retry_after)
+        except ValueError:
+            pass
     return min(30, (2**attempt) * 5)
 
 
