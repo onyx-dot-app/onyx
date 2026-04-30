@@ -97,8 +97,8 @@ class IndexAttemptType(str, PyEnum):
     documents — they reuse the indexing pipeline but are excluded from
     freshness, scheduling, and swap-gating queries."""
 
-    FULL_RUN = "full_run"
-    TARGETED_RETRY = "targeted_retry"
+    FULL_RUN = "FULL_RUN"
+    TARGETED_RETRY = "TARGETED_RETRY"
 
 
 class ProcessingMode(str, PyEnum):
