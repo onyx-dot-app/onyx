@@ -1329,6 +1329,13 @@ COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
 VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
 OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
+# Whether tenant provisioning auto-creates LLMProvider rows seeded with the
+# *_DEFAULT_API_KEY env vars above. Defaults to True for self-hosted and
+# legacy cloud deployments; cloud sets this to False to require new tenants
+# to bring their own LLM keys.
+AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
+    os.environ.get("AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", "true").lower() == "true"
+)
 
 INSTANCE_TYPE = (
     "managed"
