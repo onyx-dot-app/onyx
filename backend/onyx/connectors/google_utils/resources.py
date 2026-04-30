@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import Any
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -28,54 +27,43 @@ class GmailService(Resource):
     pass
 
 
-class RefreshableDriveObject:
+class ImpersonationError(Exception):
+    """Raised when the service account cannot impersonate a user."""
+
+    def __init__(self, user_email: str, original: RefreshError) -> None:
+        super().__init__(f"Cannot impersonate '{user_email}'")
+        self.user_email = user_email
+        self.original = original
+
+
+class UserRemovedError(ImpersonationError):
+    """Raised when the impersonation failure is confirmed to be a deleted/suspended user."""
+
+
+def make_user_removal_checker(
+    user_email: str,
+    get_fresh_emails: Callable[[], list[str]] | None = None,
+) -> Callable[[], bool]:
+    """Return a callable that checks whether user_email was removed from the workspace.
+
+    The Admin SDK callback is fired at most once regardless of how many times
+    the returned callable is invoked.
     """
-    Running Google drive service retrieval functions
-    involves accessing methods of the service object (ie. files().list())
-    which can raise a RefreshError if the access token is expired.
-    This class is a wrapper that propagates the ability to refresh the access token
-    and retry the final retrieval function until execute() is called.
-    """
+    checked = False
+    user_removed = False
 
-    def __init__(
-        self,
-        call_stack: Callable[[ServiceAccountCredentials | OAuthCredentials], Any],
-        creds: ServiceAccountCredentials | OAuthCredentials,
-        creds_getter: Callable[..., ServiceAccountCredentials | OAuthCredentials],
-    ):
-        self.call_stack = call_stack
-        self.creds = creds
-        self.creds_getter = creds_getter
+    def is_user_removed() -> bool:
+        nonlocal checked, user_removed
+        if not checked:
+            checked = True
+            if get_fresh_emails is not None:
+                try:
+                    user_removed = user_email not in get_fresh_emails()
+                except Exception:
+                    pass
+        return user_removed
 
-    def __getattr__(self, name: str) -> Any:
-        if name == "execute":
-            return self.make_refreshable_execute()
-        return RefreshableDriveObject(
-            lambda creds: getattr(self.call_stack(creds), name),
-            self.creds,
-            self.creds_getter,
-        )
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return RefreshableDriveObject(
-            lambda creds: self.call_stack(creds)(*args, **kwargs),
-            self.creds,
-            self.creds_getter,
-        )
-
-    def make_refreshable_execute(self) -> Callable:
-        def execute(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return self.call_stack(self.creds).execute(*args, **kwargs)
-            except RefreshError as e:
-                logger.warning(
-                    f"RefreshError, going to attempt a creds refresh and retry: {e}"
-                )
-                # Refresh the access token
-                self.creds = self.creds_getter()
-                return self.call_stack(self.creds).execute(*args, **kwargs)
-
-        return execute
+    return is_user_removed
 
 
 def _get_google_service(

@@ -7,6 +7,7 @@ from typing import cast
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import Resource
 from googleapiclient.errors import HttpError
 from googleapiclient.http import BatchHttpRequest
@@ -148,6 +149,8 @@ def get_folder_metadata(
             logger.debug(f"Cannot access folder {folder_id}: {e}")
         else:
             raise e
+    except RefreshError:
+        logger.debug(f"Cannot access folder {folder_id}: impersonation failed")
     return None
 
 
@@ -179,6 +182,8 @@ def get_shared_drive_name(
             logger.debug(f"Cannot access drive {drive_id}: {e}")
         else:
             raise
+    except RefreshError:
+        logger.debug(f"Cannot access drive {drive_id}: impersonation failed")
     return None
 
 
