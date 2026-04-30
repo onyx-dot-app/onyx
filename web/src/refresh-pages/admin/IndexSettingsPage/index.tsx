@@ -301,6 +301,8 @@ function ProviderGroup({
   const connectModal = useCreateModal();
   const editCredentialsModal = useCreateModal();
   const providerCreationModal = useCreateModal();
+  const [pendingConnectModel, setPendingConnectModel] =
+    useState<EmbeddingModel | null>(null);
   const providerGroupContainsCurrentModelName = models.some(
     (m) => m.modelName === currentModelName
   );
@@ -345,6 +347,7 @@ function ProviderGroup({
       }
 
       if (state === "unconnected" && isCloud) {
+        setPendingConnectModel(model);
         connectModal.toggle(true);
         return;
       }
@@ -358,8 +361,11 @@ function ProviderGroup({
       connectModal,
       provider.deprecated,
       isCloud,
+      setPendingConnectModel,
     ]
   );
+
+  console.log("pendingConnectModel", pendingConnectModel);
 
   return (
     <>
@@ -388,6 +394,10 @@ function ProviderGroup({
               provider={provider}
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
+                if (pendingConnectModel) {
+                  onSelectModel(pendingConnectModel.modelName);
+                  setPendingConnectModel(null);
+                }
                 connectModal.toggle(false);
               }}
             />
@@ -644,11 +654,6 @@ export default function IndexSettingsPage() {
   const [switchoverType, setSwitchoverType] = useState<
     SwitchoverType | typeof SWITCHOVER_NONE
   >(SWITCHOVER_NONE);
-
-  const configOnlyProviders = useMemo(
-    () => CLOUD_BASED_PROVIDERS.filter((p) => p.embeddingModels.length === 0),
-    []
-  );
 
   const allModels = useMemo(
     () => [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS],
