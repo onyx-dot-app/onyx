@@ -443,20 +443,7 @@ function CustomSelfHostedModal({
       initialValues={initialValues}
       validationSchema={customSchema}
       validateOnMount
-      onSubmit={async (values) => {
-        const testResponse = await testEmbedding({
-          provider_type: "",
-          modelName: values.modelName ?? "",
-          apiKey: null,
-          apiUrl: null,
-          apiVersion: null,
-          deploymentName: null,
-        });
-        if (!testResponse.ok) {
-          const err = await testResponse.json();
-          toast.error(err.detail ?? "Embedding test failed");
-          return;
-        }
+      onSubmit={(values) => {
         onSubmit({
           modelName: values.modelName?.trim(),
           modelDim: values.modelDim,
