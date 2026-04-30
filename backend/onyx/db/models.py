@@ -2243,6 +2243,11 @@ class RetryJob(Base):
         back_populates="retry_job",
         primaryjoin="RetryJob.id == IndexAttempt.retry_job_id",
     )
+    errors: Mapped[list["IndexAttemptError"]] = relationship(
+        "IndexAttemptError",
+        back_populates="last_retry_job",
+        primaryjoin="RetryJob.id == IndexAttemptError.last_retry_job_id",
+    )
 
 
 class IndexAttempt(Base):
@@ -2532,6 +2537,11 @@ class IndexAttemptError(Base):
         ForeignKey("retry_job.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    last_retry_job: Mapped["RetryJob | None"] = relationship(
+        "RetryJob",
+        back_populates="errors",
+        primaryjoin="RetryJob.id == IndexAttemptError.last_retry_job_id",
     )
     resolved_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
