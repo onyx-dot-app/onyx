@@ -9,6 +9,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import { toast } from "@/hooks/useToast";
 import {
+  EmbeddingModelRequest,
   EmbeddingProviderName,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
@@ -142,7 +143,7 @@ interface ProviderModalProps {
    * to hand the just-defined model spec back to the page so it can be
    * staged into the Formik form.
    */
-  onSubmit: (customModel?: EmbeddingModel) => void;
+  onSubmit: (req?: EmbeddingModelRequest) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +397,6 @@ function LiteLLMProviderModal({
             normalize: values.normalize,
             queryPrefix: values.queryPrefix || null,
             passagePrefix: values.passagePrefix || null,
-            description: "",
           });
         }
       }}
@@ -422,15 +422,7 @@ function LiteLLMProviderModal({
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
-interface CustomFormValues {
-  modelName: string;
-  modelDim: number;
-  queryPrefix: string;
-  passagePrefix: string;
-  normalize: boolean;
-}
-const customSchema: Yup.ObjectSchema<CustomFormValues> =
-  Yup.object(modelSpecSchemaShape);
+const customSchema = Yup.object(modelSpecSchemaShape);
 function CustomSelfHostedModal({
   provider,
   existingModel,
@@ -438,16 +430,16 @@ function CustomSelfHostedModal({
 }: ProviderModalProps) {
   const isEditing = !!existingModel;
 
-  const initialValues: CustomFormValues = {
+  const initialValues: EmbeddingModelRequest = {
     modelName: existingModel?.modelName ?? "",
-    modelDim: existingModel?.modelDim ?? 0,
+    modelDim: existingModel?.modelDim ?? null,
     queryPrefix: existingModel?.queryPrefix ?? "",
     passagePrefix: existingModel?.passagePrefix ?? "",
     normalize: existingModel?.normalize ?? false,
   };
 
   return (
-    <Formik<CustomFormValues>
+    <Formik
       initialValues={initialValues}
       validationSchema={customSchema}
       validateOnMount

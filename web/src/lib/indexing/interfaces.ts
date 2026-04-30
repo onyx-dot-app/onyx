@@ -62,11 +62,20 @@ export interface EmbeddingProvider {
 
 export interface EmbeddingModel {
   modelName: string;
-  modelDim: number;
+  modelDim?: number | null;
   normalize: boolean;
-  queryPrefix: string | null;
-  passagePrefix: string | null;
+  queryPrefix?: string | null;
+  passagePrefix?: string | null;
   description: string;
+}
+
+export interface EmbeddingModelRequest {
+  modelName: string;
+  modelDim?: number | null;
+  normalize: boolean;
+  queryPrefix?: string | null;
+  passagePrefix?: string | null;
+  description?: string | null;
 }
 
 // Reranking
