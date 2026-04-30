@@ -258,7 +258,6 @@ jobs:
       - "extras=ecr-cache"
       - volume=50gb
     timeout-minutes: 45
-    environment: ci-protected
     strategy:
       fail-fast: false
       matrix:
@@ -616,7 +615,6 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-lite"
       - "extras=ecr-cache"
     timeout-minutes: 30
-    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 

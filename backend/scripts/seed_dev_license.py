@@ -3,11 +3,10 @@
 Usage:
     ONYX_DEV_LICENSE="$(cat license.lic)" python -m scripts.seed_dev_license
 
-Reads ONYX_DEV_LICENSE from the environment. If empty, no-ops so fork PRs
-that don't have access to the secret can still boot the stack.
-
-Accepts both PEM-armored and raw base64 license blobs. Verifies the RSA-4096
-signature before persisting.
+Reads ONYX_DEV_LICENSE from the environment. Empty values no-op so the
+script can be invoked unconditionally (e.g. local dev runs without a
+license to hand). Accepts both PEM-armored and raw base64 license blobs.
+Verifies the RSA-4096 signature before persisting.
 """
 
 import os
