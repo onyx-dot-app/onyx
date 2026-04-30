@@ -1,14 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Button, Divider, MessageCard } from "@opal/components";
+import { Formik, useFormikContext } from "formik";
+import * as Yup from "yup";
+import { Button, Divider } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { InputHorizontal, InputVertical } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Switch from "@/refresh-components/inputs/Switch";
+import { toast } from "@/hooks/useToast";
 import {
   EmbeddingProviderName,
   type ConfiguredEmbeddingProvider,
@@ -16,19 +15,24 @@ import {
   type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
 import { connectEmbeddingProvider } from "@/lib/indexing/svc";
-import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
+import {
+  ApiKeyField,
+  ApiUrlField,
+  BoolField,
+  GoogleCredentialsField,
+  TextField,
+} from "./shared";
 
 // ---------------------------------------------------------------------------
-// Shared modal shell
+// Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
+// surrounding Formik context. Every modal in this file is wrapped in a
+// `<Formik>` whose schema enforces field-level validation and whose
+// `onSubmit` toasts backend errors instead of showing inline cards.
 // ---------------------------------------------------------------------------
 
 interface ModalShellProps {
   provider: EmbeddingProvider;
   isEditing: boolean;
-  isValid: boolean;
-  isSubmitting: boolean;
-  errorMsg: string;
-  onSubmit: () => void;
   onCancel: () => void;
   children: React.ReactNode;
 }
@@ -36,13 +40,11 @@ interface ModalShellProps {
 function ModalShell({
   provider,
   isEditing,
-  isValid,
-  isSubmitting,
-  errorMsg,
-  onSubmit,
   onCancel,
   children,
 }: ModalShellProps) {
+  const { isValid, isSubmitting, submitForm } = useFormikContext();
+
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <Modal.Content width="md">
@@ -63,23 +65,16 @@ function ModalShell({
           onClose={onCancel}
         />
         <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={1}>
-            {children}
-
-            {errorMsg && (
-              <MessageCard
-                variant="error"
-                title="Error"
-                description={errorMsg}
-              />
-            )}
-          </GeneralLayouts.Section>
+          <GeneralLayouts.Section gap={1}>{children}</GeneralLayouts.Section>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button disabled={!isValid || isSubmitting} onClick={onSubmit}>
+          <Button
+            disabled={!isValid || isSubmitting}
+            onClick={() => void submitForm()}
+          >
             {isSubmitting
               ? isEditing
                 ? "Updating..."
@@ -95,38 +90,28 @@ function ModalShell({
 }
 
 // ---------------------------------------------------------------------------
-// Shared hook for submit logic
+// Shared submit helper — wraps `connectEmbeddingProvider` with the toast-on-
+// failure convention so each modal's `onSubmit` stays a one-liner.
 // ---------------------------------------------------------------------------
 
-function useProviderSubmit(
+async function submitProviderCredentials(
   provider: EmbeddingProvider,
   apiKey: string,
   apiUrl: string,
-  onSubmit: () => void
-) {
-  const [errorMsg, setErrorMsg] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    setErrorMsg("");
-    setIsSubmitting(true);
-    try {
-      await connectEmbeddingProvider({
-        providerType: provider.providerName,
-        apiKey,
-        apiUrl,
-      });
-      onSubmit();
-    } catch (error: unknown) {
-      setErrorMsg(
-        error instanceof Error ? error.message : "An unknown error occurred"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return { errorMsg, isSubmitting, handleSubmit };
+  onSuccess: () => void
+): Promise<void> {
+  try {
+    await connectEmbeddingProvider({
+      providerType: provider.providerName,
+      apiKey,
+      apiUrl,
+    });
+    onSuccess();
+  } catch (error: unknown) {
+    toast.error(
+      error instanceof Error ? error.message : "An unknown error occurred"
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +135,14 @@ export interface ProviderModalProps {
 // Standard provider modal (OpenAI, Cohere, Voyage)
 // ---------------------------------------------------------------------------
 
+interface StandardFormValues {
+  apiKey: string;
+}
+
+const standardSchema: Yup.ObjectSchema<StandardFormValues> = Yup.object({
+  apiKey: Yup.string().trim().required("API key is required"),
+});
+
 export function StandardProviderModal({
   provider,
   existingCredentials,
@@ -157,39 +150,56 @@ export function StandardProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = provider.displayName;
-  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
-
-  const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
-    provider,
-    apiKey,
-    "",
-    onSubmit
-  );
 
   return (
-    <ModalShell
-      provider={provider}
-      isEditing={isEditing}
-      isValid={!!apiKey}
-      isSubmitting={isSubmitting}
-      errorMsg={errorMsg}
-      onSubmit={handleSubmit}
-      onCancel={onCancel}
+    <Formik<StandardFormValues>
+      initialValues={{ apiKey: existingCredentials?.api_key ?? "" }}
+      validationSchema={standardSchema}
+      validateOnMount
+      onSubmit={async (values) => {
+        await submitProviderCredentials(provider, values.apiKey, "", onSubmit);
+      }}
     >
-      <ApiKeyField
-        apiLink={provider.apiLink ?? ""}
-        providerName={provider.displayName}
-        value={apiKey}
-        onChange={setApiKey}
-      />
-    </ModalShell>
+      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+        <ApiKeyField
+          name="apiKey"
+          apiLink={provider.apiLink ?? ""}
+          providerName={provider.displayName}
+        />
+      </ModalShell>
+    </Formik>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Google provider modal (JSON file upload)
 // ---------------------------------------------------------------------------
+
+interface GoogleFormValues {
+  apiKey: string;
+}
+
+const googleSchema: Yup.ObjectSchema<GoogleFormValues> = Yup.object({
+  apiKey: Yup.string()
+    .required("Service account JSON is required")
+    .test(
+      "service-account-json",
+      "Must be a valid Google service account JSON file",
+      (value) => {
+        if (!value) return false;
+        try {
+          const parsed = JSON.parse(value);
+          return (
+            parsed.type === "service_account" &&
+            typeof parsed.client_email === "string" &&
+            typeof parsed.private_key === "string"
+          );
+        } catch {
+          return false;
+        }
+      }
+    ),
+});
 
 export function GoogleProviderModal({
   provider,
@@ -198,52 +208,39 @@ export function GoogleProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
-  const [fileName, setFileName] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileName("");
-    if (!file) return;
-    setFileName(file.name);
-    try {
-      const content = JSON.parse(await file.text());
-      setApiKey(JSON.stringify(content));
-    } catch {
-      setApiKey("");
-    }
-  };
-
-  const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
-    provider,
-    apiKey,
-    "",
-    onSubmit
-  );
 
   return (
-    <ModalShell
-      provider={provider}
-      isEditing={isEditing}
-      isValid={!!apiKey}
-      isSubmitting={isSubmitting}
-      errorMsg={errorMsg}
-      onSubmit={handleSubmit}
-      onCancel={onCancel}
+    <Formik<GoogleFormValues>
+      initialValues={{ apiKey: existingCredentials?.api_key ?? "" }}
+      validationSchema={googleSchema}
+      validateOnMount
+      onSubmit={async (values) => {
+        await submitProviderCredentials(provider, values.apiKey, "", onSubmit);
+      }}
     >
-      <GoogleCredentialsField
-        fileInputRef={fileInputRef}
-        fileName={fileName}
-        onFileUpload={handleFileUpload}
-      />
-    </ModalShell>
+      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+        <GoogleCredentialsField name="apiKey" />
+      </ModalShell>
+    </Formik>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Azure provider modal (Target URL + API Key)
 // ---------------------------------------------------------------------------
+
+interface AzureFormValues {
+  apiUrl: string;
+  apiKey: string;
+}
+
+const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
+  apiUrl: Yup.string()
+    .trim()
+    .required("Target URL is required")
+    .url("Must be a valid URL"),
+  apiKey: Yup.string().trim().required("API key is required"),
+});
 
 export function AzureProviderModal({
   provider,
@@ -252,46 +249,71 @@ export function AzureProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = provider.displayName;
-  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
-  const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
-
-  const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
-    provider,
-    apiKey,
-    apiUrl,
-    onSubmit
-  );
 
   return (
-    <ModalShell
-      provider={provider}
-      isEditing={isEditing}
-      isValid={!!apiUrl && !!apiKey}
-      isSubmitting={isSubmitting}
-      errorMsg={errorMsg}
-      onSubmit={handleSubmit}
-      onCancel={onCancel}
+    <Formik<AzureFormValues>
+      initialValues={{
+        apiUrl: existingCredentials?.api_url ?? "",
+        apiKey: existingCredentials?.api_key ?? "",
+      }}
+      validationSchema={azureSchema}
+      validateOnMount
+      onSubmit={async (values) => {
+        await submitProviderCredentials(
+          provider,
+          values.apiKey,
+          values.apiUrl,
+          onSubmit
+        );
+      }}
     >
-      <ApiUrlField
-        title="Target URL"
-        placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
-        value={apiUrl}
-        onChange={setApiUrl}
-      />
-      <ApiKeyField
-        apiLink={provider.apiLink ?? ""}
-        providerName={provider.displayName}
-        value={apiKey}
-        onChange={setApiKey}
-      />
-    </ModalShell>
+      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+        <ApiUrlField
+          name="apiUrl"
+          title="Target URL"
+          placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
+        />
+        <ApiKeyField
+          name="apiKey"
+          apiLink={provider.apiLink ?? ""}
+          providerName={provider.displayName}
+        />
+      </ModalShell>
+    </Formik>
   );
 }
 
 // ---------------------------------------------------------------------------
 // LiteLLM provider modal (full config)
 // ---------------------------------------------------------------------------
+
+interface LiteLLMFormValues {
+  apiUrl: string;
+  apiKey: string;
+  modelName: string;
+  modelDim: string;
+  queryPrefix: string;
+  passagePrefix: string;
+  normalize: boolean;
+}
+
+const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
+  apiUrl: Yup.string()
+    .trim()
+    .required("API base URL is required")
+    .url("Must be a valid URL"),
+  apiKey: Yup.string().defined().default(""),
+  modelName: Yup.string().trim().required("Model name is required"),
+  modelDim: Yup.string()
+    .required("Model dimension is required")
+    .test("positive-int", "Must be a positive integer", (value) => {
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
+    }),
+  queryPrefix: Yup.string().defined().default(""),
+  passagePrefix: Yup.string().defined().default(""),
+  normalize: Yup.boolean().defined().default(false),
+});
 
 export function LiteLLMProviderModal({
   provider,
@@ -300,222 +322,208 @@ export function LiteLLMProviderModal({
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
-  const providerName = provider.displayName;
-  const [apiKey, setApiKey] = useState(existingCredentials?.api_key ?? "");
-  const [apiUrl, setApiUrl] = useState(existingCredentials?.api_url ?? "");
-  const [modelName, setModelName] = useState("");
-  const [modelDim, setModelDim] = useState("");
-  const [queryPrefix, setQueryPrefix] = useState("");
-  const [passagePrefix, setPassagePrefix] = useState("");
-  const [normalize, setNormalize] = useState(false);
-
-  const { errorMsg, isSubmitting, handleSubmit } = useProviderSubmit(
-    provider,
-    apiKey,
-    apiUrl,
-    onSubmit
-  );
 
   return (
-    <ModalShell
-      provider={provider}
-      isEditing={isEditing}
-      isValid={!!apiUrl && !!modelName && !!modelDim}
-      isSubmitting={isSubmitting}
-      errorMsg={errorMsg}
-      onSubmit={handleSubmit}
-      onCancel={onCancel}
+    <Formik<LiteLLMFormValues>
+      initialValues={{
+        apiUrl: existingCredentials?.api_url ?? "",
+        apiKey: existingCredentials?.api_key ?? "",
+        modelName: "",
+        modelDim: "",
+        queryPrefix: "",
+        passagePrefix: "",
+        normalize: false,
+      }}
+      validationSchema={litellmSchema}
+      validateOnMount
+      onSubmit={async (values) => {
+        await submitProviderCredentials(
+          provider,
+          values.apiKey,
+          values.apiUrl,
+          onSubmit
+        );
+      }}
     >
-      <ApiUrlField
-        title="API Base URL"
-        placeholder="https://..."
-        subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
-        value={apiUrl}
-        onChange={setApiUrl}
-      />
+      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+        <ApiUrlField
+          name="apiUrl"
+          title="API Base URL"
+          placeholder="https://..."
+          subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
+        />
 
-      <ApiKeyField
-        apiLink={provider.apiLink ?? ""}
-        providerName={provider.displayName}
-        value={apiKey}
-        onChange={setApiKey}
-      />
+        <ApiKeyField
+          name="apiKey"
+          apiLink={provider.apiLink ?? ""}
+          providerName={provider.displayName}
+        />
 
-      <InputVertical
-        title="Model Name"
-        subDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
-      >
-        <InputTypeIn
+        <TextField
+          name="modelName"
+          title="Model Name"
           placeholder="model-name"
-          value={modelName}
-          onChange={(e) => setModelName(e.target.value)}
+          subDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
         />
-      </InputVertical>
 
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-      <InputVertical
-        title="Model Dimension"
-        subDescription="Number of dimensions in the embeddings generated by this model."
-      >
-        <InputTypeIn
-          inputMode="numeric"
+        <TextField
+          name="modelDim"
+          title="Model Dimension"
           placeholder="e.g., 768"
-          value={modelDim}
-          onChange={(e) => setModelDim(e.target.value)}
+          inputMode="numeric"
+          subDescription="Number of dimensions in the embeddings generated by this model."
         />
-      </InputVertical>
 
-      <InputVertical
-        title="Query Prefix"
-        suffix="optional"
-        subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-      >
-        <InputTypeIn
+        <TextField
+          name="queryPrefix"
+          title="Query Prefix"
+          suffix="optional"
           placeholder="e.g., 'query: '"
-          value={queryPrefix}
-          onChange={(e) => setQueryPrefix(e.target.value)}
+          subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
         />
-      </InputVertical>
 
-      <InputVertical
-        title="Passage Prefix"
-        suffix="optional"
-        subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-      >
-        <InputTypeIn
+        <TextField
+          name="passagePrefix"
+          title="Passage Prefix"
+          suffix="optional"
           placeholder="e.g., 'passage: '"
-          value={passagePrefix}
-          onChange={(e) => setPassagePrefix(e.target.value)}
+          subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
         />
-      </InputVertical>
 
-      <InputHorizontal
-        title="Normalize Embeddings"
-        description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
-        withLabel
-      >
-        <Switch checked={normalize} onCheckedChange={setNormalize} />
-      </InputHorizontal>
-    </ModalShell>
+        <BoolField
+          name="normalize"
+          title="Normalize Embeddings"
+          description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
+        />
+      </ModalShell>
+    </Formik>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Provider credentials modal (connect + edit)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Custom self-hosted model modal
 // ---------------------------------------------------------------------------
+
+interface CustomFormValues {
+  modelName: string;
+  modelDim: string;
+  queryPrefix: string;
+  passagePrefix: string;
+  normalize: boolean;
+}
+
+const customSchema: Yup.ObjectSchema<CustomFormValues> = Yup.object({
+  modelName: Yup.string().trim().required("Model name is required"),
+  modelDim: Yup.string()
+    .required("Model dimension is required")
+    .test("positive-int", "Must be a positive integer", (value) => {
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
+    }),
+  queryPrefix: Yup.string().defined().default(""),
+  passagePrefix: Yup.string().defined().default(""),
+  normalize: Yup.boolean().defined().default(false),
+});
 
 export function CustomSelfHostedModal({
   provider,
   onSubmit,
   onCancel,
 }: ProviderModalProps) {
-  const [modelName, setModelName] = useState("");
-  const [modelDim, setModelDim] = useState("");
-  const [queryPrefix, setQueryPrefix] = useState("");
-  const [passagePrefix, setPassagePrefix] = useState("");
-  const [normalize, setNormalize] = useState(false);
-
-  const parsedDim = parseInt(modelDim, 10);
-  const isValid = !!modelName && Number.isFinite(parsedDim) && parsedDim > 0;
-
-  const handleSubmit = () => {
-    if (!isValid) return;
-    onSubmit({
-      modelName,
-      modelDim: parsedDim,
-      normalize,
-      queryPrefix: queryPrefix || null,
-      passagePrefix: passagePrefix || null,
-      description: "",
-    });
-  };
-
   return (
-    <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <Modal.Content width="md">
-        <Modal.Header
-          icon={provider.icon}
-          moreIcon1={SvgArrowExchange}
-          moreIcon2={SvgOnyxLogo}
-          title={`Add ${provider.displayName}`}
-          description="Register a custom self-hosted embedding model."
-          onClose={onCancel}
-        />
-        <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={1}>
-            <InputVertical
-              title="Model Name"
-              subDescription="Onyx will connect to this model on your self-hosted endpoint."
-            >
-              <InputTypeIn
+    <Formik<CustomFormValues>
+      initialValues={{
+        modelName: "",
+        modelDim: "",
+        queryPrefix: "",
+        passagePrefix: "",
+        normalize: false,
+      }}
+      validationSchema={customSchema}
+      validateOnMount
+      onSubmit={(values) => {
+        onSubmit({
+          modelName: values.modelName.trim(),
+          modelDim: parseInt(values.modelDim, 10),
+          normalize: values.normalize,
+          queryPrefix: values.queryPrefix || null,
+          passagePrefix: values.passagePrefix || null,
+          description: "",
+        });
+      }}
+    >
+      <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
+        <Modal.Content width="md">
+          <Modal.Header
+            icon={provider.icon}
+            moreIcon1={SvgArrowExchange}
+            moreIcon2={SvgOnyxLogo}
+            title={`Add ${provider.displayName}`}
+            description="Register a custom self-hosted embedding model."
+            onClose={onCancel}
+          />
+          <Modal.Body twoTone>
+            <GeneralLayouts.Section gap={1}>
+              <TextField
+                name="modelName"
+                title="Model Name"
                 placeholder="model-name"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
+                subDescription="Onyx will connect to this model on your self-hosted endpoint."
               />
-            </InputVertical>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-            <InputVertical
-              title="Model Dimension"
-              subDescription="Number of dimensions in the embeddings generated by this model."
-            >
-              <InputTypeIn
-                inputMode="numeric"
+              <TextField
+                name="modelDim"
+                title="Model Dimension"
                 placeholder="e.g., 768"
-                value={modelDim}
-                onChange={(e) => setModelDim(e.target.value)}
+                inputMode="numeric"
+                subDescription="Number of dimensions in the embeddings generated by this model."
               />
-            </InputVertical>
 
-            <InputVertical
-              title="Query Prefix"
-              suffix="optional"
-              subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-            >
-              <InputTypeIn
+              <TextField
+                name="queryPrefix"
+                title="Query Prefix"
+                suffix="optional"
                 placeholder="e.g., 'query: '"
-                value={queryPrefix}
-                onChange={(e) => setQueryPrefix(e.target.value)}
+                subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
               />
-            </InputVertical>
 
-            <InputVertical
-              title="Passage Prefix"
-              suffix="optional"
-              subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-            >
-              <InputTypeIn
+              <TextField
+                name="passagePrefix"
+                title="Passage Prefix"
+                suffix="optional"
                 placeholder="e.g., 'passage: '"
-                value={passagePrefix}
-                onChange={(e) => setPassagePrefix(e.target.value)}
+                subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
               />
-            </InputVertical>
 
-            <InputHorizontal
-              title="Normalize Embeddings"
-              description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
-              withLabel
-            >
-              <Switch checked={normalize} onCheckedChange={setNormalize} />
-            </InputHorizontal>
-          </GeneralLayouts.Section>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button prominence="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button disabled={!isValid} onClick={handleSubmit}>
-            Connect
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+              <BoolField
+                name="normalize"
+                title="Normalize Embeddings"
+                description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
+              />
+            </GeneralLayouts.Section>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button prominence="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+            <CustomSelfHostedSubmitButton />
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
+    </Formik>
+  );
+}
+
+function CustomSelfHostedSubmitButton() {
+  const { isValid, submitForm } = useFormikContext();
+  return (
+    <Button disabled={!isValid} onClick={() => void submitForm()}>
+      Connect
+    </Button>
   );
 }
 
