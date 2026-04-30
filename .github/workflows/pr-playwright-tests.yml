@@ -17,6 +17,7 @@ on:
       - "release/**"
 
 permissions:
+  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
@@ -258,6 +259,7 @@ jobs:
       - "extras=ecr-cache"
       - volume=50gb
     timeout-minutes: 45
+    environment: ci-protected
     strategy:
       fail-fast: false
       matrix:
@@ -295,6 +297,11 @@ jobs:
         working-directory: ./web
         run: npx playwright install --with-deps
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Create .env file for Docker Compose
         env:
           OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
@@ -305,8 +312,6 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
@@ -317,6 +322,11 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
+          # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
+          # license enforcement so the stack still boots.
+          if [ -z "$ONYX_DEV_LICENSE" ]; then
+            echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
+          fi
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -437,6 +447,11 @@ jobs:
             echo "Web server not ready yet. Retrying in 3 seconds..."
             sleep 3
           done
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run Playwright tests
         working-directory: ./web
@@ -604,6 +619,7 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-lite"
       - "extras=ecr-cache"
     timeout-minutes: 30
+    environment: ci-protected
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -637,6 +653,11 @@ jobs:
         working-directory: ./web
         run: npx playwright install --with-deps
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Create .env file for Docker Compose
         env:
           OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
@@ -645,7 +666,6 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
@@ -655,6 +675,11 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
+          # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
+          # license enforcement so the stack still boots.
+          if [ -z "$ONYX_DEV_LICENSE" ]; then
+            echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
+          fi
 
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
@@ -669,6 +694,29 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d
         id: start_docker
+
+      - name: Wait for API server to be ready
+        run: |
+          start_time=$(date +%s)
+          timeout=300
+          while true; do
+            elapsed=$(( $(date +%s) - start_time ))
+            if [ $elapsed -ge $timeout ]; then
+              echo "Timeout reached. API server did not become ready in $timeout seconds."
+              exit 1
+            fi
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+            if [ "$response" = "200" ]; then
+              echo "API server is ready."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run Playwright tests (lite)
         working-directory: ./web

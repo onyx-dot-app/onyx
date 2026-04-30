@@ -60,7 +60,6 @@ runs:
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
         ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-        LICENSE_ENFORCEMENT_ENABLED=false
         AUTH_TYPE=basic
         POSTGRES_POOL_PRE_PING=true
         POSTGRES_USE_NULL_POOL=true
@@ -72,6 +71,11 @@ runs:
         ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
         ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
         EOF2
+        # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
+        # license enforcement so the stack still boots.
+        if [ -z "$ONYX_DEV_LICENSE" ]; then
+          echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
+        fi
 
     - name: Start Docker containers
       shell: bash
@@ -84,6 +88,12 @@ runs:
           minio \
           api_server \
           inference_model_server
+
+    - name: Seed dev license
+      shell: bash
+      run: |
+        docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+          python -m scripts.seed_dev_license
 
     - name: Run nightly provider integration test
       uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3

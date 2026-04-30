@@ -14,6 +14,7 @@ on:
       - "v*.*.*"
 
 permissions:
+  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
@@ -284,6 +285,8 @@ jobs:
       - extras=ecr-cache
     timeout-minutes: 45
 
+    environment: ci-protected
+
     strategy:
       fail-fast: false
       matrix:
@@ -296,6 +299,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -334,10 +342,13 @@ jobs:
           if [ "$EDITION" = "ee" ]; then
             cat <<EOF >> deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           EOF
+            # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
+            # license enforcement so the stack still boots.
+            if [ -z "$ONYX_DEV_LICENSE" ]; then
+              echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
+            fi
           fi
 
       - name: Start Docker containers
@@ -394,6 +405,12 @@ jobs:
 
           wait_for_service "http://localhost:8080/health" "API server"
           echo "Finished waiting for services."
+
+      - name: Seed dev license
+        if: matrix.edition == 'ee'
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Start Mock Services
         run: |
@@ -487,6 +504,7 @@ jobs:
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
+    environment: ci-protected
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -494,6 +512,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
@@ -508,7 +531,6 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -517,6 +539,11 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           EOF
+          # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
+          # license enforcement so the stack still boots.
+          if [ -z "$ONYX_DEV_LICENSE" ]; then
+            echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
+          fi
 
       # Start only the services needed for Onyx Lite (Postgres + API server)
       - name: Start Docker containers (onyx-lite)
@@ -551,6 +578,11 @@ jobs:
             fi
             sleep 5
           done
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -635,7 +667,6 @@ jobs:
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          LICENSE_ENFORCEMENT_ENABLED=false \
           MULTI_TENANT=true \
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
