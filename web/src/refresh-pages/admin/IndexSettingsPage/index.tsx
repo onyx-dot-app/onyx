@@ -54,6 +54,7 @@ import {
 } from "@/lib/indexing/interfaces";
 import {
   CLOUD_BASED_PROVIDERS,
+  CUSTOM_PROVIDER,
   SELF_HOSTED_PROVIDERS,
   findCloudProvider,
   getCurrentModelCopy,
@@ -608,6 +609,7 @@ export default function IndexSettingsPage() {
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
+  const customModelModal = useCreateModal();
 
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
@@ -680,6 +682,14 @@ export default function IndexSettingsPage() {
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
 
+      <customModelModal.Provider>
+        <ProviderCredentialsModal
+          provider={CUSTOM_PROVIDER}
+          onSubmit={() => customModelModal.toggle(false)}
+          onCancel={() => customModelModal.toggle(false)}
+        />
+      </customModelModal.Provider>
+
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
@@ -701,7 +711,7 @@ export default function IndexSettingsPage() {
 
               if (switchoverType === SWITCHOVER_NONE) {
                 toast.success("Settings applied");
-                resetForm({ values });
+                resetForm();
                 setSwitchoverType(SWITCHOVER_NONE);
                 return;
               }
@@ -755,6 +765,7 @@ export default function IndexSettingsPage() {
                           flexDirection="row"
                           gap={0.5}
                           justifyContent="end"
+                          padding={0.5}
                         >
                           <Button
                             icon={SvgExternalLink}
@@ -996,6 +1007,55 @@ export default function IndexSettingsPage() {
                                             />
                                           )
                                         )}
+
+                                        <GeneralLayouts.Section gap={0.25}>
+                                          <div className="px-1 pt-1 w-full h-[var(--opal-line-height-lg)]">
+                                            <GeneralLayouts.Section
+                                              flexDirection="row"
+                                              gap={0}
+                                            >
+                                              <Spacer horizontal rem={0.675} />
+                                              <div className="flex flex-row justify-between items-center w-full py-1">
+                                                <Content
+                                                  icon={CUSTOM_PROVIDER.icon}
+                                                  title="Custom Models"
+                                                  sizePreset="secondary"
+                                                />
+                                              </div>
+                                            </GeneralLayouts.Section>
+                                          </div>
+
+                                          <SelectCard
+                                            state="filled"
+                                            rounding="md"
+                                            padding="sm"
+                                            onClick={() =>
+                                              customModelModal.toggle(true)
+                                            }
+                                          >
+                                            <ContentAction
+                                              title="Add a custom self-hosted embedding model."
+                                              sizePreset="secondary"
+                                              variant="body"
+                                              color="muted"
+                                              padding="md"
+                                              rightChildren={
+                                                <Button
+                                                  prominence="tertiary"
+                                                  rightIcon={SvgPlusCircle}
+                                                  onClick={() =>
+                                                    customModelModal.toggle(
+                                                      true
+                                                    )
+                                                  }
+                                                >
+                                                  Add Custom Model
+                                                </Button>
+                                              }
+                                              center
+                                            />
+                                          </SelectCard>
+                                        </GeneralLayouts.Section>
                                       </GeneralLayouts.Section>
                                     ) : (
                                       <IllustrationContent

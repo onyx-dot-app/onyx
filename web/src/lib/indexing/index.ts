@@ -1,4 +1,4 @@
-import { SvgServer } from "@opal/icons";
+import { SvgHardDrive, SvgServer } from "@opal/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -215,6 +215,20 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
     ],
   },
 ];
+
+/**
+ * Synthetic provider used by the "Add Custom Model" flow. Not a real provider —
+ * its `providerName` never reaches the backend (custom self-hosted models are
+ * persisted with `provider_type=null` like other self-hosted models). Exists so
+ * the modal can be dispatched through `ProviderCredentialsModal` like every
+ * other provider.
+ */
+export const CUSTOM_PROVIDER: EmbeddingProvider = {
+  providerName: EmbeddingProviderName.CUSTOM,
+  displayName: "Custom Model",
+  icon: SvgHardDrive,
+  embeddingModels: [],
+};
 
 /**
  * Find the {@link EmbeddingProvider} entry matching `providerType`, or
