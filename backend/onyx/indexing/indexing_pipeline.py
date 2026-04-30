@@ -94,7 +94,7 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
-MAX_IMAGE_WORKERS = 20
+MAX_IMAGE_WORKERS = 16
 
 
 class _PendingImageSummarization(BaseModel):
