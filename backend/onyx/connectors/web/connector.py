@@ -7,26 +7,19 @@ from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
-from typing import Tuple
 from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
-from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError
-from requests_oauthlib import OAuth2Session
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -45,6 +38,12 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+
+# Re-exported for backwards compatibility with existing tests/callers that
+# patch these names on `onyx.connectors.web.connector`.
+from onyx.utils.playwright_fetch import DEFAULT_HEADERS
+from onyx.utils.playwright_fetch import DEFAULT_USER_AGENT  # noqa: F401
+from onyx.utils.playwright_fetch import start_playwright
 from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.web_content import extract_pdf_text
 from onyx.utils.web_content import is_pdf_resource
@@ -96,29 +95,6 @@ JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 # Grace period after page navigation to allow bot-detection challenges
 # and SPA content rendering to complete
 PAGE_RENDER_TIMEOUT_MS = 5000
-
-# Define common headers that mimic a real browser
-DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-DEFAULT_HEADERS = {
-    "User-Agent": DEFAULT_USER_AGENT,
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,"
-        "image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
-    ),
-    "Accept-Language": "en-US,en;q=0.9",
-    # Brotli decoding has been flaky in brotlicffi/httpx for certain chunked responses;
-    # stick to gzip/deflate to keep connectivity checks stable.
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8"',
-    "Sec-CH-UA-Mobile": "?0",
-    "Sec-CH-UA-Platform": '"macOS"',
-}
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -260,85 +236,6 @@ def get_internal_links(
         if _same_site(base_url, href):
             internal_links.add(href)
     return internal_links
-
-
-def start_playwright() -> Tuple[Playwright, BrowserContext]:
-    playwright = sync_playwright().start()
-
-    # Launch browser with more realistic settings
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=[
-            "--disable-blink-features=AutomationControlled",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--disable-site-isolation-trials",
-        ],
-    )
-
-    # Create a context with realistic browser properties
-    context = browser.new_context(
-        user_agent=DEFAULT_USER_AGENT,
-        viewport={"width": 1440, "height": 900},
-        device_scale_factor=2.0,
-        locale="en-US",
-        timezone_id="America/Los_Angeles",
-        has_touch=False,
-        java_script_enabled=True,
-        color_scheme="light",
-        # Add more realistic browser properties
-        bypass_csp=True,
-        ignore_https_errors=True,
-    )
-
-    # Set additional headers to mimic a real browser
-    context.set_extra_http_headers(
-        {
-            "Accept": DEFAULT_HEADERS["Accept"],
-            "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
-            "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
-            "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
-            "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
-            "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
-            "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
-            "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
-            "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],
-            "Cache-Control": "max-age=0",
-            "DNT": "1",
-        }
-    )
-
-    # Add a script to modify navigator properties to avoid detection
-    context.add_init_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
-    """
-    )
-
-    if (
-        WEB_CONNECTOR_OAUTH_CLIENT_ID
-        and WEB_CONNECTOR_OAUTH_CLIENT_SECRET
-        and WEB_CONNECTOR_OAUTH_TOKEN_URL
-    ):
-        client = BackendApplicationClient(client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID)
-        oauth = OAuth2Session(client=client)
-        token = oauth.fetch_token(
-            token_url=WEB_CONNECTOR_OAUTH_TOKEN_URL,
-            client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID,
-            client_secret=WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
-        )
-        context.set_extra_http_headers(
-            {"Authorization": "Bearer {}".format(token["access_token"])}
-        )
-
-    return playwright, context
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
