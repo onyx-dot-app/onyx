@@ -92,13 +92,19 @@ def track_image_summarization(
                     "Failed to record image processing metrics.", exc_info=True
                 )
 
+        try:
+            _image_summarization_total.labels(**labels).inc()
+        except Exception:
+            logger.warning(
+                "Failed to record image summarization metrics.", exc_info=True
+            )
+
         start = time.monotonic()
         result = fn(*args, **kwargs)
         elapsed = time.monotonic() - start
 
         try:
             _image_summarization_duration_seconds.labels(**labels).observe(elapsed)
-            _image_summarization_total.labels(**labels).inc()
         except Exception:
             logger.warning(
                 "Failed to record image summarization metrics.", exc_info=True
