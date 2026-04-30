@@ -4,6 +4,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Protocol
 
 import sentry_sdk
@@ -650,26 +651,36 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             for document in documents
         ]
 
+    # Collect all image summarization work items across all documents,
+    # then run them in parallel threads and slot results back in.
+    _MAX_IMAGE_WORKERS = 20
+
+    # First pass: build processed_sections for each document, leaving
+    # image sections as placeholders, and collect work items.
+    @dataclass
+    class _ImageWorkItem:
+        image_data: bytes
+        context_name: str
+        # Location to write the result back into
+        section: Section
+
     indexed_documents: list[IndexingDocument] = []
+    work_items: list[_ImageWorkItem] = []
 
     for document in documents:
         processed_sections: list[Section] = []
 
         for section in document.sections:
-            # For ImageSection, process and create base Section with both text and image_file_id
             if isinstance(section, ImageSection):
-                # Default section with image path preserved - ensure text is always a string
                 processed_section = Section(
                     type=section.type,
                     link=section.link,
                     image_file_id=section.image_file_id,
-                    text="",  # Initialize with empty string
+                    text="",
                 )
 
-                # Try to get image summary
                 try:
                     file_store = get_default_file_store()
-
                     file_record = file_store.read_file_record(
                         file_id=section.image_file_id
                     )
@@ -677,45 +688,57 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                         logger.warning(
                             f"Image file {section.image_file_id} not found in FileStore"
                         )
-
                         processed_section.text = "[Image could not be processed]"
                     else:
-                        # Get the image data
                         image_data_io = file_store.read_file(
                             file_id=section.image_file_id
                         )
                         image_data = image_data_io.read()
-                        summary = summarize_image_with_error_handling(
-                            llm=llm,
-                            image_data=image_data,
-                            context_name=file_record.display_name or "Image",
+                        work_items.append(
+                            _ImageWorkItem(
+                                image_data=image_data,
+                                context_name=file_record.display_name or "Image",
+                                section=processed_section,
+                            )
                         )
-
-                        if summary:
-                            processed_section.text = summary
-                        else:
-                            processed_section.text = "[Image could not be summarized]"
                 except Exception as e:
-                    logger.error(f"Error processing image section: {e}")
+                    logger.error(f"Error reading image section: {e}")
                     processed_section.text = "[Error processing image]"
 
                 processed_sections.append(processed_section)
-
-            # For TextSection, create a base Section with text and link
             else:
                 processed_section = Section(
                     type=section.type,
-                    text=section.text or "",  # Ensure text is always a string, not None
+                    text=section.text or "",
                     link=section.link,
                     image_file_id=None,
                 )
                 processed_sections.append(processed_section)
 
-        # Create IndexingDocument with original sections and processed_sections
         indexed_document = IndexingDocument(
             **document.model_dump(), processed_sections=processed_sections
         )
         indexed_documents.append(indexed_document)
+
+    # Second pass: run all image summarizations in parallel
+    if work_items:
+
+        def _summarize(item: _ImageWorkItem) -> str:
+            summary = summarize_image_with_error_handling(
+                llm=llm,
+                image_data=item.image_data,
+                context_name=item.context_name,
+            )
+            return summary or "[Image could not be summarized]"
+
+        results = run_functions_tuples_in_parallel(
+            [(_summarize, (item,)) for item in work_items],
+            allow_failures=True,
+            max_workers=_MAX_IMAGE_WORKERS,
+        )
+
+        for item, result in zip(work_items, results):
+            item.section.text = result or "[Error processing image]"
 
     return indexed_documents
 
