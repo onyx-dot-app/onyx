@@ -62,6 +62,7 @@ import {
 import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
+  cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
 } from "@/lib/indexing/svc";
@@ -76,6 +77,7 @@ import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useLLMContextualCosts,
+  useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
@@ -635,6 +637,23 @@ export default function IndexSettingsPage() {
     useCurrentSearchSettings();
   const { data: contextualCosts } = useLLMContextualCosts();
   const { data: configuredProviders } = useConfiguredEmbeddingProviders();
+  const { data: secondarySearchSettings } = useSecondarySearchSettings();
+  const isReindexing = !!secondarySearchSettings;
+  const cancelReindexModal = useCreateModal();
+
+  const handleCancelReindex = useCallback(async () => {
+    const response = await cancelNewEmbedding();
+    if (!response.ok) {
+      toast.error("Failed to cancel re-indexing");
+      return;
+    }
+    cancelReindexModal.toggle(false);
+    toast.success("Re-indexing canceled");
+    await Promise.all([
+      mutate(SWR_KEYS.secondarySearchSettings),
+      mutate(SWR_KEYS.indexingStatus),
+    ]);
+  }, [cancelReindexModal]);
 
   const saveSearchSettings = useCallback(
     async (updates: Partial<SavedSearchSettings>) => {
@@ -693,6 +712,23 @@ export default function IndexSettingsPage() {
         </editModal.Provider>
       )}
 
+      <cancelReindexModal.Provider>
+        <ConfirmationModalLayout
+          icon={SvgRevert}
+          title="Cancel re-indexing"
+          submit={
+            <Button variant="danger" onClick={handleCancelReindex}>
+              Confirm cancel
+            </Button>
+          }
+        >
+          <Text font="main-ui-body" color="text-03" as="p">
+            Cancelling will revert to the previous embedding model and all
+            re-indexing progress will be lost.
+          </Text>
+        </ConfirmationModalLayout>
+      </cancelReindexModal.Provider>
+
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
@@ -702,7 +738,28 @@ export default function IndexSettingsPage() {
         />
 
         <SettingsLayouts.Body>
-          {!NEXT_PUBLIC_CLOUD_ENABLED && (
+          {isReindexing && (
+            <MessageCard
+              variant="warning"
+              headerPadding="sm"
+              title="Re-indexing in progress"
+              description={markdown(
+                `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
+              )}
+              bottomChildren={
+                <div className="flex flex-row justify-end gap-2 p-2">
+                  <Button
+                    variant="danger"
+                    prominence="secondary"
+                    onClick={() => cancelReindexModal.toggle(true)}
+                  >
+                    Cancel re-indexing
+                  </Button>
+                </div>
+              }
+            />
+          )}
+          {!isReindexing && !NEXT_PUBLIC_CLOUD_ENABLED && (
             <MessageCard
               variant={statusVariant}
               headerPadding="sm"
@@ -817,198 +874,211 @@ export default function IndexSettingsPage() {
               </Card>
             ) : (
               currentEmbeddingModel && (
-                <Tabs value={activeModelTab} onValueChange={setActiveModelTab}>
-                  <Card
-                    expandable
-                    expanded={viewAllModelsOpen}
-                    expandableContentHeight="fit"
-                    border="solid"
-                    borderColor={statusVariant}
-                    rounding="lg"
-                    padding={viewAllModelsOpen ? "fit" : "sm"}
-                    expandedContent={
-                      <>
-                        <Tabs.Content value={MODEL_TAB_CLOUD} className="pt-0">
-                          {filteredCloudProviders.length > 0 ? (
-                            <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                              {filteredCloudProviders.map(
-                                ({ provider, models }) => (
-                                  <ProviderGroup
-                                    key={provider.providerName}
-                                    provider={provider}
-                                    models={models}
-                                    currentModelName={
-                                      currentEmbeddingModel?.model_name
-                                    }
-                                    selectedModelName={
-                                      selectedModelName ?? undefined
-                                    }
-                                    isCloud
-                                    existingCredentials={configuredProviders?.get(
-                                      provider.providerName
-                                    )}
-                                    onSelectModel={setSelectedModelName}
-                                    onDeselectModel={() =>
-                                      setSelectedModelName(null)
-                                    }
-                                  />
-                                )
-                              )}
-                            </GeneralLayouts.Section>
-                          ) : (
-                            <IllustrationContent
-                              illustration={SvgNoResult}
-                              title="No cloud-based models found"
-                              description="Try a different search term."
-                            />
-                          )}
-                        </Tabs.Content>
-
-                        <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
-                          {filteredSelfHostedProviders.length > 0 ? (
-                            <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                              {filteredSelfHostedProviders.map(
-                                ({ provider: shProvider, models }) => (
-                                  <ProviderGroup
-                                    key={shProvider.providerName}
-                                    provider={shProvider}
-                                    models={models}
-                                    currentModelName={
-                                      currentEmbeddingModel?.model_name
-                                    }
-                                    selectedModelName={
-                                      selectedModelName ?? undefined
-                                    }
-                                    onSelectModel={setSelectedModelName}
-                                    onDeselectModel={() =>
-                                      setSelectedModelName(null)
-                                    }
-                                  />
-                                )
-                              )}
-                            </GeneralLayouts.Section>
-                          ) : (
-                            <IllustrationContent
-                              illustration={SvgNoResult}
-                              title="No self-hosted models found"
-                              description="Try a different search term."
-                            />
-                          )}
-                        </Tabs.Content>
-                      </>
-                    }
+                <Disabled
+                  disabled={isReindexing}
+                  tooltip="Cancel the in-progress re-index to switch models."
+                >
+                  <Tabs
+                    value={activeModelTab}
+                    onValueChange={setActiveModelTab}
                   >
-                    {viewAllModelsOpen ? (
-                      <div className="pt-1 px-1">
-                        <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
-                          <InputTypeIn
-                            placeholder="Search models..."
-                            variant="internal"
-                            leftSearchIcon
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                          />
-                          <div className="flex flex-row">
-                            {selectedModelName && (
-                              <Button
-                                icon={SvgRevert}
-                                prominence="internal"
-                                onClick={() => {
-                                  setSelectedModelName(null);
-                                  setSwitchoverType(SWITCHOVER_NONE);
-                                }}
+                    <Card
+                      expandable
+                      expanded={viewAllModelsOpen}
+                      expandableContentHeight="fit"
+                      border="solid"
+                      borderColor={statusVariant}
+                      rounding="lg"
+                      padding={viewAllModelsOpen ? "fit" : "sm"}
+                      expandedContent={
+                        <>
+                          <Tabs.Content
+                            value={MODEL_TAB_CLOUD}
+                            className="pt-0"
+                          >
+                            {filteredCloudProviders.length > 0 ? (
+                              <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                                {filteredCloudProviders.map(
+                                  ({ provider, models }) => (
+                                    <ProviderGroup
+                                      key={provider.providerName}
+                                      provider={provider}
+                                      models={models}
+                                      currentModelName={
+                                        currentEmbeddingModel?.model_name
+                                      }
+                                      selectedModelName={
+                                        selectedModelName ?? undefined
+                                      }
+                                      isCloud
+                                      existingCredentials={configuredProviders?.get(
+                                        provider.providerName
+                                      )}
+                                      onSelectModel={setSelectedModelName}
+                                      onDeselectModel={() =>
+                                        setSelectedModelName(null)
+                                      }
+                                    />
+                                  )
+                                )}
+                              </GeneralLayouts.Section>
+                            ) : (
+                              <IllustrationContent
+                                illustration={SvgNoResult}
+                                title="No cloud-based models found"
+                                description="Try a different search term."
                               />
                             )}
-                            <Button
-                              prominence="internal"
-                              onClick={() => setViewAllModelsOpen(false)}
-                              rightIcon={SvgFold}
-                            >
-                              Fold Models
-                            </Button>
-                          </div>
-                        </div>
+                          </Tabs.Content>
 
-                        <div className="px-2">
-                          <Tabs.List variant="underline">
-                            <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                              Cloud-based
-                            </Tabs.Trigger>
-                            <Tabs.Trigger value={MODEL_TAB_SELF}>
-                              Self-hosted
-                            </Tabs.Trigger>
-                          </Tabs.List>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-row items-start w-full">
-                        <GeneralLayouts.Section
-                          padding={0.5}
-                          gap={0}
-                          alignItems="start"
-                        >
-                          <Content
-                            icon={
-                              getEmbeddingProvider(
-                                currentEmbeddingModel.provider_type
-                              ).icon
-                            }
-                            title={currentEmbeddingModel.model_name}
-                            description={
-                              getCurrentModelCopy(
-                                currentEmbeddingModel.model_name
-                              )?.model.description
-                            }
-                            sizePreset="main-ui"
-                            variant="section"
-                          />
-                          <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                            <EmbeddingProviderInfo
-                              providerType={currentEmbeddingModel.provider_type}
-                            />
-                          </div>
-                        </GeneralLayouts.Section>
-
-                        <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
-                          <Button
-                            prominence="secondary"
-                            onClick={() => {
-                              const isSelectedSelfHosted =
-                                selectedModelName &&
-                                SELF_HOSTED_PROVIDERS.some((p) =>
-                                  p.embeddingModels.some(
-                                    (m) => m.modelName === selectedModelName
+                          <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
+                            {filteredSelfHostedProviders.length > 0 ? (
+                              <GeneralLayouts.Section gap={0.5} padding={0.5}>
+                                {filteredSelfHostedProviders.map(
+                                  ({ provider: shProvider, models }) => (
+                                    <ProviderGroup
+                                      key={shProvider.providerName}
+                                      provider={shProvider}
+                                      models={models}
+                                      currentModelName={
+                                        currentEmbeddingModel?.model_name
+                                      }
+                                      selectedModelName={
+                                        selectedModelName ?? undefined
+                                      }
+                                      onSelectModel={setSelectedModelName}
+                                      onDeselectModel={() =>
+                                        setSelectedModelName(null)
+                                      }
+                                    />
                                   )
-                                );
-                              setActiveModelTab(
-                                isSelectedSelfHosted
-                                  ? MODEL_TAB_SELF
-                                  : selectedModelName
-                                    ? MODEL_TAB_CLOUD
-                                    : currentEmbeddingModel?.provider_type
-                                      ? MODEL_TAB_CLOUD
-                                      : MODEL_TAB_SELF
-                              );
-                              setViewAllModelsOpen(true);
-                            }}
-                          >
-                            View All Models
-                          </Button>
-                          {currentCloudProvider && (
-                            <div className="p-1">
+                                )}
+                              </GeneralLayouts.Section>
+                            ) : (
+                              <IllustrationContent
+                                illustration={SvgNoResult}
+                                title="No self-hosted models found"
+                                description="Try a different search term."
+                              />
+                            )}
+                          </Tabs.Content>
+                        </>
+                      }
+                    >
+                      {viewAllModelsOpen ? (
+                        <div className="pt-1 px-1">
+                          <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
+                            <InputTypeIn
+                              placeholder="Search models..."
+                              variant="internal"
+                              leftSearchIcon
+                              value={query}
+                              onChange={(e) => setQuery(e.target.value)}
+                            />
+                            <div className="flex flex-row">
+                              {selectedModelName && (
+                                <Button
+                                  icon={SvgRevert}
+                                  prominence="internal"
+                                  onClick={() => {
+                                    setSelectedModelName(null);
+                                    setSwitchoverType(SWITCHOVER_NONE);
+                                  }}
+                                />
+                              )}
                               <Button
-                                icon={SvgSettings}
-                                prominence="tertiary"
-                                size="md"
-                                onClick={() => editModal.toggle(true)}
+                                prominence="internal"
+                                onClick={() => setViewAllModelsOpen(false)}
+                                rightIcon={SvgFold}
+                              >
+                                Fold Models
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="px-2">
+                            <Tabs.List variant="underline">
+                              <Tabs.Trigger value={MODEL_TAB_CLOUD}>
+                                Cloud-based
+                              </Tabs.Trigger>
+                              <Tabs.Trigger value={MODEL_TAB_SELF}>
+                                Self-hosted
+                              </Tabs.Trigger>
+                            </Tabs.List>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-row items-start w-full">
+                          <GeneralLayouts.Section
+                            padding={0.5}
+                            gap={0}
+                            alignItems="start"
+                          >
+                            <Content
+                              icon={
+                                getEmbeddingProvider(
+                                  currentEmbeddingModel.provider_type
+                                ).icon
+                              }
+                              title={currentEmbeddingModel.model_name}
+                              description={
+                                getCurrentModelCopy(
+                                  currentEmbeddingModel.model_name
+                                )?.model.description
+                              }
+                              sizePreset="main-ui"
+                              variant="section"
+                            />
+                            <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                              <EmbeddingProviderInfo
+                                providerType={
+                                  currentEmbeddingModel.provider_type
+                                }
                               />
                             </div>
-                          )}
+                          </GeneralLayouts.Section>
+
+                          <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
+                            <Button
+                              prominence="secondary"
+                              onClick={() => {
+                                const isSelectedSelfHosted =
+                                  selectedModelName &&
+                                  SELF_HOSTED_PROVIDERS.some((p) =>
+                                    p.embeddingModels.some(
+                                      (m) => m.modelName === selectedModelName
+                                    )
+                                  );
+                                setActiveModelTab(
+                                  isSelectedSelfHosted
+                                    ? MODEL_TAB_SELF
+                                    : selectedModelName
+                                      ? MODEL_TAB_CLOUD
+                                      : currentEmbeddingModel?.provider_type
+                                        ? MODEL_TAB_CLOUD
+                                        : MODEL_TAB_SELF
+                                );
+                                setViewAllModelsOpen(true);
+                              }}
+                            >
+                              View All Models
+                            </Button>
+                            {currentCloudProvider && (
+                              <div className="p-1">
+                                <Button
+                                  icon={SvgSettings}
+                                  prominence="tertiary"
+                                  size="md"
+                                  onClick={() => editModal.toggle(true)}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </Card>
-                </Tabs>
+                      )}
+                    </Card>
+                  </Tabs>
+                </Disabled>
               )
             )}
           </GeneralLayouts.Section>

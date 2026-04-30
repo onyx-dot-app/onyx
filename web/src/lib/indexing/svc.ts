@@ -124,6 +124,17 @@ export async function saveAdminSettings(settings: Settings) {
  * Accepts a frontend {@link EmbeddingModel} and constructs the API payload
  * explicitly — no frontend-only fields leak to the backend.
  */
+/**
+ * Cancels an in-flight embedding-model switchover. Marks the FUTURE search
+ * settings row as PAST, expires its index attempts, and drops the secondary
+ * vector index.
+ */
+export async function cancelNewEmbedding(): Promise<Response> {
+  return await fetch("/api/search-settings/cancel-new-embedding", {
+    method: "POST",
+  });
+}
+
 export async function setNewSearchSettings(
   model: EmbeddingModel,
   providerName: string,

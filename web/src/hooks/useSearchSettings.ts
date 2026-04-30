@@ -28,6 +28,21 @@ export function useCurrentSearchSettings() {
 }
 
 /**
+ * Fetches the FUTURE embedding model, populated only while a
+ * switchover is in progress. Returns null when no re-index is running.
+ *
+ * Polls every 5 seconds so the in-progress banner appears/disappears
+ * promptly when the backend transitions states.
+ */
+export function useSecondarySearchSettings() {
+  return useSWR<EmbeddingModelResponse | null>(
+    SWR_KEYS.secondarySearchSettings,
+    errorHandlingFetcher,
+    { refreshInterval: 5000 }
+  );
+}
+
+/**
  * Fetches the currently-active embedding model. Narrower-typed view of
  * {@link useCurrentSearchSettings} focused on model metadata (name,
  * provider, etc.).
