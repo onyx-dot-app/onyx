@@ -31,6 +31,10 @@ import {
   BifrostFetchParams,
   OpenAICompatibleFetchParams,
   OpenAICompatibleModelResponse,
+  OpenAIFetchParams,
+  OpenAIModelResponse,
+  AnthropicFetchParams,
+  AnthropicModelResponse,
 } from "@/interfaces/llm";
 
 /**
@@ -465,6 +469,112 @@ export const fetchOpenAICompatibleModels = async (
 };
 
 /**
+ * Fetches OpenAI models from OpenAI's /v1/models endpoint.
+ * The api_base is hard-coded server-side to api.openai.com — no SSRF surface.
+ */
+export const fetchOpenAIModels = async (
+  params: OpenAIFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  if (!params.api_key) {
+    return { models: [], error: "API Key is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/openai/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_key: params.api_key,
+        provider_name: params.provider_name,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: OpenAIModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches Anthropic models from Anthropic's /v1/models endpoint.
+ * The api_base is hard-coded server-side to api.anthropic.com — no SSRF surface.
+ */
+export const fetchAnthropicModels = async (
+  params: AnthropicFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  if (!params.api_key) {
+    return { models: [], error: "API Key is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/anthropic/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_key: params.api_key,
+        provider_name: params.provider_name,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: AnthropicModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
  * Fetches LiteLLM Proxy models directly without any form state dependencies.
  * Uses snake_case params to match API structure.
  */
@@ -587,6 +697,18 @@ export const fetchModels = async (
     case LLMProviderName.OPENAI_COMPATIBLE:
       return fetchOpenAICompatibleModels({
         api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+        signal,
+      });
+    case LLMProviderName.OPENAI:
+      return fetchOpenAIModels({
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+        signal,
+      });
+    case LLMProviderName.ANTHROPIC:
+      return fetchAnthropicModels({
         api_key: formValues.api_key,
         provider_name: formValues.name,
         signal,
