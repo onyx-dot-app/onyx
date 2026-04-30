@@ -401,12 +401,6 @@ jobs:
           wait_for_service "http://localhost:8080/health" "API server"
           echo "Finished waiting for services."
 
-      - name: Seed dev license
-        if: matrix.edition == 'ee'
-        run: |
-          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
-            python -m scripts.seed_dev_license
-
       - name: Start Mock Services
         run: |
           cd backend/tests/integration/mock_services
@@ -464,6 +458,7 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
@@ -571,11 +566,6 @@ jobs:
             sleep 5
           done
 
-      - name: Seed dev license
-        run: |
-          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
-            python -m scripts.seed_dev_license
-
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
@@ -597,6 +587,7 @@ jobs:
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 
