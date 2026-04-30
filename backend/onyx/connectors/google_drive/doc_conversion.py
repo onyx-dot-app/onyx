@@ -385,10 +385,7 @@ def _download_and_extract_sections_basic(
                 content_type=export_mime_type,
             )
 
-        if (
-            export_mime_type
-            == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        ):
+        if export_mime_type == PRESENTATION_MIME_TYPE:
             pptx_sections: list[TextSection | ImageSection | TabularSection] = []
             text, _ = read_pptx_file(
                 io.BytesIO(response),
@@ -439,10 +436,7 @@ def _download_and_extract_sections_basic(
             response_call(), name=tabular_file_name, content_type=mime_type
         )
 
-    elif (
-        mime_type
-        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    ):
+    elif mime_type == PRESENTATION_MIME_TYPE:
         pptx_sections_native: list[TextSection | ImageSection | TabularSection] = []
         text, _ = read_pptx_file(
             io.BytesIO(response_call()),
