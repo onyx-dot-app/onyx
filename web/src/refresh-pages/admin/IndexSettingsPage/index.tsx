@@ -1034,7 +1034,7 @@ export default function IndexSettingsPage() {
                                             }
                                           >
                                             <ContentAction
-                                              title="Add a custom self-hosted embedding model."
+                                              title="Set up a custom embedding model."
                                               sizePreset="secondary"
                                               variant="body"
                                               color="muted"
