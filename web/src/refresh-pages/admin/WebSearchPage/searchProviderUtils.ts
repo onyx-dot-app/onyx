@@ -3,6 +3,7 @@ import {
   SvgBrave,
   SvgExa,
   SvgGoogle,
+  SvgOllama,
   SvgSearxng,
   SvgSerper,
 } from "@opal/logos";
@@ -12,7 +13,8 @@ export type WebSearchProviderType =
   | "serper"
   | "exa"
   | "searxng"
-  | "brave";
+  | "brave"
+  | "ollama";
 
 export const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
@@ -58,6 +60,13 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     subtitle: "SearXNG",
     helper: "Connect to SearXNG to set up web search.",
     logo: SvgSearxng,
+  },
+  ollama: {
+    label: "Ollama",
+    subtitle: "Ollama",
+    helper: "Connect to Ollama to set up web search.",
+    logo: SvgOllama,
+    apiKeyUrl: "https://ollama.com/settings/keys",
   },
 };
 
@@ -130,6 +139,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     storedConfigAliases: {
       searxng_base_url: ["searxng_base_url"],
     },
+  },
+  ollama: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
   },
 };
 
