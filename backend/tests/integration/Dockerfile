@@ -18,7 +18,9 @@ COPY ./tests/utils/* /app/tests/utils/
 
 FROM base AS openapi-schema
 COPY ./scripts/onyx_openapi_schema.py /app/scripts/onyx_openapi_schema.py
-RUN python scripts/onyx_openapi_schema.py --filename openapi.json
+# OpenAPI client codegen cannot handle some EE-only schema shapes; export
+# the MIT route set with enforcement disabled.
+RUN LICENSE_ENFORCEMENT_ENABLED=false python scripts/onyx_openapi_schema.py --filename openapi.json
 
 FROM openapitools/openapi-generator-cli:latest AS openapi-client
 WORKDIR /local

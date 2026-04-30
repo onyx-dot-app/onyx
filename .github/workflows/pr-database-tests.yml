@@ -40,6 +40,10 @@ jobs:
 
       - name: Generate OpenAPI schema and Python client
         shell: bash
+        # OpenAPI client codegen does not handle some EE-only schema shapes;
+        # disable enforcement so the MIT route set is exported.
+        env:
+          LICENSE_ENFORCEMENT_ENABLED: "false"
         run: |
           ods openapi all
 

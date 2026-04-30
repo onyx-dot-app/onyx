@@ -27,6 +27,9 @@ jobs:
       PYTHONPATH: ./backend
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
       DISABLE_TELEMETRY: "true"
+      # Unit tests run without a live backend; EE code paths that depend on
+      # Redis/Vespa/etc are not available, so disable enforcement here.
+      LICENSE_ENFORCEMENT_ENABLED: "false"
 
     steps:
     - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
