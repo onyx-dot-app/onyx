@@ -630,9 +630,6 @@ jobs:
   multitenant-tests:
     needs:
       [build-backend-image, build-model-server-image, build-integration-image]
-    permissions:
-      id-token: write # Required for OIDC-based AWS credential exchange
-      contents: read
     runs-on:
       [
         runs-on,
@@ -648,11 +645,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Setup test license
-        uses: ./.github/actions/setup-test-license
-        with:
-          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
@@ -713,11 +705,6 @@ jobs:
             sleep 5
           done
           echo "Finished waiting for service."
-
-      - name: Seed dev license
-        run: |
-          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
-            python -m scripts.seed_dev_license
 
       - name: Run Multi-Tenant Integration Tests
         env:
