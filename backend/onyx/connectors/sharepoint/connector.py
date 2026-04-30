@@ -35,6 +35,7 @@ from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel
 from pydantic import Field
 from requests.exceptions import HTTPError
+from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -54,6 +55,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
 from onyx.connectors.models import BasicExpertInfo
@@ -897,7 +899,8 @@ def _convert_sitepage_to_slim_document(
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
     """Convert a SharePoint site page to a SlimDocument object."""
-    if site_page.get("id") is None:
+    page_id = site_page.get("id")
+    if page_id is None:
         raise ValueError("Site page ID is required")
 
     external_access = get_sharepoint_external_access(
@@ -906,17 +909,16 @@ def _convert_sitepage_to_slim_document(
         site_page=site_page,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
-    id = site_page.get("id")
-    if id is None:
-        raise ValueError("Site page ID is required")
+
     return SlimDocument(
-        id=id,
+        id=page_id,
         external_access=external_access,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
 class SharepointConnector(
+    SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
 ):
@@ -1827,6 +1829,7 @@ class SharepointConnector(
         self,
         start: datetime | None = None,
         end: datetime | None = None,
+        include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
         site_descriptors = self._filter_excluded_sites(
             self.site_descriptors or self.fetch_sites()
@@ -1885,17 +1888,28 @@ class SharepointConnector(
 
                     try:
                         logger.debug(f"Processing: {driveitem.web_url}")
-                        ctx = self._create_rest_client_context(site_descriptor.url)
-                        doc_batch.append(
-                            _convert_driveitem_to_slim_document(
-                                driveitem,
-                                drive_name,
-                                ctx,
-                                self.graph_client,
-                                parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                        if include_permissions:
+                            ctx = self._create_rest_client_context(site_descriptor.url)
+                            doc_batch.append(
+                                _convert_driveitem_to_slim_document(
+                                    driveitem,
+                                    drive_name,
+                                    ctx,
+                                    self.graph_client,
+                                    parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                                    treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                                )
                             )
-                        )
+                        else:
+                            if driveitem.id is None:
+                                raise ValueError("DriveItem ID is required")
+                            doc_batch.append(
+                                SlimDocument(
+                                    id=driveitem.id,
+                                    external_access=ExternalAccess.empty(),
+                                    parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                                )
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to process driveitem: {str(e)}")
 
@@ -1913,16 +1927,28 @@ class SharepointConnector(
                         f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
                     )
                     try:
-                        ctx = self._create_rest_client_context(site_descriptor.url)
-                        doc_batch.append(
-                            _convert_sitepage_to_slim_document(
-                                site_page,
-                                ctx,
-                                self.graph_client,
-                                parent_hierarchy_raw_node_id=site_descriptor.url,
-                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                        if include_permissions:
+                            ctx = self._create_rest_client_context(site_descriptor.url)
+                            doc_batch.append(
+                                _convert_sitepage_to_slim_document(
+                                    site_page,
+                                    ctx,
+                                    self.graph_client,
+                                    parent_hierarchy_raw_node_id=site_descriptor.url,
+                                    treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                                )
                             )
-                        )
+                        else:
+                            page_id = site_page.get("id")
+                            if page_id is None:
+                                raise ValueError("Site page ID is required")
+                            doc_batch.append(
+                                SlimDocument(
+                                    id=page_id,
+                                    external_access=ExternalAccess.empty(),
+                                    parent_hierarchy_raw_node_id=site_descriptor.url,
+                                )
+                            )
                     except Exception as e:
                         logger.warning(
                             f"Failed to process site page "
@@ -2635,6 +2661,28 @@ class SharepointConnector(
     ) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint.model_validate_json(checkpoint_json)
 
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        start_dt = (
+            datetime.fromtimestamp(start, tz=timezone.utc)
+            if start is not None
+            else None
+        )
+        end_dt = (
+            datetime.fromtimestamp(end, tz=timezone.utc) if end is not None else None
+        )
+        yield from self._fetch_slim_documents_from_sharepoint(
+            start=start_dt,
+            end=end_dt,
+            include_permissions=False,
+        )
+
+    @override
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -2652,6 +2700,7 @@ class SharepointConnector(
         yield from self._fetch_slim_documents_from_sharepoint(
             start=start_dt,
             end=end_dt,
+            include_permissions=True,
         )
 
 
