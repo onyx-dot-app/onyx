@@ -718,22 +718,24 @@ export default function IndexSettingsPage() {
     isLoading: isLoadingLlmProviders,
   } = useLlmDefaults();
 
-  const initialFormValues: IndexSettingsFormValues = useMemo(
-    () => ({
+  const initialFormValues: IndexSettingsFormValues = useMemo(() => {
+    const enableContextualRag = searchSettings?.enable_contextual_rag ?? false;
+    return {
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
-      enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
-      contextual_rag_llm_name:
-        searchSettings?.contextual_rag_llm_name ??
-        defaultLlm?.modelName ??
-        null,
-      contextual_rag_llm_provider:
-        searchSettings?.contextual_rag_llm_provider ??
-        defaultLlm?.providerName ??
-        null,
-    }),
-    [currentEmbeddingModel, searchSettings, defaultLlm]
-  );
+      enable_contextual_rag: enableContextualRag,
+      contextual_rag_llm_name: enableContextualRag
+        ? searchSettings?.contextual_rag_llm_name ??
+          defaultLlm?.modelName ??
+          null
+        : null,
+      contextual_rag_llm_provider: enableContextualRag
+        ? searchSettings?.contextual_rag_llm_provider ??
+          defaultLlm?.providerName ??
+          null
+        : null,
+    };
+  }, [currentEmbeddingModel, searchSettings, defaultLlm]);
 
   const handleCancelReindex = useCallback(async () => {
     const response = await cancelNewEmbedding();
@@ -1413,6 +1415,16 @@ export default function IndexSettingsPage() {
                                 void setFieldValue(
                                   "enable_contextual_rag",
                                   checked
+                                );
+                                void setFieldValue(
+                                  "contextual_rag_llm_name",
+                                  checked ? defaultLlm?.modelName ?? null : null
+                                );
+                                void setFieldValue(
+                                  "contextual_rag_llm_provider",
+                                  checked
+                                    ? defaultLlm?.providerName ?? null
+                                    : null
                                 );
                               }}
                             />
