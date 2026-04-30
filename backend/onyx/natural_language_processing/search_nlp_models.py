@@ -44,6 +44,8 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.server.metrics.embedding import observe_embedding_client
 from onyx.server.metrics.embedding import track_embedding_in_progress
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -886,8 +888,28 @@ class EmbeddingModel:
             start_time = time.monotonic()
             response: EmbedResponse
             success = False
+            embed_flow = (
+                LLMFlow.EMBED_PASSAGE
+                if text_type == EmbedTextType.PASSAGE
+                else LLMFlow.EMBED_QUERY
+            )
             try:
-                with track_embedding_in_progress(self.provider_type, text_type):
+                with (
+                    traced_llm_call(
+                        flow=embed_flow,
+                        model=self.model_name or "",
+                        provider=(
+                            self.provider_type.value
+                            if self.provider_type
+                            else "model_server"
+                        ),
+                        extra_config={
+                            "num_texts": str(num_texts),
+                            "num_chars": str(num_chars),
+                        },
+                    ),
+                    track_embedding_in_progress(self.provider_type, text_type),
+                ):
                     # Route between direct API calls and model server calls.
                     if self.provider_type is not None:
                         # For API providers, make direct API call.
@@ -1134,39 +1156,47 @@ class RerankingModel:
             raise ValueError(f"Unsupported reranking provider: {self.provider_type}")
 
     def predict(self, query: str, passages: list[str]) -> list[float]:
-        # Route between direct API calls and model server calls
-        if self.provider_type is not None:
-            # For API providers, make direct API call
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                return loop.run_until_complete(
-                    self._make_direct_rerank_call(query, passages)
+        with traced_llm_call(
+            flow=LLMFlow.RERANK,
+            model=self.model_name,
+            provider=(
+                self.provider_type.value if self.provider_type else "model_server"
+            ),
+            extra_config={"num_passages": str(len(passages))},
+        ):
+            # Route between direct API calls and model server calls
+            if self.provider_type is not None:
+                # For API providers, make direct API call
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    return loop.run_until_complete(
+                        self._make_direct_rerank_call(query, passages)
+                    )
+                finally:
+                    loop.close()
+            else:
+                # For local models, use model server
+                if self.rerank_server_endpoint is None:
+                    raise ValueError(
+                        "Rerank server endpoint is not configured for local models"
+                    )
+
+                rerank_request = RerankRequest(
+                    query=query,
+                    documents=passages,
+                    model_name=self.model_name,
+                    provider_type=self.provider_type,
+                    api_key=self.api_key,
+                    api_url=self.api_url,
                 )
-            finally:
-                loop.close()
-        else:
-            # For local models, use model server
-            if self.rerank_server_endpoint is None:
-                raise ValueError(
-                    "Rerank server endpoint is not configured for local models"
+
+                response = requests.post(
+                    self.rerank_server_endpoint, json=rerank_request.model_dump()
                 )
+                response.raise_for_status()
 
-            rerank_request = RerankRequest(
-                query=query,
-                documents=passages,
-                model_name=self.model_name,
-                provider_type=self.provider_type,
-                api_key=self.api_key,
-                api_url=self.api_url,
-            )
-
-            response = requests.post(
-                self.rerank_server_endpoint, json=rerank_request.model_dump()
-            )
-            response.raise_for_status()
-
-            return RerankResponse(**response.json()).scores
+                return RerankResponse(**response.json()).scores
 
 
 class QueryAnalysisModel:
@@ -1194,12 +1224,17 @@ class QueryAnalysisModel:
             semantic_percent_threshold=self.semantic_percent_threshold,
         )
 
-        response = requests.post(
-            self.intent_server_endpoint, json=intent_request.model_dump()
-        )
-        response.raise_for_status()
+        with traced_llm_call(
+            flow=LLMFlow.INTENT_CLASSIFICATION,
+            model="query-analysis",
+            provider="model_server",
+        ):
+            response = requests.post(
+                self.intent_server_endpoint, json=intent_request.model_dump()
+            )
+            response.raise_for_status()
 
-        response_model = IntentResponse(**response.json())
+            response_model = IntentResponse(**response.json())
 
         return response_model.is_keyword, response_model.keywords
 

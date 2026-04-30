@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
@@ -531,10 +533,15 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         audio_file = io.BytesIO(audio_data)
         audio_file.name = f"audio.{audio_format}"
 
-        response = await client.audio.transcriptions.create(
+        with traced_llm_call(
+            flow=LLMFlow.STT,
             model=self.stt_model,
-            file=audio_file,
-        )
+            provider="openai",
+        ):
+            response = await client.audio.transcriptions.create(
+                model=self.stt_model,
+                file=audio_file,
+            )
 
         return response.text
 
@@ -560,15 +567,21 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         # Use with_streaming_response for proper async streaming
         # Using 8192 byte chunks for better streaming performance
         # (larger chunks = fewer round-trips, more complete MP3 frames)
-        async with client.audio.speech.with_streaming_response.create(
+        with traced_llm_call(
+            flow=LLMFlow.TTS,
             model=self.tts_model,
-            voice=voice or self.default_voice,
-            input=text,
-            speed=speed,
-            response_format="mp3",
-        ) as response:
-            async for chunk in response.iter_bytes(chunk_size=8192):
-                yield chunk
+            provider="openai",
+            input_messages=[{"role": "user", "content": text}],
+        ):
+            async with client.audio.speech.with_streaming_response.create(
+                model=self.tts_model,
+                voice=voice or self.default_voice,
+                input=text,
+                speed=speed,
+                response_format="mp3",
+            ) as response:
+                async for chunk in response.iter_bytes(chunk_size=8192):
+                    yield chunk
 
     async def validate_credentials(self) -> None:
         """Validate OpenAI API key by listing models."""
