@@ -64,6 +64,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
+from onyx.db.chat import build_chat_history_to_message
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
@@ -721,40 +722,36 @@ def build_chat_turn(
         project_id=chat_session.project_id,
     )
 
-    # Re-create linear history of messages
-    chat_history = create_chat_history_chain(
-        chat_session_id=chat_session.id, db_session=db_session
-    )
-
     # Determine the parent message based on the request:
-    # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in chain
+    # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in current mainline
     # - None or root ID: regeneration from root (first message)
-    # - positive int: place after that specific parent message
+    # - positive int: place after that specific parent message (any branch)
     root_message = get_or_create_root_message(
         chat_session_id=chat_session.id, db_session=db_session
     )
 
+    parent_message: ChatMessage
+    chat_history: list[ChatMessage]
     if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
+        chat_history = create_chat_history_chain(
+            chat_session_id=chat_session.id, db_session=db_session
+        )
         parent_message = chat_history[-1] if chat_history else root_message
     elif (
         new_msg_req.parent_message_id is None
         or new_msg_req.parent_message_id == root_message.id
     ):
-        # Regeneration from root — clear history so we start fresh
         parent_message = root_message
         chat_history = []
     else:
-        parent_message = None
-        for i in range(len(chat_history) - 1, -1, -1):
-            if chat_history[i].id == new_msg_req.parent_message_id:
-                parent_message = chat_history[i]
-                # Truncate to only messages up to and including the parent
-                chat_history = chat_history[: i + 1]
-                break
-
-    if parent_message is None:
-        raise ValueError(
-            "The new message sent is not on the latest mainline of messages"
+        # Resolve via the immutable parent chain so the next send is
+        # independent of the client's pending set-message-as-latest PUT —
+        # avoids races on branch switch, message edit, regenerate
+        # mid-stream, and agent/persona switch.
+        parent_message, chat_history = build_chat_history_to_message(
+            chat_session_id=chat_session.id,
+            target_message_id=new_msg_req.parent_message_id,
+            db_session=db_session,
         )
 
     # ── Query Processing hook + user message ─────────────────────────────────

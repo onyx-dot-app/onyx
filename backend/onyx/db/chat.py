@@ -796,6 +796,76 @@ def set_as_latest_chat_message(
     db_session.commit()
 
 
+def build_chat_history_to_message(
+    chat_session_id: UUID,
+    target_message_id: int,
+    db_session: Session,
+) -> tuple[ChatMessage, list[ChatMessage]]:
+    """Walk UP from ``target_message_id`` via the immutable ``parent_message_id``
+    pointer to reconstruct the chain leading to it, regardless of the current
+    mainline (``latest_child_message_id``) state.
+
+    Returns ``(target_message, chain_excluding_root_root_to_leaf)`` matching
+    the shape of :func:`create_chat_history_chain` so callers can use the
+    chain interchangeably.
+
+    Side effect: rewrites ``latest_child_message_id`` on each ancestor so the
+    mainline pointer chain matches the path we just used. This makes the
+    backend authoritative about which branch the next send addresses, so a
+    racing client-side ``set-message-as-latest`` PUT is no longer required for
+    correctness.
+    """
+    all_messages = get_chat_messages_by_session(
+        chat_session_id=chat_session_id,
+        user_id=None,
+        db_session=db_session,
+        skip_permission_check=True,
+        prefetch_top_two_level_tool_calls=True,
+    )
+    by_id: dict[int, ChatMessage] = {m.id: m for m in all_messages}
+
+    target = by_id.get(target_message_id)
+    if target is None:
+        raise ValueError(
+            f"parent_message_id {target_message_id} not found in chat session"
+        )
+
+    chain_leaf_to_root: list[ChatMessage] = []
+    visited: set[int] = set()
+    cur: ChatMessage | None = target
+    while cur is not None and cur.parent_message_id is not None:
+        if cur.id in visited:
+            raise RuntimeError(
+                f"Cycle detected in chat message parent chain at id={cur.id}"
+            )
+        visited.add(cur.id)
+        chain_leaf_to_root.append(cur)
+        next_id = cur.parent_message_id
+        cur = by_id.get(next_id)
+        if cur is None:
+            raise RuntimeError(
+                f"Broken parent chain: message {next_id} missing from session"
+            )
+
+    root_message = cur
+    if root_message is None:
+        raise RuntimeError("Could not resolve root message while walking parent chain")
+
+    chain = list(reversed(chain_leaf_to_root))
+
+    prev: ChatMessage = root_message
+    changed = False
+    for msg in chain:
+        if prev.latest_child_message_id != msg.id:
+            prev.latest_child_message_id = msg.id
+            changed = True
+        prev = msg
+    if changed:
+        db_session.commit()
+
+    return target, chain
+
+
 def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
