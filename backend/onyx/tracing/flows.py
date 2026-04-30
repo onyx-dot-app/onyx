@@ -59,9 +59,6 @@ class LLMFlow(StrEnum):
     RERANK = "rerank"
     INTENT_CLASSIFICATION = "intent_classification"
 
-    # Tools
-    CUSTOM_TOOL_LLM = "custom_tool_llm"
-
     # Sentinels — emitted by the LLM auto-wrap fallback when a caller did not
     # tag the call. Showing up in dashboards is a signal to add an explicit
     # ``llm_generation_span`` at the call site with the right tag.

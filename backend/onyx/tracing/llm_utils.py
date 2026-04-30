@@ -68,12 +68,11 @@ def traced_llm_call(
     :func:`llm_generation_span` instead — it pulls model and provider straight
     off the ``LLM`` config.
     """
-    model_config: dict[str, str] = {
-        "model_provider": provider,
-        "flow": flow.value,
-    }
-    if extra_config:
-        model_config.update(extra_config)
+    # Build extra_config first, then overlay authoritative keys so callers
+    # cannot accidentally override ``flow`` / ``model_provider``.
+    model_config: dict[str, str] = dict(extra_config) if extra_config else {}
+    model_config["model_provider"] = provider
+    model_config["flow"] = flow.value
     with generation_span(
         model=model,
         model_config=model_config,
