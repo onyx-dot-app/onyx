@@ -29,6 +29,14 @@ class TestSafeLLMToolName:
         assert len(safe_name) == 64
         assert safe_name.startswith("mcp_123_")
 
+    def test_long_names_keep_hash_suffix_to_avoid_collisions(self) -> None:
+        first_name = _safe_llm_tool_name(1, f"{'a' * 80}_first")
+        second_name = _safe_llm_tool_name(1, f"{'a' * 80}_second")
+
+        assert len(first_name) == 64
+        assert len(second_name) == 64
+        assert first_name != second_name
+
 
 class TestNormalizeParametersSchema:
     def test_empty_dict_gets_object_shell(self) -> None:

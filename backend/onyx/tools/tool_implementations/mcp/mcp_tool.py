@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from typing import Any
@@ -42,7 +43,13 @@ def _safe_llm_tool_name(mcp_server_id: int, tool_name: str) -> str:
         safe_tool_name = "tool"
 
     prefix = f"mcp_{mcp_server_id}_"
-    return f"{prefix}{safe_tool_name}"[:64]
+    name = f"{prefix}{safe_tool_name}"
+    if len(name) <= 64:
+        return name
+
+    digest = hashlib.sha1(safe_tool_name.encode()).hexdigest()[:8]
+    suffix = f"_{digest}"
+    return f"{prefix}{safe_tool_name[: 64 - len(prefix) - len(suffix)]}{suffix}"
 
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
