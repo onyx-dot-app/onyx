@@ -1198,13 +1198,12 @@ def index_doc_batch(
                         yield enricher.enrich_chunk(chunk, 1.0)
 
                 vector_db_write_start = time.monotonic()
-                (
-                    insertion_records,
-                    write_failures,
-                ) = write_chunks_to_vector_db_with_backoff(
-                    document_index=document_index,
-                    make_chunks=_enriched_stream,
-                    index_batch_params=index_batch_params,
+                insertion_records, write_failures = (
+                    write_chunks_to_vector_db_with_backoff(
+                        document_index=document_index,
+                        make_chunks=_enriched_stream,
+                        index_batch_params=index_batch_params,
+                    )
                 )
                 vector_db_write_ms += max(
                     0, int((time.monotonic() - vector_db_write_start) * 1000)

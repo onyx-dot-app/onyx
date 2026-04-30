@@ -899,7 +899,7 @@ class EmbeddingModel:
                         flow=embed_flow,
                         model=self.model_name or "",
                         provider=(
-                            str(self.provider_type)
+                            self.provider_type.value
                             if self.provider_type
                             else "model_server"
                         ),
@@ -1159,7 +1159,9 @@ class RerankingModel:
         with traced_llm_call(
             flow=LLMFlow.RERANK,
             model=self.model_name,
-            provider=str(self.provider_type) if self.provider_type else "model_server",
+            provider=(
+                self.provider_type.value if self.provider_type else "model_server"
+            ),
             extra_config={"num_passages": str(len(passages))},
         ):
             # Route between direct API calls and model server calls
