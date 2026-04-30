@@ -11,10 +11,6 @@ Two consumers:
   one-shot navigation per URL.
 """
 
-from __future__ import annotations
-
-from typing import Tuple
-
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
@@ -75,7 +71,7 @@ class RenderedPage(BaseModel):
     status: int | None = None
 
 
-def start_playwright() -> Tuple[Playwright, BrowserContext]:
+def start_playwright() -> tuple[Playwright, BrowserContext]:
     """Launch a Playwright Chromium context tuned to look like a real browser.
 
     Used by both the long-lived web-connector crawl and the one-shot

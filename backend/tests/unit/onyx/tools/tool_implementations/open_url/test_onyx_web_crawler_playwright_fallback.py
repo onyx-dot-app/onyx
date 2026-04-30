@@ -281,16 +281,35 @@ def test_rendered_cloudflare_challenge_body_yields_failure_with_reason(
 def test_render_failure_with_cf_signals_yields_cloudflare_reason(
     mock_get: MagicMock, mock_render: MagicMock
 ) -> None:
-    """When the original 403 had CF signals AND Playwright failed to render
-    at all (None), the surfaced reason should still call out Cloudflare —
-    not a generic 'upstream returned 403'."""
-    mock_get.return_value = _mock_response(status_code=403)
+    """When the original 403 had actual CF headers AND Playwright failed to
+    render, the surfaced reason should call out Cloudflare specifically."""
+    mock_get.return_value = _mock_response(
+        status_code=403, headers={"cf-mitigated": "challenge"}
+    )
     mock_render.return_value = None
 
     result = OnyxWebCrawler()._fetch_url("https://example.com/")
 
     assert not result.scrape_successful
     assert result.failure_reason == FailureReason.CLOUDFLARE_CHALLENGE
+
+
+@patch("onyx.tools.tool_implementations.open_url.onyx_web_crawler.fetch_rendered_html")
+@patch("onyx.tools.tool_implementations.open_url.onyx_web_crawler.ssrf_safe_get")
+def test_bare_403_without_cf_signals_yields_generic_403_reason(
+    mock_get: MagicMock, mock_render: MagicMock
+) -> None:
+    """A 403 with no Cloudflare evidence shouldn't be labelled as Cloudflare —
+    it's far more likely to be an auth wall or restricted resource. Playwright
+    is still tried as cheap insurance, but the reason is honest."""
+    mock_get.return_value = _mock_response(status_code=403)
+    mock_render.return_value = None
+
+    result = OnyxWebCrawler()._fetch_url("https://example.com/")
+
+    mock_render.assert_called_once()  # fallback still tried
+    assert not result.scrape_successful
+    assert result.failure_reason == FailureReason.HTTP_403_BLOCKED
 
 
 # ---------------------------------------------------------------------------
@@ -332,19 +351,35 @@ def test_network_error_failure_reason(mock_get: MagicMock) -> None:
 
 
 @patch("onyx.tools.tool_implementations.open_url.onyx_web_crawler.ssrf_safe_get")
-def test_403_with_fallback_disabled_yields_cloudflare_reason(
+def test_403_with_cf_signals_and_fallback_disabled_yields_cloudflare_reason(
     mock_get: MagicMock,
 ) -> None:
-    """Even without invoking Playwright, a 403 with CF signals should still
-    label the failure as a CF challenge — admins shouldn't have to enable
+    """A 403 with actual CF headers should still label as a CF challenge
+    even without invoking Playwright — admins shouldn't have to enable
     the fallback to find out why their URL is failing."""
-    mock_get.return_value = _mock_response(status_code=403)
+    mock_get.return_value = _mock_response(
+        status_code=403, headers={"cf-ray": "9f4994882a46eb36-SJC"}
+    )
 
     crawler = OnyxWebCrawler(playwright_fallback_enabled=False)
     result = crawler._fetch_url("https://example.com/")
 
     assert not result.scrape_successful
     assert result.failure_reason == FailureReason.CLOUDFLARE_CHALLENGE
+
+
+@patch("onyx.tools.tool_implementations.open_url.onyx_web_crawler.ssrf_safe_get")
+def test_bare_403_with_fallback_disabled_yields_generic_403_reason(
+    mock_get: MagicMock,
+) -> None:
+    """No CF headers + fallback disabled: don't pretend it's Cloudflare."""
+    mock_get.return_value = _mock_response(status_code=403)
+
+    crawler = OnyxWebCrawler(playwright_fallback_enabled=False)
+    result = crawler._fetch_url("https://example.com/")
+
+    assert not result.scrape_successful
+    assert result.failure_reason == FailureReason.HTTP_403_BLOCKED
 
 
 # ---------------------------------------------------------------------------

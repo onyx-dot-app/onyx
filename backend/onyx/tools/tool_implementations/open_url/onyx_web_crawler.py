@@ -46,6 +46,13 @@ class FailureReason:
         "cannot solve — try a different URL or configure Firecrawl as the "
         "web content provider"
     )
+    # Generic 403 with no Cloudflare evidence. Kept distinct from
+    # CLOUDFLARE_CHALLENGE so we don't tell the LLM to "configure Firecrawl"
+    # for what's actually an auth wall, expired presigned URL, private repo, etc.
+    HTTP_403_BLOCKED = (
+        "upstream returned HTTP 403 — the URL likely requires authentication "
+        "or is otherwise restricted from the built-in crawler"
+    )
     SSRF_BLOCKED = "blocked by SSRF protection (URL resolves to an internal address)"
     NETWORK_ERROR = "network error while fetching the URL"
     OVERSIZED_HTML = "HTML response exceeded the configured maximum size"
@@ -69,20 +76,47 @@ def _failed_result(url: str, failure_reason: str | None = None) -> WebContent:
     )
 
 
-def _looks_like_bot_challenge_response(response: requests.Response) -> bool:
-    """True if a non-2xx response looks like a Cloudflare/bot-management challenge.
+def _has_cloudflare_signals(response: requests.Response) -> bool:
+    """True iff the response carries actual Cloudflare-specific markers.
 
-    Conservative on purpose: we want to spend Chromium time (and emit
-    "Cloudflare blocked us" failure reasons) only on responses that actually
-    look like CF challenges, not on real 401/404/410/etc. errors.
+    Strict on purpose — only used to choose between the CF-specific failure
+    reason (which tells admins to configure Firecrawl) vs. the generic 403
+    failure reason (which points at auth / access). A bare 403 with no
+    `cf-ray` / `cf-mitigated` / `Server: cloudflare` headers is treated
+    as "not Cloudflare" here.
     """
-    if response.status_code == 403:
-        return True
     headers = response.headers
     if any(name in headers for name in _CLOUDFLARE_HEADER_NAMES):
         return True
     server = headers.get("Server", "").lower()
     return server.startswith("cloudflare")
+
+
+def _should_try_playwright_fallback(response: requests.Response) -> bool:
+    """True if a Playwright render is plausibly worth attempting.
+
+    Broader than `_has_cloudflare_signals` — any 403 is cheap insurance to
+    retry through a real browser (some sites serve JS-protected interstitials
+    without CF headers). Real 401/404/410/5xx errors fall through unchanged.
+    """
+    return response.status_code == 403 or _has_cloudflare_signals(response)
+
+
+def _failure_reason_for_status(
+    response: requests.Response, has_cf_signals: bool
+) -> str:
+    """Pick the LLM-facing failure reason for a 4xx/5xx upstream response.
+
+    Only labels failures as Cloudflare when the response actually carries
+    CF-specific headers — bare 403s without those headers are far more
+    often auth walls or access-restricted resources, and labelling them
+    "Cloudflare" sends the LLM and the admin chasing the wrong fix.
+    """
+    if has_cf_signals:
+        return FailureReason.CLOUDFLARE_CHALLENGE
+    if response.status_code == 403:
+        return FailureReason.HTTP_403_BLOCKED
+    return FailureReason.http_status(response.status_code)
 
 
 def _parse_html_to_web_content(url: str, html: str) -> WebContent:
@@ -188,33 +222,40 @@ class OnyxWebCrawler(WebContentProvider):
             return _failed_result(url, FailureReason.NETWORK_ERROR)
 
         if response.status_code >= 400:
-            cf_challenge_suspected = _looks_like_bot_challenge_response(response)
-            if cf_challenge_suspected and self._playwright_fallback_enabled:
+            # Decide separately:
+            #   - whether to attempt the Playwright fallback (broad, any 403
+            #     is cheap insurance — some sites serve JS interstitials
+            #     without CF-specific headers)
+            #   - what failure reason to surface when nothing works (strict;
+            #     only claim "Cloudflare" when we have actual CF evidence,
+            #     either headers or a CF body returned by the render. A bare
+            #     403 from e.g. a private GitHub repo or expired presigned
+            #     S3 URL gets the generic-403 reason instead).
+            has_cf_signals = _has_cloudflare_signals(response)
+            try_fallback = (
+                self._playwright_fallback_enabled
+                and _should_try_playwright_fallback(response)
+            )
+
+            if try_fallback:
                 logger.info(
-                    "Onyx crawler got %s for %s with bot-challenge signals; "
-                    "retrying via Playwright",
+                    "Onyx crawler got %s for %s; retrying via Playwright "
+                    "(cf_signals=%s)",
                     response.status_code,
                     url,
+                    has_cf_signals,
                 )
                 fallback = self._fetch_via_playwright(url)
                 if fallback is not None:
+                    # Either a successful render OR a definitive CF-challenge
+                    # signal from the rendered body itself. Either way the
+                    # fallback's own result is the truth.
                     return fallback
-                # Playwright path either failed to render or came back with the
-                # challenge body itself — surface a CF-specific failure reason
-                # so the LLM stops retrying and the admin knows what to fix.
-                logger.warning(
-                    "Onyx crawler could not bypass Cloudflare challenge for %s",
-                    url,
-                )
-                return _failed_result(url, FailureReason.CLOUDFLARE_CHALLENGE)
 
             logger.warning("Onyx crawler received %s for %s", response.status_code, url)
-            reason = (
-                FailureReason.CLOUDFLARE_CHALLENGE
-                if cf_challenge_suspected
-                else FailureReason.http_status(response.status_code)
+            return _failed_result(
+                url, _failure_reason_for_status(response, has_cf_signals)
             )
-            return _failed_result(url, reason)
 
         content_type = response.headers.get("Content-Type", "")
         content = response.content
@@ -277,10 +318,15 @@ class OnyxWebCrawler(WebContentProvider):
         """Try a one-shot headless render.
 
         Returns:
-            WebContent on success.
-            None when the fallback didn't help (browser failed to launch,
-            CF challenge page came back, or content was empty/oversized).
-            The caller decides what failure_reason to surface in that case.
+            - Successful `WebContent` on success.
+            - Failed `WebContent` with `failure_reason=CLOUDFLARE_CHALLENGE`
+              when the render came back as the CF challenge interstitial
+              itself (a definitive signal we can pass up regardless of what
+              headers the original response carried).
+            - `None` when the fallback gave us no new information (Chromium
+              failed to launch, navigation hard-errored, content oversized,
+              or rendered HTML didn't parse to anything). Caller should fall
+              back to its own status-based failure reason.
         """
         rendered: RenderedPage | None = fetch_rendered_html(url)
         if rendered is None:
@@ -298,17 +344,17 @@ class OnyxWebCrawler(WebContentProvider):
             )
             return None
 
-        # If the render came back as a CF challenge interstitial itself,
-        # don't return it — it parses to "Just a moment..." or similar
-        # garbage that would mislead the LLM into thinking it had real
-        # content. Caller will surface the CLOUDFLARE_CHALLENGE reason.
+        # If the render came back as a CF challenge interstitial, surface
+        # that as a definitive CF failure (parsing it would just leak
+        # "Just a moment..." text to the LLM). This is the one case where
+        # Playwright actually adds information vs. the original 4xx.
         if looks_like_cloudflare_challenge(rendered.html):
             logger.info(
                 "Playwright fallback rendered the Cloudflare challenge page "
-                "itself for %s; treating as failure",
+                "itself for %s; treating as Cloudflare failure",
                 url,
             )
-            return None
+            return _failed_result(url, FailureReason.CLOUDFLARE_CHALLENGE)
 
         result = _parse_html_to_web_content(url, rendered.html)
         if not result.scrape_successful:
