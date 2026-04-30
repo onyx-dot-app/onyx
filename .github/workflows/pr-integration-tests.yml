@@ -659,6 +659,7 @@ jobs:
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          LICENSE_ENFORCEMENT_ENABLED=false \
           MULTI_TENANT=true \
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
