@@ -801,7 +801,8 @@ def add_chunk_summaries(
             chunk.chunk_context = ""
 
     run_functions_tuples_in_parallel(
-        [(assign_context, (chunk,)) for chunk in chunks_by_doc]
+        functions_with_args=[(assign_context, (chunk,)) for chunk in chunks_by_doc],
+        max_workers=128,
     )
 
 
