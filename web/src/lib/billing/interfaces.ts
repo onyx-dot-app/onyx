@@ -117,6 +117,23 @@ export interface SeatUpdateResponse {
 }
 
 // ----------------------------------------------------------------------------
+// Trial Management Types
+// ----------------------------------------------------------------------------
+
+export interface EndTrialResponse {
+  success: boolean;
+  stripe_subscription_id: string;
+  status: string;
+}
+
+export class PaymentMethodRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentMethodRequiredError";
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Type Guards
 // ----------------------------------------------------------------------------
 

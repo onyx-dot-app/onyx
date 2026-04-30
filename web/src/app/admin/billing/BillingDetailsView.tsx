@@ -19,9 +19,14 @@ import {
   SvgFileText,
   SvgOrganization,
 } from "@opal/icons";
-import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
+import {
+  BillingInformation,
+  LicenseStatus,
+  PaymentMethodRequiredError,
+} from "@/lib/billing/interfaces";
 import {
   createCustomerPortalSession,
+  endTrial,
   resetStripeConnection,
   updateSeatCount,
   claimLicense,
@@ -146,6 +151,7 @@ function SubscriptionCard({
   disabled,
   isManualLicenseOnly,
   onReconnect,
+  onRefresh,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
@@ -153,8 +159,11 @@ function SubscriptionCard({
   disabled?: boolean;
   isManualLicenseOnly?: boolean;
   onReconnect?: () => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isEndingTrial, setIsEndingTrial] = useState(false);
+  const [endTrialError, setEndTrialError] = useState<string | null>(null);
 
   const planName = isManualLicenseOnly ? "Enterprise Plan" : "Business Plan";
   const PlanIcon = isManualLicenseOnly ? SvgOrganization : SvgUsers;
@@ -206,6 +215,41 @@ function SubscriptionCard({
     }
   };
 
+  const handleEndTrial = async () => {
+    setIsEndingTrial(true);
+    setEndTrialError(null);
+    try {
+      await endTrial();
+      await onRefresh?.();
+    } catch (error) {
+      if (error instanceof PaymentMethodRequiredError) {
+        // Route to Stripe customer portal to add a card, then return here.
+        try {
+          const response = await createCustomerPortalSession({
+            return_url: `${window.location.origin}/admin/billing?portal_return=true`,
+          });
+          if (response.stripe_customer_portal_url) {
+            window.location.href = response.stripe_customer_portal_url;
+            return;
+          }
+        } catch (portalError) {
+          console.error("Failed to open customer portal:", portalError);
+          setEndTrialError(
+            "Add a payment method first, then try upgrading again."
+          );
+        }
+      } else {
+        setEndTrialError(
+          error instanceof Error ? error.message : "Failed to end trial"
+        );
+      }
+    } finally {
+      setIsEndingTrial(false);
+    }
+  };
+
+  const isTrialing = billing?.status === "trialing";
+
   return (
     <Card>
       <Section
@@ -252,9 +296,35 @@ function SubscriptionCard({
               {isReconnecting ? "Connecting..." : "Connect to Stripe"}
             </OpalButton>
           ) : (
-            <OpalButton onClick={handleManagePlan} rightIcon={SvgExternalLink}>
-              Manage Plan
-            </OpalButton>
+            <Section
+              flexDirection="column"
+              gap={0.5}
+              alignItems="end"
+              height="auto"
+              width="auto"
+            >
+              {isTrialing && (
+                <OpalButton
+                  disabled={isEndingTrial}
+                  onClick={handleEndTrial}
+                  rightIcon={SvgArrowRight}
+                >
+                  {isEndingTrial ? "Upgrading..." : "Upgrade now"}
+                </OpalButton>
+              )}
+              <OpalButton
+                prominence={isTrialing ? "secondary" : "primary"}
+                onClick={handleManagePlan}
+                rightIcon={SvgExternalLink}
+              >
+                Manage Plan
+              </OpalButton>
+            </Section>
+          )}
+          {endTrialError && (
+            <Text secondaryBody className="text-status-error-04">
+              {endTrialError}
+            </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
@@ -682,6 +752,7 @@ export default function BillingDetailsView({
           disabled={disableBillingActions}
           isManualLicenseOnly={isManualLicenseOnly}
           onReconnect={onRefresh}
+          onRefresh={onRefresh}
         />
       )}
 

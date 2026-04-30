@@ -75,3 +75,11 @@ class StripePublishableKeyResponse(BaseModel):
     """Response containing the Stripe publishable key."""
 
     publishable_key: str
+
+
+class EndTrialResponse(BaseModel):
+    """Response from ending a trial early."""
+
+    success: bool
+    stripe_subscription_id: str
+    status: str
