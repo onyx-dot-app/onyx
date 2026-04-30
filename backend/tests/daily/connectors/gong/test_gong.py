@@ -1,4 +1,3 @@
-import os
 import time
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -7,16 +6,24 @@ import pytest
 
 from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.models import Document
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.GONG_ACCESS_KEY,
+    TestSecret.GONG_ACCESS_KEY_SECRET,
+)
 
 
 @pytest.fixture
-def gong_connector() -> GongConnector:
+def gong_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GongConnector:
     connector = GongConnector()
 
     connector.load_credentials(
         {
-            "gong_access_key": os.environ["GONG_ACCESS_KEY"],
-            "gong_access_key_secret": os.environ["GONG_ACCESS_KEY_SECRET"],
+            "gong_access_key": test_secrets[TestSecret.GONG_ACCESS_KEY],
+            "gong_access_key_secret": test_secrets[TestSecret.GONG_ACCESS_KEY_SECRET],
         }
     )
 

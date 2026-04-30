@@ -16,6 +16,15 @@ from onyx.connectors.sharepoint.connector import SharepointAuthMethod
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.SHAREPOINT_CLIENT_SECRET,
+    TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID,
+    TestSecret.PERM_SYNC_SHAREPOINT_PRIVATE_KEY,
+    TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD,
+    TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID,
+)
 
 # NOTE: Sharepoint site for tests is "sharepoint-tests"
 
@@ -139,10 +148,12 @@ def mock_store_image() -> MagicMock:
 
 
 @pytest.fixture
-def sharepoint_credentials() -> dict[str, str]:
+def sharepoint_credentials(
+    test_secrets: dict[TestSecret, str],
+) -> dict[str, str]:
     return {
         "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
-        "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
+        "sp_client_secret": test_secrets[TestSecret.SHAREPOINT_CLIENT_SECRET],
         "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
     }
 
@@ -522,15 +533,17 @@ def test_sharepoint_connector_hierarchy_nodes(
 
 
 @pytest.fixture
-def sharepoint_cert_credentials() -> dict[str, str]:
+def sharepoint_cert_credentials(
+    test_secrets: dict[TestSecret, str],
+) -> dict[str, str]:
     return {
         "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
-        "sp_client_id": os.environ["PERM_SYNC_SHAREPOINT_CLIENT_ID"],
-        "sp_private_key": os.environ["PERM_SYNC_SHAREPOINT_PRIVATE_KEY"],
-        "sp_certificate_password": os.environ[
-            "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"
+        "sp_client_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID],
+        "sp_private_key": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_PRIVATE_KEY],
+        "sp_certificate_password": test_secrets[
+            TestSecret.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD
         ],
-        "sp_directory_id": os.environ["PERM_SYNC_SHAREPOINT_DIRECTORY_ID"],
+        "sp_directory_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID],
     }
 
 

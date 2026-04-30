@@ -1,4 +1,3 @@
-import os
 import time
 
 import pytest
@@ -6,16 +5,24 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gitbook.connector import GitbookConnector
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.GITBOOK_SPACE_ID,
+    TestSecret.GITBOOK_API_KEY,
+)
 
 
 @pytest.fixture
-def gitbook_connector() -> GitbookConnector:
+def gitbook_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GitbookConnector:
     connector = GitbookConnector(
-        space_id=os.environ["GITBOOK_SPACE_ID"],
+        space_id=test_secrets[TestSecret.GITBOOK_SPACE_ID],
     )
     connector.load_credentials(
         {
-            "gitbook_api_key": os.environ["GITBOOK_API_KEY"],
+            "gitbook_api_key": test_secrets[TestSecret.GITBOOK_API_KEY],
         }
     )
     return connector

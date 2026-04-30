@@ -8,14 +8,19 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.imap.connector import ImapConnector
 from tests.daily.connectors.imap.models import EmailDoc
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.IMAP_PASSWORD)
 
 
 @pytest.fixture
-def imap_connector() -> ImapConnector:
+def imap_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ImapConnector:
     host = os.environ.get("IMAP_HOST")
     mailboxes_str = os.environ.get("IMAP_MAILBOXES")
     username = os.environ.get("IMAP_USERNAME")
-    password = os.environ.get("IMAP_PASSWORD")
+    password = test_secrets[TestSecret.IMAP_PASSWORD]
 
     assert host
     mailboxes = (

@@ -1,5 +1,4 @@
 import json
-import os
 import time
 from pathlib import Path
 
@@ -9,6 +8,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slab.connector import SlabConnector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.SLAB_BOT_TOKEN)
 
 
 def load_test_data(file_name: str = "test_slab_data.json") -> dict[str, str]:
@@ -18,13 +20,15 @@ def load_test_data(file_name: str = "test_slab_data.json") -> dict[str, str]:
 
 
 @pytest.fixture
-def slab_connector() -> SlabConnector:
+def slab_connector(
+    test_secrets: dict[TestSecret, str],
+) -> SlabConnector:
     connector = SlabConnector(
         base_url="https://onyx-test.slab.com/",
     )
     connector.load_credentials(
         {
-            "slab_bot_token": os.environ["SLAB_BOT_TOKEN"],
+            "slab_bot_token": test_secrets[TestSecret.SLAB_BOT_TOKEN],
         }
     )
     return connector
