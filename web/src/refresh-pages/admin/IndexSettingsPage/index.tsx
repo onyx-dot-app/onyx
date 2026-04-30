@@ -98,15 +98,6 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 const SWITCHOVER_NONE = "none";
-const SELECT_CARD_STATE: Record<
-  EmbeddingModelState,
-  "empty" | "filled" | "selected"
-> = {
-  unconnected: "filled",
-  connected: "filled",
-  current: "filled",
-  selected: "selected",
-};
 const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
 
 /**
@@ -302,7 +293,6 @@ function ProviderGroup({
   const connectModal = useCreateModal();
   const editCredentialsModal = useCreateModal();
   const providerCreationModal = useCreateModal();
-  const [pendingModel, setPendingModel] = useState<EmbeddingModel | null>(null);
   const providerGroupContainsCurrentModelName = models.some(
     (m) => m.modelName === currentModelName
   );
@@ -339,13 +329,11 @@ function ProviderGroup({
         return;
       }
 
-      if (state === "unconnected" && isCloud) {
-        setPendingModel(model);
-        connectModal.toggle(true);
-        return;
-      }
-
       onSelectModel(model.modelName);
+
+      if (state === "unconnected" && isCloud) {
+        connectModal.toggle(true);
+      }
     },
     [
       getModelState,
@@ -385,14 +373,10 @@ function ProviderGroup({
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 connectModal.toggle(false);
-                if (pendingModel) {
-                  onSelectModel(pendingModel.modelName);
-                  setPendingModel(null);
-                }
               }}
               onCancel={() => {
                 connectModal.toggle(false);
-                setPendingModel(null);
+                onDeselectModel();
               }}
             />
           </connectModal.Provider>
@@ -497,15 +481,22 @@ function ProviderGroup({
             />
           </SelectCard>
         ) : (
-          models.map((model) => (
-            <EmbeddingModelCard
-              key={model.modelName}
-              model={model}
-              provider={provider}
-              modelState={getModelState(model)}
-              onSelect={() => handleModelSelect(model)}
-            />
-          ))
+          models.map((model) => {
+            const state = getModelState(model);
+            const isPrioritized =
+              state === "selected" ||
+              (state === "current" && !selectedModelName);
+            return (
+              <EmbeddingModelCard
+                key={model.modelName}
+                model={model}
+                provider={provider}
+                modelState={state}
+                cardState={isPrioritized ? "selected" : "filled"}
+                onSelect={() => handleModelSelect(model)}
+              />
+            );
+          })
         )}
       </GeneralLayouts.Section>
     </>
@@ -516,6 +507,7 @@ interface EmbeddingModelCardProps {
   provider: EmbeddingProvider;
   model: EmbeddingModel;
   modelState: EmbeddingModelState;
+  cardState: "filled" | "selected";
   onSelect?: () => void;
 }
 
@@ -523,6 +515,7 @@ function EmbeddingModelCard({
   provider,
   model,
   modelState,
+  cardState,
   onSelect,
 }: EmbeddingModelCardProps) {
   const topRightButton = (() => {
@@ -592,7 +585,7 @@ function EmbeddingModelCard({
 
   return (
     <SelectCard
-      state={SELECT_CARD_STATE[modelState]}
+      state={cardState}
       rounding="md"
       padding="xs"
       onClick={isClickable ? onSelect : undefined}
