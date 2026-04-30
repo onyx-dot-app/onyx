@@ -12,10 +12,10 @@ import Switch from "@/refresh-components/inputs/Switch";
 import {
   EmbeddingProviderName,
   type ConfiguredEmbeddingProvider,
+  type EmbeddingModel,
   type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
 import { connectEmbeddingProvider } from "@/lib/indexing/svc";
-import { toast } from "@/hooks/useToast";
 import { ApiKeyField, ApiUrlField, GoogleCredentialsField } from "./shared";
 
 // ---------------------------------------------------------------------------
@@ -136,7 +136,13 @@ function useProviderSubmit(
 export interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
-  onSubmit: () => void;
+  /**
+   * Called after the modal finishes its work. The optional `customModel`
+   * argument is only populated by `CustomSelfHostedModal`, which uses it
+   * to hand the just-defined model spec back to the page so it can be
+   * staged into the Formik form.
+   */
+  onSubmit: (customModel?: EmbeddingModel) => void;
   onCancel: () => void;
 }
 
@@ -414,13 +420,19 @@ export function CustomSelfHostedModal({
   const [passagePrefix, setPassagePrefix] = useState("");
   const [normalize, setNormalize] = useState(false);
 
-  const isValid = !!modelName && !!modelDim;
+  const parsedDim = parseInt(modelDim, 10);
+  const isValid = !!modelName && Number.isFinite(parsedDim) && parsedDim > 0;
 
-  // TODO(@raunakab): wire up registration once the backend grows a column
-  // for custom self-hosted models. Until then this is a UI-only stub.
   const handleSubmit = () => {
-    toast.info("Custom self-hosted model registration is coming soon.");
-    onSubmit();
+    if (!isValid) return;
+    onSubmit({
+      modelName,
+      modelDim: parsedDim,
+      normalize,
+      queryPrefix: queryPrefix || null,
+      passagePrefix: passagePrefix || null,
+      description: "",
+    });
   };
 
   return (

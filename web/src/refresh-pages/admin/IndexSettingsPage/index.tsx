@@ -61,6 +61,7 @@ import {
   getCurrentModelCopy,
   getEmbeddingProvider,
   MAX_IMAGE_SIZE_OPTIONS,
+  resolveProviderName,
 } from "@/lib/indexing";
 import Tabs from "@/refresh-components/Tabs";
 import {
@@ -602,6 +603,14 @@ function EmbeddingModelCard({
 
 interface IndexSettingsFormValues {
   model_name: string;
+  /**
+   * Populated when the staged model came from the "Add Custom Model" modal
+   * — i.e. it's not in `CLOUD_BASED_PROVIDERS` / `SELF_HOSTED_PROVIDERS`.
+   * The submit path uses this directly instead of looking the name up in
+   * the static registry. Cleared whenever the user selects a registered
+   * model.
+   */
+  custom_model: EmbeddingModel | null;
   enable_contextual_rag: boolean;
   contextual_rag_llm_name: string | null;
   contextual_rag_llm_provider: string | null;
@@ -712,6 +721,7 @@ export default function IndexSettingsPage() {
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
       model_name: currentEmbeddingModel?.model_name ?? "",
+      custom_model: null,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_llm_name:
         searchSettings?.contextual_rag_llm_name ??
@@ -789,14 +799,6 @@ export default function IndexSettingsPage() {
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
 
-      <customModelModal.Provider>
-        <ProviderCredentialsModal
-          provider={CUSTOM_PROVIDER}
-          onSubmit={() => customModelModal.toggle(false)}
-          onCancel={() => customModelModal.toggle(false)}
-        />
-      </customModelModal.Provider>
-
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
@@ -810,11 +812,21 @@ export default function IndexSettingsPage() {
             enableReinitialize
             initialValues={initialFormValues}
             onSubmit={async (values, { resetForm }) => {
-              const result = getCurrentModelCopy(values.model_name);
-              if (!result) {
+              // Custom self-hosted models live outside the static registry,
+              // so the form carries their spec (`modelDim`, `normalize`, etc.)
+              // in `custom_model` for submission. The provider, however, is
+              // ALWAYS resolved through `resolveProviderName` — see its NOTE
+              // for why this is the single source of truth for provider
+              // discrimination.
+              const stagedModel =
+                values.custom_model ??
+                getCurrentModelCopy(values.model_name)?.model ??
+                null;
+              if (!stagedModel) {
                 toast.error("Could not find the selected model");
                 return;
               }
+              const providerName = resolveProviderName(values.model_name, null);
 
               if (switchoverType === SWITCHOVER_NONE) {
                 toast.success("Settings applied");
@@ -824,8 +836,8 @@ export default function IndexSettingsPage() {
               }
 
               const response = await setNewSearchSettings({
-                model: result.model,
-                providerName: result.providerName,
+                model: stagedModel,
+                providerName,
                 switchoverType: switchoverType as SwitchoverType,
                 enableContextualRag: values.enable_contextual_rag,
                 contextualRagLlmName: values.contextual_rag_llm_name,
@@ -859,6 +871,23 @@ export default function IndexSettingsPage() {
 
               return (
                 <>
+                  <customModelModal.Provider>
+                    <ProviderCredentialsModal
+                      provider={CUSTOM_PROVIDER}
+                      onSubmit={(customModel) => {
+                        if (customModel) {
+                          void setFieldValue(
+                            "model_name",
+                            customModel.modelName
+                          );
+                          void setFieldValue("custom_model", customModel);
+                        }
+                        customModelModal.toggle(false);
+                      }}
+                      onCancel={() => customModelModal.toggle(false)}
+                    />
+                  </customModelModal.Provider>
+
                   {isReindexing ? (
                     <MessageCard
                       variant="warning"
@@ -1050,18 +1079,26 @@ export default function IndexSettingsPage() {
                                               existingCredentials={configuredProviders?.get(
                                                 provider.providerName
                                               )}
-                                              onSelectModel={(name) =>
+                                              onSelectModel={(name) => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   name
-                                                )
-                                              }
-                                              onDeselectModel={() =>
+                                                );
+                                                void setFieldValue(
+                                                  "custom_model",
+                                                  null
+                                                );
+                                              }}
+                                              onDeselectModel={() => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   initialFormValues.model_name
-                                                )
-                                              }
+                                                );
+                                                void setFieldValue(
+                                                  "custom_model",
+                                                  null
+                                                );
+                                              }}
                                             />
                                           )
                                         )}
@@ -1099,18 +1136,26 @@ export default function IndexSettingsPage() {
                                               selectedModelName={
                                                 stagedModelName ?? undefined
                                               }
-                                              onSelectModel={(name) =>
+                                              onSelectModel={(name) => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   name
-                                                )
-                                              }
-                                              onDeselectModel={() =>
+                                                );
+                                                void setFieldValue(
+                                                  "custom_model",
+                                                  null
+                                                );
+                                              }}
+                                              onDeselectModel={() => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   initialFormValues.model_name
-                                                )
-                                              }
+                                                );
+                                                void setFieldValue(
+                                                  "custom_model",
+                                                  null
+                                                );
+                                              }}
                                             />
                                           )
                                         )}
