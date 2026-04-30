@@ -21,7 +21,7 @@ def build_llm_model_config(llm: LLM, flow: LLMFlow | None = None) -> dict[str, s
         "base_url": str(llm.config.api_base or ""),
         "model_provider": llm.config.model_provider,
     }
-    if flow is not None:
+    if flow:
         model_config["flow"] = flow.value
     return model_config
 

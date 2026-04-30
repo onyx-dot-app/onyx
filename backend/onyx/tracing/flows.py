@@ -10,8 +10,6 @@ and makes it possible to enforce instrumentation coverage by searching for
 ``LLMFlow.UNTAGGED_*`` (the sentinel used by the auto-wrap fallback).
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 
 
