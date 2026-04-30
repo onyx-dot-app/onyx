@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from uuid import uuid4
 
-import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
@@ -26,10 +25,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Temporarily disabled due to Anthropic key issues. When those issues are resolved, `strict=True` will cause a CI run to fail if this test passes, acting as a reminder to re-enable this test.",
-)
 def test_answer_with_only_anthropic_provider(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
