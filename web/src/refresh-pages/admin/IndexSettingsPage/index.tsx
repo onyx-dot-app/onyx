@@ -275,6 +275,12 @@ interface ProviderGroupProps {
   selectedModelName?: string;
   isCloud?: boolean;
   existingCredentials?: ConfiguredEmbeddingProvider;
+  /**
+   * Camel-cased spec of the active embedding model when it belongs to THIS
+   * provider — passed straight through to `ProviderCredentialsModal` so
+   * `LiteLLMProviderModal` can preload its model-spec fields on edit.
+   */
+  existingModel?: EmbeddingModel;
   onSelectModel: (modelName: string) => void;
   onDeselectModel: () => void;
 }
@@ -285,6 +291,7 @@ function ProviderGroup({
   selectedModelName,
   isCloud = false,
   existingCredentials,
+  existingModel,
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
@@ -403,6 +410,7 @@ function ProviderGroup({
             <ProviderCredentialsModal
               provider={provider}
               existingCredentials={existingCredentials}
+              existingModel={existingModel}
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 editCredentialsModal.toggle(false);
@@ -708,6 +716,23 @@ export default function IndexSettingsPage() {
 
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
     useCurrentEmbeddingModel();
+
+  /**
+   * Camel-cased view of the active embedding model for modal preload. Only
+   * `LiteLLMProviderModal` reads this — other provider modals ignore the
+   * `existingModel` prop entirely. See `ProviderModalProps.existingModel`.
+   */
+  const currentEmbeddingModelSpec: EmbeddingModel | null = useMemo(() => {
+    if (!currentEmbeddingModel) return null;
+    return {
+      modelName: currentEmbeddingModel.model_name,
+      modelDim: currentEmbeddingModel.model_dim,
+      normalize: currentEmbeddingModel.normalize,
+      queryPrefix: currentEmbeddingModel.query_prefix,
+      passagePrefix: currentEmbeddingModel.passage_prefix,
+      description: "",
+    };
+  }, [currentEmbeddingModel]);
 
   const currentProviderName = currentEmbeddingModel
     ? resolveProviderName(
@@ -1178,6 +1203,13 @@ export default function IndexSettingsPage() {
                                               existingCredentials={configuredProviders?.get(
                                                 provider.providerName
                                               )}
+                                              existingModel={
+                                                currentEmbeddingModel?.provider_type ===
+                                                provider.providerName
+                                                  ? currentEmbeddingModelSpec ??
+                                                    undefined
+                                                  : undefined
+                                              }
                                               onSelectModel={(name) => {
                                                 void setFieldValue(
                                                   "model_name",

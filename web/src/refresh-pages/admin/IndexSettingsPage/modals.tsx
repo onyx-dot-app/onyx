@@ -93,18 +93,31 @@ function ModalShell({
 // Shared connect helper — wraps `connectEmbeddingProvider` with the
 // toast-on-failure convention. Returns `true` on success so callers can chain
 // their own follow-up (e.g. staging a freshly-defined LiteLLM model).
+//
+// `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
+// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
 // ---------------------------------------------------------------------------
 
-async function submitProviderCredentials(
-  provider: EmbeddingProvider,
-  apiKey: string,
-  apiUrl: string
-): Promise<boolean> {
+async function submitProviderCredentials({
+  provider,
+  apiKey,
+  apiUrl = "",
+  apiVersion = null,
+  deploymentName = null,
+}: {
+  provider: EmbeddingProvider;
+  apiKey: string;
+  apiUrl?: string;
+  apiVersion?: string | null;
+  deploymentName?: string | null;
+}): Promise<boolean> {
   try {
     await connectEmbeddingProvider({
       providerType: provider.providerName,
       apiKey,
       apiUrl,
+      apiVersion,
+      deploymentName,
     });
     return true;
   } catch (error: unknown) {
@@ -122,6 +135,14 @@ async function submitProviderCredentials(
 export interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
+  /**
+   * Current model spec for THIS provider, when the active embedding model
+   * belongs to it. Only `LiteLLMProviderModal` consumes this — it preloads
+   * the model-spec fields (modelName, modelDim, prefixes, normalize) so the
+   * user doesn't have to retype them when editing creds. Other modals ignore
+   * this prop.
+   */
+  existingModel?: EmbeddingModel;
   /**
    * Called after the modal finishes its work. The optional `customModel`
    * argument is only populated by `CustomSelfHostedModal`, which uses it
@@ -152,13 +173,19 @@ export function StandardProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const initialValues: StandardFormValues = {
+    apiKey: existingCredentials?.api_key ?? "",
+  };
+
   return (
     <Formik<StandardFormValues>
-      initialValues={{ apiKey: existingCredentials?.api_key ?? "" }}
+      initialValues={initialValues}
       validationSchema={standardSchema}
       validateOnMount
       onSubmit={async (values) => {
-        if (await submitProviderCredentials(provider, values.apiKey, "")) {
+        if (
+          await submitProviderCredentials({ provider, apiKey: values.apiKey })
+        ) {
           onSubmit();
         }
       }}
@@ -208,13 +235,19 @@ export function GoogleProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const initialValues: GoogleFormValues = {
+    apiKey: existingCredentials?.api_key ?? "",
+  };
+
   return (
     <Formik<GoogleFormValues>
-      initialValues={{ apiKey: existingCredentials?.api_key ?? "" }}
+      initialValues={initialValues}
       validationSchema={googleSchema}
       validateOnMount
       onSubmit={async (values) => {
-        if (await submitProviderCredentials(provider, values.apiKey, "")) {
+        if (
+          await submitProviderCredentials({ provider, apiKey: values.apiKey })
+        ) {
           onSubmit();
         }
       }}
@@ -227,12 +260,14 @@ export function GoogleProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// Azure provider modal (Target URL + API Key)
+// Azure provider modal (Target URL + API Key + API Version + Deployment Name)
 // ---------------------------------------------------------------------------
 
 interface AzureFormValues {
   apiUrl: string;
   apiKey: string;
+  apiVersion: string;
+  deploymentName: string;
 }
 
 const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
@@ -241,6 +276,8 @@ const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
     .required("Target URL is required")
     .url("Must be a valid URL"),
   apiKey: Yup.string().trim().required("API key is required"),
+  apiVersion: Yup.string().trim().required("API version is required"),
+  deploymentName: Yup.string().trim().required("Deployment name is required"),
 });
 
 export function AzureProviderModal({
@@ -251,21 +288,27 @@ export function AzureProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const initialValues: AzureFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: existingCredentials?.api_key ?? "",
+    apiVersion: existingCredentials?.api_version ?? "",
+    deploymentName: existingCredentials?.deployment_name ?? "",
+  };
+
   return (
     <Formik<AzureFormValues>
-      initialValues={{
-        apiUrl: existingCredentials?.api_url ?? "",
-        apiKey: existingCredentials?.api_key ?? "",
-      }}
+      initialValues={initialValues}
       validationSchema={azureSchema}
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials(
+          await submitProviderCredentials({
             provider,
-            values.apiKey,
-            values.apiUrl
-          )
+            apiKey: values.apiKey,
+            apiUrl: values.apiUrl,
+            apiVersion: values.apiVersion,
+            deploymentName: values.deploymentName,
+          })
         ) {
           onSubmit();
         }
@@ -278,6 +321,18 @@ export function AzureProviderModal({
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
         <ApiKeyField name="apiKey" provider={provider} />
+        <TextField
+          name="apiVersion"
+          title="API Version"
+          placeholder="e.g., 2023-05-15"
+          subDescription="The Azure OpenAI API version your deployment targets."
+        />
+        <TextField
+          name="deploymentName"
+          title="Deployment Name"
+          placeholder="my-embedding-deployment"
+          subDescription="The deployment name you configured for this embedding model in Azure."
+        />
       </ModalShell>
     </Formik>
   );
@@ -291,7 +346,7 @@ interface LiteLLMFormValues {
   apiUrl: string;
   apiKey: string;
   modelName: string;
-  modelDim: string;
+  modelDim: number;
   queryPrefix: string;
   passagePrefix: string;
   normalize: boolean;
@@ -304,7 +359,7 @@ const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
     .url("Must be a valid URL"),
   apiKey: Yup.string().trim().required("API key is required"),
   modelName: Yup.string().trim().required("Model name is required"),
-  modelDim: Yup.string()
+  modelDim: Yup.number()
     .required("Model dimension is required")
     .test("positive-int", "Must be a positive integer", (value) => {
       const parsed = Number(value);
@@ -318,35 +373,38 @@ const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
 export function LiteLLMProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
   onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const initialValues: LiteLLMFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: existingCredentials?.api_key ?? "",
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
+  };
+
   return (
     <Formik<LiteLLMFormValues>
-      initialValues={{
-        apiUrl: existingCredentials?.api_url ?? "",
-        apiKey: existingCredentials?.api_key ?? "",
-        modelName: "",
-        modelDim: "",
-        queryPrefix: "",
-        passagePrefix: "",
-        normalize: false,
-      }}
+      initialValues={initialValues}
       validationSchema={litellmSchema}
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials(
+          await submitProviderCredentials({
             provider,
-            values.apiKey,
-            values.apiUrl
-          )
+            apiKey: values.apiKey,
+            apiUrl: values.apiUrl,
+          })
         ) {
           onSubmit({
             modelName: values.modelName.trim(),
-            modelDim: parseInt(values.modelDim, 10),
+            modelDim: values.modelDim,
             normalize: values.normalize,
             queryPrefix: values.queryPrefix || null,
             passagePrefix: values.passagePrefix || null,
@@ -414,7 +472,7 @@ export function LiteLLMProviderModal({
 
 interface CustomFormValues {
   modelName: string;
-  modelDim: string;
+  modelDim: number;
   queryPrefix: string;
   passagePrefix: string;
   normalize: boolean;
@@ -422,7 +480,7 @@ interface CustomFormValues {
 
 const customSchema: Yup.ObjectSchema<CustomFormValues> = Yup.object({
   modelName: Yup.string().trim().required("Model name is required"),
-  modelDim: Yup.string()
+  modelDim: Yup.number()
     .required("Model dimension is required")
     .test("positive-int", "Must be a positive integer", (value) => {
       const parsed = Number(value);
@@ -438,21 +496,23 @@ export function CustomSelfHostedModal({
   onSubmit,
   onCancel,
 }: ProviderModalProps) {
+  const initialValues: CustomFormValues = {
+    modelName: "",
+    modelDim: 0,
+    queryPrefix: "",
+    passagePrefix: "",
+    normalize: false,
+  };
+
   return (
     <Formik<CustomFormValues>
-      initialValues={{
-        modelName: "",
-        modelDim: "",
-        queryPrefix: "",
-        passagePrefix: "",
-        normalize: false,
-      }}
+      initialValues={initialValues}
       validationSchema={customSchema}
       validateOnMount
       onSubmit={(values) => {
         onSubmit({
           modelName: values.modelName.trim(),
-          modelDim: parseInt(values.modelDim, 10),
+          modelDim: values.modelDim,
           normalize: values.normalize,
           queryPrefix: values.queryPrefix || null,
           passagePrefix: values.passagePrefix || null,

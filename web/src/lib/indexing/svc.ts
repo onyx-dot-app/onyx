@@ -46,23 +46,31 @@ export async function testEmbedding({
  * Tests and saves embedding provider credentials.
  * Tests the connection first, then persists the credentials.
  * Throws on failure with a user-facing error message.
+ *
+ * `apiVersion` and `deploymentName` are Azure-specific — backend's
+ * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
+ * non-Azure providers should pass `null`.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
+  apiVersion,
+  deploymentName,
 }: {
   providerType: string;
   apiKey: string;
   apiUrl: string;
+  apiVersion: string | null;
+  deploymentName: string | null;
 }): Promise<void> {
   const testResponse = await testEmbedding({
     provider_type: providerType,
     modelName: "",
     apiKey,
     apiUrl,
-    apiVersion: null,
-    deploymentName: null,
+    apiVersion,
+    deploymentName,
   });
 
   if (!testResponse.ok) {
@@ -77,6 +85,8 @@ export async function connectEmbeddingProvider({
       provider_type: providerType,
       api_key: apiKey,
       api_url: apiUrl,
+      api_version: apiVersion,
+      deployment_name: deploymentName,
       is_default_provider: false,
       is_configured: true,
     }),
