@@ -90,27 +90,28 @@ function ModalShell({
 }
 
 // ---------------------------------------------------------------------------
-// Shared submit helper — wraps `connectEmbeddingProvider` with the toast-on-
-// failure convention so each modal's `onSubmit` stays a one-liner.
+// Shared connect helper — wraps `connectEmbeddingProvider` with the
+// toast-on-failure convention. Returns `true` on success so callers can chain
+// their own follow-up (e.g. staging a freshly-defined LiteLLM model).
 // ---------------------------------------------------------------------------
 
 async function submitProviderCredentials(
   provider: EmbeddingProvider,
   apiKey: string,
-  apiUrl: string,
-  onSuccess: () => void
-): Promise<void> {
+  apiUrl: string
+): Promise<boolean> {
   try {
     await connectEmbeddingProvider({
       providerType: provider.providerName,
       apiKey,
       apiUrl,
     });
-    onSuccess();
+    return true;
   } catch (error: unknown) {
     toast.error(
       error instanceof Error ? error.message : "An unknown error occurred"
     );
+    return false;
   }
 }
 
@@ -157,7 +158,9 @@ export function StandardProviderModal({
       validationSchema={standardSchema}
       validateOnMount
       onSubmit={async (values) => {
-        await submitProviderCredentials(provider, values.apiKey, "", onSubmit);
+        if (await submitProviderCredentials(provider, values.apiKey, "")) {
+          onSubmit();
+        }
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
@@ -211,7 +214,9 @@ export function GoogleProviderModal({
       validationSchema={googleSchema}
       validateOnMount
       onSubmit={async (values) => {
-        await submitProviderCredentials(provider, values.apiKey, "", onSubmit);
+        if (await submitProviderCredentials(provider, values.apiKey, "")) {
+          onSubmit();
+        }
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
@@ -255,12 +260,15 @@ export function AzureProviderModal({
       validationSchema={azureSchema}
       validateOnMount
       onSubmit={async (values) => {
-        await submitProviderCredentials(
-          provider,
-          values.apiKey,
-          values.apiUrl,
-          onSubmit
-        );
+        if (
+          await submitProviderCredentials(
+            provider,
+            values.apiKey,
+            values.apiUrl
+          )
+        ) {
+          onSubmit();
+        }
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
@@ -329,12 +337,22 @@ export function LiteLLMProviderModal({
       validationSchema={litellmSchema}
       validateOnMount
       onSubmit={async (values) => {
-        await submitProviderCredentials(
-          provider,
-          values.apiKey,
-          values.apiUrl,
-          onSubmit
-        );
+        if (
+          await submitProviderCredentials(
+            provider,
+            values.apiKey,
+            values.apiUrl
+          )
+        ) {
+          onSubmit({
+            modelName: values.modelName.trim(),
+            modelDim: parseInt(values.modelDim, 10),
+            normalize: values.normalize,
+            queryPrefix: values.queryPrefix || null,
+            passagePrefix: values.passagePrefix || null,
+            description: "",
+          });
+        }
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
