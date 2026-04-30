@@ -254,38 +254,83 @@ def _site_page_in_time_window(
     )
 
 
+# Transport-level exceptions that indicate a transient network/server-side
+# problem rather than an HTTP error. These can occur both as bare exceptions
+# (older office365 SDK paths that don't wrap them) and as the underlying
+# cause of a ClientRequestException with no response (newer SDK wrapping in
+# `execute_query`'s `except requests.exceptions.RequestException`). Note
+# `ChunkedEncodingError` is a subclass of `requests.ConnectionError`, so
+# `ConnectionError` covers it.
+TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
+
+# HTTP statuses we treat as transient and worth retrying.
+RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
+
+
+def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
+    """Honor a Retry-After header when the server provides one, otherwise
+    fall back to capped exponential backoff (5s, 10s, 20s, …, max 30s)."""
+    if retry_after:
+        return int(retry_after)
+    return min(30, (2**attempt) * 5)
+
+
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
     """
-    Execute a SharePoint query with retry logic for rate limiting.
+    Execute a SharePoint query with retry logic for rate limiting and
+    transient transport-level failures (e.g. ChunkedEncodingError when
+    the server or an upstream gateway closes the connection mid-response).
     """
     for attempt in range(max_retries + 1):
         try:
             return query_obj.execute_query()
+        except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
+            if attempt >= max_retries:
+                logger.warning(
+                    f"Transport error on {method_name} after "
+                    f"{max_retries + 1} attempts: {type(e).__name__}: {e}"
+                )
+                raise
+            sleep_time = _backoff_seconds(attempt, retry_after=None)
+            logger.warning(
+                f"Transport error on {method_name}, attempt {attempt + 1}/{max_retries + 1}: "
+                f"{type(e).__name__}: {e}. Sleeping {sleep_time}s before retry."
+            )
+            time.sleep(sleep_time)
+            continue
         except ClientRequestException as e:
             status = e.response.status_code if e.response is not None else None
 
-            # 429 / 503 — rate limit or transient error.  Back off and retry.
-            if status in (429, 503) and attempt < max_retries:
+            # Retryable: rate limits (429), transient server errors (503),
+            # plus transport errors that some office365 SDK versions wrap
+            # into ClientRequestException with response=None (e.g.
+            # ChunkedEncodingError).
+            wrapped_transport_error = e.response is None and isinstance(
+                e.__cause__, TRANSIENT_TRANSPORT_EXCEPTIONS
+            )
+
+            is_retryable = status in RETRYABLE_HTTP_STATUSES or wrapped_transport_error
+            if is_retryable and attempt < max_retries:
+                retry_after = (
+                    e.response.headers.get("Retry-After")
+                    if e.response is not None
+                    else None
+                )
+                sleep_time = _backoff_seconds(attempt, retry_after)
                 logger.warning(
-                    "Rate limit exceeded on %s, attempt %s/%s, sleeping and retrying",
+                    "Retryable error on %s, attempt %s/%s: status=%s. "
+                    "Sleeping %ss before retry.",
                     method_name,
                     attempt + 1,
                     max_retries + 1,
+                    status,
+                    sleep_time,
                 )
-                retry_after = (
-                    e.response.headers.get(  # ty: ignore[unresolved-attribute]
-                        "Retry-After"
-                    )
-                )
-                if retry_after:
-                    sleep_time = int(retry_after)
-                else:
-                    # Exponential backoff: 2^attempt * 5 seconds
-                    sleep_time = min(30, (2**attempt) * 5)
-
-                logger.info("Sleeping for %s seconds before retry", sleep_time)
                 time.sleep(sleep_time)
                 continue
 
