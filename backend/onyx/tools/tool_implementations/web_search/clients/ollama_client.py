@@ -110,7 +110,6 @@ class OllamaClient(WebSearchProvider):
                     status_code=400,
                     detail="Ollama API key validation failed: search returned no results.",
                 )
-            return {"status": "ok"}
         except HTTPException:
             raise
         except ValueError as exc:
@@ -118,6 +117,9 @@ class OllamaClient(WebSearchProvider):
                 status_code=400,
                 detail=str(exc),
             ) from exc
+
+        logger.info("Web search provider test succeeded for Ollama.")
+        return {"status": "ok"}
 
 
 def _is_retryable_status(status_code: int) -> bool:
