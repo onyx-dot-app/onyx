@@ -17,7 +17,6 @@ on:
       - "release/**"
 
 permissions:
-  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
@@ -322,11 +321,6 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
-          # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
-          # license enforcement so the stack still boots.
-          if [ -z "$ONYX_DEV_LICENSE" ]; then
-            echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
-          fi
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -613,6 +607,9 @@ jobs:
   playwright-tests-lite:
     needs: [build-web-image, build-backend-image]
     name: Playwright Tests (lite)
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -675,11 +672,6 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
-          # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
-          # license enforcement so the stack still boots.
-          if [ -z "$ONYX_DEV_LICENSE" ]; then
-            echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
-          fi
 
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/

@@ -13,14 +13,6 @@ signature before persisting.
 import os
 import sys
 
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
-
-from ee.onyx.db.license import upsert_license  # noqa: E402
-from ee.onyx.utils.license import verify_license_signature  # noqa: E402
-from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
-from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
-
 _PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
 _PEM_END = "-----END ONYX LICENSE-----"
 
@@ -39,10 +31,18 @@ def main() -> None:
         print("ONYX_DEV_LICENSE empty: skipping license seed", file=sys.stderr)
         return
 
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(parent_dir)
+
+    from ee.onyx.db.license import upsert_license
+    from ee.onyx.utils.license import verify_license_signature
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.engine.sql_engine import SqlEngine
+
     license_data = _strip_pem_delimiters(blob).strip()
 
     try:
-        _payload = verify_license_signature(license_data)
+        verify_license_signature(license_data)
     except ValueError as e:
         print(f"License signature verification failed: {e}", file=sys.stderr)
         sys.exit(1)

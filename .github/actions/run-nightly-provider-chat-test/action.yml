@@ -71,11 +71,6 @@ runs:
         ONYX_BACKEND_IMAGE=${ECR_CACHE}:nightly-llm-it-backend-${RUN_ID}
         ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
         EOF2
-        # Fork PRs do not have access to ONYX_DEV_LICENSE; fall back to disabling
-        # license enforcement so the stack still boots.
-        if [ -z "$ONYX_DEV_LICENSE" ]; then
-          echo "LICENSE_ENFORCEMENT_ENABLED=false" >> deployment/docker_compose/.env
-        fi
 
     - name: Start Docker containers
       shell: bash
