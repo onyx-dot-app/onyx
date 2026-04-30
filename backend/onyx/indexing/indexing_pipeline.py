@@ -1,4 +1,3 @@
-import time
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator
@@ -683,19 +682,13 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                             file_id=section.image_file_id
                         )
                         image_data = image_data_io.read()
-                        onyx_image_size_bytes.observe(len(image_data))
-
-                        start = time.monotonic()
                         summary = summarize_image_with_error_handling(
                             llm=llm,
                             image_data=image_data,
                             context_name=file_record.display_name or "Image",
                         )
-                        elapsed = time.monotonic() - start
 
                         if summary:
-                            onyx_image_summarization_duration_seconds.observe(elapsed)
-                            onyx_image_summarization_total.inc()
                             processed_section.text = summary
                         else:
                             processed_section.text = "[Image could not be summarized]"
