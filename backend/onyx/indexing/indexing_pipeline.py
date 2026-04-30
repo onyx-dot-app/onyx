@@ -86,6 +86,8 @@ from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
+MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
+
 
 class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
@@ -802,7 +804,7 @@ def add_chunk_summaries(
 
     run_functions_tuples_in_parallel(
         functions_with_args=[(assign_context, (chunk,)) for chunk in chunks_by_doc],
-        max_workers=128,
+        max_workers=MAX_CONTEXTUAL_RAG_WORKERS,
     )
 
 
