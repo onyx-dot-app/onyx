@@ -17,6 +17,7 @@ import {
   endTrial,
   PaymentMethodRequiredError,
   createCustomerPortalSession,
+  StripePortalFlowType,
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -244,7 +245,7 @@ export default function BillingPage() {
             try {
               const response = await createCustomerPortalSession({
                 return_url: `${window.location.origin}/admin/billing?portal_return=true&retry_upgrade=1`,
-                flow_type: "payment_method_update",
+                flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
               });
               if (response.stripe_customer_portal_url) {
                 window.location.href = response.stripe_customer_portal_url;

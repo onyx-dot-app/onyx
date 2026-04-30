@@ -93,9 +93,17 @@ export interface CreateCheckoutSessionResponse {
   stripe_checkout_url: string;
 }
 
+/**
+ * Stripe billing portal `flow_data.type` values supported by the API.
+ * Mirrors `shared.enums.StripePortalFlowType` on the control plane.
+ */
+export enum StripePortalFlowType {
+  PAYMENT_METHOD_UPDATE = "payment_method_update",
+}
+
 export interface CreateCustomerPortalSessionRequest {
   return_url?: string;
-  flow_type?: "payment_method_update";
+  flow_type?: StripePortalFlowType;
 }
 
 export interface CreateCustomerPortalSessionResponse {

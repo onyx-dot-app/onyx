@@ -21,8 +21,10 @@ import {
 } from "@opal/icons";
 import {
   BillingInformation,
+  BillingStatus,
   LicenseStatus,
   PaymentMethodRequiredError,
+  StripePortalFlowType,
 } from "@/lib/billing/interfaces";
 import {
   createCustomerPortalSession,
@@ -229,7 +231,7 @@ function SubscriptionCard({
         try {
           const response = await createCustomerPortalSession({
             return_url: `${window.location.origin}/admin/billing?portal_return=true&retry_upgrade=1`,
-            flow_type: "payment_method_update",
+            flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
           });
           if (response.stripe_customer_portal_url) {
             window.location.href = response.stripe_customer_portal_url;
@@ -252,7 +254,7 @@ function SubscriptionCard({
   };
 
   const isTrialing =
-    NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === "trialing";
+    NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === BillingStatus.TRIALING;
 
   return (
     <Card>

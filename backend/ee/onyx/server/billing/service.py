@@ -20,6 +20,7 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
 from ee.onyx.server.billing.models import EndTrialResponse
 from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import StripePortalFlowType
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
@@ -180,7 +181,7 @@ async def create_customer_portal_session(
     license_data: str | None = None,
     return_url: str | None = None,
     tenant_id: str | None = None,
-    flow_type: Literal["payment_method_update"] | None = None,
+    flow_type: StripePortalFlowType | None = None,
 ) -> CreateCustomerPortalSessionResponse:
     """Create a Stripe customer portal session.
 
@@ -200,7 +201,7 @@ async def create_customer_portal_session(
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
     if flow_type:
-        body["flow_type"] = flow_type
+        body["flow_type"] = flow_type.value
 
     data = await _make_billing_request(
         method="POST",
