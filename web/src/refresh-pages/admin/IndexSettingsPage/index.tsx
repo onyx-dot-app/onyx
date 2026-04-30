@@ -70,6 +70,7 @@ import {
   cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
+  updateInferenceSettings,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
@@ -897,9 +898,36 @@ export default function IndexSettingsPage() {
               const providerName = resolveProviderName(values.model_name, null);
 
               if (switchoverType === SWITCHOVER_NONE) {
+                if (!searchSettings) {
+                  toast.error("Could not load current search settings");
+                  return;
+                }
+                if (
+                  stagedModel.modelName !== currentEmbeddingModel?.model_name
+                ) {
+                  toast.error(
+                    "Changing the embedding model requires a re-index — pick a re-index strategy."
+                  );
+                  return;
+                }
+                const response = await updateInferenceSettings({
+                  ...searchSettings,
+                  enable_contextual_rag: values.enable_contextual_rag,
+                  contextual_rag_llm_name: values.enable_contextual_rag
+                    ? values.contextual_rag_llm_name
+                    : null,
+                  contextual_rag_llm_provider: values.enable_contextual_rag
+                    ? values.contextual_rag_llm_provider
+                    : null,
+                });
+                if (!response.ok) {
+                  toast.error("Failed to apply settings");
+                  return;
+                }
                 toast.success("Settings applied");
-                resetForm();
+                resetForm({ values });
                 setSwitchoverType(SWITCHOVER_NONE);
+                await mutate(SWR_KEYS.currentSearchSettings);
                 return;
               }
 
