@@ -84,6 +84,15 @@ VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
 
+# Per-process cache of indices we've already verified/created/applied the
+# mapping for. Used for the multi-tenant cloud codepath, which attempts to
+# verify or create an index on DocumentIndex init since that deployment mode
+# does not run setup on application start. This attempt can be expensive, and it
+# only needs to happen at most once per process lifetime, since any changes to
+# an index should always be correlated with a redeploy.
+_verified_index_names_for_current_process: set[str] = set()
+
+
 class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
 
@@ -600,10 +609,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._tenant_state: TenantState = tenant_state
         self._client = OpenSearchIndexClient(index_name=self._index_name)
 
-        if self._tenant_state.multitenant and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT:
+        if (
+            self._tenant_state.multitenant
+            and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
+            and index_name not in _verified_index_names_for_current_process
+        ):
             self.verify_and_create_index_if_necessary(
                 embedding_dim=embedding_dim, embedding_precision=embedding_precision
             )
+            _verified_index_names_for_current_process.add(index_name)
 
     def verify_and_create_index_if_necessary(
         self,
