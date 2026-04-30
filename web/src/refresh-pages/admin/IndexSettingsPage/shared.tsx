@@ -22,40 +22,32 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 // ---------------------------------------------------------------------------
 
 interface ApiKeyFieldProps {
-  name: string;
   provider: EmbeddingProvider;
-  isEditing?: boolean;
 }
 
-export function ApiKeyField({ name, provider, isEditing }: ApiKeyFieldProps) {
+export function ApiKeyField({ provider }: ApiKeyFieldProps) {
   return (
     <InputVertical
       title="API Key"
-      withLabel={name}
-      subDescription={
-        isEditing
-          ? "Leave blank to keep the existing key, or enter a new one to replace it."
-          : markdown(
-              `Paste your [API key](${provider.apiLink ?? ""}) from ${
-                provider.displayName
-              } to access your models.`
-            )
-      }
+      withLabel="apiKey"
+      subDescription={markdown(
+        `Paste your [API key](${provider.apiLink ?? ""}) from ${
+          provider.displayName
+        } to access your models.`
+      )}
     >
-      <PasswordInputTypeInField name={name} />
+      <PasswordInputTypeInField name="apiKey" />
     </InputVertical>
   );
 }
 
 interface ApiUrlFieldProps {
-  name: string;
   title: string;
   placeholder: string;
   subDescription?: string;
 }
 
 export function ApiUrlField({
-  name,
   title,
   placeholder,
   subDescription,
@@ -64,23 +56,15 @@ export function ApiUrlField({
     <InputVertical
       title={title}
       subDescription={subDescription}
-      withLabel={name}
+      withLabel="apiUrl"
     >
-      <InputTypeInField name={name} placeholder={placeholder} />
+      <InputTypeInField name="apiUrl" placeholder={placeholder} />
     </InputVertical>
   );
 }
 
-interface GoogleCredentialsFieldProps {
-  name: string;
-  isEditing?: boolean;
-}
-
-export function GoogleCredentialsField({
-  name,
-  isEditing,
-}: GoogleCredentialsFieldProps) {
-  const [, , helpers] = useField<string>(name);
+export function GoogleCredentialsField() {
+  const [, , helpers] = useField<string>("apiKey");
   const [fileName, setFileName] = useState("");
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,16 +86,13 @@ export function GoogleCredentialsField({
   };
 
   return (
-    <InputVertical
-      title="Upload JSON credentials file"
-      withLabel={name}
-      subDescription={
-        isEditing
-          ? "Leave blank to keep the existing credentials, or upload a new file to replace them."
-          : undefined
-      }
-    >
-      <input id={name} type="file" accept=".json" onChange={handleFileUpload} />
+    <InputVertical title="Upload JSON credentials file" withLabel="apiKey">
+      <input
+        id="apiKey"
+        type="file"
+        accept=".json"
+        onChange={handleFileUpload}
+      />
       {fileName && (
         <Text font="secondary-body" color="text-03">
           {fileName}

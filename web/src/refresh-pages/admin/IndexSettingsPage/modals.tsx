@@ -182,7 +182,7 @@ function StandardProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <ApiKeyField name="apiKey" provider={provider} />
+        <ApiKeyField provider={provider} />
       </ModalShell>
     </Formik>
   );
@@ -245,7 +245,7 @@ function GoogleProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <GoogleCredentialsField name="apiKey" isEditing={isEditing} />
+        <GoogleCredentialsField />
       </ModalShell>
     </Formik>
   );
@@ -311,11 +311,10 @@ function AzureProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          name="apiUrl"
           title="Target URL"
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
-        <ApiKeyField name="apiKey" provider={provider} />
+        <ApiKeyField provider={provider} />
         <TextField
           name="apiVersion"
           title="API Version"
@@ -404,13 +403,12 @@ function LiteLLMProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          name="apiUrl"
           title="API Base URL"
           placeholder="https://..."
           subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
         />
 
-        <ApiKeyField name="apiKey" provider={provider} />
+        <ApiKeyField provider={provider} />
 
         <ModelSpecFields
           modelNameSubDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
