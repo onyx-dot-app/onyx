@@ -22,6 +22,7 @@ import {
   GoogleCredentialsField,
   TextField,
 } from "@/refresh-pages/admin/IndexSettingsPage/shared";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
@@ -33,20 +34,15 @@ import {
 interface ModalShellProps {
   provider: EmbeddingProvider;
   isEditing: boolean;
-  onCancel: () => void;
   children: React.ReactNode;
 }
 
-function ModalShell({
-  provider,
-  isEditing,
-  onCancel,
-  children,
-}: ModalShellProps) {
+function ModalShell({ provider, isEditing, children }: ModalShellProps) {
   const { isValid, isSubmitting, submitForm } = useFormikContext();
+  const onClose = useModalClose();
 
   return (
-    <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md">
         <Modal.Header
           icon={provider.icon}
@@ -62,13 +58,13 @@ function ModalShell({
               ? `Manage ${provider.displayName} provider and model details.`
               : `Connect to ${provider.displayName} and set up your ${provider.displayName} embedding models.`
           }
-          onClose={onCancel}
+          onClose={onClose}
         />
         <Modal.Body twoTone>
           <GeneralLayouts.Section gap={1}>{children}</GeneralLayouts.Section>
         </Modal.Body>
         <Modal.Footer>
-          <Button prominence="secondary" onClick={onCancel}>
+          <Button prominence="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -90,15 +86,16 @@ function ModalShell({
 }
 
 // ---------------------------------------------------------------------------
-// Shared connect helper — wraps `connectEmbeddingProvider` with the
-// toast-on-failure convention. Returns `true` on success so callers can chain
-// their own follow-up (e.g. staging a freshly-defined LiteLLM model).
+// Tests credentials against the backend then persists them if the test passes.
+// Returns `true` on success so callers can chain their own follow-up
+// (e.g. staging a freshly-defined LiteLLM model). On failure, toasts the
+// error and returns `false`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
 // providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
 // ---------------------------------------------------------------------------
 
-async function submitProviderCredentials({
+async function testAndSaveProviderCredentials({
   provider,
   apiKey,
   apiUrl = "",
@@ -149,7 +146,7 @@ interface ProviderModalProps {
    * staged into the Formik form.
    */
   onSubmit: (customModel?: EmbeddingModel) => void;
-  onCancel: () => void;
+  // onCancel: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +163,6 @@ function StandardProviderModal({
   provider,
   existingCredentials,
   onSubmit,
-  onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
@@ -181,13 +177,16 @@ function StandardProviderModal({
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials({ provider, apiKey: values.apiKey })
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey: values.apiKey,
+          })
         ) {
           onSubmit();
         }
       }}
     >
-      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+      <ModalShell provider={provider} isEditing={isEditing}>
         <ApiKeyField name="apiKey" provider={provider} />
       </ModalShell>
     </Formik>
@@ -226,7 +225,6 @@ function GoogleProviderModal({
   provider,
   existingCredentials,
   onSubmit,
-  onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
@@ -241,13 +239,16 @@ function GoogleProviderModal({
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials({ provider, apiKey: values.apiKey })
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey: values.apiKey,
+          })
         ) {
           onSubmit();
         }
       }}
     >
-      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+      <ModalShell provider={provider} isEditing={isEditing}>
         <GoogleCredentialsField name="apiKey" />
       </ModalShell>
     </Formik>
@@ -277,7 +278,6 @@ function AzureProviderModal({
   provider,
   existingCredentials,
   onSubmit,
-  onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
@@ -295,7 +295,7 @@ function AzureProviderModal({
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials({
+          await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey,
             apiUrl: values.apiUrl,
@@ -307,7 +307,7 @@ function AzureProviderModal({
         }
       }}
     >
-      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+      <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           name="apiUrl"
           title="Target URL"
@@ -366,7 +366,6 @@ function LiteLLMProviderModal({
   existingCredentials,
   existingModel,
   onSubmit,
-  onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
@@ -387,7 +386,7 @@ function LiteLLMProviderModal({
       validateOnMount
       onSubmit={async (values) => {
         if (
-          await submitProviderCredentials({
+          await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey,
             apiUrl: values.apiUrl,
@@ -404,7 +403,7 @@ function LiteLLMProviderModal({
         }
       }}
     >
-      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+      <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           name="apiUrl"
           title="API Base URL"
@@ -484,7 +483,6 @@ function CustomSelfHostedModal({
   provider,
   existingModel,
   onSubmit,
-  onCancel,
 }: ProviderModalProps) {
   const isEditing = !!existingModel;
 
@@ -512,7 +510,7 @@ function CustomSelfHostedModal({
         });
       }}
     >
-      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+      <ModalShell provider={provider} isEditing={isEditing}>
         <TextField
           name="modelName"
           title="Model Name"

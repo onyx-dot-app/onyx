@@ -399,10 +399,6 @@ function ProviderGroup({
                   pendingConnectModelRef.current = null;
                 }
               }}
-              onCancel={() => {
-                connectModal.toggle(false);
-                pendingConnectModelRef.current = null;
-              }}
             />
           </connectModal.Provider>
 
@@ -415,7 +411,6 @@ function ProviderGroup({
                 await mutate(SWR_KEYS.embeddingProviders);
                 editCredentialsModal.toggle(false);
               }}
-              onCancel={() => editCredentialsModal.toggle(false)}
             />
           </editCredentialsModal.Provider>
         </>
@@ -428,7 +423,6 @@ function ProviderGroup({
             await mutate(SWR_KEYS.embeddingProviders);
             providerCreationModal.toggle(false);
           }}
-          onCancel={() => providerCreationModal.toggle(false)}
         />
       </providerCreationModal.Provider>
 
@@ -874,7 +868,6 @@ export default function IndexSettingsPage() {
               await mutate(SWR_KEYS.embeddingProviders);
               editModal.toggle(false);
             }}
-            onCancel={() => editModal.toggle(false)}
           />
         </editModal.Provider>
       )}
@@ -1015,7 +1008,6 @@ export default function IndexSettingsPage() {
                         }
                         customModelModal.toggle(false);
                       }}
-                      onCancel={() => customModelModal.toggle(false)}
                     />
                   </customModelModal.Provider>
 
