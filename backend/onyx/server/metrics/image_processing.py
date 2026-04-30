@@ -93,6 +93,8 @@ def track_image_summarization(
                 )
 
         try:
+            # Metrics for all images that attempt to get processed
+            # We want to know the size distribution
             _image_summarization_total.labels(**labels).inc()
         except Exception:
             logger.warning(
@@ -104,6 +106,7 @@ def track_image_summarization(
         elapsed = time.monotonic() - start
 
         try:
+            # Metrics for how long image X took to upload plus the details about it
             _image_summarization_duration_seconds.labels(**labels).observe(elapsed)
         except Exception:
             logger.warning(
