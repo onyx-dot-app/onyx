@@ -14,8 +14,8 @@ from onyx.llm.models import SystemMessage
 from onyx.llm.models import TextContentPart
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
-from onyx.tracing.flows import LLMFlow
 from onyx.server.metrics.image_processing import track_image_summarization
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.b64 import get_image_type_from_bytes
