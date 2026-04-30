@@ -69,9 +69,13 @@ export function ApiUrlField({
 
 interface GoogleCredentialsFieldProps {
   name: string;
+  isEditing?: boolean;
 }
 
-export function GoogleCredentialsField({ name }: GoogleCredentialsFieldProps) {
+export function GoogleCredentialsField({
+  name,
+  isEditing,
+}: GoogleCredentialsFieldProps) {
   const [, , helpers] = useField<string>(name);
   const [fileName, setFileName] = useState("");
 
@@ -94,7 +98,15 @@ export function GoogleCredentialsField({ name }: GoogleCredentialsFieldProps) {
   };
 
   return (
-    <InputVertical title="Upload JSON credentials file" withLabel={name}>
+    <InputVertical
+      title="Upload JSON credentials file"
+      withLabel={name}
+      subDescription={
+        isEditing
+          ? "Leave blank to keep the existing credentials, or upload a new file to replace them."
+          : undefined
+      }
+    >
       <input id={name} type="file" accept=".json" onChange={handleFileUpload} />
       {fileName && (
         <Text font="secondary-body" color="text-03">

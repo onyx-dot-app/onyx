@@ -59,37 +59,41 @@ export async function connectEmbeddingProvider({
   deploymentName,
 }: {
   providerType: string;
-  apiKey: string;
+  apiKey: string | null;
   apiUrl: string;
   apiVersion: string | null;
   deploymentName: string | null;
 }): Promise<void> {
-  const testResponse = await testEmbedding({
-    provider_type: providerType,
-    modelName: "",
-    apiKey,
-    apiUrl,
-    apiVersion,
-    deploymentName,
-  });
+  if (apiKey !== null) {
+    const testResponse = await testEmbedding({
+      provider_type: providerType,
+      modelName: "",
+      apiKey,
+      apiUrl,
+      apiVersion,
+      deploymentName,
+    });
 
-  if (!testResponse.ok) {
-    const err = await testResponse.json();
-    throw new Error(err.detail ?? "Embedding test failed");
+    if (!testResponse.ok) {
+      const err = await testResponse.json();
+      throw new Error(err.detail ?? "Embedding test failed");
+    }
   }
+
+  const body: Record<string, unknown> = {
+    provider_type: providerType,
+    api_url: apiUrl,
+    api_version: apiVersion,
+    deployment_name: deploymentName,
+    is_default_provider: false,
+    is_configured: true,
+  };
+  if (apiKey !== null) body.api_key = apiKey;
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      provider_type: providerType,
-      api_key: apiKey,
-      api_url: apiUrl,
-      api_version: apiVersion,
-      deployment_name: deploymentName,
-      is_default_provider: false,
-      is_configured: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!saveResponse.ok) {

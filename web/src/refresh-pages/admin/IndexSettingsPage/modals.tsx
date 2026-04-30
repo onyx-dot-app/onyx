@@ -99,7 +99,7 @@ async function testAndSaveProviderCredentials({
   deploymentName = null,
 }: {
   provider: EmbeddingProvider;
-  apiKey: string;
+  apiKey: string | null;
   apiUrl?: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
@@ -151,9 +151,6 @@ interface ProviderModalProps {
 interface StandardFormValues {
   apiKey: string;
 }
-const standardSchema: Yup.ObjectSchema<StandardFormValues> = Yup.object({
-  apiKey: Yup.string().trim().required("API key is required"),
-});
 function StandardProviderModal({
   provider,
   existingCredentials,
@@ -161,20 +158,24 @@ function StandardProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
-  const initialValues: StandardFormValues = {
-    apiKey: existingCredentials?.api_key ?? "",
-  };
+  const schema = Yup.object({
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required("API key is required"),
+  });
+
+  const initialValues: StandardFormValues = { apiKey: "" };
 
   return (
     <Formik<StandardFormValues>
       initialValues={initialValues}
-      validationSchema={standardSchema}
+      validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey,
+            apiKey: values.apiKey || null,
           })
         ) {
           onSubmit();
@@ -195,27 +196,6 @@ function StandardProviderModal({
 interface GoogleFormValues {
   apiKey: string;
 }
-const googleSchema: Yup.ObjectSchema<GoogleFormValues> = Yup.object({
-  apiKey: Yup.string()
-    .required("Service account JSON is required")
-    .test(
-      "service-account-json",
-      "Must be a valid Google service account JSON file",
-      (value) => {
-        if (!value) return false;
-        try {
-          const parsed = JSON.parse(value);
-          return (
-            parsed.type === "service_account" &&
-            typeof parsed.client_email === "string" &&
-            typeof parsed.private_key === "string"
-          );
-        } catch {
-          return false;
-        }
-      }
-    ),
-});
 function GoogleProviderModal({
   provider,
   existingCredentials,
@@ -223,20 +203,42 @@ function GoogleProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
-  const initialValues: GoogleFormValues = {
-    apiKey: existingCredentials?.api_key ?? "",
-  };
+  const schema = Yup.object({
+    apiKey: isEditing
+      ? Yup.string()
+      : Yup.string()
+          .required("Service account JSON is required")
+          .test(
+            "service-account-json",
+            "Must be a valid Google service account JSON file",
+            (value) => {
+              if (!value) return false;
+              try {
+                const parsed = JSON.parse(value);
+                return (
+                  parsed.type === "service_account" &&
+                  typeof parsed.client_email === "string" &&
+                  typeof parsed.private_key === "string"
+                );
+              } catch {
+                return false;
+              }
+            }
+          ),
+  });
+
+  const initialValues: GoogleFormValues = { apiKey: "" };
 
   return (
     <Formik<GoogleFormValues>
       initialValues={initialValues}
-      validationSchema={googleSchema}
+      validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey,
+            apiKey: values.apiKey || null,
           })
         ) {
           onSubmit();
@@ -244,7 +246,7 @@ function GoogleProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <GoogleCredentialsField name="apiKey" />
+        <GoogleCredentialsField name="apiKey" isEditing={isEditing} />
       </ModalShell>
     </Formik>
   );
@@ -260,15 +262,6 @@ interface AzureFormValues {
   apiVersion: string;
   deploymentName: string;
 }
-const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
-  apiUrl: Yup.string()
-    .trim()
-    .required("Target URL is required")
-    .url("Must be a valid URL"),
-  apiKey: Yup.string().trim().required("API key is required"),
-  apiVersion: Yup.string().trim().required("API version is required"),
-  deploymentName: Yup.string().trim().required("Deployment name is required"),
-});
 function AzureProviderModal({
   provider,
   existingCredentials,
@@ -276,9 +269,21 @@ function AzureProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required("Target URL is required")
+      .url("Must be a valid URL"),
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required("API key is required"),
+    apiVersion: Yup.string().trim().required("API version is required"),
+    deploymentName: Yup.string().trim().required("Deployment name is required"),
+  });
+
   const initialValues: AzureFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: existingCredentials?.api_key ?? "",
+    apiKey: "",
     apiVersion: existingCredentials?.api_version ?? "",
     deploymentName: existingCredentials?.deployment_name ?? "",
   };
@@ -286,13 +291,13 @@ function AzureProviderModal({
   return (
     <Formik<AzureFormValues>
       initialValues={initialValues}
-      validationSchema={azureSchema}
+      validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey,
+            apiKey: values.apiKey || null,
             apiUrl: values.apiUrl,
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
@@ -339,23 +344,6 @@ interface LiteLLMFormValues {
   passagePrefix: string;
   normalize: boolean;
 }
-const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
-  apiUrl: Yup.string()
-    .trim()
-    .required("API base URL is required")
-    .url("Must be a valid URL"),
-  apiKey: Yup.string().trim().required("API key is required"),
-  modelName: Yup.string().trim().required("Model name is required"),
-  modelDim: Yup.number()
-    .required("Model dimension is required")
-    .test("positive-int", "Must be a positive integer", (value) => {
-      const parsed = Number(value);
-      return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
-    }),
-  queryPrefix: Yup.string().defined().default(""),
-  passagePrefix: Yup.string().defined().default(""),
-  normalize: Yup.boolean().defined().default(false),
-});
 function LiteLLMProviderModal({
   provider,
   existingCredentials,
@@ -364,9 +352,29 @@ function LiteLLMProviderModal({
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
 
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required("API base URL is required")
+      .url("Must be a valid URL"),
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required("API key is required"),
+    modelName: Yup.string().trim().required("Model name is required"),
+    modelDim: Yup.number()
+      .required("Model dimension is required")
+      .test("positive-int", "Must be a positive integer", (value) => {
+        const parsed = Number(value);
+        return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
+      }),
+    queryPrefix: Yup.string().defined().default(""),
+    passagePrefix: Yup.string().defined().default(""),
+    normalize: Yup.boolean().defined().default(false),
+  });
+
   const initialValues: LiteLLMFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: existingCredentials?.api_key ?? "",
+    apiKey: "",
     modelName: existingModel?.modelName ?? "",
     modelDim: existingModel?.modelDim ?? 0,
     queryPrefix: existingModel?.queryPrefix ?? "",
@@ -377,13 +385,13 @@ function LiteLLMProviderModal({
   return (
     <Formik<LiteLLMFormValues>
       initialValues={initialValues}
-      validationSchema={litellmSchema}
+      validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey,
+            apiKey: values.apiKey || null,
             apiUrl: values.apiUrl,
           })
         ) {
