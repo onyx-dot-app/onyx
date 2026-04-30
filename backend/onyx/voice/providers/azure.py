@@ -467,9 +467,6 @@ class AzureVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.STT,
             model=self.stt_model or "azure-speech-stt",
             provider="azure",
-            input_messages=[
-                {"audio_format": audio_format, "audio_bytes": len(audio_data)}
-            ],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -537,7 +534,6 @@ class AzureVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model or "azure-speech-tts",
             provider="azure",
-            input_messages=[{"text_chars": len(text), "voice": voice_name}],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, data=ssml) as response:

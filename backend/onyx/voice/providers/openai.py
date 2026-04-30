@@ -537,9 +537,6 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.STT,
             model=self.stt_model,
             provider="openai",
-            input_messages=[
-                {"audio_format": audio_format, "audio_bytes": len(audio_data)}
-            ],
         ):
             response = await client.audio.transcriptions.create(
                 model=self.stt_model,
@@ -574,9 +571,6 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model,
             provider="openai",
-            input_messages=[
-                {"text_chars": len(text), "voice": voice or self.default_voice}
-            ],
         ):
             async with client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,

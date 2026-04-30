@@ -98,7 +98,6 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=normalized_model,
                 provider="openai",
-                input_messages=[{"prompt": prompt, "n": n, "size": size}],
             ):
                 return image_edit(
                     image=[image.data for image in reference_images],
@@ -118,7 +117,6 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=normalized_model,
             provider="openai",
-            input_messages=[{"prompt": prompt, "n": n, "size": size}],
         ):
             return image_generation(
                 prompt=prompt,

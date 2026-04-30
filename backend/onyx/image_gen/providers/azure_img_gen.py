@@ -111,7 +111,6 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=deployment,
                 provider="azure",
-                input_messages=[{"prompt": prompt, "n": n, "size": size}],
             ):
                 return image_edit(
                     image=[image.data for image in reference_images],
@@ -132,7 +131,6 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=deployment,
             provider="azure",
-            input_messages=[{"prompt": prompt, "n": n, "size": size}],
         ):
             return image_generation(
                 prompt=prompt,

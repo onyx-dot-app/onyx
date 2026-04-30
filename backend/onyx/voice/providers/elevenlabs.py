@@ -698,9 +698,6 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.STT,
             model=batch_model,
             provider="elevenlabs",
-            input_messages=[
-                {"audio_format": audio_format, "audio_bytes": len(audio_data)}
-            ],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -767,7 +764,6 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model,
             provider="elevenlabs",
-            input_messages=[{"text_chars": len(text), "voice": voice_id}],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=payload) as response:
