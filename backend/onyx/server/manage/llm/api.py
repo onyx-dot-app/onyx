@@ -112,6 +112,12 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/llm")
 basic_router = APIRouter(prefix="/llm")
 
+# Hard-coded so the api_base for these well-known providers is never
+# user-controlled — eliminates SSRF surface on the new endpoints below.
+OPENAI_API_BASE = "https://api.openai.com/v1"
+ANTHROPIC_API_BASE = "https://api.anthropic.com"
+ANTHROPIC_API_VERSION = "2023-06-01"
+
 
 def _mask_string(value: str) -> str:
     """Mask a string, showing first 4 and last 4 characters."""
@@ -1739,13 +1745,6 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
-
-
-# Hard-coded so the api_base for these well-known providers is never
-# user-controlled — eliminates SSRF surface on the new endpoints below.
-OPENAI_API_BASE = "https://api.openai.com/v1"
-ANTHROPIC_API_BASE = "https://api.anthropic.com"
-ANTHROPIC_API_VERSION = "2023-06-01"
 
 
 @admin_router.post("/openai/available-models")
