@@ -512,41 +512,59 @@ def upload_files(
                                 "Archive contains too many entries.",
                             )
                         remaining_budget = MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES
-                        zip_metadata_file_id, metadata_bytes_read = (
-                            save_zip_metadata_to_file_store(
-                                zf, file_store, remaining_budget
-                            )
-                        )
-                        remaining_budget -= metadata_bytes_read
-                        for file_info in zf.namelist():
-                            if zf.getinfo(file_info).is_dir():
-                                continue
-
-                            if not should_process_file(file_info):
-                                continue
-
-                            sub_file_bytes = read_zip_entry_bounded(
-                                zf, file_info, remaining_budget
-                            )
-                            if sub_file_bytes is None:
-                                raise OnyxError(
-                                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                                    "Archive uncompressed size exceeds the allowed limit.",
+                        # Track every blob persisted during this archive's
+                        # extraction so an overflow / error mid-loop can roll
+                        # them back instead of leaking orphans into the file
+                        # store.
+                        archive_saved_file_ids: list[str] = []
+                        try:
+                            zip_metadata_file_id, metadata_bytes_read = (
+                                save_zip_metadata_to_file_store(
+                                    zf, file_store, remaining_budget
                                 )
-                            remaining_budget -= len(sub_file_bytes)
-
-                            mime_type, __ = mimetypes.guess_type(file_info)
-                            if mime_type is None:
-                                mime_type = "application/octet-stream"
-
-                            file_id = file_store.save_file(
-                                content=BytesIO(sub_file_bytes),
-                                display_name=os.path.basename(file_info),
-                                file_origin=file_origin,
-                                file_type=mime_type,
                             )
-                            deduped_file_paths.append(file_id)
-                            deduped_file_names.append(os.path.basename(file_info))
+                            if zip_metadata_file_id is not None:
+                                archive_saved_file_ids.append(zip_metadata_file_id)
+                            remaining_budget -= metadata_bytes_read
+                            for file_info in zf.namelist():
+                                if zf.getinfo(file_info).is_dir():
+                                    continue
+
+                                if not should_process_file(file_info):
+                                    continue
+
+                                sub_file_bytes = read_zip_entry_bounded(
+                                    zf, file_info, remaining_budget
+                                )
+                                if sub_file_bytes is None:
+                                    raise OnyxError(
+                                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                                        "Archive uncompressed size exceeds the allowed limit.",
+                                    )
+                                remaining_budget -= len(sub_file_bytes)
+
+                                mime_type, __ = mimetypes.guess_type(file_info)
+                                if mime_type is None:
+                                    mime_type = "application/octet-stream"
+
+                                file_id = file_store.save_file(
+                                    content=BytesIO(sub_file_bytes),
+                                    display_name=os.path.basename(file_info),
+                                    file_origin=file_origin,
+                                    file_type=mime_type,
+                                )
+                                archive_saved_file_ids.append(file_id)
+                                deduped_file_paths.append(file_id)
+                                deduped_file_names.append(os.path.basename(file_info))
+                        except Exception:
+                            for fid in archive_saved_file_ids:
+                                try:
+                                    file_store.delete_file(fid, error_on_missing=False)
+                                except Exception as cleanup_err:
+                                    logger.warning(
+                                        f"Failed to clean up partial zip upload file {fid}: {cleanup_err}"
+                                    )
+                            raise
                         continue
 
                 # Store the zip as-is (unzip=False)

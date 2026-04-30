@@ -132,3 +132,33 @@ def test_upload_zip_rejected_when_uncompressed_size_exceeds_limit(
 
     assert exc_info.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
     mock_store.save_file.assert_not_called()
+
+
+@patch("onyx.server.documents.connector.MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES", 1024)
+@patch("onyx.server.documents.connector.get_default_file_store")
+def test_upload_zip_rolls_back_partial_writes_on_overflow(
+    mock_get_store: MagicMock,
+) -> None:
+    """If a later entry trips the size cap, blobs that were already
+    persisted during this archive's extraction must be deleted so the
+    rejected request does not leak storage."""
+    mock_store = MagicMock()
+    mock_store.save_file.side_effect = ["id-small.txt"]
+    mock_get_store.return_value = mock_store
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("small.txt", b"hi")
+        zf.writestr("big.bin", b"\0" * 4096)
+    upload = _make_upload_file(buf.getvalue(), "mixed.zip", "application/zip")
+
+    with pytest.raises(OnyxError) as exc_info:
+        upload_files([upload], FileOrigin.CONNECTOR)
+
+    assert exc_info.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+    # Only the small file was saved before overflow; verify it was
+    # rolled back rather than leaked.
+    assert mock_store.save_file.call_count == 1
+    mock_store.delete_file.assert_called_once_with(
+        "id-small.txt", error_on_missing=False
+    )
