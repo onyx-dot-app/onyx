@@ -57,9 +57,9 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   SELF_HOSTED_PROVIDERS,
-  findCloudProvider,
-  getCurrentModelCopy,
-  getEmbeddingProvider,
+  findProvider,
+  findRegistryModel,
+  isCloudBased,
   MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
 } from "@/lib/indexing";
@@ -134,11 +134,11 @@ function CloudDisabled({
 }
 
 interface EmbeddingProviderInfoProps {
-  providerType: EmbeddingProviderName | null;
+  providerName: EmbeddingProviderName;
 }
 
-function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
-  if (!providerType) {
+function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
+  if (!isCloudBased(providerName)) {
     return (
       <Content
         icon={SvgServer}
@@ -151,8 +151,7 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
     );
   }
 
-  const cloudProvider = findCloudProvider(providerType);
-  if (!cloudProvider) return null;
+  const provider = findProvider(providerName);
 
   return (
     <>
@@ -164,13 +163,13 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         color="muted"
         width="fit"
       />
-      {cloudProvider.costslink && (
-        <LinkButton href={cloudProvider.costslink} target="_blank">
+      {provider.costslink && (
+        <LinkButton href={provider.costslink} target="_blank">
           Pricing
         </LinkButton>
       )}
-      {cloudProvider.docsLink && (
-        <LinkButton href={cloudProvider.docsLink} target="_blank">
+      {provider.docsLink && (
+        <LinkButton href={provider.docsLink} target="_blank">
           Docs
         </LinkButton>
       )}
@@ -271,7 +270,6 @@ function ContextualLlmPicker({
 
 interface ProviderGroupProps {
   provider: EmbeddingProvider;
-  models: EmbeddingModel[];
   currentModelName?: string;
   selectedModelName?: string;
   isCloud?: boolean;
@@ -282,7 +280,6 @@ interface ProviderGroupProps {
 
 function ProviderGroup({
   provider,
-  models,
   currentModelName,
   selectedModelName,
   isCloud = false,
@@ -290,6 +287,7 @@ function ProviderGroup({
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
+  const models = provider.embeddingModels;
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
@@ -490,7 +488,6 @@ function ProviderGroup({
               model={model}
               provider={provider}
               modelState={getModelState(model)}
-              deprecated={provider.deprecated}
               onSelect={() => handleModelSelect(model)}
             />
           ))
@@ -504,7 +501,6 @@ interface EmbeddingModelCardProps {
   provider: EmbeddingProvider;
   model: EmbeddingModel;
   modelState: EmbeddingModelState;
-  deprecated?: boolean;
   onSelect?: () => void;
 }
 
@@ -512,7 +508,6 @@ function EmbeddingModelCard({
   provider,
   model,
   modelState,
-  deprecated,
   onSelect,
 }: EmbeddingModelCardProps) {
   const topRightButton = (() => {
@@ -523,9 +518,9 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
-            disabled={deprecated}
+            disabled={provider.deprecated}
             tooltip={
-              deprecated
+              provider.deprecated
                 ? "This embedding model is deprecated and cannot be selected."
                 : undefined
             }
@@ -538,7 +533,7 @@ function EmbeddingModelCard({
           <Button
             prominence="tertiary"
             onClick={onSelect}
-            disabled={deprecated}
+            disabled={provider.deprecated}
           >
             Select Model
           </Button>
@@ -569,7 +564,7 @@ function EmbeddingModelCard({
   })();
 
   const isClickable =
-    !deprecated &&
+    !provider.deprecated &&
     (modelState === "unconnected" ||
       modelState === "connected" ||
       modelState === "current" ||
@@ -592,7 +587,7 @@ function EmbeddingModelCard({
             variant="section"
           />
           <div className="flex flex-row px-6 pt-2 gap-4">
-            <EmbeddingProviderInfo providerType={provider.providerName} />
+            <EmbeddingProviderInfo providerName={provider.providerName} />
           </div>
         </GeneralLayouts.Section>
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
@@ -650,30 +645,13 @@ export default function IndexSettingsPage() {
 
   const { filteredCloudProviders, filteredSelfHostedProviders } =
     useMemo(() => {
-      const cloudBasedMap = new Map<string, EmbeddingModel[]>();
-      const selfHostedMap = new Map<string, EmbeddingModel[]>();
-
-      for (const provider of filteredProviders) {
-        const isCloud = CLOUD_BASED_PROVIDERS.includes(provider);
-        const map = isCloud ? cloudBasedMap : selfHostedMap;
-        const key = provider.providerName;
-        if (!map.has(key)) map.set(key, []);
-        map.set(key, provider.embeddingModels);
-      }
-
-      const toGroups = (
-        providers: EmbeddingProvider[],
-        map: Map<string, EmbeddingModel[]>
-      ) =>
-        providers
-          .filter((p) => map.has(p.providerName))
-          .map((p) => ({ provider: p, models: map.get(p.providerName)! }));
-
+      const matched = new Set(filteredProviders);
       return {
-        filteredCloudProviders: toGroups(CLOUD_BASED_PROVIDERS, cloudBasedMap),
-        filteredSelfHostedProviders: toGroups(
-          SELF_HOSTED_PROVIDERS,
-          selfHostedMap
+        filteredCloudProviders: CLOUD_BASED_PROVIDERS.filter((p) =>
+          matched.has(p)
+        ),
+        filteredSelfHostedProviders: SELF_HOSTED_PROVIDERS.filter((p) =>
+          matched.has(p)
         ),
       };
     }, [filteredProviders]);
@@ -700,9 +678,18 @@ export default function IndexSettingsPage() {
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
     useCurrentEmbeddingModel();
 
-  const currentCloudProvider = findCloudProvider(
-    currentEmbeddingModel?.provider_type ?? null
-  );
+  const currentProviderName = currentEmbeddingModel
+    ? resolveProviderName(
+        currentEmbeddingModel.model_name,
+        currentEmbeddingModel.provider_type
+      )
+    : null;
+  const currentProvider = currentProviderName
+    ? findProvider(currentProviderName)
+    : null;
+  const isCurrentCloudBased = currentProviderName
+    ? isCloudBased(currentProviderName)
+    : false;
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings();
@@ -768,12 +755,12 @@ export default function IndexSettingsPage() {
 
   return (
     <>
-      {currentCloudProvider && (
+      {currentProvider && isCurrentCloudBased && (
         <editModal.Provider>
           <ProviderCredentialsModal
-            provider={currentCloudProvider}
+            provider={currentProvider}
             existingCredentials={configuredProviders?.get(
-              currentCloudProvider.providerName
+              currentProvider.providerName
             )}
             onSubmit={async () => {
               await mutate(SWR_KEYS.embeddingProviders);
@@ -821,9 +808,7 @@ export default function IndexSettingsPage() {
               // for why this is the single source of truth for provider
               // discrimination.
               const stagedModel =
-                values.custom_model ??
-                getCurrentModelCopy(values.model_name)?.model ??
-                null;
+                values.custom_model ?? findRegistryModel(values.model_name);
               if (!stagedModel) {
                 toast.error("Could not find the selected model");
                 return;
@@ -1066,11 +1051,10 @@ export default function IndexSettingsPage() {
                                         padding={0.5}
                                       >
                                         {filteredCloudProviders.map(
-                                          ({ provider, models }) => (
+                                          (provider) => (
                                             <ProviderGroup
                                               key={provider.providerName}
                                               provider={provider}
-                                              models={models}
                                               currentModelName={
                                                 currentEmbeddingModel?.model_name
                                               }
@@ -1124,14 +1108,10 @@ export default function IndexSettingsPage() {
                                         padding={0.5}
                                       >
                                         {filteredSelfHostedProviders.map(
-                                          ({
-                                            provider: shProvider,
-                                            models,
-                                          }) => (
+                                          (shProvider) => (
                                             <ProviderGroup
                                               key={shProvider.providerName}
                                               provider={shProvider}
-                                              models={models}
                                               currentModelName={
                                                 currentEmbeddingModel?.model_name
                                               }
@@ -1277,26 +1257,22 @@ export default function IndexSettingsPage() {
                                     alignItems="start"
                                   >
                                     <Content
-                                      icon={
-                                        getEmbeddingProvider(
-                                          currentEmbeddingModel.model_name
-                                        ).icon
-                                      }
+                                      icon={currentProvider?.icon ?? SvgServer}
                                       title={currentEmbeddingModel.model_name}
                                       description={
-                                        getCurrentModelCopy(
+                                        findRegistryModel(
                                           currentEmbeddingModel.model_name
-                                        )?.model.description
+                                        )?.description
                                       }
                                       sizePreset="main-ui"
                                       variant="section"
                                     />
                                     <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                                      <EmbeddingProviderInfo
-                                        providerType={
-                                          currentEmbeddingModel.provider_type
-                                        }
-                                      />
+                                      {currentProviderName && (
+                                        <EmbeddingProviderInfo
+                                          providerName={currentProviderName}
+                                        />
+                                      )}
                                     </div>
                                   </GeneralLayouts.Section>
 
@@ -1326,7 +1302,7 @@ export default function IndexSettingsPage() {
                                     >
                                       View All Models
                                     </Button>
-                                    {currentCloudProvider && (
+                                    {isCurrentCloudBased && (
                                       <div className="p-1">
                                         <Button
                                           icon={SvgSettings}

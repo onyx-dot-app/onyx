@@ -9,6 +9,7 @@ import { InputHorizontal, InputVertical } from "@opal/layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import Switch from "@/refresh-components/inputs/Switch";
+import type { EmbeddingProvider } from "@/lib/indexing/interfaces";
 
 // ---------------------------------------------------------------------------
 // Formik-aware field components
@@ -21,18 +22,19 @@ import Switch from "@/refresh-components/inputs/Switch";
 
 interface ApiKeyFieldProps {
   name: string;
-  apiLink: string;
-  providerName: string;
+  provider: EmbeddingProvider;
 }
 
-export function ApiKeyField({ name, apiLink, providerName }: ApiKeyFieldProps) {
+export function ApiKeyField({ name, provider }: ApiKeyFieldProps) {
   const [field] = useField<string>(name);
   return (
     <InputVertical
       title="API Key"
       withLabel={name}
       subDescription={markdown(
-        `Paste your [API key](${apiLink}) from ${providerName} to access your models.`
+        `Paste your [API key](${provider.apiLink ?? ""}) from ${
+          provider.displayName
+        } to access your models.`
       )}
     >
       <PasswordInputTypeIn id={name} {...field} />

@@ -1,4 +1,4 @@
-import { SvgHardDrive, SvgServer } from "@opal/icons";
+import { SvgHardDrive } from "@opal/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -9,7 +9,6 @@ import {
   SvgOpenai,
   SvgVoyage,
 } from "@opal/logos";
-import type { IconFunctionComponent } from "@opal/types";
 import {
   EmbeddingModel,
   EmbeddingProvider,
@@ -231,49 +230,50 @@ export const CUSTOM_PROVIDER: EmbeddingProvider = {
 };
 
 /**
- * Find the {@link EmbeddingProvider} entry matching `providerType`, or
- * `null` if none matches (e.g. self-hosted models).
+ * Total lookup of an {@link EmbeddingProvider} by its `providerName`.
+ * Covers the cloud registry, the self-hosted registry, and the synthetic
+ * `CUSTOM_PROVIDER` — every value of `EmbeddingProviderName` resolves to a
+ * registered entry, so the return type is non-null. The trailing `throw`
+ * is unreachable as long as the enum and registries stay in sync.
  */
-export function findCloudProvider(
-  providerType: EmbeddingProviderName | null
-): EmbeddingProvider | null {
-  if (!providerType) return null;
-  return (
-    CLOUD_BASED_PROVIDERS.find((p) => p.providerName === providerType) ?? null
-  );
+export function findProvider(
+  providerName: EmbeddingProviderName
+): EmbeddingProvider {
+  for (const p of CLOUD_BASED_PROVIDERS) {
+    if (p.providerName === providerName) return p;
+  }
+  for (const p of SELF_HOSTED_PROVIDERS) {
+    if (p.providerName === providerName) return p;
+  }
+  if (providerName === EmbeddingProviderName.CUSTOM) return CUSTOM_PROVIDER;
+  throw new Error(`Unknown embedding provider: ${providerName}`);
 }
 
 /**
- * Returns the icon + displayName of whichever provider (cloud or self-hosted)
- * registers a model with the given name. Backwards-indexes by model name
- * because `provider_type` from the backend can be null for self-hosted models,
- * which would otherwise force a generic fallback.
- *
- * Falls back to a generic self-hosted icon for models that aren't in either
- * registry (e.g. a custom self-hosted model registered out-of-band).
+ * `true` iff the resolved `providerName` corresponds to a cloud-routed
+ * provider — i.e. credentials are managed via API keys, the row should
+ * have an editable creds modal, and the backend should route through a
+ * cloud SDK rather than the local model server. Returns `false` for
+ * self-hosted buckets (`NOMIC`, `MICROSOFT`) and `CUSTOM`.
  */
-export function getEmbeddingProvider(modelName: string): {
-  icon: IconFunctionComponent;
-  displayName: string;
-} {
-  const allProviders = [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS];
-  for (const provider of allProviders) {
-    if (provider.embeddingModels.some((m) => m.modelName === modelName)) {
-      return { icon: provider.icon, displayName: provider.displayName };
-    }
-  }
-  return { icon: SvgServer, displayName: "Self-hosted" };
+export function isCloudBased(providerName: EmbeddingProviderName): boolean {
+  return CLOUD_BASED_PROVIDERS.some((p) => p.providerName === providerName);
 }
 
-export function getCurrentModelCopy(
-  currentModelName: string
-): { model: EmbeddingModel; providerName: EmbeddingProviderName } | null {
-  const allProviders = [...SELF_HOSTED_PROVIDERS, ...CLOUD_BASED_PROVIDERS];
-  for (const provider of allProviders) {
-    const model = provider.embeddingModels.find(
-      (m) => m.modelName === currentModelName
-    );
-    if (model) return { model, providerName: provider.providerName };
+/**
+ * Find an {@link EmbeddingModel} spec by `modelName` across both registries.
+ * Returns `null` for models that aren't pre-registered (e.g. custom
+ * self-hosted models added through the modal — those carry their own spec
+ * in form state and don't need a registry hit).
+ */
+export function findRegistryModel(modelName: string): EmbeddingModel | null {
+  for (const p of CLOUD_BASED_PROVIDERS) {
+    const m = p.embeddingModels.find((m) => m.modelName === modelName);
+    if (m) return m;
+  }
+  for (const p of SELF_HOSTED_PROVIDERS) {
+    const m = p.embeddingModels.find((m) => m.modelName === modelName);
+    if (m) return m;
   }
   return null;
 }

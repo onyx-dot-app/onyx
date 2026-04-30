@@ -6,7 +6,7 @@ import {
   EmbeddingProviderName,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
-import { findCloudProvider } from "@/lib/indexing";
+import { isCloudBased } from "@/lib/indexing";
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -151,7 +151,7 @@ export async function setNewSearchSettings({
   // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
   // under the frontend's EmbeddingProviderName for UI grouping (icon,
   // docs link), but the backend expects provider_type=null for them.
-  const providerType = findCloudProvider(providerName) ? providerName : null;
+  const providerType = isCloudBased(providerName) ? providerName : null;
 
   return await fetch("/api/search-settings/set-new-search-settings", {
     method: "POST",

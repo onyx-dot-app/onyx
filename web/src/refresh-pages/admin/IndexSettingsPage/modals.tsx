@@ -161,11 +161,7 @@ export function StandardProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
-        <ApiKeyField
-          name="apiKey"
-          apiLink={provider.apiLink ?? ""}
-          providerName={provider.displayName}
-        />
+        <ApiKeyField name="apiKey" provider={provider} />
       </ModalShell>
     </Formik>
   );
@@ -273,11 +269,7 @@ export function AzureProviderModal({
           title="Target URL"
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
-        <ApiKeyField
-          name="apiKey"
-          apiLink={provider.apiLink ?? ""}
-          providerName={provider.displayName}
-        />
+        <ApiKeyField name="apiKey" provider={provider} />
       </ModalShell>
     </Formik>
   );
@@ -353,11 +345,7 @@ export function LiteLLMProviderModal({
           subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
         />
 
-        <ApiKeyField
-          name="apiKey"
-          apiLink={provider.apiLink ?? ""}
-          providerName={provider.displayName}
-        />
+        <ApiKeyField name="apiKey" provider={provider} />
 
         <TextField
           name="modelName"
