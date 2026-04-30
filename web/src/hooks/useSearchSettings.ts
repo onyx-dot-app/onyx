@@ -6,7 +6,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   ConfiguredEmbeddingProvider,
   EmbeddingModelResponse,
-  EmbeddingProviderName,
   LLMContextualCost,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
@@ -71,16 +70,16 @@ export function useLLMContextualCosts() {
 
 /**
  * Fetches cloud embedding providers that have credentials configured in the
- * backend. Returns a Map keyed by provider type so callers can both check
- * existence and access stored credentials (api_key is masked by the backend).
+ * backend.
+ *
+ * The fetcher intentionally returns a plain array (and not a `Map`) — SWR's
+ * internal hash comparison doesn't reliably detect changes between two `Map`
+ * instances, so callers got a stale view after `mutate`. Build a lookup `Map`
+ * client-side via `useMemo` if needed.
  */
 export function useConfiguredEmbeddingProviders() {
-  return useSWR<Map<EmbeddingProviderName, ConfiguredEmbeddingProvider>>(
+  return useSWR<ConfiguredEmbeddingProvider[]>(
     SWR_KEYS.embeddingProviders,
-    async (url: string) => {
-      const providers: ConfiguredEmbeddingProvider[] =
-        await errorHandlingFetcher(url);
-      return new Map(providers.map((p) => [p.provider_type, p]));
-    }
+    errorHandlingFetcher
   );
 }

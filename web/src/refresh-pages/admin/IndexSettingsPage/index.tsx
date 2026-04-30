@@ -723,7 +723,12 @@ export default function IndexSettingsPage() {
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings();
-  const { data: configuredProviders } = useConfiguredEmbeddingProviders();
+  const { data: configuredProvidersList } = useConfiguredEmbeddingProviders();
+  const configuredProviders = useMemo(
+    () =>
+      new Map((configuredProvidersList ?? []).map((p) => [p.provider_type, p])),
+    [configuredProvidersList]
+  );
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
