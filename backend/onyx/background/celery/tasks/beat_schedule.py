@@ -9,6 +9,7 @@ from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
@@ -175,7 +176,9 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-if _LICENSE_ENFORCEMENT_ENABLED:
+# Mirror set_is_ee_based_on_env_variable(): EE features are active when either
+# ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
+if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
     beat_task_templates.extend(
         [
             {
