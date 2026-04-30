@@ -1,4 +1,4 @@
-import { SvgCpu } from "@opal/icons";
+import { SvgServer } from "@opal/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -229,23 +229,26 @@ export function findCloudProvider(
   );
 }
 
-export function getEmbeddingProvider(
-  providerType: EmbeddingProviderName | null
-): {
+/**
+ * Returns the icon + displayName of whichever provider (cloud or self-hosted)
+ * registers a model with the given name. Backwards-indexes by model name
+ * because `provider_type` from the backend can be null for self-hosted models,
+ * which would otherwise force a generic fallback.
+ *
+ * Falls back to a generic self-hosted icon for models that aren't in either
+ * registry (e.g. a custom self-hosted model registered out-of-band).
+ */
+export function getEmbeddingProvider(modelName: string): {
   icon: IconFunctionComponent;
   displayName: string;
 } {
-  if (!providerType) return { icon: SvgNomic, displayName: "Self-hosted" };
-
-  const embeddingProvider = findCloudProvider(providerType);
-  if (!embeddingProvider) {
-    return { icon: SvgCpu, displayName: "Self-hosted" };
+  const allProviders = [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS];
+  for (const provider of allProviders) {
+    if (provider.embeddingModels.some((m) => m.modelName === modelName)) {
+      return { icon: provider.icon, displayName: provider.displayName };
+    }
   }
-
-  return {
-    icon: embeddingProvider.icon,
-    displayName: embeddingProvider.displayName,
-  };
+  return { icon: SvgServer, displayName: "Self-hosted" };
 }
 
 export function getCurrentModelCopy(

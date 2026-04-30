@@ -3,8 +3,10 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModel,
   EmbeddingPrecision,
+  EmbeddingProviderName,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
+import { findCloudProvider } from "@/lib/indexing";
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -137,9 +139,15 @@ export async function cancelNewEmbedding(): Promise<Response> {
 
 export async function setNewSearchSettings(
   model: EmbeddingModel,
-  providerName: string,
+  providerName: EmbeddingProviderName,
   switchoverType: SwitchoverType
 ): Promise<Response> {
+  // The backend's EmbeddingProvider enum only contains cloud providers
+  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
+  // under the frontend's EmbeddingProviderName for UI grouping (icon,
+  // docs link), but the backend expects provider_type=null for them.
+  const providerType = findCloudProvider(providerName) ? providerName : null;
+
   return await fetch("/api/search-settings/set-new-search-settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -149,7 +157,7 @@ export async function setNewSearchSettings(
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,
-      provider_type: providerName,
+      provider_type: providerType,
       api_key: null,
       api_url: null,
       index_name: null,

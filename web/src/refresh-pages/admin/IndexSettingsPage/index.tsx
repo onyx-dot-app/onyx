@@ -26,6 +26,7 @@ import {
   SvgClock,
   SvgCloud,
   SvgEmpty,
+  SvgExternalLink,
   SvgFold,
   SvgNoImage,
   SvgPlusCircle,
@@ -428,6 +429,11 @@ function EmbeddingModelCard({
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
             disabled={deprecated}
+            tooltip={
+              deprecated
+                ? "This embedding model is deprecated and cannot be selected."
+                : undefined
+            }
           >
             Connect
           </Button>
@@ -715,10 +721,10 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel re-indexing"
+          title="Cancel Re-indexing"
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
-              Confirm cancel
+              Cancel
             </Button>
           }
         >
@@ -747,15 +753,22 @@ export default function IndexSettingsPage() {
                 `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
               )}
               bottomChildren={
-                <div className="flex flex-row justify-end gap-2 p-2">
+                <GeneralLayouts.Section
+                  flexDirection="row"
+                  gap={0.5}
+                  justifyContent="end"
+                >
+                  <Button icon={SvgExternalLink} href="/admin/indexing/status">
+                    See Connectors
+                  </Button>
                   <Button
                     variant="danger"
                     prominence="secondary"
                     onClick={() => cancelReindexModal.toggle(true)}
                   >
-                    Cancel re-indexing
+                    Cancel Re-indexing
                   </Button>
-                </div>
+                </GeneralLayouts.Section>
               }
             />
           )}
@@ -1017,7 +1030,7 @@ export default function IndexSettingsPage() {
                             <Content
                               icon={
                                 getEmbeddingProvider(
-                                  currentEmbeddingModel.provider_type
+                                  currentEmbeddingModel.model_name
                                 ).icon
                               }
                               title={currentEmbeddingModel.model_name}
