@@ -40,6 +40,7 @@ import {
   SvgVector,
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
@@ -181,29 +182,36 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
 // Contextual RAG LLM picker
 // ---------------------------------------------------------------------------
 
-interface ContextualLlmPickerProps {
+interface LlmPickerProps {
   modelName: string | null;
   providerName: string | null;
   onChange: (next: { modelName: string; providerName: string }) => void;
   disabled?: boolean;
+  /**
+   * When true, restricts the popover to vision-capable models (those with
+   * `supports_image_input === true`). Used by the Captioning LLM picker;
+   * leave unset for any-model use cases like Contextual Retrieval.
+   */
+  requiresImageInput?: boolean;
 }
 
 /**
- * Single-select LLM picker bound to external state (the Formik form), unlike
- * `LLMPopover` which is wired to `LlmManager.currentLlm` and would mutate the
- * user's default chat model on select. Reuses the same popover primitives
+ * Single-select LLM picker bound to external state, unlike `LLMPopover`
+ * which is wired to `LlmManager.currentLlm` and would mutate the user's
+ * default chat model on select. Reuses the same popover primitives
  * (`Popover`, `OpenButton`, `ModelListContent`) for visual parity.
  *
  * Emits `providerName = LLMOption.name` (the LLM provider's instance name like
  * "OpenAI"), which is what the backend's `validate_contextual_rag_model` looks
  * up via `fetch_existing_llm_provider(name=...)`.
  */
-function ContextualLlmPicker({
+function LlmPicker({
   modelName,
   providerName,
   onChange,
   disabled,
-}: ContextualLlmPickerProps) {
+  requiresImageInput,
+}: LlmPickerProps) {
   const [open, setOpen] = useState(false);
   const { llmProviders, isLoading } = useLlmDefaults();
 
@@ -258,6 +266,7 @@ function ContextualLlmPicker({
           isLoading={isLoading}
           onSelect={handleSelect}
           isSelected={isSelected}
+          requiresImageInput={requiresImageInput}
         />
       </Popover.Content>
     </Popover>
@@ -700,29 +709,75 @@ export default function IndexSettingsPage() {
   const customModelModal = useCreateModal();
 
   const {
+    llmProviders,
     hasAnyLlm,
+    hasAnyVisionLlm,
     defaultLlm,
+    defaultVision,
     isLoading: isLoadingLlmProviders,
   } = useLlmDefaults();
 
-  const initialFormValues: IndexSettingsFormValues = useMemo(() => {
-    const enableContextualRag = searchSettings?.enable_contextual_rag ?? false;
-    return {
+  /**
+   * Persist a new default vision model. Onyx routes all image-captioning
+   * calls through `get_default_llm_with_vision()` (`backend/onyx/llm/factory.py`),
+   * which reads `default_vision` — so writing here switches the model the
+   * indexer uses for new captions. Existing captions stay baked into the
+   * embeddings of already-indexed documents.
+   */
+  const handleCaptioningModelChange = useCallback(
+    async ({
+      modelName,
+      providerName,
+    }: {
+      modelName: string;
+      providerName: string;
+    }) => {
+      const provider = llmProviders?.find((p) => p.name === providerName);
+      if (!provider) {
+        toast.error("Could not resolve provider");
+        return;
+      }
+      try {
+        const response = await fetch("/api/admin/llm/default-vision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider_id: provider.id,
+            model_name: modelName,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(
+            (await response.json()).detail ?? "Failed to update captioning LLM"
+          );
+        }
+        await mutate(SWR_KEYS.llmProviders);
+        toast.success("Captioning LLM updated");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "An unknown error occurred"
+        );
+      }
+    },
+    [llmProviders]
+  );
+
+  const initialFormValues: IndexSettingsFormValues = useMemo(
+    () => ({
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
-      enable_contextual_rag: enableContextualRag,
-      contextual_rag_llm_name: enableContextualRag
-        ? searchSettings?.contextual_rag_llm_name ??
-          defaultLlm?.modelName ??
-          null
-        : null,
-      contextual_rag_llm_provider: enableContextualRag
-        ? searchSettings?.contextual_rag_llm_provider ??
-          defaultLlm?.providerName ??
-          null
-        : null,
-    };
-  }, [currentEmbeddingModel, searchSettings, defaultLlm]);
+      enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
+      contextual_rag_llm_name:
+        searchSettings?.contextual_rag_llm_name ??
+        defaultLlm?.modelName ??
+        null,
+      contextual_rag_llm_provider:
+        searchSettings?.contextual_rag_llm_provider ??
+        defaultLlm?.providerName ??
+        null,
+    }),
+    [currentEmbeddingModel, searchSettings, defaultLlm]
+  );
 
   const handleCancelReindex = useCallback(async () => {
     const response = await cancelNewEmbedding();
@@ -827,8 +882,12 @@ export default function IndexSettingsPage() {
                 providerName,
                 switchoverType: switchoverType as SwitchoverType,
                 enableContextualRag: values.enable_contextual_rag,
-                contextualRagLlmName: values.contextual_rag_llm_name,
-                contextualRagLlmProvider: values.contextual_rag_llm_provider,
+                contextualRagLlmName: values.enable_contextual_rag
+                  ? values.contextual_rag_llm_name
+                  : null,
+                contextualRagLlmProvider: values.enable_contextual_rag
+                  ? values.contextual_rag_llm_provider
+                  : null,
               });
 
               if (!response.ok) {
@@ -1385,25 +1444,7 @@ export default function IndexSettingsPage() {
                             description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
                             withLabel
                           >
-                            <Switch
-                              checked={values.enable_contextual_rag}
-                              onCheckedChange={(checked) => {
-                                void setFieldValue(
-                                  "enable_contextual_rag",
-                                  checked
-                                );
-                                void setFieldValue(
-                                  "contextual_rag_llm_name",
-                                  checked ? defaultLlm?.modelName ?? null : null
-                                );
-                                void setFieldValue(
-                                  "contextual_rag_llm_provider",
-                                  checked
-                                    ? defaultLlm?.providerName ?? null
-                                    : null
-                                );
-                              }}
-                            />
+                            <SwitchField name="enable_contextual_rag" />
                           </InputHorizontal>
 
                           <Disabled
@@ -1416,7 +1457,7 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <ContextualLlmPicker
+                              <LlmPicker
                                 modelName={values.contextual_rag_llm_name}
                                 providerName={
                                   values.contextual_rag_llm_provider
@@ -1456,12 +1497,21 @@ export default function IndexSettingsPage() {
                       variant="section"
                     />
 
-                    <CloudDisabled>
+                    <CloudDisabled
+                      disabled={!hasAnyVisionLlm}
+                      tooltip={
+                        !hasAnyVisionLlm
+                          ? markdown(
+                              "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](/admin/configuration/language-models) first."
+                            )
+                          : undefined
+                      }
+                    >
                       <Card border="solid" rounding="lg">
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
                             title="Extract & Caption Images"
-                            description="Extract images during document indexing and generate searchable descriptions."
+                            description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
                             withLabel
                           >
                             <Switch
@@ -1475,26 +1525,32 @@ export default function IndexSettingsPage() {
                             />
                           </InputHorizontal>
 
-                          <Disabled disabled={!imageProcessingEnabled}>
+                          <Disabled
+                            disabled={!imageProcessingEnabled}
+                            tooltip="Enable Extract & Caption Images to configure this."
+                          >
                             <InputHorizontal
                               title="Captioning LLM"
-                              description="This model will be used to analyze images during indexing."
+                              description="This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings."
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
-                              {/* TODO(@raunakab): wire up */}
-                              <InputSelect
-                                value=""
-                                onValueChange={() => {}}
+                              <LlmPicker
+                                modelName={defaultVision?.modelName ?? null}
+                                providerName={
+                                  defaultVision?.providerName ?? null
+                                }
                                 disabled={!imageProcessingEnabled}
-                              >
-                                <InputSelect.Trigger placeholder="Select a model" />
-                                <InputSelect.Content />
-                              </InputSelect>
+                                onChange={handleCaptioningModelChange}
+                                requiresImageInput
+                              />
                             </InputHorizontal>
                           </Disabled>
 
-                          <Disabled disabled={!imageProcessingEnabled}>
+                          <Disabled
+                            disabled={!imageProcessingEnabled}
+                            tooltip="Enable Extract & Caption Images to configure this."
+                          >
                             <InputHorizontal
                               title="Max Image Size for Analysis"
                               suffix="(MB)"

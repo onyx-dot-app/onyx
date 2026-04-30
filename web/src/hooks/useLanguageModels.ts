@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -186,6 +186,8 @@ export interface LlmDefaults {
   llmProviders: LLMProviderDescriptor[] | undefined;
   /** True iff any provider exposes at least one visible model. */
   hasAnyLlm: boolean;
+  /** True iff any provider exposes a visible model with `supports_image_input`. */
+  hasAnyVisionLlm: boolean;
   /**
    * The admin-configured default text model, resolved to the form-friendly
    * `{ providerName, modelName }` shape. The backend stores
@@ -195,6 +197,13 @@ export interface LlmDefaults {
    * up via `fetch_existing_llm_provider(name=...)`.
    */
   defaultLlm: DefaultLlmReference | null;
+  /**
+   * The admin-configured default *vision* model, resolved to the same
+   * `{ providerName, modelName }` shape as `defaultLlm`. Mirrors the
+   * resolution path of `defaultLlm` but for `default_vision`. Used by
+   * indexing-time captioning and any other vision-only feature.
+   */
+  defaultVision: DefaultLlmReference | null;
   isLoading: boolean;
 }
 
@@ -205,7 +214,8 @@ export interface LlmDefaults {
  *     made an explicit choice.
  */
 export function useLlmDefaults(): LlmDefaults {
-  const { llmProviders, defaultText, isLoading } = useLLMProviders();
+  const { llmProviders, defaultText, defaultVision, isLoading } =
+    useLLMProviders();
 
   const hasAnyLlm = useMemo(
     () =>
@@ -215,12 +225,41 @@ export function useLlmDefaults(): LlmDefaults {
     [llmProviders]
   );
 
-  const defaultLlm = useMemo<DefaultLlmReference | null>(() => {
-    if (!llmProviders || !defaultText) return null;
-    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
-    if (!provider) return null;
-    return { providerName: provider.name, modelName: defaultText.model_name };
-  }, [llmProviders, defaultText]);
+  const hasAnyVisionLlm = useMemo(
+    () =>
+      (llmProviders ?? []).some((p) =>
+        p.model_configurations.some(
+          (m) => m.is_visible && m.supports_image_input
+        )
+      ),
+    [llmProviders]
+  );
 
-  return { llmProviders, hasAnyLlm, defaultLlm, isLoading };
+  const resolveDefault = useCallback(
+    (raw: { provider_id: number; model_name: string } | null) => {
+      if (!llmProviders || !raw) return null;
+      const provider = llmProviders.find((p) => p.id === raw.provider_id);
+      if (!provider) return null;
+      return { providerName: provider.name, modelName: raw.model_name };
+    },
+    [llmProviders]
+  );
+
+  const defaultLlm = useMemo<DefaultLlmReference | null>(
+    () => resolveDefault(defaultText),
+    [resolveDefault, defaultText]
+  );
+  const defaultVisionResolved = useMemo<DefaultLlmReference | null>(
+    () => resolveDefault(defaultVision),
+    [resolveDefault, defaultVision]
+  );
+
+  return {
+    llmProviders,
+    hasAnyLlm,
+    hasAnyVisionLlm,
+    defaultLlm,
+    defaultVision: defaultVisionResolved,
+    isLoading,
+  };
 }
