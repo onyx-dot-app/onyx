@@ -27,6 +27,7 @@ from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
 from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
 from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
 from onyx.prompts.compression_prompts import USER_REMINDER
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
@@ -314,7 +315,7 @@ def generate_summary(
 
     with llm_generation_span(
         llm=llm,
-        flow="chat_history_summarization",
+        flow=LLMFlow.CHAT_HISTORY_SUMMARIZATION,
         input_messages=input_messages,
     ) as span_generation:
         response = llm.invoke(input_messages)
