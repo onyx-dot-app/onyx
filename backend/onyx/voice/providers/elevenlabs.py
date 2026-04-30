@@ -20,6 +20,8 @@ from typing import Any
 
 import aiohttp
 
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
@@ -692,17 +694,26 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             f"ElevenLabs transcribe: sending {len(audio_data)} bytes, format={audio_format}"
         )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data=form_data) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"ElevenLabs transcribe failed: {error_text}")
-                    raise RuntimeError(f"ElevenLabs transcription failed: {error_text}")
+        with traced_llm_call(
+            flow=LLMFlow.STT,
+            model=batch_model,
+            provider="elevenlabs",
+        ):
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, headers=headers, data=form_data
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"ElevenLabs transcribe failed: {error_text}")
+                        raise RuntimeError(
+                            f"ElevenLabs transcription failed: {error_text}"
+                        )
 
-                result = await response.json()
-                text = result.get("text", "")
-                logger.info(f"ElevenLabs transcribe: got result: {text[:50]}...")
-                return text
+                    result = await response.json()
+                    text = result.get("text", "")
+                    logger.info(f"ElevenLabs transcribe: got result: {text[:50]}...")
+                    return text
 
     async def synthesize_stream(
         self, text: str, voice: str | None = None, speed: float = 1.0
@@ -749,27 +760,33 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             },
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as response:
-                logger.info(
-                    f"ElevenLabs TTS: got response status={response.status}, content-type={response.headers.get('content-type')}"
-                )
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"ElevenLabs TTS failed: {error_text}")
-                    raise RuntimeError(f"ElevenLabs TTS failed: {error_text}")
+        with traced_llm_call(
+            flow=LLMFlow.TTS,
+            model=self.tts_model,
+            provider="elevenlabs",
+            input_messages=[{"role": "user", "content": text}],
+        ):
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    logger.info(
+                        f"ElevenLabs TTS: got response status={response.status}, content-type={response.headers.get('content-type')}"
+                    )
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"ElevenLabs TTS failed: {error_text}")
+                        raise RuntimeError(f"ElevenLabs TTS failed: {error_text}")
 
-                # Use 8192 byte chunks for smoother streaming
-                chunk_count = 0
-                total_bytes = 0
-                async for chunk in response.content.iter_chunked(8192):
-                    if chunk:
-                        chunk_count += 1
-                        total_bytes += len(chunk)
-                        yield chunk
-                logger.info(
-                    f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, {total_bytes} total bytes"
-                )
+                    # Use 8192 byte chunks for smoother streaming
+                    chunk_count = 0
+                    total_bytes = 0
+                    async for chunk in response.content.iter_chunked(8192):
+                        if chunk:
+                            chunk_count += 1
+                            total_bytes += len(chunk)
+                            yield chunk
+                    logger.info(
+                        f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, {total_bytes} total bytes"
+                    )
 
     async def validate_credentials(self) -> None:
         """Validate ElevenLabs API key.

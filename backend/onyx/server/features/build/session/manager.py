@@ -85,6 +85,7 @@ from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
@@ -858,7 +859,7 @@ class SessionManager:
             ):
                 with llm_generation_span(
                     llm=llm,
-                    flow="build_session_naming",
+                    flow=LLMFlow.BUILD_SESSION_NAMING,
                     input_messages=prompt_messages,
                 ) as span_generation:
                     response = llm.invoke(
@@ -914,7 +915,7 @@ class SessionManager:
             with ensure_trace("build_followup_suggestions"):
                 with llm_generation_span(
                     llm=llm,
-                    flow="build_followup_suggestions",
+                    flow=LLMFlow.BUILD_FOLLOWUP_SUGGESTIONS,
                     input_messages=prompt_messages,
                 ) as span_generation:
                     response = llm.invoke(

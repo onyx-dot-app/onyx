@@ -53,6 +53,7 @@ from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallKickoff
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
@@ -1032,6 +1033,7 @@ def run_llm_step_pkt_generator(
         model_config={
             "base_url": str(llm.config.api_base or ""),
             "model_impl": "litellm",
+            "flow": LLMFlow.CHAT_RESPONSE.value,
         },
     ) as span_generation:
         span_generation.span_data.input = cast(

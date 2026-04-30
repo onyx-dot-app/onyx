@@ -4,6 +4,7 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import UserMessage
 from onyx.prompts.basic_memory import FULL_MEMORY_UPDATE_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -118,7 +119,7 @@ def process_memory_update(
     try:
         prompt_msg = UserMessage(content=prompt)
         with llm_generation_span(
-            llm=llm, flow="memory_update", input_messages=[prompt_msg]
+            llm=llm, flow=LLMFlow.MEMORY_UPDATE, input_messages=[prompt_msg]
         ) as span_generation:
             response = llm.invoke(
                 prompt=prompt_msg, reasoning_effort=ReasoningEffort.OFF

@@ -12,6 +12,8 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.interfaces import ReferenceImage
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 
 if TYPE_CHECKING:
     from onyx.image_gen.interfaces import ImageGenerationResponse
@@ -84,17 +86,23 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
 
         from litellm import image_generation
 
-        return image_generation(
-            prompt=prompt,
+        with traced_llm_call(
+            flow=LLMFlow.IMAGE_GENERATION,
             model=model,
-            size=size,
-            n=n,
-            quality=quality,
-            vertex_location=self._vertex_location,
-            vertex_credentials=self._vertex_credentials,
-            vertex_project=self._vertex_project,
-            **kwargs,
-        )
+            provider="vertex_ai",
+            input_messages=[{"role": "user", "content": prompt}],
+        ):
+            return image_generation(
+                prompt=prompt,
+                model=model,
+                size=size,
+                n=n,
+                quality=quality,
+                vertex_location=self._vertex_location,
+                vertex_credentials=self._vertex_credentials,
+                vertex_project=self._vertex_project,
+                **kwargs,
+            )
 
     def _generate_image_with_reference_images(
         self,
@@ -137,14 +145,20 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             ),
         )
         model_name = model.replace("vertex_ai/", "")
-        response = client.models.generate_content(
+        with traced_llm_call(
+            flow=LLMFlow.IMAGE_EDIT,
             model=model_name,
-            contents=genai_types.Content(
-                role="user",
-                parts=parts,
-            ),
-            config=config,
-        )
+            provider="vertex_ai",
+            input_messages=[{"role": "user", "content": prompt}],
+        ):
+            response = client.models.generate_content(
+                model=model_name,
+                contents=genai_types.Content(
+                    role="user",
+                    parts=parts,
+                ),
+                config=config,
+            )
 
         generated_data: list[ImageObject] = []
         for candidate in response.candidates or []:
