@@ -302,7 +302,7 @@ const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
     .trim()
     .required("API base URL is required")
     .url("Must be a valid URL"),
-  apiKey: Yup.string().defined().default(""),
+  apiKey: Yup.string().trim().required("API key is required"),
   modelName: Yup.string().trim().required("Model name is required"),
   modelDim: Yup.string()
     .required("Model dimension is required")
