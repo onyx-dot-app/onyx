@@ -120,13 +120,6 @@ export async function saveAdminSettings(settings: Settings) {
 }
 
 /**
- * Marks a model as the FUTURE embedding model. Does NOT start re-indexing —
- * that is a separate, explicit action.
- *
- * Accepts a frontend {@link EmbeddingModel} and constructs the API payload
- * explicitly — no frontend-only fields leak to the backend.
- */
-/**
  * Cancels an in-flight embedding-model switchover. Marks the FUTURE search
  * settings row as PAST, expires its index attempts, and drops the secondary
  * vector index.
@@ -137,11 +130,23 @@ export async function cancelNewEmbedding(): Promise<Response> {
   });
 }
 
-export async function setNewSearchSettings(
-  model: EmbeddingModel,
-  providerName: EmbeddingProviderName,
-  switchoverType: SwitchoverType
-): Promise<Response> {
+interface SetNewSearchSettingsArgs {
+  model: EmbeddingModel;
+  providerName: EmbeddingProviderName;
+  switchoverType: SwitchoverType;
+  enableContextualRag: boolean;
+  contextualRagLlmName: string | null;
+  contextualRagLlmProvider: string | null;
+}
+
+export async function setNewSearchSettings({
+  model,
+  providerName,
+  switchoverType,
+  enableContextualRag,
+  contextualRagLlmName,
+  contextualRagLlmProvider,
+}: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
   // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
   // under the frontend's EmbeddingProviderName for UI grouping (icon,
@@ -163,7 +168,9 @@ export async function setNewSearchSettings(
       index_name: null,
       multipass_indexing: false,
       embedding_precision: EmbeddingPrecision.FLOAT,
-      enable_contextual_rag: false,
+      enable_contextual_rag: enableContextualRag,
+      contextual_rag_llm_name: contextualRagLlmName,
+      contextual_rag_llm_provider: contextualRagLlmProvider,
       switchover_type: switchoverType,
     }),
   });

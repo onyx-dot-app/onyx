@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -50,7 +51,6 @@ import {
   type EmbeddingModel,
   type EmbeddingModelState,
   type EmbeddingProvider,
-  type SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
 import {
   CLOUD_BASED_PROVIDERS,
@@ -506,15 +506,19 @@ function EmbeddingModelCard({
   );
 }
 
+interface IndexSettingsFormValues {
+  model_name: string;
+  enable_contextual_rag: boolean;
+  contextual_rag_llm_name: string | null;
+  contextual_rag_llm_provider: string | null;
+}
+
 export default function IndexSettingsPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
-  const [selectedModelName, setSelectedModelName] = useState<string | null>(
-    null
-  );
   const [switchoverType, setSwitchoverType] = useState<
     SwitchoverType | typeof SWITCHOVER_NONE
   >(SWITCHOVER_NONE);
@@ -587,48 +591,6 @@ export default function IndexSettingsPage() {
     [settings.settings, router]
   );
 
-  const handleApply = useCallback(async () => {
-    if (!selectedModelName) return;
-
-    const result = getCurrentModelCopy(selectedModelName);
-    if (!result) {
-      toast.error("Could not find the selected model");
-      return;
-    }
-
-    if (switchoverType === SWITCHOVER_NONE) {
-      toast.success("Settings applied");
-      setSelectedModelName(null);
-      setSwitchoverType(SWITCHOVER_NONE);
-      return;
-    }
-
-    const response = await setNewSearchSettings(
-      result.model,
-      result.providerName,
-      switchoverType as SwitchoverType
-    );
-
-    if (!response.ok) {
-      toast.error("Failed to apply settings");
-      return;
-    }
-
-    toast.success("Re-indexing started");
-    setSelectedModelName(null);
-    setSwitchoverType(SWITCHOVER_NONE);
-    await Promise.all([
-      mutate(SWR_KEYS.currentSearchSettings),
-      mutate("/api/search-settings/get-secondary-search-settings"),
-    ]);
-  }, [selectedModelName, switchoverType]);
-
-  const statusVariant = selectedModelName
-    ? switchoverType === SWITCHOVER_NONE
-      ? "info"
-      : "warning"
-    : undefined;
-
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
 
@@ -647,6 +609,17 @@ export default function IndexSettingsPage() {
   const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
 
+  const initialFormValues: IndexSettingsFormValues = useMemo(
+    () => ({
+      model_name: currentEmbeddingModel?.model_name ?? "",
+      enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
+      contextual_rag_llm_name: searchSettings?.contextual_rag_llm_name ?? null,
+      contextual_rag_llm_provider:
+        searchSettings?.contextual_rag_llm_provider ?? null,
+    }),
+    [currentEmbeddingModel, searchSettings]
+  );
+
   const handleCancelReindex = useCallback(async () => {
     const response = await cancelNewEmbedding();
     if (!response.ok) {
@@ -660,34 +633,6 @@ export default function IndexSettingsPage() {
       mutate(SWR_KEYS.indexingStatus),
     ]);
   }, [cancelReindexModal]);
-
-  const saveSearchSettings = useCallback(
-    async (updates: Partial<SavedSearchSettings>) => {
-      if (!searchSettings) return;
-
-      try {
-        const response = await fetch(
-          "/api/search-settings/update-inference-settings",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...searchSettings, ...updates }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
-        }
-
-        await mutate(SWR_KEYS.currentSearchSettings);
-        toast.success("Search settings updated");
-      } catch {
-        toast.error("Failed to update search settings");
-      }
-    },
-    [searchSettings]
-  );
 
   if (isLoadingCurrentModel || isLoadingSearchSettings) {
     return (
@@ -721,7 +666,7 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel Re-indexing"
+          title="Cancel Re-index"
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
               Cancel
@@ -744,548 +689,658 @@ export default function IndexSettingsPage() {
         />
 
         <SettingsLayouts.Body>
-          {isReindexing && (
-            <MessageCard
-              variant="warning"
-              headerPadding="sm"
-              title="Re-indexing in progress"
-              description={markdown(
-                `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
-              )}
-              bottomChildren={
-                <GeneralLayouts.Section
-                  flexDirection="row"
-                  gap={0.5}
-                  justifyContent="end"
-                >
-                  <Button icon={SvgExternalLink} href="/admin/indexing/status">
-                    See Connectors
-                  </Button>
-                  <Button
-                    variant="danger"
-                    prominence="secondary"
-                    onClick={() => cancelReindexModal.toggle(true)}
-                  >
-                    Cancel Re-indexing
-                  </Button>
-                </GeneralLayouts.Section>
+          <Formik<IndexSettingsFormValues>
+            enableReinitialize
+            initialValues={initialFormValues}
+            onSubmit={async (values, { resetForm }) => {
+              const result = getCurrentModelCopy(values.model_name);
+              if (!result) {
+                toast.error("Could not find the selected model");
+                return;
               }
-            />
-          )}
-          {!isReindexing && !NEXT_PUBLIC_CLOUD_ENABLED && (
-            <MessageCard
-              variant={statusVariant}
-              headerPadding="sm"
-              title={
-                statusVariant === "info"
-                  ? "Changes apply to newly indexed content only."
-                  : "Changes require a full re-index."
-              }
-              description={markdown(
-                statusVariant === "info"
-                  ? "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\nRe-indexing may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\nYou can monitor the re-indexing progress on this page."
-                  : statusVariant === "warning"
-                    ? "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\nYou can monitor the re-indexing progress on this page."
-                    : "Modifying embedding settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
-              )}
-              bottomChildren={
-                selectedModelName ? (
-                  <div className="flex flex-row items-end gap-4 p-2">
-                    <div className="flex-1 min-w-0">
-                      <InputSelect
-                        value={switchoverType}
-                        onValueChange={(v) =>
-                          setSwitchoverType(
-                            v as SwitchoverType | typeof SWITCHOVER_NONE
-                          )
-                        }
-                      >
-                        <InputSelect.Trigger placeholder="Select a switchover strategy" />
-                        <InputSelect.Content>
-                          <InputSelect.Item
-                            value={SWITCHOVER_NONE}
-                            icon={SvgNoImage}
-                            wrapDescription
-                            description="Safe option. Only apply changes to newly indexed content."
-                          >
-                            Do Not Re-index
-                          </InputSelect.Item>
-                          <Divider title="Re-index Options" />
-                          <InputSelect.Item
-                            value={SwitchoverType.REINDEX}
-                            icon={SvgClock}
-                            wrapDescription
-                            description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
-                          >
-                            Re-index All Connectors Then Switch
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={SwitchoverType.ACTIVE_ONLY}
-                            icon={SvgSlowTime}
-                            wrapDescription
-                            description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
-                          >
-                            Re-index Active Connectors Then Switch
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={SwitchoverType.INSTANT}
-                            icon={SvgEmpty}
-                            wrapDescription
-                            description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
-                          >
-                            Switch Before Re-index
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </div>
-                    <div className="flex flex-row gap-2 shrink-0">
-                      <Button
-                        prominence="secondary"
-                        onClick={() => {
-                          setSelectedModelName(null);
-                          setSwitchoverType(SWITCHOVER_NONE);
-                        }}
-                      >
-                        Revert
-                      </Button>
-                      <Button onClick={handleApply}>
-                        {switchoverType === SWITCHOVER_NONE
-                          ? "Apply without Re-index"
-                          : "Apply & Re-index"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : undefined
-              }
-            />
-          )}
 
-          {/* ── Embedding Model ── */}
-          <GeneralLayouts.Section
-            gap={0.75}
-            height="fit"
-            alignItems="stretch"
-            justifyContent="start"
+              if (switchoverType === SWITCHOVER_NONE) {
+                toast.success("Settings applied");
+                resetForm({ values });
+                setSwitchoverType(SWITCHOVER_NONE);
+                return;
+              }
+
+              const response = await setNewSearchSettings({
+                model: result.model,
+                providerName: result.providerName,
+                switchoverType: switchoverType as SwitchoverType,
+                enableContextualRag: values.enable_contextual_rag,
+                contextualRagLlmName: values.contextual_rag_llm_name,
+                contextualRagLlmProvider: values.contextual_rag_llm_provider,
+              });
+
+              if (!response.ok) {
+                toast.error("Failed to apply settings");
+                return;
+              }
+
+              toast.success("Re-indexing started");
+              resetForm({ values });
+              setSwitchoverType(SWITCHOVER_NONE);
+              await Promise.all([
+                mutate(SWR_KEYS.currentSearchSettings),
+                mutate(SWR_KEYS.secondarySearchSettings),
+              ]);
+            }}
           >
-            <Content
-              title="Embedding Model"
-              description="Onyx uses this model to encode documents for search and retrieval."
-              sizePreset="main-content"
-              variant="section"
-            />
+            {({ values, dirty, setFieldValue, resetForm, submitForm }) => {
+              const isModelStaged =
+                values.model_name !== initialFormValues.model_name &&
+                !!values.model_name;
+              const stagedModelName = isModelStaged ? values.model_name : null;
+              const statusVariant = dirty
+                ? switchoverType === SWITCHOVER_NONE
+                  ? "info"
+                  : "warning"
+                : undefined;
 
-            {NEXT_PUBLIC_CLOUD_ENABLED ? (
-              <Card border="solid" rounding="lg" padding="sm">
-                <GeneralLayouts.Section padding={0.5}>
-                  <Content
-                    icon={SvgVector}
-                    title="Embedding model and settings are managed by Onyx Cloud."
-                    sizePreset="main-ui"
-                    variant="section"
-                  />
-                </GeneralLayouts.Section>
-              </Card>
-            ) : (
-              currentEmbeddingModel && (
-                <Disabled
-                  disabled={isReindexing}
-                  tooltip="Cancel the in-progress re-index to switch models."
-                >
-                  <Tabs
-                    value={activeModelTab}
-                    onValueChange={setActiveModelTab}
-                  >
-                    <Card
-                      expandable
-                      expanded={viewAllModelsOpen}
-                      expandableContentHeight="fit"
-                      border="solid"
-                      borderColor={statusVariant}
-                      rounding="lg"
-                      padding={viewAllModelsOpen ? "fit" : "sm"}
-                      expandedContent={
-                        <>
-                          <Tabs.Content
-                            value={MODEL_TAB_CLOUD}
-                            className="pt-0"
+              return (
+                <>
+                  {isReindexing ? (
+                    <MessageCard
+                      variant="warning"
+                      headerPadding="sm"
+                      title="Re-indexing in progress"
+                      description={markdown(
+                        `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
+                      )}
+                      bottomChildren={
+                        <GeneralLayouts.Section
+                          flexDirection="row"
+                          gap={0.5}
+                          justifyContent="end"
+                        >
+                          <Button
+                            icon={SvgExternalLink}
+                            href="/admin/indexing/status"
                           >
-                            {filteredCloudProviders.length > 0 ? (
-                              <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                                {filteredCloudProviders.map(
-                                  ({ provider, models }) => (
-                                    <ProviderGroup
-                                      key={provider.providerName}
-                                      provider={provider}
-                                      models={models}
-                                      currentModelName={
-                                        currentEmbeddingModel?.model_name
-                                      }
-                                      selectedModelName={
-                                        selectedModelName ?? undefined
-                                      }
-                                      isCloud
-                                      existingCredentials={configuredProviders?.get(
-                                        provider.providerName
-                                      )}
-                                      onSelectModel={setSelectedModelName}
-                                      onDeselectModel={() =>
-                                        setSelectedModelName(null)
-                                      }
-                                    />
-                                  )
-                                )}
-                              </GeneralLayouts.Section>
-                            ) : (
-                              <IllustrationContent
-                                illustration={SvgNoResult}
-                                title="No cloud-based models found"
-                                description="Try a different search term."
-                              />
-                            )}
-                          </Tabs.Content>
-
-                          <Tabs.Content value={MODEL_TAB_SELF} className="pt-0">
-                            {filteredSelfHostedProviders.length > 0 ? (
-                              <GeneralLayouts.Section gap={0.5} padding={0.5}>
-                                {filteredSelfHostedProviders.map(
-                                  ({ provider: shProvider, models }) => (
-                                    <ProviderGroup
-                                      key={shProvider.providerName}
-                                      provider={shProvider}
-                                      models={models}
-                                      currentModelName={
-                                        currentEmbeddingModel?.model_name
-                                      }
-                                      selectedModelName={
-                                        selectedModelName ?? undefined
-                                      }
-                                      onSelectModel={setSelectedModelName}
-                                      onDeselectModel={() =>
-                                        setSelectedModelName(null)
-                                      }
-                                    />
-                                  )
-                                )}
-                              </GeneralLayouts.Section>
-                            ) : (
-                              <IllustrationContent
-                                illustration={SvgNoResult}
-                                title="No self-hosted models found"
-                                description="Try a different search term."
-                              />
-                            )}
-                          </Tabs.Content>
-                        </>
+                            See Connectors
+                          </Button>
+                          <Button
+                            variant="danger"
+                            prominence="secondary"
+                            onClick={() => cancelReindexModal.toggle(true)}
+                          >
+                            Cancel Re-index
+                          </Button>
+                        </GeneralLayouts.Section>
                       }
-                    >
-                      {viewAllModelsOpen ? (
-                        <div className="pt-1 px-1">
-                          <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
-                            <InputTypeIn
-                              placeholder="Search models..."
-                              variant="internal"
-                              leftSearchIcon
-                              value={query}
-                              onChange={(e) => setQuery(e.target.value)}
-                            />
-                            <div className="flex flex-row">
-                              {selectedModelName && (
+                    />
+                  ) : (
+                    !NEXT_PUBLIC_CLOUD_ENABLED && (
+                      <MessageCard
+                        variant={statusVariant}
+                        headerPadding="sm"
+                        title={
+                          statusVariant === "info"
+                            ? "Changes apply to newly indexed content only."
+                            : "Changes require a full re-index."
+                        }
+                        description={markdown(
+                          statusVariant === "info"
+                            ? "Selected changes will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\nRe-indexing may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                            : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                        )}
+                        bottomChildren={
+                          dirty ? (
+                            <div className="flex flex-row items-end gap-4 p-2">
+                              <div className="flex-1 min-w-0">
+                                <InputSelect
+                                  value={switchoverType}
+                                  onValueChange={(v) =>
+                                    setSwitchoverType(
+                                      v as
+                                        | SwitchoverType
+                                        | typeof SWITCHOVER_NONE
+                                    )
+                                  }
+                                >
+                                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                                  <InputSelect.Content>
+                                    <InputSelect.Item
+                                      value={SWITCHOVER_NONE}
+                                      icon={SvgNoImage}
+                                      wrapDescription
+                                      description="Safe option. Only apply changes to newly indexed content."
+                                    >
+                                      Do Not Re-index
+                                    </InputSelect.Item>
+                                    <Divider title="Re-index Options" />
+                                    <InputSelect.Item
+                                      value={SwitchoverType.REINDEX}
+                                      icon={SvgClock}
+                                      wrapDescription
+                                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                                    >
+                                      Re-index All Connectors Then Switch
+                                    </InputSelect.Item>
+                                    <InputSelect.Item
+                                      value={SwitchoverType.ACTIVE_ONLY}
+                                      icon={SvgSlowTime}
+                                      wrapDescription
+                                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                                    >
+                                      Re-index Active Connectors Then Switch
+                                    </InputSelect.Item>
+                                    <InputSelect.Item
+                                      value={SwitchoverType.INSTANT}
+                                      icon={SvgEmpty}
+                                      wrapDescription
+                                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                                    >
+                                      Switch Before Re-index
+                                    </InputSelect.Item>
+                                  </InputSelect.Content>
+                                </InputSelect>
+                              </div>
+                              <div className="flex flex-row gap-2 shrink-0">
                                 <Button
-                                  icon={SvgRevert}
-                                  prominence="internal"
+                                  prominence="secondary"
                                   onClick={() => {
-                                    setSelectedModelName(null);
+                                    resetForm();
                                     setSwitchoverType(SWITCHOVER_NONE);
                                   }}
-                                />
-                              )}
-                              <Button
-                                prominence="internal"
-                                onClick={() => setViewAllModelsOpen(false)}
-                                rightIcon={SvgFold}
-                              >
-                                Fold Models
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="px-2">
-                            <Tabs.List variant="underline">
-                              <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                Cloud-based
-                              </Tabs.Trigger>
-                              <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                Self-hosted
-                              </Tabs.Trigger>
-                            </Tabs.List>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-row items-start w-full">
-                          <GeneralLayouts.Section
-                            padding={0.5}
-                            gap={0}
-                            alignItems="start"
-                          >
-                            <Content
-                              icon={
-                                getEmbeddingProvider(
-                                  currentEmbeddingModel.model_name
-                                ).icon
-                              }
-                              title={currentEmbeddingModel.model_name}
-                              description={
-                                getCurrentModelCopy(
-                                  currentEmbeddingModel.model_name
-                                )?.model.description
-                              }
-                              sizePreset="main-ui"
-                              variant="section"
-                            />
-                            <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                              <EmbeddingProviderInfo
-                                providerType={
-                                  currentEmbeddingModel.provider_type
-                                }
-                              />
-                            </div>
-                          </GeneralLayouts.Section>
-
-                          <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
-                            <Button
-                              prominence="secondary"
-                              onClick={() => {
-                                const isSelectedSelfHosted =
-                                  selectedModelName &&
-                                  SELF_HOSTED_PROVIDERS.some((p) =>
-                                    p.embeddingModels.some(
-                                      (m) => m.modelName === selectedModelName
-                                    )
-                                  );
-                                setActiveModelTab(
-                                  isSelectedSelfHosted
-                                    ? MODEL_TAB_SELF
-                                    : selectedModelName
-                                      ? MODEL_TAB_CLOUD
-                                      : currentEmbeddingModel?.provider_type
-                                        ? MODEL_TAB_CLOUD
-                                        : MODEL_TAB_SELF
-                                );
-                                setViewAllModelsOpen(true);
-                              }}
-                            >
-                              View All Models
-                            </Button>
-                            {currentCloudProvider && (
-                              <div className="p-1">
-                                <Button
-                                  icon={SvgSettings}
-                                  prominence="tertiary"
-                                  size="md"
-                                  onClick={() => editModal.toggle(true)}
-                                />
+                                >
+                                  Revert
+                                </Button>
+                                <Button onClick={() => void submitForm()}>
+                                  {switchoverType === SWITCHOVER_NONE
+                                    ? "Apply without Re-index"
+                                    : "Apply & Re-index"}
+                                </Button>
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </Card>
-                  </Tabs>
-                </Disabled>
-              )
-            )}
-          </GeneralLayouts.Section>
+                            </div>
+                          ) : undefined
+                        }
+                      />
+                    )
+                  )}
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-
-          {/* ── Retrieval Optimization ── */}
-          <GeneralLayouts.Section
-            gap={0.75}
-            height="fit"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            <Content
-              title="Retrieval Optimization"
-              description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
-              sizePreset="main-content"
-              variant="section"
-            />
-
-            <CloudDisabled
-              disabled
-              tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
-            >
-              <Card border="solid" rounding="lg">
-                <InputHorizontal
-                  title="Multipass Indexing"
-                  description="Index documents as chunks of varying sizes to better identify relevant sources."
-                  tag={{
-                    title: "temporarily unavailable",
-                    color: "gray",
-                  }}
-                  withLabel
-                >
-                  <Switch
-                    checked={searchSettings?.multipass_indexing ?? false}
-                    disabled
-                  />
-                </InputHorizontal>
-              </Card>
-            </CloudDisabled>
-
-            {/* TODO(@raunakab): enable_contextual_rag is in PRESERVED_SEARCH_FIELDS
-             (backend/shared_configs/configs.py), so the update-inference-settings
-             endpoint silently ignores it. The backend returns 200 but never persists
-             the change. Needs a backend fix to remove it from the preserved list. */}
-            <CloudDisabled>
-              <Card border="solid" borderColor={statusVariant} rounding="lg">
-                <GeneralLayouts.Section width="full">
-                  <InputHorizontal
-                    title="Contextual Retrieval"
-                    description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
-                    withLabel
+                  {/* ── Embedding Model ── */}
+                  <GeneralLayouts.Section
+                    gap={0.75}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
                   >
-                    <Switch
-                      checked={searchSettings?.enable_contextual_rag ?? false}
-                      onCheckedChange={(checked) => {
-                        void saveSearchSettings({
-                          enable_contextual_rag: checked,
-                        });
-                      }}
+                    <Content
+                      title="Embedding Model"
+                      description="Onyx uses this model to encode documents for search and retrieval."
+                      sizePreset="main-content"
+                      variant="section"
                     />
-                  </InputHorizontal>
 
-                  <Disabled
-                    disabled={!searchSettings?.enable_contextual_rag}
-                    tooltip="Cannot modify while Contextual Retrieval is off."
-                  >
-                    <InputHorizontal
-                      title="Contextual Retrieval LLM"
-                      description="This model will be used to generate context for chunks."
-                      disabled={!searchSettings?.enable_contextual_rag}
-                      withLabel
-                    >
-                      <InputSelect
-                        value={searchSettings?.contextual_rag_llm_name ?? ""}
-                        onValueChange={(value) => {
-                          const selectedModel = contextualCosts?.find(
-                            (cost) => cost.model_name === value
-                          );
-                          void saveSearchSettings({
-                            contextual_rag_llm_name: value,
-                            contextual_rag_llm_provider:
-                              selectedModel?.provider ?? null,
-                          });
-                        }}
-                        disabled={!searchSettings?.enable_contextual_rag}
-                      >
-                        <InputSelect.Trigger placeholder="Select a model" />
-                        <InputSelect.Content>
-                          {(contextualCosts ?? []).map((cost) => (
-                            <InputSelect.Item
-                              key={cost.model_name}
-                              value={cost.model_name}
+                    {NEXT_PUBLIC_CLOUD_ENABLED ? (
+                      <Card border="solid" rounding="lg" padding="sm">
+                        <GeneralLayouts.Section padding={0.5}>
+                          <Content
+                            icon={SvgVector}
+                            title="Embedding model and settings are managed by Onyx Cloud."
+                            sizePreset="main-ui"
+                            variant="section"
+                          />
+                        </GeneralLayouts.Section>
+                      </Card>
+                    ) : (
+                      currentEmbeddingModel && (
+                        <Disabled
+                          disabled={isReindexing}
+                          tooltip="Cancel the in-progress re-index to switch models."
+                        >
+                          <Tabs
+                            value={activeModelTab}
+                            onValueChange={setActiveModelTab}
+                          >
+                            <Card
+                              expandable
+                              expanded={viewAllModelsOpen}
+                              expandableContentHeight="fit"
+                              border="solid"
+                              borderColor={statusVariant}
+                              rounding="lg"
+                              padding={viewAllModelsOpen ? "fit" : "sm"}
+                              expandedContent={
+                                <>
+                                  <Tabs.Content
+                                    value={MODEL_TAB_CLOUD}
+                                    className="pt-0"
+                                  >
+                                    {filteredCloudProviders.length > 0 ? (
+                                      <GeneralLayouts.Section
+                                        gap={0.5}
+                                        padding={0.5}
+                                      >
+                                        {filteredCloudProviders.map(
+                                          ({ provider, models }) => (
+                                            <ProviderGroup
+                                              key={provider.providerName}
+                                              provider={provider}
+                                              models={models}
+                                              currentModelName={
+                                                currentEmbeddingModel?.model_name
+                                              }
+                                              selectedModelName={
+                                                stagedModelName ?? undefined
+                                              }
+                                              isCloud
+                                              existingCredentials={configuredProviders?.get(
+                                                provider.providerName
+                                              )}
+                                              onSelectModel={(name) =>
+                                                void setFieldValue(
+                                                  "model_name",
+                                                  name
+                                                )
+                                              }
+                                              onDeselectModel={() =>
+                                                void setFieldValue(
+                                                  "model_name",
+                                                  initialFormValues.model_name
+                                                )
+                                              }
+                                            />
+                                          )
+                                        )}
+                                      </GeneralLayouts.Section>
+                                    ) : (
+                                      <IllustrationContent
+                                        illustration={SvgNoResult}
+                                        title="No cloud-based models found"
+                                        description="Try a different search term."
+                                      />
+                                    )}
+                                  </Tabs.Content>
+
+                                  <Tabs.Content
+                                    value={MODEL_TAB_SELF}
+                                    className="pt-0"
+                                  >
+                                    {filteredSelfHostedProviders.length > 0 ? (
+                                      <GeneralLayouts.Section
+                                        gap={0.5}
+                                        padding={0.5}
+                                      >
+                                        {filteredSelfHostedProviders.map(
+                                          ({
+                                            provider: shProvider,
+                                            models,
+                                          }) => (
+                                            <ProviderGroup
+                                              key={shProvider.providerName}
+                                              provider={shProvider}
+                                              models={models}
+                                              currentModelName={
+                                                currentEmbeddingModel?.model_name
+                                              }
+                                              selectedModelName={
+                                                stagedModelName ?? undefined
+                                              }
+                                              onSelectModel={(name) =>
+                                                void setFieldValue(
+                                                  "model_name",
+                                                  name
+                                                )
+                                              }
+                                              onDeselectModel={() =>
+                                                void setFieldValue(
+                                                  "model_name",
+                                                  initialFormValues.model_name
+                                                )
+                                              }
+                                            />
+                                          )
+                                        )}
+                                      </GeneralLayouts.Section>
+                                    ) : (
+                                      <IllustrationContent
+                                        illustration={SvgNoResult}
+                                        title="No self-hosted models found"
+                                        description="Try a different search term."
+                                      />
+                                    )}
+                                  </Tabs.Content>
+                                </>
+                              }
                             >
-                              {cost.model_name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
-                  </Disabled>
-                </GeneralLayouts.Section>
-              </Card>
-            </CloudDisabled>
-          </GeneralLayouts.Section>
+                              {viewAllModelsOpen ? (
+                                <div className="pt-1 px-1">
+                                  <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
+                                    <InputTypeIn
+                                      placeholder="Search models..."
+                                      variant="internal"
+                                      leftSearchIcon
+                                      value={query}
+                                      onChange={(e) => setQuery(e.target.value)}
+                                    />
+                                    <div className="flex flex-row">
+                                      {dirty && (
+                                        <Button
+                                          icon={SvgRevert}
+                                          prominence="internal"
+                                          onClick={() => {
+                                            resetForm();
+                                            setSwitchoverType(SWITCHOVER_NONE);
+                                          }}
+                                        />
+                                      )}
+                                      <Button
+                                        prominence="internal"
+                                        onClick={() =>
+                                          setViewAllModelsOpen(false)
+                                        }
+                                        rightIcon={SvgFold}
+                                      >
+                                        Fold Models
+                                      </Button>
+                                    </div>
+                                  </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                                  <div className="px-2">
+                                    <Tabs.List variant="underline">
+                                      <Tabs.Trigger value={MODEL_TAB_CLOUD}>
+                                        Cloud-based
+                                      </Tabs.Trigger>
+                                      <Tabs.Trigger value={MODEL_TAB_SELF}>
+                                        Self-hosted
+                                      </Tabs.Trigger>
+                                    </Tabs.List>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-row items-start w-full">
+                                  <GeneralLayouts.Section
+                                    padding={0.5}
+                                    gap={0}
+                                    alignItems="start"
+                                  >
+                                    <Content
+                                      icon={
+                                        getEmbeddingProvider(
+                                          currentEmbeddingModel.model_name
+                                        ).icon
+                                      }
+                                      title={currentEmbeddingModel.model_name}
+                                      description={
+                                        getCurrentModelCopy(
+                                          currentEmbeddingModel.model_name
+                                        )?.model.description
+                                      }
+                                      sizePreset="main-ui"
+                                      variant="section"
+                                    />
+                                    <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                                      <EmbeddingProviderInfo
+                                        providerType={
+                                          currentEmbeddingModel.provider_type
+                                        }
+                                      />
+                                    </div>
+                                  </GeneralLayouts.Section>
 
-          {/* ── Image Processing ── */}
-          <GeneralLayouts.Section
-            gap={0.75}
-            height="fit"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            <Content
-              title="Image Processing"
-              description="Use LLM model to analyze and add descriptions to images during indexing."
-              sizePreset="main-content"
-              variant="section"
-            />
+                                  <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
+                                    <Button
+                                      prominence="secondary"
+                                      onClick={() => {
+                                        const isStagedSelfHosted =
+                                          stagedModelName &&
+                                          SELF_HOSTED_PROVIDERS.some((p) =>
+                                            p.embeddingModels.some(
+                                              (m) =>
+                                                m.modelName === stagedModelName
+                                            )
+                                          );
+                                        setActiveModelTab(
+                                          isStagedSelfHosted
+                                            ? MODEL_TAB_SELF
+                                            : stagedModelName
+                                              ? MODEL_TAB_CLOUD
+                                              : currentEmbeddingModel?.provider_type
+                                                ? MODEL_TAB_CLOUD
+                                                : MODEL_TAB_SELF
+                                        );
+                                        setViewAllModelsOpen(true);
+                                      }}
+                                    >
+                                      View All Models
+                                    </Button>
+                                    {currentCloudProvider && (
+                                      <div className="p-1">
+                                        <Button
+                                          icon={SvgSettings}
+                                          prominence="tertiary"
+                                          size="md"
+                                          onClick={() => editModal.toggle(true)}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          </Tabs>
+                        </Disabled>
+                      )
+                    )}
+                  </GeneralLayouts.Section>
 
-            <CloudDisabled>
-              <Card border="solid" borderColor={statusVariant} rounding="lg">
-                <GeneralLayouts.Section width="full">
-                  <InputHorizontal
-                    title="Extract & Caption Images"
-                    description="Extract images during document indexing and generate searchable descriptions."
-                    withLabel
+                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+                  {/* ── Retrieval Optimization ── */}
+                  <GeneralLayouts.Section
+                    gap={0.75}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
                   >
-                    <Switch
-                      checked={imageProcessingEnabled}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({
-                          image_extraction_and_analysis_enabled: checked,
-                        });
-                      }}
+                    <Content
+                      title="Retrieval Optimization"
+                      description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
+                      sizePreset="main-content"
+                      variant="section"
                     />
-                  </InputHorizontal>
 
-                  <Disabled disabled={!imageProcessingEnabled}>
-                    <InputHorizontal
-                      title="Captioning LLM"
-                      description="This model will be used to analyze images during indexing."
-                      disabled={!imageProcessingEnabled}
-                      withLabel
+                    <CloudDisabled
+                      disabled
+                      tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
                     >
-                      {/* TODO(@raunakab): wire up */}
-                      <InputSelect
-                        value=""
-                        onValueChange={() => {}}
-                        disabled={!imageProcessingEnabled}
-                      >
-                        <InputSelect.Trigger placeholder="Select a model" />
-                        <InputSelect.Content />
-                      </InputSelect>
-                    </InputHorizontal>
-                  </Disabled>
+                      <Card border="solid" rounding="lg">
+                        <InputHorizontal
+                          title="Multipass Indexing"
+                          description="Index documents as chunks of varying sizes to better identify relevant sources."
+                          tag={{
+                            title: "temporarily unavailable",
+                            color: "gray",
+                          }}
+                          withLabel
+                        >
+                          <Switch
+                            checked={
+                              searchSettings?.multipass_indexing ?? false
+                            }
+                            disabled
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </CloudDisabled>
 
-                  <Disabled disabled={!imageProcessingEnabled}>
-                    <InputHorizontal
-                      title="Max Image Size for Analysis"
-                      suffix="(MB)"
-                      description="Images above this size will be skipped to limit resource usage."
-                      disabled={!imageProcessingEnabled}
-                      withLabel
+                    <CloudDisabled
+                      disabled={isReindexing}
+                      tooltip={
+                        isReindexing
+                          ? "Cancel the in-progress re-index to change retrieval settings."
+                          : undefined
+                      }
                     >
-                      <InputSelect
-                        value={String(
-                          settings.settings.image_analysis_max_size_mb ?? 20
-                        )}
-                        onValueChange={(value) => {
-                          void saveSettings({
-                            image_analysis_max_size_mb: parseInt(value, 10),
-                          });
-                        }}
-                        disabled={!imageProcessingEnabled}
+                      <Card
+                        border="solid"
+                        borderColor={statusVariant}
+                        rounding="lg"
                       >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          {MAX_IMAGE_SIZE_OPTIONS.map((size) => (
-                            <InputSelect.Item key={size} value={size}>
-                              {size}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
-                  </Disabled>
-                </GeneralLayouts.Section>
-              </Card>
-            </CloudDisabled>
-          </GeneralLayouts.Section>
+                        <GeneralLayouts.Section width="full">
+                          <InputHorizontal
+                            title="Contextual Retrieval"
+                            description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
+                            withLabel
+                          >
+                            <Switch
+                              checked={values.enable_contextual_rag}
+                              onCheckedChange={(checked) => {
+                                void setFieldValue(
+                                  "enable_contextual_rag",
+                                  checked
+                                );
+                              }}
+                            />
+                          </InputHorizontal>
+
+                          <Disabled
+                            disabled={!values.enable_contextual_rag}
+                            tooltip="Cannot modify while Contextual Retrieval is off."
+                          >
+                            <InputHorizontal
+                              title="Contextual Retrieval LLM"
+                              description="This model will be used to generate context for chunks."
+                              disabled={!values.enable_contextual_rag}
+                              withLabel
+                            >
+                              <InputSelect
+                                value={values.contextual_rag_llm_name ?? ""}
+                                onValueChange={(value) => {
+                                  const selected = contextualCosts?.find(
+                                    (cost) => cost.model_name === value
+                                  );
+                                  void setFieldValue(
+                                    "contextual_rag_llm_name",
+                                    value
+                                  );
+                                  void setFieldValue(
+                                    "contextual_rag_llm_provider",
+                                    selected?.provider ?? null
+                                  );
+                                }}
+                                disabled={!values.enable_contextual_rag}
+                              >
+                                <InputSelect.Trigger placeholder="Select a model" />
+                                <InputSelect.Content>
+                                  {(contextualCosts ?? []).map((cost) => (
+                                    <InputSelect.Item
+                                      key={cost.model_name}
+                                      value={cost.model_name}
+                                    >
+                                      {cost.model_name}
+                                    </InputSelect.Item>
+                                  ))}
+                                </InputSelect.Content>
+                              </InputSelect>
+                            </InputHorizontal>
+                          </Disabled>
+                        </GeneralLayouts.Section>
+                      </Card>
+                    </CloudDisabled>
+                  </GeneralLayouts.Section>
+
+                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+                  {/* ── Image Processing ── */}
+                  <GeneralLayouts.Section
+                    gap={0.75}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
+                  >
+                    <Content
+                      title="Image Processing"
+                      description="Use LLM model to analyze and add descriptions to images during indexing."
+                      sizePreset="main-content"
+                      variant="section"
+                    />
+
+                    <CloudDisabled>
+                      <Card border="solid" rounding="lg">
+                        <GeneralLayouts.Section width="full">
+                          <InputHorizontal
+                            title="Extract & Caption Images"
+                            description="Extract images during document indexing and generate searchable descriptions."
+                            withLabel
+                          >
+                            <Switch
+                              checked={imageProcessingEnabled}
+                              onCheckedChange={(checked) => {
+                                void saveSettings({
+                                  image_extraction_and_analysis_enabled:
+                                    checked,
+                                });
+                              }}
+                            />
+                          </InputHorizontal>
+
+                          <Disabled disabled={!imageProcessingEnabled}>
+                            <InputHorizontal
+                              title="Captioning LLM"
+                              description="This model will be used to analyze images during indexing."
+                              disabled={!imageProcessingEnabled}
+                              withLabel
+                            >
+                              {/* TODO(@raunakab): wire up */}
+                              <InputSelect
+                                value=""
+                                onValueChange={() => {}}
+                                disabled={!imageProcessingEnabled}
+                              >
+                                <InputSelect.Trigger placeholder="Select a model" />
+                                <InputSelect.Content />
+                              </InputSelect>
+                            </InputHorizontal>
+                          </Disabled>
+
+                          <Disabled disabled={!imageProcessingEnabled}>
+                            <InputHorizontal
+                              title="Max Image Size for Analysis"
+                              suffix="(MB)"
+                              description="Images above this size will be skipped to limit resource usage."
+                              disabled={!imageProcessingEnabled}
+                              withLabel
+                            >
+                              <InputSelect
+                                value={String(
+                                  settings.settings
+                                    .image_analysis_max_size_mb ?? 20
+                                )}
+                                onValueChange={(value) => {
+                                  void saveSettings({
+                                    image_analysis_max_size_mb: parseInt(
+                                      value,
+                                      10
+                                    ),
+                                  });
+                                }}
+                                disabled={!imageProcessingEnabled}
+                              >
+                                <InputSelect.Trigger />
+                                <InputSelect.Content>
+                                  {MAX_IMAGE_SIZE_OPTIONS.map((size) => (
+                                    <InputSelect.Item key={size} value={size}>
+                                      {size}
+                                    </InputSelect.Item>
+                                  ))}
+                                </InputSelect.Content>
+                              </InputSelect>
+                            </InputHorizontal>
+                          </Disabled>
+                        </GeneralLayouts.Section>
+                      </Card>
+                    </CloudDisabled>
+                  </GeneralLayouts.Section>
+                </>
+              );
+            }}
+          </Formik>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     </>
