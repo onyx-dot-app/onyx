@@ -44,17 +44,21 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.tenant_invite_counter import release_trial_invites
+from onyx.db.tenant_invite_counter import reserve_trial_invites
 from onyx.db.user_preferences import activate_user
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.user_preferences import get_all_user_assistant_specific_configs
@@ -81,10 +85,15 @@ from onyx.db.users import get_total_filtered_users_count
 from onyx.db.users import get_user_by_email
 from onyx.db.users import get_user_counts_by_role_and_status
 from onyx.db.users import validate_user_role_update
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
+from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
+from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import BulkInviteResponse
@@ -460,19 +469,37 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
-    # Limit bulk invites for trial tenants to prevent email spam
-    # Only count new invites, not re-invites of existing users
-    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
-        current_invited = len(already_invited)
-        if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
-            raise HTTPException(
-                status_code=403,
-                detail="You have hit your invite limit. Please upgrade for unlimited invites.",
-            )
-
-    # Check seat availability for new users
+    # Check seat availability for new users. Must run before the counter
+    # reservation below — a seat-limit failure must not burn trial quota.
     if emails_needing_seats:
         enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
+
+    # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
+    # The UPSERT holds a row-level lock on `tenant_id` during the UPDATE, so
+    # concurrent bulk-invite flows for the same tenant are serialized without
+    # an advisory lock. On reject we ROLLBACK so the reservation does not stick.
+    trial_invite_reservation = 0
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        num_new_invites = len(emails_needing_seats)
+        if num_new_invites > 0:
+            with get_session_with_shared_schema() as shared_session:
+                new_total = reserve_trial_invites(
+                    shared_session, tenant_id, num_new_invites
+                )
+                if new_total > NUM_FREE_TRIAL_USER_INVITES:
+                    shared_session.rollback()
+                    raise OnyxError(
+                        OnyxErrorCode.TRIAL_INVITE_LIMIT_EXCEEDED,
+                        "You have hit your invite limit. Please upgrade for unlimited invites.",
+                    )
+                shared_session.commit()
+                trial_invite_reservation = num_new_invites
+        enforce_invite_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+            num_invites=len(emails_needing_seats),
+            tenant_id=tenant_id,
+        )
 
     if MULTI_TENANT:
         try:
@@ -486,7 +513,29 @@ def bulk_invite_users(
     initial_invited_users = get_invited_users()
 
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
-    number_of_invited_users = write_invited_users(all_emails)
+    try:
+        number_of_invited_users = write_invited_users(all_emails)
+    except Exception:
+        # KV write failed after the counter already reserved slots. Release
+        # the reservation so the counter tracks invites that actually reached
+        # the store. Compensation failures are logged and never re-raised —
+        # the original KV error is what the caller needs to see.
+        if trial_invite_reservation > 0:
+            try:
+                with get_session_with_shared_schema() as comp_session:
+                    release_trial_invites(
+                        comp_session, tenant_id, trial_invite_reservation
+                    )
+                    comp_session.commit()
+            except Exception as comp_err:
+                logger.error(
+                    "tenant_invite_counter release failed for tenant=%s, "
+                    "slots burned=%d: %s",
+                    tenant_id,
+                    trial_invite_reservation,
+                    comp_err,
+                )
+        raise
 
     # send out email invitations only to new users (not already invited or existing)
     if not ENABLE_EMAIL_INVITES:
@@ -514,10 +563,31 @@ def bulk_invite_users(
             logger.info(
                 "Reverting changes: removing users from tenant and resetting invited users"
             )
-            write_invited_users(initial_invited_users)  # Reset to original state
-            fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-            )(new_invited_emails, tenant_id)
+            try:
+                write_invited_users(initial_invited_users)  # Reset to original state
+                fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+                )(new_invited_emails, tenant_id)
+            finally:
+                # Release the counter reservation regardless of whether the KV /
+                # user-mapping reverts above succeeded — otherwise a double-fault
+                # (billing failure + revert failure) permanently inflates the
+                # counter for an invite batch the system considers rolled back.
+                if trial_invite_reservation > 0:
+                    try:
+                        with get_session_with_shared_schema() as comp_session:
+                            release_trial_invites(
+                                comp_session, tenant_id, trial_invite_reservation
+                            )
+                            comp_session.commit()
+                    except Exception as comp_err:
+                        logger.error(
+                            "tenant_invite_counter release failed for tenant=%s, "
+                            "slots burned=%d: %s",
+                            tenant_id,
+                            trial_invite_reservation,
+                            comp_err,
+                        )
             raise e
 
     return BulkInviteResponse(
@@ -529,10 +599,17 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        enforce_remove_invited_rate_limit(
+            redis_client=get_redis_client(tenant_id=tenant_id),
+            admin_user_id=current_user.id,
+        )
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
@@ -672,15 +749,24 @@ def get_valid_domains(
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
     include_api_keys: bool = False,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
+    if (
+        USER_DIRECTORY_ADMIN_ONLY
+        and Permission.READ_USERS not in get_effective_permissions(user)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have the required permissions for this action.",
+        )
+
     users = get_all_users(db_session)
     return [
-        MinimalUserSnapshot(id=user.id, email=user.email)
-        for user in users
-        if user.account_type != AccountType.BOT
-        and (include_api_keys or not is_api_key_email_address(user.email))
+        MinimalUserSnapshot(id=u.id, email=u.email)
+        for u in users
+        if u.account_type != AccountType.BOT
+        and (include_api_keys or not is_api_key_email_address(u.email))
     ]
 
 

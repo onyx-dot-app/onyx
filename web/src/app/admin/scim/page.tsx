@@ -130,7 +130,7 @@ export default function Page() {
         icon={SvgUserSync}
         title="SCIM"
         description="Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <ScimContent />

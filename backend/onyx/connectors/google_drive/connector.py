@@ -30,9 +30,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
-from onyx.connectors.google_drive.doc_conversion import (
-    convert_drive_item_to_document,
-)
+from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
@@ -578,8 +576,18 @@ class GoogleDriveConnector(
                     current_id, file.user_email, field_type, failed_folder_ids_by_email
                 )
                 if not folder:
-                    # Can't access this folder - stop climbing
-                    # Don't mark as fully walked since we didn't reach root
+                    # Can't access this folder - stop climbing.
+                    # If the terminal node is a confirmed orphan, backfill all
+                    # intermediate folders into failed_folder_ids_by_email so
+                    # future files short-circuit via _get_folder_metadata's
+                    # cache check instead of re-climbing the whole chain.
+                    if failed_folder_ids_by_email is not None:
+                        for email in {file.user_email, self.primary_admin_email}:
+                            email_failed_ids = failed_folder_ids_by_email.get(email)
+                            if email_failed_ids and current_id in email_failed_ids:
+                                failed_folder_ids_by_email.setdefault(
+                                    email, ThreadSafeSet()
+                                ).update(set(node_ids_in_walk))
                     break
 
                 folder_parent_id = _get_parent_id_from_file(folder)
@@ -855,10 +863,26 @@ class GoogleDriveConnector(
             raise
         except RefreshError as e:
             logger.warning(
-                f"User '{user_email}' could not refresh their token. Error: {e}"
+                f"User '{user_email}' token refresh failed, re-fetching user list "
+                f"to check if they were removed. Error: {e}"
             )
-            # mark this user as done so we don't try to retrieve anything for them
-            # again
+            try:
+                fresh_emails = self._get_all_user_emails()
+                checkpoint.user_emails = fresh_emails
+            except Exception as fetch_err:
+                logger.warning(
+                    f"Could not re-fetch user list to verify '{user_email}' removal "
+                    f"(error: {fetch_err}); surfacing original RefreshError as failure."
+                )
+                fresh_emails = [user_email]  # treat as if user still exists
+            if user_email not in fresh_emails:
+                # User was removed from the workspace — skip silently
+                logger.warning(
+                    f"User '{user_email}' confirmed removed from workspace, skipping."
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            # User still exists — this is a real token problem, surface as a failure
             yield RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.DONE,
                 drive_file={},
@@ -1625,6 +1649,7 @@ class GoogleDriveConnector(
                 [retrieved_file.user_email, self.primary_admin_email]
                 + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
                 retrieved_file.drive_file,
+                self.raw_file_callback,
             )
         except Exception as e:
             logger.exception(

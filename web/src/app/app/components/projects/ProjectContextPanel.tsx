@@ -133,7 +133,7 @@ export default function ProjectContextPanel({
       <div className="flex flex-col gap-6 w-full max-w-[var(--app-page-main-content-width)] mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
-          <Hoverable.Root group="projectName" widthVariant="fit">
+          <Hoverable.Root group="projectName" width="fit">
             <div className="flex items-center gap-2">
               {isEditingName ? (
                 <ButtonRenaming
@@ -152,10 +152,7 @@ export default function ProjectContextPanel({
                     {projectName}
                   </Text>
                   {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                  <Hoverable.Item
-                    group="projectName"
-                    variant="opacity-on-hover"
-                  >
+                  <Hoverable.Item group="projectName" variant="appear-on-hover">
                     <IconButton
                       icon={SvgEdit}
                       internal

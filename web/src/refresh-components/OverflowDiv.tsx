@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface VerticalShadowScrollerProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {

@@ -73,8 +73,8 @@ export default function AdminListHeader({
             title={emptyStateText}
             sizePreset="main-ui"
             variant="body"
-            prominence="muted"
-            widthVariant="fit"
+            color="muted"
+            width="fit"
           />
           {actionButton}
         </div>

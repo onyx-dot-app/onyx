@@ -14,6 +14,7 @@ from typing import Dict
 import psycopg2.errors
 from prometheus_client import Gauge
 from prometheus_client import start_http_server
+from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
@@ -23,6 +24,7 @@ from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.http_retry import RetryHandler
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEV_MODE
@@ -61,12 +63,8 @@ from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_doc_feedback_button
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_button
-from onyx.onyxbot.slack.handlers.handle_buttons import (
-    handle_followup_resolved_button,
-)
-from onyx.onyxbot.slack.handlers.handle_buttons import (
-    handle_generate_answer_button,
-)
+from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_resolved_button
+from onyx.onyxbot.slack.handlers.handle_buttons import handle_generate_answer_button
 from onyx.onyxbot.slack.handlers.handle_buttons import (
     handle_publish_ephemeral_message_button,
 )
@@ -354,10 +352,19 @@ class SlackbotHandler:
                     except KvKeyNotFoundError:
                         # No Slackbot tokens, pass
                         pass
-                    except psycopg2.errors.UndefinedTable:
-                        logger.error(
-                            "Undefined table error in fetch_slack_bots. Tenant schema may need fixing."
-                        )
+                    except ProgrammingError as e:
+                        # SQLAlchemy wraps psycopg2 errors; UndefinedTable is
+                        # expected when a pre-provisioned tenant's slack_bot
+                        # migration has not completed yet.
+                        if isinstance(e.orig, psycopg2.errors.UndefinedTable):
+                            logger.warning(
+                                f"Tenant {tenant_id} missing slack_bot table "
+                                "(likely mid-provisioning); will retry next cycle."
+                            )
+                        else:
+                            logger.exception(
+                                f"Error fetching Slack bots for tenant {tenant_id}: {e}"
+                            )
                     except Exception as e:
                         logger.exception(
                             f"Error fetching Slack bots for tenant {tenant_id}: {e}"
@@ -394,11 +401,15 @@ class SlackbotHandler:
                 if tenant_id in self.redis_locks and not DEV_MODE:
                     try:
                         self.redis_locks[tenant_id].release()
-                        del self.redis_locks[tenant_id]
+                    except LockNotOwnedError:
+                        # Expected: lock expired or was stolen; nothing to release.
+                        pass
                     except Exception as e:
-                        logger.error(
+                        logger.warning(
                             f"Error releasing lock for gated tenant {tenant_id}: {e}"
                         )
+                    finally:
+                        self.redis_locks.pop(tenant_id, None)
                 continue
 
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
@@ -414,6 +425,15 @@ class SlackbotHandler:
                     except KvKeyNotFoundError:
                         # No Slackbot tokens, pass (and remove below)
                         bots = []
+                    except ProgrammingError as e:
+                        if isinstance(e.orig, psycopg2.errors.UndefinedTable):
+                            logger.warning(
+                                f"Tenant {tenant_id} missing slack_bot table "
+                                "(likely mid-provisioning); will retry next cycle."
+                            )
+                        else:
+                            logger.exception(f"Error handling tenant {tenant_id}: {e}")
+                        bots = []
                     except Exception as e:
                         logger.exception(f"Error handling tenant {tenant_id}: {e}")
                         bots = []
@@ -428,12 +448,16 @@ class SlackbotHandler:
                         if tenant_id in self.redis_locks and not DEV_MODE:
                             try:
                                 self.redis_locks[tenant_id].release()
-                                del self.redis_locks[tenant_id]
                                 logger.info(f"Released lock for tenant {tenant_id}")
+                            except LockNotOwnedError:
+                                # Expected: lock expired or was stolen.
+                                pass
                             except Exception as e:
-                                logger.error(
+                                logger.warning(
                                     f"Error releasing lock for tenant {tenant_id}: {e}"
                                 )
+                            finally:
+                                self.redis_locks.pop(tenant_id, None)
                     else:
                         # Manage or reconnect Slack bot sockets
                         for bot in bots:
@@ -500,11 +524,20 @@ class SlackbotHandler:
                     #     f"Started socket client for Slackbot with name '{bot_name}' (tenant: {tenant_id}, app: {slack_bot_id})"
                     # )
         except SlackApiError as e:
-            # Only error out if we get a not_authed error
-            if "not_authed" in str(e):
-                # for some reason we want to add the tenant to the list when this happens?
-                logger.error(
-                    f"Authentication error - Invalid or expired credentials: {tenant_id=} {slack_bot_id=}. Error: {e}"
+            # Any auth failure means connect() will also fail — bail early
+            # so slack_sdk's socket_mode client never logs its own error.
+            if any(
+                code in str(e)
+                for code in (
+                    "not_authed",
+                    "invalid_auth",
+                    "token_expired",
+                    "token_revoked",
+                    "account_inactive",
+                )
+            ):
+                logger.warning(
+                    f"Slack auth failed, skipping bot: {tenant_id=} {slack_bot_id=} error={e}"
                 )
                 return None
 
@@ -524,14 +557,19 @@ class SlackbotHandler:
             process_slack_event  # ty: ignore[invalid-argument-type]
         )
 
-        # Establish a WebSocket connection to the Socket Mode servers
-        # logger.debug(
-        #     f"Connecting socket client for tenant: {tenant_id}, app: {slack_bot_id}"
-        # )
-        socket_client.connect()
-        # logger.info(
-        #     f"Started SocketModeClient for tenant: {tenant_id}, app: {slack_bot_id}"
-        # )
+        # Establish a WebSocket connection to the Socket Mode servers.
+        # connect() internally calls apps.connections.open; on auth failure
+        # slack_sdk's socket_mode client logs its own error (shipped to
+        # Sentry as ONYX-BACKEND-4) and re-raises. The common case is
+        # caught above by the auth_test guard — this wrapper covers the
+        # rarer path where bot_token is valid but app_token is not.
+        try:
+            socket_client.connect()
+        except SlackApiError as e:
+            logger.warning(
+                f"Failed to open Slack socket connection: {tenant_id=} {slack_bot_id=} error={e}"
+            )
+            return None
 
         return socket_client
 
@@ -577,8 +615,11 @@ class SlackbotHandler:
                 try:
                     self.redis_locks[tenant_id].release()
                     logger.info(f"Released lock for tenant {tenant_id}")
+                except LockNotOwnedError:
+                    # Expected during shutdown: lock expired or was stolen.
+                    pass
                 except Exception as e:
-                    logger.error(f"Error releasing lock for tenant {tenant_id}: {e}")
+                    logger.warning(f"Error releasing lock for tenant {tenant_id}: {e}")
                 finally:
                     del self.redis_locks[tenant_id]
 

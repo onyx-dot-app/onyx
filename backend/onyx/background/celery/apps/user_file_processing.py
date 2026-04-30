@@ -17,7 +17,6 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 celery_app = Celery(__name__)
@@ -71,7 +70,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
-    app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
+    app_base.wait_for_document_index_or_shutdown()
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:

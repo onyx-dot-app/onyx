@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.db.models import SearchSettings
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
 from onyx.document_index.disabled import DisabledDocumentIndex
@@ -48,6 +49,11 @@ def get_default_document_index(
         secondary_large_chunks_enabled = secondary_search_settings.large_chunks_enabled
 
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
+    if ONYX_DISABLE_VESPA:
+        if not opensearch_retrieval_enabled:
+            raise ValueError(
+                "BUG: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
+            )
     if opensearch_retrieval_enabled:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         secondary_indexing_setting = (
@@ -119,21 +125,32 @@ def get_all_document_indices(
             )
         ]
 
-    vespa_document_index = VespaIndex(
-        index_name=search_settings.index_name,
-        secondary_index_name=(
-            secondary_search_settings.index_name if secondary_search_settings else None
-        ),
-        large_chunks_enabled=search_settings.large_chunks_enabled,
-        secondary_large_chunks_enabled=(
-            secondary_search_settings.large_chunks_enabled
-            if secondary_search_settings
-            else None
-        ),
-        multitenant=MULTI_TENANT,
-        httpx_client=httpx_client,
-    )
-    opensearch_document_index: OpenSearchOldDocumentIndex | None = None
+    result: list[DocumentIndex] = []
+
+    if ONYX_DISABLE_VESPA:
+        if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+            raise ValueError(
+                "ONYX_DISABLE_VESPA is set but ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is not set."
+            )
+    else:
+        vespa_document_index = VespaIndex(
+            index_name=search_settings.index_name,
+            secondary_index_name=(
+                secondary_search_settings.index_name
+                if secondary_search_settings
+                else None
+            ),
+            large_chunks_enabled=search_settings.large_chunks_enabled,
+            secondary_large_chunks_enabled=(
+                secondary_search_settings.large_chunks_enabled
+                if secondary_search_settings
+                else None
+            ),
+            multitenant=MULTI_TENANT,
+            httpx_client=httpx_client,
+        )
+        result.append(vespa_document_index)
+
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         secondary_indexing_setting = (
@@ -169,7 +186,6 @@ def get_all_document_indices(
             multitenant=MULTI_TENANT,
             httpx_client=httpx_client,
         )
-    result: list[DocumentIndex] = [vespa_document_index]
-    if opensearch_document_index:
         result.append(opensearch_document_index)
+
     return result

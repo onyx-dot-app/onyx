@@ -199,9 +199,30 @@ export default function MCPAuthenticationModal({
     };
   }, [fullServer, mcpServer?.server_url]);
 
+  // Mirrors the LLM-provider `api_key_changed` pattern in
+  // `web/src/sections/modals/llmConfig/svc.ts`. The backend uses these flags
+  // to decide whether to overwrite the stored OAuth credentials or to leave
+  // them untouched, which prevents masked placeholders sent back from the
+  // GET response from accidentally wiping out the real stored values.
+  const computeOAuthChangedFlags = (values: MCPAuthFormValues) => {
+    if (values.auth_type !== MCPAuthenticationType.OAUTH) {
+      return {
+        oauth_client_id_changed: false,
+        oauth_client_secret_changed: false,
+      };
+    }
+    return {
+      oauth_client_id_changed:
+        values.oauth_client_id !== initialValues.oauth_client_id,
+      oauth_client_secret_changed:
+        values.oauth_client_secret !== initialValues.oauth_client_secret,
+    };
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
+    const oauthChangedFlags = computeOAuthChangedFlags(values);
 
     return {
       name: mcpServer.name,
@@ -233,6 +254,7 @@ export default function MCPAuthenticationModal({
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_secret
           : undefined,
+      ...oauthChangedFlags,
       existing_server_id: mcpServer.id,
     };
   };
@@ -263,6 +285,7 @@ export default function MCPAuthenticationModal({
 
       // Step 3: For OAuth, initiate the OAuth flow
       if (authType === MCPAuthenticationType.OAUTH) {
+        const oauthChangedFlags = computeOAuthChangedFlags(values);
         const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
           method: "POST",
           headers: {
@@ -272,6 +295,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
+            ...oauthChangedFlags,
             return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),

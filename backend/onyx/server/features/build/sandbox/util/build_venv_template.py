@@ -7,10 +7,8 @@ import sys
 from pathlib import Path
 
 try:
-    from onyx.server.features.build.configs import (
-        OUTPUTS_TEMPLATE_PATH,
-        VENV_TEMPLATE_PATH,
-    )
+    from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
+    from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 except ImportError:
     # Fallback if running as standalone script
     import os

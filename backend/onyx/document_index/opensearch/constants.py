@@ -3,7 +3,6 @@
 import os
 from enum import Enum
 
-
 DEFAULT_MAX_CHUNK_SIZE = 512
 
 

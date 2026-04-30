@@ -18,7 +18,6 @@ from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
-
 _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
 _ENV_API_KEY = "NIGHTLY_LLM_API_KEY"

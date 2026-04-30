@@ -7,7 +7,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 
-
 _DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
 
 

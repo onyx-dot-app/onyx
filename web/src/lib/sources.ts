@@ -1,59 +1,56 @@
-import {
-  AxeroIcon,
-  BookstackIcon,
-  OutlineIcon,
-  ClickupIcon,
-  ConfluenceIcon,
-  DiscourseIcon,
-  Document360Icon,
-  DropboxIcon,
-  GithubIcon,
-  GitlabIcon,
-  BitbucketIcon,
-  GmailIcon,
-  GongIcon,
-  GoogleDriveIcon,
-  GoogleSitesIcon,
-  GuruIcon,
-  HubSpotIcon,
-  JiraIcon,
-  LinearIcon,
-  LoopioIcon,
-  CodaIcon,
-  NotionIcon,
-  ProductboardIcon,
-  R2Icon,
-  SalesforceIcon,
-  SharepointIcon,
-  TeamsIcon,
-  SlabIcon,
-  ZendeskIcon,
-  ZulipIcon,
-  MediaWikiIcon,
-  WikipediaIcon,
-  AsanaIcon,
-  S3Icon,
-  OCIStorageIcon,
-  GoogleStorageIcon,
-  ColorSlackIcon,
-  XenforoIcon,
-  ColorDiscordIcon,
-  FreshdeskIcon,
-  FirefliesIcon,
-  EgnyteIcon,
-  AirtableIcon,
-  GitbookIcon,
-  HighspotIcon,
-  DrupalWikiIcon,
-  EmailIcon,
-  TestRailIcon,
-} from "@/components/icons/icons";
-import { ValidSources } from "./types";
-import { SourceCategory, SourceMetadata } from "./search/interfaces";
+import { R2Icon, S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
+import { ValidSources } from "@/lib/types";
+import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { Persona } from "@/app/admin/agents/interfaces";
 import React from "react";
-import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "./constants";
-import { SvgFileText, SvgGlobe, SvgUploadCloud } from "@opal/icons";
+import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
+import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
+import {
+  SvgAirtable,
+  SvgAsana,
+  SvgAxero,
+  SvgBitbucket,
+  SvgBookstack,
+  SvgClickup,
+  SvgCoda,
+  SvgConfluence,
+  SvgDiscord,
+  SvgDiscourse,
+  SvgDocument360,
+  SvgDropbox,
+  SvgDrupal,
+  SvgEgnyte,
+  SvgFireflies,
+  SvgFreshdesk,
+  SvgGitbook,
+  SvgGithub,
+  SvgGitlab,
+  SvgGmail,
+  SvgGong,
+  SvgGoogleDrive,
+  SvgGoogleSites,
+  SvgGuru,
+  SvgHighspot,
+  SvgHubspot,
+  SvgJira,
+  SvgLinear,
+  SvgLoopio,
+  SvgMediawiki,
+  SvgNotion,
+  SvgOracle,
+  SvgOutline,
+  SvgProductboard,
+  SvgSalesforce,
+  SvgSharepoint,
+  SvgSlack,
+  SvgSlab,
+  SvgTeams,
+  SvgTestrail,
+  SvgWikipedia,
+  SvgXenforo,
+  SvgZendesk,
+  SvgZulip,
+} from "@opal/logos";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -79,7 +76,7 @@ type SourceMap = {
 };
 
 const slackMetadata = {
-  icon: ColorSlackIcon,
+  icon: SvgSlack,
   displayName: "Slack",
   category: SourceCategory.Messaging,
   isPopular: true,
@@ -95,7 +92,7 @@ const slackMetadata = {
 export const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
   confluence: {
-    icon: ConfluenceIcon,
+    icon: SvgConfluence,
     displayName: "Confluence",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/confluence`,
@@ -103,86 +100,86 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   sharepoint: {
-    icon: SharepointIcon,
+    icon: SvgSharepoint,
     displayName: "Sharepoint",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/sharepoint`,
     isPopular: true,
   },
   coda: {
-    icon: CodaIcon,
+    icon: SvgCoda,
     displayName: "Coda",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/coda",
   },
   notion: {
-    icon: NotionIcon,
+    icon: SvgNotion,
     displayName: "Notion",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/notion`,
   },
   bookstack: {
-    icon: BookstackIcon,
+    icon: SvgBookstack,
     displayName: "BookStack",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/bookstack`,
   },
   document360: {
-    icon: Document360Icon,
+    icon: SvgDocument360,
     displayName: "Document360",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/document360`,
   },
   discourse: {
-    icon: DiscourseIcon,
+    icon: SvgDiscourse,
     displayName: "Discourse",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/discourse`,
   },
   gitbook: {
-    icon: GitbookIcon,
+    icon: SvgGitbook,
     displayName: "GitBook",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gitbook`,
   },
   slab: {
-    icon: SlabIcon,
+    icon: SvgSlab,
     displayName: "Slab",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/slab`,
   },
   outline: {
-    icon: OutlineIcon,
+    icon: SvgOutline,
     displayName: "Outline",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outline`,
   },
   google_sites: {
-    icon: GoogleSitesIcon,
+    icon: SvgGoogleSites,
     displayName: "Google Sites",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_sites`,
   },
   guru: {
-    icon: GuruIcon,
+    icon: SvgGuru,
     displayName: "Guru",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/guru`,
   },
   mediawiki: {
-    icon: MediaWikiIcon,
+    icon: SvgMediawiki,
     displayName: "MediaWiki",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/mediawiki`,
   },
   axero: {
-    icon: AxeroIcon,
+    icon: SvgAxero,
     displayName: "Axero",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/axero`,
   },
   wikipedia: {
-    icon: WikipediaIcon,
+    icon: SvgWikipedia,
     displayName: "Wikipedia",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/wikipedia`,
@@ -190,7 +187,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Cloud Storage
   google_drive: {
-    icon: GoogleDriveIcon,
+    icon: SvgGoogleDrive,
     displayName: "Google Drive",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
@@ -198,7 +195,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: true,
   },
   dropbox: {
-    icon: DropboxIcon,
+    icon: SvgDropbox,
     displayName: "Dropbox",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/dropbox`,
@@ -216,13 +213,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_storage`,
   },
   egnyte: {
-    icon: EgnyteIcon,
+    icon: SvgEgnyte,
     displayName: "Egnyte",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/egnyte`,
   },
   oci_storage: {
-    icon: OCIStorageIcon,
+    icon: SvgOracle,
     displayName: "Oracle Storage",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/oci_storage`,
@@ -236,57 +233,57 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Ticketing & Task Management
   jira: {
-    icon: JiraIcon,
+    icon: SvgJira,
     displayName: "Jira",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
   },
   zendesk: {
-    icon: ZendeskIcon,
+    icon: SvgZendesk,
     displayName: "Zendesk",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/zendesk`,
     isPopular: true,
   },
   airtable: {
-    icon: AirtableIcon,
+    icon: SvgAirtable,
     displayName: "Airtable",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/airtable`,
   },
   linear: {
-    icon: LinearIcon,
+    icon: SvgLinear,
     displayName: "Linear",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/linear`,
   },
   freshdesk: {
-    icon: FreshdeskIcon,
+    icon: SvgFreshdesk,
     displayName: "Freshdesk",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/freshdesk`,
   },
   asana: {
-    icon: AsanaIcon,
+    icon: SvgAsana,
     displayName: "Asana",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/asana`,
   },
   clickup: {
-    icon: ClickupIcon,
+    icon: SvgClickup,
     displayName: "Clickup",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
   },
   productboard: {
-    icon: ProductboardIcon,
+    icon: SvgProductboard,
     displayName: "Productboard",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/productboard`,
   },
   testrail: {
-    icon: TestRailIcon,
+    icon: SvgTestrail,
     displayName: "TestRail",
     category: SourceCategory.TicketingAndTaskManagement,
   },
@@ -295,41 +292,41 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   slack: slackMetadata,
   federated_slack: slackMetadata,
   teams: {
-    icon: TeamsIcon,
+    icon: SvgTeams,
     displayName: "Teams",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/teams`,
   },
   gmail: {
-    icon: GmailIcon,
+    icon: SvgGmail,
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
   },
   drupal_wiki: {
-    icon: DrupalWikiIcon,
+    icon: SvgDrupal,
     displayName: "Drupal Wiki",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/drupal_wiki`,
   },
   imap: {
-    icon: EmailIcon,
+    icon: SvgMail,
     displayName: "Email",
     category: SourceCategory.Messaging,
   },
   discord: {
-    icon: ColorDiscordIcon,
+    icon: SvgDiscord,
     displayName: "Discord",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/discord`,
   },
   xenforo: {
-    icon: XenforoIcon,
+    icon: SvgXenforo,
     displayName: "Xenforo",
     category: SourceCategory.Messaging,
   },
   zulip: {
-    icon: ZulipIcon,
+    icon: SvgZulip,
     displayName: "Zulip",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/zulip`,
@@ -337,60 +334,60 @@ export const SOURCE_METADATA_MAP: SourceMap = {
 
   // Sales
   salesforce: {
-    icon: SalesforceIcon,
+    icon: SvgSalesforce,
     displayName: "Salesforce",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/salesforce`,
     isPopular: true,
   },
   hubspot: {
-    icon: HubSpotIcon,
+    icon: SvgHubspot,
     displayName: "HubSpot",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/hubspot`,
     isPopular: true,
   },
   gong: {
-    icon: GongIcon,
+    icon: SvgGong,
     displayName: "Gong",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gong`,
     isPopular: true,
   },
   fireflies: {
-    icon: FirefliesIcon,
+    icon: SvgFireflies,
     displayName: "Fireflies",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/fireflies`,
   },
   highspot: {
-    icon: HighspotIcon,
+    icon: SvgHighspot,
     displayName: "Highspot",
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/highspot`,
   },
   loopio: {
-    icon: LoopioIcon,
+    icon: SvgLoopio,
     displayName: "Loopio",
     category: SourceCategory.Sales,
   },
 
   // Code Repository
   github: {
-    icon: GithubIcon,
+    icon: SvgGithub,
     displayName: "Github",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/github`,
     isPopular: true,
   },
   gitlab: {
-    icon: GitlabIcon,
+    icon: SvgGitlab,
     displayName: "Gitlab",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gitlab`,
   },
   bitbucket: {
-    icon: BitbucketIcon,
+    icon: SvgBitbucket,
     displayName: "Bitbucket",
     category: SourceCategory.CodeRepository,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/bitbucket`,
@@ -498,9 +495,9 @@ export function getSourceDocLink(sourceType: ValidSources): string | null {
   return SOURCE_METADATA_MAP[sourceType].docs || null;
 }
 
-export const isValidSource = (sourceType: string) => {
+export function isValidSource(sourceType: string): boolean {
   return Object.keys(SOURCE_METADATA_MAP).includes(sourceType);
-};
+}
 
 export function getSourceDisplayName(sourceType: ValidSources): string | null {
   return getSourceMetadata(sourceType).displayName;
@@ -520,27 +517,4 @@ export function getSourcesForPersona(persona: Persona): ValidSources[] {
     });
   });
   return personaSources;
-}
-
-export async function fetchTitleFromUrl(url: string): Promise<string | null> {
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      // If the remote site has no CORS header, this may fail in the browser
-      mode: "cors",
-    });
-    if (!response.ok) {
-      // Non-200 response, treat as a failure
-      return null;
-    }
-    const html = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    // If the site has <title>My Demo Page</title>, we retrieve "My Demo Page"
-    const pageTitle = doc.querySelector("title")?.innerText.trim() ?? null;
-    return pageTitle;
-  } catch (error) {
-    console.error("Error fetching page title:", error);
-    return null;
-  }
 }

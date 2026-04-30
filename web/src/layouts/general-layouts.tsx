@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 import React from "react";
@@ -202,7 +202,7 @@ function AttachmentItemLayout({
             description={description}
             sizePreset="main-ui"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
         </div>
         {middleText && (

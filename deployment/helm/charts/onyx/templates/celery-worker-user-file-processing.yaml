@@ -77,6 +77,9 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with .Values.celery_worker_user_file_processing.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- with .Values.celery_worker_user_file_processing.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

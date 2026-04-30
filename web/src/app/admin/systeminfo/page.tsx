@@ -1,5 +1,5 @@
-import { NotebookIcon } from "@/components/icons/icons";
 import { getWebVersion, getBackendVersion } from "@/lib/version";
+import { SvgBook } from "@opal/icons";
 
 const Page = async () => {
   let web_version: string | null = null;
@@ -16,7 +16,7 @@ const Page = async () => {
   return (
     <div>
       <div className="border-solid border-background-600 border-b pb-2 mb-4 flex">
-        <NotebookIcon size={32} />
+        <SvgBook size={32} />
         <h1 className="text-3xl font-bold pl-2">Version</h1>
       </div>
 

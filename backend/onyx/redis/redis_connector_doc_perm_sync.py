@@ -15,6 +15,9 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.server.metrics.perm_sync_metrics import (
+    observe_doc_perm_sync_db_update_duration,
+)
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 
@@ -189,7 +192,7 @@ class RedisConnectorPermissionSync:
 
         num_permissions = 0
         num_errors = 0
-        # Create a task for each permission sync
+        cumulative_db_update_time = 0.0
         for permissions in new_permissions:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
@@ -228,7 +231,9 @@ class RedisConnectorPermissionSync:
 
             # This can internally exception due to db issues but still continue
             # Catch exceptions per-element to avoid breaking the entire sync
+            db_start = time.monotonic()
             try:
+
                 element_update_permissions_fn(
                     self.tenant_id,
                     permissions,
@@ -236,7 +241,6 @@ class RedisConnectorPermissionSync:
                     connector_id,
                     credential_id,
                 )
-
                 num_permissions += 1
             except Exception:
                 num_errors += 1
@@ -249,8 +253,12 @@ class RedisConnectorPermissionSync:
                     task_logger.exception(
                         f"Failed to update permissions for element {element_id}"
                     )
-                # Continue processing other elements
+            finally:
+                cumulative_db_update_time += time.monotonic() - db_start
 
+        observe_doc_perm_sync_db_update_duration(
+            cumulative_db_update_time, source_string
+        )
         return PermissionSyncResult(num_updated=num_permissions, num_errors=num_errors)
 
     def reset(self) -> None:

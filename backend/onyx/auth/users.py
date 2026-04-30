@@ -82,6 +82,7 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -380,35 +381,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
-        # Verify captcha if enabled (for cloud signup protection)
-        from onyx.auth.captcha import CaptchaVerificationError
-        from onyx.auth.captcha import is_captcha_enabled
-        from onyx.auth.captcha import verify_captcha_token
-
-        if is_captcha_enabled() and request is not None:
-            # Get captcha token from request body or headers
-            captcha_token = None
-            if hasattr(user_create, "captcha_token"):
-                captcha_token = getattr(user_create, "captcha_token", None)
-
-            # Also check headers as a fallback
-            if not captcha_token:
-                captcha_token = request.headers.get("X-Captcha-Token")
-
-            try:
-                await verify_captcha_token(
-                    captcha_token or "", expected_action="signup"
-                )
-            except CaptchaVerificationError as e:
-                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
-
-        # We verify the password here to make sure it's valid before we proceed
-        await self.validate_password(
-            user_create.password, cast(schemas.UC, user_create)
-        )
-
-        # Check for disposable emails BEFORE provisioning tenant
-        # This prevents creating tenants for throwaway email addresses
+        # Check for disposable emails FIRST so obvious throwaway domains are
+        # rejected before hitting Google's siteverify API. Cheap local check.
         try:
             verify_email_domain(user_create.email, is_registration=True)
         except OnyxError as e:
@@ -424,6 +398,35 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     extra={"email_domain": domain},
                 )
             raise
+
+        if request is not None:
+            await enforce_signup_rate_limit(request)
+
+        # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaAction
+        from onyx.auth.captcha import CaptchaVerificationError
+        from onyx.auth.captcha import is_captcha_enabled
+        from onyx.auth.captcha import verify_captcha_token
+
+        if is_captcha_enabled() and request is not None:
+            # Get captcha token from request body or headers
+            captcha_token = None
+            if hasattr(user_create, "captcha_token"):
+                captcha_token = getattr(user_create, "captcha_token", None)
+
+            # Also check headers as a fallback
+            if not captcha_token:
+                captcha_token = request.headers.get("X-Captcha-Token")
+
+            try:
+                await verify_captcha_token(captcha_token or "", CaptchaAction.SIGNUP)
+            except CaptchaVerificationError as e:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+        # We verify the password here to make sure it's valid before we proceed
+        await self.validate_password(
+            user_create.password, cast(schemas.UC, user_create)
+        )
 
         user_count: int | None = None
         referral_source = (
@@ -620,8 +623,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_db.commit()
             else:
                 logger.warning(
-                    "User %s not found in sync session during upgrade to standard; "
-                    "skipping upgrade",
+                    "User %s not found in sync session during upgrade to standard; skipping upgrade",
                     user_id,
                 )
 
@@ -1099,7 +1101,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
+            from fastapi import HTTPException
+            from fastapi import status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1614,7 +1617,6 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user

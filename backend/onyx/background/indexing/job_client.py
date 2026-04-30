@@ -125,6 +125,36 @@ class SimpleJob:
             return True
         return False
 
+    def terminate_and_wait(self, sigterm_grace_seconds: float) -> bool:
+        """Best-effort hard-kill of the spawned process.
+
+        Sends SIGTERM, waits up to `sigterm_grace_seconds` for the process to exit,
+        then escalates to SIGKILL if the process is still alive. Joins after each
+        signal so the OS can reap the child. Returns True if the process was alive
+        when this was called (i.e. we actually had to do something).
+        """
+        if self.process is None:
+            return False
+        if not self.process.is_alive():
+            return False
+
+        pid = self.process.pid
+        logger.warning(
+            f"SimpleJob.terminate_and_wait - sending SIGTERM to job: id={self.id} pid={pid}"
+        )
+        self.process.terminate()
+        self.process.join(timeout=sigterm_grace_seconds)
+
+        if self.process.is_alive():
+            logger.warning(
+                f"SimpleJob.terminate_and_wait - SIGTERM grace exceeded, sending SIGKILL: "
+                f"id={self.id} pid={pid} grace={sigterm_grace_seconds}s"
+            )
+            self.process.kill()
+            self.process.join()
+
+        return True
+
     @property
     def status(self) -> JobStatusType:
         if not self.process:

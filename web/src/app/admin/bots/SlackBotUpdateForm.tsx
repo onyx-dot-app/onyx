@@ -11,7 +11,7 @@ import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisp
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { Button } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
 function Checkbox({

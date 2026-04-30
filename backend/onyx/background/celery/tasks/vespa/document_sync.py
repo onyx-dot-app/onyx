@@ -117,7 +117,7 @@ def generate_document_sync_tasks(
 
         # Create the Celery task
         celery_app.send_task(
-            OnyxCeleryTask.VESPA_METADATA_SYNC_TASK,
+            OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
             kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
             queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
             task_id=custom_task_id,
@@ -153,7 +153,7 @@ def try_generate_stale_document_sync_tasks(
 
     # Tenant-work-gating hook: refresh this tenant's active-set membership
     # whenever vespa sync actually has stale docs to dispatch.
-    maybe_mark_tenant_active(tenant_id)
+    maybe_mark_tenant_active(tenant_id, caller="vespa_sync")
 
     logger.info(
         f"Stale documents found (at least {stale_doc_count}). Generating sync tasks in one batch."

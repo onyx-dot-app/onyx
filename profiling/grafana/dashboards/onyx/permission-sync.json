@@ -1,0 +1,697 @@
+{
+  "id": null,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Doc Permission Sync",
+      "type": "row"
+    },
+    {
+      "title": "Doc Perm Sync Duration (p50 / p95 / p99)",
+      "description": "Overall duration of doc permission sync by connector type",
+      "type": "timeseries",
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(onyx_doc_perm_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_doc_perm_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(onyx_doc_perm_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Doc Perm Sync DB Update Duration (p50 / p95 / p99)",
+      "description": "Cumulative per-element DB update time within a single sync run",
+      "type": "timeseries",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(onyx_doc_perm_sync_db_update_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_doc_perm_sync_db_update_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(onyx_doc_perm_sync_db_update_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Doc Perm Sync Throughput (docs/min)",
+      "description": "Rate of documents successfully synced per minute",
+      "type": "timeseries",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "docs/min",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 18,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(onyx_doc_perm_sync_docs_processed_total{connector_type=~\"$connector_type\"}[$__rate_interval])) by (connector_type) * 60",
+          "legendFormat": "{{connector_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Doc Perm Sync Error Rate",
+      "description": "Rate of document permission errors per minute",
+      "type": "timeseries",
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "errors/min",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 18,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(onyx_doc_perm_sync_errors_total{connector_type=~\"$connector_type\"}[$__rate_interval])) by (connector_type) * 60",
+          "legendFormat": "{{connector_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Doc Perm Sync Totals",
+      "description": "Cumulative docs synced and errors",
+      "type": "stat",
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Errors" },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "red", "value": 1 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(onyx_doc_perm_sync_docs_processed_total{connector_type=~\"$connector_type\"})",
+          "legendFormat": "Docs Synced",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(onyx_doc_perm_sync_errors_total{connector_type=~\"$connector_type\"})",
+          "legendFormat": "Errors",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 101,
+      "title": "External Group Sync",
+      "type": "row"
+    },
+    {
+      "title": "Group Sync Duration (p50 / p95 / p99)",
+      "description": "Overall duration of external group sync by connector type",
+      "type": "timeseries",
+      "id": 6,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(onyx_group_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_group_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(onyx_group_sync_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Group Sync Upsert Duration (p50 / p95 / p99)",
+      "description": "Cumulative batch upsert time within a single group sync run",
+      "type": "timeseries",
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(onyx_group_sync_upsert_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_group_sync_upsert_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(onyx_group_sync_upsert_duration_seconds_bucket{connector_type=~\"$connector_type\"}[$__rate_interval])) by (le, connector_type))",
+          "legendFormat": "{{connector_type}} p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Group Sync Throughput (groups/min)",
+      "description": "Rate of groups processed per minute",
+      "type": "timeseries",
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "groups/min",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 18,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(onyx_group_sync_groups_processed_total{connector_type=~\"$connector_type\"}[$__rate_interval])) by (connector_type) * 60",
+          "legendFormat": "{{connector_type}} groups",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(onyx_group_sync_users_processed_total{connector_type=~\"$connector_type\"}[$__rate_interval])) by (connector_type) * 60",
+          "legendFormat": "{{connector_type}} users",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Group Sync Error Rate",
+      "description": "Rate of errors during external group sync per minute",
+      "type": "timeseries",
+      "id": 9,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "errors/min",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 18,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(onyx_group_sync_errors_total{connector_type=~\"$connector_type\"}[$__rate_interval])) by (connector_type) * 60",
+          "legendFormat": "{{connector_type}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Group Sync Totals",
+      "description": "Cumulative groups, users processed and errors",
+      "type": "stat",
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Errors" },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "red", "value": 1 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "sum(onyx_group_sync_groups_processed_total{connector_type=~\"$connector_type\"})",
+          "legendFormat": "Groups",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(onyx_group_sync_users_processed_total{connector_type=~\"$connector_type\"})",
+          "legendFormat": "Users",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(onyx_group_sync_errors_total{connector_type=~\"$connector_type\"})",
+          "legendFormat": "Errors",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 102,
+      "title": "Celery Task Metrics (Perm Sync Tasks)",
+      "type": "row"
+    },
+    {
+      "title": "Perm Sync Celery Task Duration (p95)",
+      "description": "Task execution duration for permission sync celery tasks",
+      "type": "timeseries",
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_celery_task_duration_seconds_bucket{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task|check_for_doc_permissions_sync|check_for_external_group_sync\"}[$__rate_interval])) by (le, task_name))",
+          "legendFormat": "{{task_name}} p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Perm Sync Celery Task Outcomes",
+      "description": "Success vs failure counts for permission sync celery tasks",
+      "type": "timeseries",
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "fillOpacity": 50,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(onyx_celery_task_completed_total{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\", outcome=\"success\"}[$__rate_interval])) by (task_name)",
+          "legendFormat": "{{task_name}} success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(onyx_celery_task_completed_total{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\", outcome=\"failure\"}[$__rate_interval])) by (task_name)",
+          "legendFormat": "{{task_name}} failure",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Perm Sync Celery Revoked / Retried / Rejected",
+      "description": "Revocation, retry, and rejection counts for perm sync tasks",
+      "type": "timeseries",
+      "id": 13,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "fillOpacity": 50,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "mode": "normal", "group": "A" },
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(onyx_celery_task_revoked_total{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\"}[$__rate_interval])) by (task_name)",
+          "legendFormat": "{{task_name}} revoked",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(onyx_celery_task_retried_total{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\"}[$__rate_interval])) by (task_name)",
+          "legendFormat": "{{task_name}} retried",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(onyx_celery_task_rejected_total{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\"}[$__rate_interval])) by (task_name)",
+          "legendFormat": "{{task_name}} rejected",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Perm Sync Celery Queue Wait Time (p95)",
+      "description": "Time perm sync tasks waited in queue before execution",
+      "type": "timeseries",
+      "id": 14,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(onyx_celery_task_queue_wait_seconds_bucket{task_name=~\"connector_permission_sync_generator_task|connector_external_group_sync_generator_task\"}[$__rate_interval])) by (le, task_name))",
+          "legendFormat": "{{task_name}} p95",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["onyx", "permissions", "sync"],
+  "templating": {
+    "list": [
+      {
+        "current": { "text": "Prometheus", "value": "prometheus" },
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(onyx_doc_perm_sync_duration_seconds_bucket, connector_type)",
+        "includeAll": true,
+        "label": "Connector Type",
+        "multi": true,
+        "name": "connector_type",
+        "options": [],
+        "query": {
+          "query": "label_values(onyx_doc_perm_sync_duration_seconds_bucket, connector_type)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Onyx Permission Sync",
+  "uid": "onyx-permission-sync",
+  "version": 1,
+  "weekStart": ""
+}

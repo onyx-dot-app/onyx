@@ -38,7 +38,6 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-
 TEST_TENANT_ID = "public"
 TEST_USER_EMAIL = "test_sandbox_user@example.com"
 

@@ -3,113 +3,107 @@ import json
 from typing import Any
 from typing import Literal
 from typing import NotRequired
-from uuid import uuid4
-
-from pydantic import BaseModel
-from sqlalchemy.orm import validates
-
-from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
-from pydantic import ValidationError
-
-from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from uuid import uuid4
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
+from pydantic import BaseModel
+from pydantic import ValidationError
+from sqlalchemy import BigInteger
 from sqlalchemy import Boolean
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
+from sqlalchemy import event
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
-from sqlalchemy import BigInteger
-
+from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
-from sqlalchemy import event
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm import validates
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
-from sqlalchemy import PrimaryKeyConstraint
+from typing_extensions import TypedDict  # noreorder
 
-from onyx.db.enums import AccountType
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import (
-    ANONYMOUS_USER_UUID,
-    DEFAULT_BOOST,
-    FederatedConnectorSource,
-    MilestoneRecordType,
-)
+from onyx.configs.constants import ANONYMOUS_USER_UUID
+from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FederatedConnectorSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
-from onyx.db.enums import (
-    AccessType,
-    ArtifactType,
-    BuildSessionStatus,
-    EmbeddingPrecision,
-    HierarchyNodeType,
-    HookFailStrategy,
-    HookPoint,
-    IndexingMode,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
-    ProcessingMode,
-    SandboxStatus,
-    SyncType,
-    SyncStatus,
-    MCPAuthenticationType,
-    UserFileStatus,
-    MCPAuthenticationPerformer,
-    MCPTransport,
-    MCPServerStatus,
-    Permission,
-    GrantSource,
-    LLMModelFlowType,
-    ThemePreference,
-    DefaultAppMode,
-    SwitchoverType,
-    SharingScope,
-)
+from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
+from onyx.db.enums import AccessType
+from onyx.db.enums import AccountType
+from onyx.db.enums import ArtifactType
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import GrantSource
+from onyx.db.enums import HierarchyNodeType
+from onyx.db.enums import HookFailStrategy
+from onyx.db.enums import HookPoint
+from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPServerStatus
+from onyx.db.enums import MCPTransport
+from onyx.db.enums import OpenSearchDocumentMigrationStatus
+from onyx.db.enums import OpenSearchTenantMigrationStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ProcessingMode
+from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SharingScope
+from onyx.db.enums import SwitchoverType
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.enums import TaskStatus
-from onyx.db.pydantic_type import PydanticListType, PydanticType
-from onyx.kg.models import KGEntityTypeAttributes
-from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
+from onyx.db.enums import ThemePreference
+from onyx.db.enums import UserFileStatus
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
+from onyx.db.pydantic_type import PydanticListType
+from onyx.db.pydantic_type import PydanticType
 from onyx.file_store.models import FileDescriptor
+from onyx.kg.models import KGEntityTypeAttributes
+from onyx.kg.models import KGStage
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
-from onyx.kg.models import KGStage
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
-from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
+from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
+from onyx.utils.special_types import JSON_ro
 from shared_configs.enums import EmbeddingProvider
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
@@ -894,7 +888,7 @@ class HierarchyNode(Base):
     # For hierarchy nodes that are also documents (e.g., Confluence pages)
     # SET NULL when document is deleted - node can exist without its document
     document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("document.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Self-referential FK for tree structure
@@ -952,6 +946,7 @@ class Document(Base):
     semantic_id: Mapped[str] = mapped_column(NullFilteredString)
     # First Section's link
     link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
+    file_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of
@@ -1054,9 +1049,9 @@ class Document(Base):
 
     __table_args__ = (
         Index(
-            "ix_document_sync_status",
-            last_modified,
-            last_synced,
+            "ix_document_needs_sync",
+            "id",
+            postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
         ),
     )
 
@@ -2074,9 +2069,12 @@ class SearchSettings(Base):
         Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
     )
 
-    # allows for quantization -> less memory usage for a small performance hit
+    # allows for quantization -> less memory usage for a small performance hit.
+    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
+    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
     embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False)
+        Enum(EmbeddingPrecision, native_enum=False),
+        default=EmbeddingPrecision.FLOAT,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -2097,10 +2095,6 @@ class SearchSettings(Base):
     contextual_rag_llm_name: Mapped[str | None] = mapped_column(String, nullable=True)
     contextual_rag_llm_provider: Mapped[str | None] = mapped_column(
         String, nullable=True
-    )
-
-    multilingual_expansion: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), default=[]
     )
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
@@ -2203,6 +2197,7 @@ class IndexAttempt(Base):
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     # Some index attempts that run from beginning will still have this as False
@@ -2291,6 +2286,12 @@ class IndexAttempt(Base):
 
     error_rows = relationship(
         "IndexAttemptError",
+        back_populates="index_attempt",
+        cascade="all, delete-orphan",
+    )
+
+    stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
+        "IndexAttemptStageMetric",
         back_populates="index_attempt",
         cascade="all, delete-orphan",
     )
@@ -2406,10 +2407,12 @@ class IndexAttemptError(Base):
     index_attempt_id: Mapped[int] = mapped_column(
         ForeignKey("index_attempt.id"),
         nullable=False,
+        index=True,
     )
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id"),
         nullable=False,
+        index=True,
     )
 
     document_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -2435,6 +2438,67 @@ class IndexAttemptError(Base):
 
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
+
+
+class IndexAttemptStageMetric(Base):
+    """Per-stage timing aggregate for an `IndexAttempt`.
+
+    One row per `(index_attempt_id, stage)` pair. The row holds running
+    aggregates (count, sum, min, max, and Welford/Chan M2 accumulator) so we
+    can derive average and standard deviation at read time without storing
+    individual samples. See `plans/index-attempt-stage-metrics.md` for the
+    write-path SQL and `onyx.db.index_attempt_metrics_models.STAGE_SCOPE`
+    for the per-stage display scope.
+    """
+
+    __tablename__ = "index_attempt_stage_metric"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    index_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stage: Mapped[IndexAttemptStage] = mapped_column(
+        Enum(IndexAttemptStage, native_enum=False, length=40),
+        nullable=False,
+    )
+
+    event_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    total_duration_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    # Welford / Chan running sum of squared deviations from the mean. Stored
+    # as Float (DOUBLE PRECISION on PostgreSQL) so the SQL upsert can apply
+    # Chan's parallel-combination formula without rounding drift.
+    m2_duration_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    min_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+    max_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+
+    time_first_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_last_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    index_attempt: Mapped["IndexAttempt"] = relationship(
+        "IndexAttempt", back_populates="stage_metrics"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "index_attempt_id",
+            "stage",
+            name="uq_index_attempt_stage_metric_attempt_stage",
+        ),
+    )
 
 
 class SyncRecord(Base):
@@ -4586,6 +4650,25 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+
+# Lifetime invite counter per tenant. Incremented atomically on every
+# invite reservation; never decremented — removals do not free quota, so
+# loops of invite → remove → invite cannot bypass the trial cap.
+class TenantInviteCounter(Base):
+    __tablename__ = "tenant_invite_counter"
+    __table_args__ = {"schema": "public"}
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    total_invites_sent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
 

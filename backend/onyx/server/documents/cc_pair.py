@@ -12,9 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
+from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
@@ -28,9 +26,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.connector_credential_pair import remove_credential_from_connector
-from onyx.db.connector_credential_pair import (
-    update_connector_credential_pair_from_id,
-)
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
@@ -42,12 +38,12 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
+from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import (
-    get_latest_successful_index_attempt_for_cc_pair_id,
-)
+from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
+from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import User
@@ -57,6 +53,8 @@ from onyx.db.permission_sync_attempt import (
 from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
@@ -68,6 +66,8 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocumentSyncStatus
 from onyx.server.documents.models import IndexAttemptSnapshot
+from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
+from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.documents.models import PermissionSyncAttemptSnapshot
 from onyx.server.models import StatusResponse
@@ -112,6 +112,47 @@ def get_cc_pair_index_attempts(
             for index_attempt in index_attempts
         ],
         total_items=total_count,
+    )
+
+
+@router.get("/admin/index-attempt/{index_attempt_id}/stage-metrics")
+def get_index_attempt_stage_metrics(
+    index_attempt_id: int,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> IndexAttemptStageMetricsResponse:
+    """Return the per-stage timing breakdown for a single ``IndexAttempt``.
+
+    Returned in pipeline (enum declaration) order. The frontend renders this
+    order verbatim for the default "Pipeline order" sort and re-sorts
+    client-side for the "Time taken" sort. Auth: caller must have at least
+    read access to the cc-pair that owns the attempt.
+    """
+    index_attempt = get_index_attempt(
+        db_session=db_session,
+        index_attempt_id=index_attempt_id,
+    )
+    if index_attempt is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Index attempt not found")
+
+    if not verify_user_has_access_to_cc_pair(
+        index_attempt.connector_credential_pair_id,
+        db_session,
+        user,
+        get_editable=False,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this index attempt",
+        )
+
+    metrics = get_stage_metrics_for_attempt(
+        db_session=db_session,
+        index_attempt_id=index_attempt_id,
+    )
+    return IndexAttemptStageMetricsResponse(
+        index_attempt_id=index_attempt_id,
+        stages=[IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics],
     )
 
 
@@ -584,7 +625,7 @@ def associate_credential_to_connector(
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.
-        maybe_mark_tenant_active(tenant_id)
+        maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
 
         # trigger indexing immediately
         client_app.send_task(

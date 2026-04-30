@@ -5,9 +5,7 @@ from simple_salesforce import Salesforce
 from simple_salesforce import SFType
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_OBJECTS
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_PREFIXES
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_SUFFIXES
@@ -15,7 +13,6 @@ from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-
 
 logger = setup_logger()
 

@@ -168,7 +168,7 @@ export default function GroupsCell({
             </Tooltip>
           )}
           {user.id && (
-            <Hoverable.Item group="tags" variant="opacity-on-hover">
+            <Hoverable.Item group="tags" variant="appear-on-hover">
               <Button
                 icon={SvgEdit}
                 prominence="tertiary"

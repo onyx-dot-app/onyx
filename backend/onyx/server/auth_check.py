@@ -13,7 +13,6 @@ from onyx.auth.users import current_user_with_expired_token
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
-
 PUBLIC_ENDPOINT_SPECS = [
     # built-in documentation functions
     ("/openapi.json", {"GET", "HEAD"}),
@@ -35,6 +34,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/refresh", {"POST"}),
     ("/auth/register", {"POST"}),
     ("/auth/login", {"POST"}),
+    # reCAPTCHA pre-OAuth challenge — user is not yet authenticated when
+    # they solve it, and the endpoint's own handler enforces the only
+    # thing that matters (valid Google siteverify response).
+    ("/auth/captcha/oauth-verify", {"POST"}),
     ("/auth/logout", {"POST"}),
     ("/auth/forgot-password", {"POST"}),
     ("/auth/reset-password", {"POST"}),

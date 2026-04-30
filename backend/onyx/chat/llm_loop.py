@@ -5,6 +5,7 @@ from typing import Any
 from typing import Literal
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import build_python_chat_files_from_search_docs
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import CitationMode
@@ -21,9 +22,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
-from onyx.chat.prompt_utils import (
-    get_default_base_system_prompt,
-)
+from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -56,9 +55,7 @@ from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -656,6 +653,11 @@ def run_llm_loop(
 
         initialize_litellm()
 
+        # Normalize chat_files to a mutable list so we can extend it mid-loop
+        # when a search hit carries an attached file the Python tool should
+        # see.
+        chat_files = list(chat_files or [])
+
         # Track when the loop starts for calculating time-to-answer
         loop_start_time = time.monotonic()
 
@@ -996,6 +998,21 @@ def run_llm_loop(
                     # only do this if the web search tool yielded results
                     if search_docs and tool_call.tool_name == WebSearchTool.NAME:
                         just_ran_web_search = True
+
+                    # Stage any raw source files attached to these hits into
+                    # the session's chat_files so the next Python tool call
+                    # sees them already uploaded under their display names.
+                    if search_docs:
+                        staged = build_python_chat_files_from_search_docs(
+                            search_docs=search_docs,
+                        )
+                        if staged:
+                            existing_filenames = {cf.filename for cf in chat_files}
+                            chat_files.extend(
+                                cf
+                                for cf in staged
+                                if cf.filename not in existing_filenames
+                            )
 
                 # Extract generated_images if this is an image generation tool response
                 generated_images = None

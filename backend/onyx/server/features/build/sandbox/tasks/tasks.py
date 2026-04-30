@@ -34,7 +34,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 
-
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
 
@@ -113,7 +112,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
             # Tenant-work-gating hook: refresh this tenant's active-set
             # membership whenever sandbox cleanup has work to do.
-            maybe_mark_tenant_active(tenant_id)
+            maybe_mark_tenant_active(tenant_id, caller="sandbox_cleanup")
 
             task_logger.info(
                 f"Found {len(idle_sandboxes)} idle sandboxes to put to sleep"

@@ -167,9 +167,12 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         default_factory=ThreadSafeSet
     )
 
-    # Maps email → set of IDs of folders where that email confirmed no accessible parent.
-    # Avoids redundant API calls when the same (folder, email) pair is
-    # encountered again within the same retrieval run.
+    # Maps email → set of folder IDs that email should skip when walking the
+    # parent chain. Covers two cases:
+    #   1. Folders where that email confirmed no accessible parent (true orphans).
+    #   2. Intermediate folders on a path that dead-ended at a confirmed orphan —
+    #      backfilled so future walks short-circuit earlier in the chain.
+    # In both cases _get_folder_metadata skips the API call and returns None.
     failed_folder_ids_by_email: ThreadSafeDict[str, ThreadSafeSet[str]] = Field(
         default_factory=ThreadSafeDict
     )

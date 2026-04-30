@@ -9,7 +9,6 @@ from onyx.connectors.teams.connector import TeamsConnector
 from tests.daily.connectors.teams.models import TeamsThread
 from tests.daily.connectors.utils import load_all_from_connector
 
-
 TEAMS_THREAD = [
     # Posted in "Public Channel"
     TeamsThread(

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FiEdit2 } from "react-icons/fi";
-import { CheckmarkIcon } from "./icons/icons";
+import { SvgCheck } from "@opal/icons";
 
 export function EditableValue({
   initialValue,
@@ -49,7 +49,7 @@ export function EditableValue({
           }}
           className="cursor-pointer my-auto ml-2"
         >
-          <CheckmarkIcon size={16} className="text-green-700" />
+          <SvgCheck size={16} className="text-green-700" />
         </div>
       </div>
     );

@@ -22,6 +22,7 @@ from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
+from onyx.file_store.staging import RawFileCallback
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -107,6 +108,7 @@ def instantiate_connector(
     input_type: InputType,
     connector_specific_config: dict[str, Any],
     credential: Credential,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -129,6 +131,9 @@ def instantiate_connector(
             backend_update_credential_json(credential, new_credentials, db_session)
 
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+
+    if raw_file_callback is not None:
+        connector.set_raw_file_callback(raw_file_callback)
 
     return connector
 

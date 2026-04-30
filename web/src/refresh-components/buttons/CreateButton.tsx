@@ -1,7 +1,7 @@
 "use client";
 
 import Button, { ButtonProps } from "@/refresh-components/buttons/Button";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { SvgPlusCircle } from "@opal/icons";
 
 export interface CreateButtonProps

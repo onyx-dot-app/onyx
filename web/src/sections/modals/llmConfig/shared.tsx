@@ -3,14 +3,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
@@ -276,7 +276,7 @@ export function ModelAccessField() {
                     Always shared
                   </Text>
                 }
-                paddingVariant="fit"
+                padding="fit"
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -304,7 +304,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          paddingVariant="fit"
+                          padding="fit"
                         />
                       </Card>
                     </div>
@@ -341,7 +341,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          paddingVariant="fit"
+                          padding="fit"
                         />
                       </Card>
                     </div>
@@ -548,7 +548,7 @@ export function ModelSelectionField({
                       prominence="tertiary"
                       onClick={() => setIsExpanded(!isExpanded)}
                     >
-                      <Interactive.Container type="button" widthVariant="full">
+                      <Interactive.Container type="button" width="full">
                         <Content
                           sizePreset="secondary"
                           variant="body"

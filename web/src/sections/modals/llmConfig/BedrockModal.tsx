@@ -28,15 +28,9 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchBedrockModels } from "@/lib/llmConfig/svc";
-import { Card } from "@opal/components";
+import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { SvgAlertCircle } from "@opal/icons";
-import {
-  Content,
-  InputDivider,
-  InputPadder,
-  InputVertical,
-} from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
@@ -218,14 +212,10 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
-          <Card background="none" border="solid" padding="sm">
-            <Content
-              icon={SvgAlertCircle}
-              title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
-              variant="body"
-              sizePreset="main-ui"
-            />
-          </Card>
+          <MessageCard
+            variant="info"
+            title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+          />
         </InputPadder>
       )}
 

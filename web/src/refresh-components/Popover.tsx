@@ -2,10 +2,10 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 
 /**
@@ -107,13 +107,14 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger";
+type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "2xl" | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   sm: "w-[10rem]",
   md: "w-[12rem]",
   lg: "w-[15rem]",
   xl: "w-[18rem]",
+  "2xl": "w-[25rem]",
   trigger: "w-[var(--radix-popover-trigger-width)]",
 };
 interface PopoverContentProps
@@ -172,10 +173,10 @@ function SeparatorHelper() {
 /**
  * Popover Menu Component
  *
- * Converts a list of React nodes into a vertical menu with automatic separator handling.
+ * Converts a list of React nodes into a vertical menu with automatic divider handling.
  *
  * @remarks
- * - Treats `null` values as separator lines
+ * - Treats `null` values as divider lines
  * - Filters out `undefined` and `false` values
  * - Removes separators at the beginning and end of the list
  *
@@ -237,7 +238,7 @@ export function PopoverMenu({
             {child === undefined ? (
               <></>
             ) : child === null ? (
-              // Render `null`s as separator lines
+              // Render `null`s as divider lines
               <SeparatorHelper />
             ) : (
               child

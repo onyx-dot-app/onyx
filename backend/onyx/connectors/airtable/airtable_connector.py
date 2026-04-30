@@ -14,6 +14,7 @@ from pyairtable.models.schema import TableSchema
 from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -258,7 +259,9 @@ class AirtableConnector(LoadConnector):
                 )
                 def get_attachment_with_retry(url: str, record_id: str) -> bytes | None:
                     try:
-                        attachment_response = requests.get(url)
+                        attachment_response = requests.get(
+                            url, timeout=REQUEST_TIMEOUT_SECONDS
+                        )
                         attachment_response.raise_for_status()
                         return attachment_response.content
                     except requests.exceptions.HTTPError as e:
@@ -274,7 +277,9 @@ class AirtableConnector(LoadConnector):
                                 if refreshed_attachment.get("filename") == filename:
                                     new_url = refreshed_attachment.get("url")
                                     if new_url:
-                                        attachment_response = requests.get(new_url)
+                                        attachment_response = requests.get(
+                                            new_url, timeout=REQUEST_TIMEOUT_SECONDS
+                                        )
                                         attachment_response.raise_for_status()
                                         return attachment_response.content
 

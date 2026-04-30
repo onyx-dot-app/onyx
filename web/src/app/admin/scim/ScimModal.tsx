@@ -97,10 +97,7 @@ export default function ScimModal({
                     className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
                     rightSection={
                       <div onClick={(e) => e.stopPropagation()}>
-                        <Hoverable.Item
-                          group="token"
-                          variant="opacity-on-hover"
-                        >
+                        <Hoverable.Item group="token" variant="appear-on-hover">
                           <CopyIconButton getCopyText={() => view.rawToken} />
                         </Hoverable.Item>
                       </div>

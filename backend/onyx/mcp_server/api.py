@@ -19,8 +19,13 @@ from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.utils import shutdown_http_client
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 
 logger = setup_logger()
+
+# Initialize EE flag at module import so it's set regardless of the entry point
+# (python -m onyx.mcp_server_main, uvicorn onyx.mcp_server.api:mcp_app, etc.).
+set_is_ee_based_on_env_variable()
 
 logger.info("Creating Onyx MCP Server...")
 
@@ -32,8 +37,8 @@ mcp_server = FastMCP(
 
 # Import tools and resources AFTER mcp_server is created to avoid circular imports
 # Components register themselves via decorators on the shared mcp_server instance
-from onyx.mcp_server.tools import search  # noqa: E402, F401
 from onyx.mcp_server.resources import indexed_sources  # noqa: E402, F401
+from onyx.mcp_server.tools import search  # noqa: E402, F401
 
 logger.info("MCP server instance created")
 

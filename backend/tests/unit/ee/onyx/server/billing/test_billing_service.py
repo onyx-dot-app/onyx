@@ -7,8 +7,6 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from .conftest import make_mock_http_client
-from .conftest import make_mock_response
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
@@ -16,6 +14,9 @@ from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+from .conftest import make_mock_http_client
+from .conftest import make_mock_response
 
 
 class TestMakeBillingRequest:

@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "react";
 
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
@@ -39,7 +40,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
-      <Hoverable.Item group="fileTile" variant="opacity-on-hover">
+      <Hoverable.Item group="fileTile" variant="appear-on-hover">
         <button
           type="button"
           onClick={(e) => {
@@ -78,7 +79,7 @@ export default function FileTile({
   const isMuted = state === "processing" || state === "disabled";
 
   return (
-    <Hoverable.Root group="fileTile" widthVariant="fit">
+    <Hoverable.Root group="fileTile" width="fit">
       <div
         onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
         className={cn(

@@ -25,12 +25,8 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
-)
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
-)
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
@@ -724,10 +720,15 @@ def get_feedback_visibility() -> FeedbackVisibility:
 
 class TenantSocketModeClient(SocketModeClient):
     def __init__(self, tenant_id: str, slack_bot_id: int, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+        # Set these BEFORE calling super().__init__ — the base class starts
+        # the message_processor IntervalRunner thread during init, which can
+        # race into our overridden process_message/enqueue_message methods
+        # before these attributes exist (ONYX-BACKEND-1: AttributeError on
+        # _tenant_id).
         self._tenant_id = tenant_id
         self.slack_bot_id = slack_bot_id
         self.bot_name: str = "Unnamed"
+        super().__init__(*args, **kwargs)
 
     @contextmanager
     def _set_tenant_context(self) -> Generator[None, None, None]:

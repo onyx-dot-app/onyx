@@ -23,9 +23,7 @@ from onyx.connectors.google_utils.google_auth import sanitize_oauth_credentials
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
-from onyx.connectors.google_utils.shared_constants import (
-    DB_CREDENTIALS_DICT_TOKEN_KEY,
-)
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )

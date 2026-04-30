@@ -15,6 +15,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
+from onyx.file_store.staging import RawFileCallback
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -41,6 +42,9 @@ class NormalizationResult(BaseModel):
 
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
+
+    # Optional raw-file persistence hook to save original file
+    raw_file_callback: RawFileCallback | None = None
 
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -87,6 +91,15 @@ class BaseConnector(abc.ABC, Generic[CT]):
     def set_allow_images(self, value: bool) -> None:
         """Implement if the underlying connector wants to skip/allow image downloading
         based on the application level image analysis setting."""
+
+    def set_raw_file_callback(self, callback: RawFileCallback) -> None:
+        """Inject the per-attempt raw-file persistence callback.
+
+        Wired up by the docfetching entrypoint via `instantiate_connector`.
+        Connectors that don't care about persisting raw bytes can ignore this
+        — `raw_file_callback` simply stays `None`.
+        """
+        self.raw_file_callback = callback
 
     @classmethod
     def normalize_url(cls, url: str) -> "NormalizationResult":  # noqa: ARG003

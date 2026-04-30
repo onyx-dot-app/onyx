@@ -7,7 +7,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -37,7 +37,6 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Tooltip } from "@opal/components";
@@ -177,14 +176,14 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
   const imageSrc = uploadedImagePreview
     ? uploadedImagePreview
-    : values.uploaded_image_id
-      ? buildImgUrl(values.uploaded_image_id)
+    : values.uploaded_image_id && existingAgent?.id != null
+      ? buildAgentAvatarUrl(existingAgent.id)
       : values.icon_name
         ? undefined
         : values.remove_image
           ? undefined
           : existingAgent?.uploaded_image_id
-            ? buildImgUrl(existingAgent.uploaded_image_id)
+            ? buildAgentAvatarUrl(existingAgent.id)
             : undefined;
 
   function handleIconClick(iconName: string | null) {
@@ -212,7 +211,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
-          <Hoverable.Root group="inputAvatar" widthVariant="fit">
+          <Hoverable.Root group="inputAvatar" width="fit">
             <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
               <CustomAgentAvatar
@@ -223,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               />
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
-                <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
+                <Hoverable.Item group="inputAvatar" variant="appear-on-hover">
                   <Button prominence="secondary" size="md">
                     Edit
                   </Button>
@@ -280,20 +279,15 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <CardLayout.Header
-        headerChildren={
-          <ContentAction
-            icon={SvgActions}
-            title={tool.display_name || tool.name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-            paddingVariant="fit"
-          />
-        }
-        topRightChildren={<SwitchField name={toolFieldName} />}
-      />
+    <Card border="solid" rounding="lg">
+      <InputHorizontal
+        icon={SvgActions}
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        withLabel={toolFieldName}
+      >
+        <SwitchField name={toolFieldName} />
+      </InputHorizontal>
     </Card>
   );
 }
@@ -338,26 +332,22 @@ function MCPServerCard({
     );
   } else if (hasTools) {
     cardContent = (
-      <div className="flex flex-col gap-2 p-2">
+      <GeneralLayouts.Section gap={0.5} padding={0.5}>
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="lg" padding="sm">
-                <CardLayout.Header
-                  headerChildren={
-                    <ContentAction
-                      icon={tool.icon ?? SvgSliders}
-                      title={tool.name}
-                      description={tool.description}
-                      sizePreset="main-ui"
-                      variant="section"
-                      paddingVariant="fit"
-                    />
-                  }
-                  topRightChildren={
+              <Card border="solid" rounding="md" padding="sm">
+                <ContentAction
+                  icon={tool.icon ?? SvgSliders}
+                  title={tool.name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                  padding="fit"
+                  rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
                       disabled={!isServerEnabled}
@@ -368,7 +358,7 @@ function MCPServerCard({
             </Disabled>
           );
         })}
-      </div>
+      </GeneralLayouts.Section>
     );
   }
 
@@ -382,14 +372,35 @@ function MCPServerCard({
       expandedContent={cardContent}
     >
       <CardLayout.Header
-        headerChildren={
+        bottomChildren={
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search tools..."
+              variant="internal"
+              leftSearchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {enabledTools.length > 0 && (
+              <Button
+                prominence="internal"
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
+          </GeneralLayouts.Section>
+        }
+      >
+        <div className="p-2">
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
             title={server.name}
             description={server.description}
             sizePreset="main-ui"
             variant="section"
-            paddingVariant="fit"
+            padding="fit"
             rightChildren={
               <GeneralLayouts.Section
                 flexDirection="row"
@@ -416,28 +427,8 @@ function MCPServerCard({
               </GeneralLayouts.Section>
             }
           />
-        }
-        bottomChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {enabledTools.length > 0 && (
-              <Button
-                prominence="internal"
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-              >
-                {isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
-          </GeneralLayouts.Section>
-        }
-      />
+        </div>
+      </CardLayout.Header>
     </Card>
   );
 }
@@ -1291,7 +1282,7 @@ export default function AgentEditorPage({
                         </div>
                       }
                       backButton
-                      separator
+                      divider
                     />
 
                     {/* Agent Form Content */}
@@ -1488,7 +1479,7 @@ export default function AgentEditorPage({
 
                             {/* Tools */}
                             <>
-                              {/* render the separator if there is at least one mcp-server or open-api-tool */}
+                              {/* render the divider if there is at least one mcp-server or open-api-tool */}
                               {(mcpServers.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider

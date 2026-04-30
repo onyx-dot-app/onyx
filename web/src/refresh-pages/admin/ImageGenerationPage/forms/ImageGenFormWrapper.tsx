@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import ProviderModal from "@/components/modals/ProviderModal";
-import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
+import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import {
   testImageGenerationApiKey,

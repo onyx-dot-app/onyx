@@ -27,7 +27,9 @@ import { extractCodeText } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
-import { cn, transformLinkUri } from "@/lib/utils";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -71,14 +73,15 @@ function getRevealPosition(markdown: string, cleanChars: number): number {
   return mdIndex;
 }
 
-// Cheap streaming plugins (gfm only) → cheap per-frame parse. Full
-// pipeline flips in once, at the end, for syntax highlighting + math.
-const STREAMING_REMARK_PLUGINS: PluggableList = [remarkGfm];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [];
-const FULL_REMARK_PLUGINS: PluggableList = [
+// Streaming pipeline runs gfm + math so LaTeX renders live.
+// Syntax highlighting is the heavier of the two and stays deferred —
+// rehype-highlight only flips in once the stream is fully displayed.
+const STREAMING_REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
 ];
+const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
+const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 const FULL_REHYPE_PLUGINS: PluggableList = [rehypeHighlight, rehypeKatex];
 
 export const MessageTextRenderer: MessageRenderer<
@@ -96,6 +99,8 @@ export const MessageTextRenderer: MessageRenderer<
   stopReason,
   children,
 }) => {
+  const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
+
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
 
@@ -247,7 +252,8 @@ export const MessageTextRenderer: MessageRenderer<
   const isStreamingAnimationEnabled =
     animate &&
     !shouldUseAutoPlaybackSync &&
-    stopReason !== StopReason.USER_CANCELLED;
+    stopReason !== StopReason.USER_CANCELLED &&
+    smoothStreamingEnabled;
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
@@ -394,7 +400,10 @@ export const MessageTextRenderer: MessageRenderer<
             Thinking
           </Text>
         ) : displayedContent.length > 0 ? (
-          <div dir="auto">
+          <div
+            dir="auto"
+            className={cn(!streamFullyDisplayed && "streaming-katex")}
+          >
             <ReactMarkdown
               className="prose prose-onyx font-main-content-body max-w-full"
               components={markdownComponents}

@@ -13,7 +13,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import delete_documents_complete__no_commit
+from onyx.db.document import delete_documents_complete
 from onyx.db.document import get_document
 from onyx.db.document import get_documents_by_cc_pair
 from onyx.db.document import get_ingestion_documents
@@ -210,5 +210,4 @@ def delete_ingestion_doc(
         )
 
     # Delete from database
-    delete_documents_complete__no_commit(db_session, [document_id])
-    db_session.commit()
+    delete_documents_complete(db_session, [document_id])

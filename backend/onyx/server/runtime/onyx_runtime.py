@@ -18,9 +18,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.file import OnyxStaticFileManager
-from onyx.utils.variable_functionality import (
-    fetch_ee_implementation_or_noop,
-)
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 class OnyxRuntime:

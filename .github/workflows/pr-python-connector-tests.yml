@@ -97,7 +97,7 @@ jobs:
               - 'uv.lock'
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # ratchet:aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -116,6 +116,7 @@ jobs:
             CONFLUENCE_ACCESS_TOKEN, test/confluence-access-token
             CONFLUENCE_ACCESS_TOKEN_SCOPED, test/confluence-access-token-scoped
             JIRA_BASE_URL, test/jira-base-url
+            JIRA_ADMIN_USER_EMAIL, test/jira-admin-user-email
             JIRA_USER_EMAIL, test/jira-user-email
             JIRA_API_TOKEN, test/jira-api-token
             JIRA_API_TOKEN_SCOPED, test/jira-api-token-scoped

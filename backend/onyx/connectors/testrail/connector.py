@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -26,7 +27,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
-
 
 logger = setup_logger()
 
@@ -155,6 +155,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                 url,
                 auth=(self.username, self.api_key),
                 params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -537,11 +538,9 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    from onyx.configs.app_configs import (
-        TESTRAIL_API_KEY,
-        TESTRAIL_BASE_URL,
-        TESTRAIL_USERNAME,
-    )
+    from onyx.configs.app_configs import TESTRAIL_API_KEY
+    from onyx.configs.app_configs import TESTRAIL_BASE_URL
+    from onyx.configs.app_configs import TESTRAIL_USERNAME
 
     connector = TestRailConnector()
 

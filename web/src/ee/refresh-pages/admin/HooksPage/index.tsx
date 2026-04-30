@@ -392,7 +392,7 @@ function ConnectedHookCard({
                     <>
                       <Hoverable.Item
                         group="connected-hook-card"
-                        variant="opacity-on-hover"
+                        variant="appear-on-hover"
                       >
                         <Button
                           prominence="tertiary"
@@ -578,7 +578,7 @@ export default function HooksPage() {
           icon={route.icon}
           title={route.title}
           description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (

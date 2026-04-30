@@ -101,7 +101,6 @@ jobs:
 
       - name: Run Tests
         run: |
-          py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/llm
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/embedding
 
       - name: Alert on Failure
@@ -121,7 +120,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log

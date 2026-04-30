@@ -85,8 +85,10 @@ export async function selectModelFromInputPopover(
 
   for (const modelName of preferredModels) {
     await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("[data-selected]");
-    const nonSelectedOptions = dialog.locator('[data-selected="false"]');
+    const modelOptions = dialog.locator("[data-interactive-state]");
+    const nonSelectedOptions = dialog.locator(
+      '[data-interactive-state="empty"]'
+    );
 
     if ((await modelOptions.count()) > 0) {
       const candidate =
@@ -110,7 +112,7 @@ export async function selectModelFromInputPopover(
   // Reset search so fallback sees all available models.
   await searchInput.fill("");
 
-  const nonSelectedOptions = dialog.locator('[data-selected="false"]');
+  const nonSelectedOptions = dialog.locator('[data-interactive-state="empty"]');
   if ((await nonSelectedOptions.count()) > 0) {
     const fallback = nonSelectedOptions.first();
     await expect(fallback).toBeVisible();
@@ -145,7 +147,7 @@ export async function switchModel(page: Page, modelName: string) {
 
   const modelButton = page
     .locator('[role="dialog"]')
-    .locator('[role="button"]')
+    .getByRole("button")
     .filter({ hasText: modelName })
     .first();
 

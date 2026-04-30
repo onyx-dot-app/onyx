@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator
@@ -30,25 +31,28 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
+from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
+from onyx.db.index_attempt_metrics import IndexAttemptStage
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics import time_stage_if_set
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
-from onyx.document_index.document_index_utils import (
-    get_multipass_config,
-)
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import promote_staged_file
 from onyx.hooks.executor import execute_hook
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
@@ -83,7 +87,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
-
 
 logger = setup_logger()
 
@@ -154,6 +157,7 @@ def _upsert_documents_in_db(
             doc_metadata=doc.doc_metadata,
             # parent_hierarchy_node_id is resolved in docfetching using Redis cache
             parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
+            file_id=doc.file_id,
         )
         document_metadata_list.append(db_doc_metadata)
 
@@ -250,11 +254,18 @@ def embed_and_stream(
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
+    attempt_id: int | None = None,
 ) -> Generator[tuple[ChunkEmbeddingResult, ChunkBatchStore], None, None]:
     """Embed chunks to disk and yield a ``(result, store)`` pair.
 
     The store owns the temp directory — files are cleaned up when the context
     manager exits.
+
+    When ``attempt_id`` is provided, records the EMBEDDING stage timing for
+    just the actual embedding call (which finishes before ``yield``). Doing
+    this inside the context manager avoids the caller's ``with``-body work
+    (vector-db writes, post_index, etc.) being included in the embedding
+    measurement.
 
     Usage::
 
@@ -263,12 +274,17 @@ def embed_and_stream(
                 ...
     """
     with ChunkBatchStore() as store:
+        embed_start = time.monotonic()
         result = _embed_chunks_to_store(
             chunks=chunks,
             embedder=embedder,
             tenant_id=tenant_id,
             request_id=request_id,
             store=store,
+        )
+        embed_duration_ms = max(0, int((time.monotonic() - embed_start) * 1000))
+        safe_record_single_event_if_set(
+            IndexAttemptStage.EMBEDDING, attempt_id, embed_duration_ms
         )
         yield result, store
 
@@ -364,6 +380,45 @@ def index_doc_batch_with_handler(
     return index_pipeline_result
 
 
+def _promote_new_staged_files(
+    documents: list[Document],
+    previous_file_ids: dict[str, str],
+    db_session: Session,
+) -> None:
+    """Queue STAGING → CONNECTOR origin flips for every new file_id in the batch.
+
+    Intended to run immediately before `_upsert_documents_in_db` so the origin
+    flip lands in the same commit as the `Document.file_id` write. Does not
+    commit — the caller's next commit flushes these UPDATEs.
+    """
+    for doc in documents:
+        new_file_id = doc.file_id
+        if new_file_id is None or new_file_id == previous_file_ids.get(doc.id):
+            continue
+        promote_staged_file(db_session=db_session, file_id=new_file_id)
+
+
+def _delete_replaced_files(
+    documents: list[Document],
+    previous_file_ids: dict[str, str],
+) -> None:
+    """Best-effort blob deletes for file_ids replaced in this batch.
+
+    Must run AFTER `Document.file_id` has been committed to the new
+    file_id.
+    """
+    file_store = get_default_file_store()
+    for doc in documents:
+        new_file_id = doc.file_id
+        old_file_id = previous_file_ids.get(doc.id)
+        if old_file_id is None or old_file_id == new_file_id:
+            continue
+        try:
+            file_store.delete_file(old_file_id, error_on_missing=False)
+        except Exception:
+            logger.exception(f"Failed to delete replaced file_id={old_file_id}.")
+
+
 def index_doc_batch_prepare(
     documents: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -382,6 +437,11 @@ def index_doc_batch_prepare(
         document_ids=document_ids,
     )
 
+    # Capture previous file_ids BEFORE any writes so we know what to reap.
+    previous_file_ids: dict[str, str] = {
+        db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
+    }
+
     updatable_docs = (
         get_doc_ids_to_update(documents=documents, db_docs=db_docs)
         if not ignore_time_skip
@@ -399,10 +459,23 @@ def index_doc_batch_prepare(
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
     if updatable_docs:
+        # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
+        # so `upsert_documents`' commit flushes Document.file_id and the origin
+        # flip atomically
+        _promote_new_staged_files(
+            documents=updatable_docs,
+            previous_file_ids=previous_file_ids,
+            db_session=db_session,
+        )
         _upsert_documents_in_db(
             documents=updatable_docs,
             index_attempt_metadata=index_attempt_metadata,
             db_session=db_session,
+        )
+        # Blob deletes run only after Document.file_id is durable.
+        _delete_replaced_files(
+            documents=updatable_docs,
+            previous_file_ids=previous_file_ids,
         )
 
     logger.info(
@@ -530,8 +603,15 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     Returns:
         List of IndexingDocument objects with processed_sections as list[Section]
     """
-    # Check if image extraction and analysis is enabled before trying to get a vision LLM
-    if not get_image_extraction_and_analysis_enabled():
+    # Check if image extraction and analysis is enabled before trying to get a vision LLM.
+    # Use section.type rather than isinstance because sections can round-trip
+    # through pydantic as base Section instances (not the concrete subclass).
+    has_image_section = any(
+        section.type == SectionType.IMAGE
+        for document in documents
+        for section in document.sections
+    )
+    if not get_image_extraction_and_analysis_enabled() or not has_image_section:
         llm = None
     else:
         # Only get the vision LLM if image processing is enabled
@@ -965,15 +1045,36 @@ def index_doc_batch(
         f"num_docs={len(document_batch)}"
     )
 
+    # Pull the attempt id off the adapter (when present) so per-stage metrics
+    # can be attributed to the right ``IndexAttempt``. The protocol does not
+    # mandate an ``index_attempt_metadata`` field, so non-attempt callers
+    # (ingestion API, user file processing) get None and the
+    # ``*_if_set`` helpers no-op.
+    _attempt_metadata = getattr(adapter, "index_attempt_metadata", None)
+    attempt_id: int | None = (
+        _attempt_metadata.attempt_id if _attempt_metadata is not None else None
+    )
+
     filtered_documents = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
-    context = adapter.prepare(filtered_documents, ignore_time_skip)
+    with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
+        context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
         return IndexingPipelineResult.empty(len(filtered_documents))
 
-    # Convert documents to IndexingDocument objects with processed section
-    # logger.debug("Processing image sections")
-    context.indexable_docs = process_image_sections(context.updatable_docs)
+    # Convert documents to IndexingDocument objects with processed section.
+    # Only record IMAGE_PROCESSING when there's actually image work to do --
+    # otherwise the average/stddev gets polluted with no-op zero events.
+    has_image_section = any(
+        section.type == SectionType.IMAGE
+        for document in context.updatable_docs
+        for section in document.sections
+    )
+    if has_image_section:
+        with time_stage_if_set(IndexAttemptStage.IMAGE_PROCESSING, attempt_id):
+            context.indexable_docs = process_image_sections(context.updatable_docs)
+    else:
+        context.indexable_docs = process_image_sections(context.updatable_docs)
 
     doc_descriptors = [
         {
@@ -987,7 +1088,8 @@ def index_doc_batch(
     logger.debug("Starting chunking")
     # NOTE: no special handling for failures here, since the chunker is not
     # a common source of failure for the indexing pipeline
-    chunks: list[DocAwareChunk] = chunker.chunk(context.indexable_docs)
+    with time_stage_if_set(IndexAttemptStage.CHUNKING, attempt_id):
+        chunks: list[DocAwareChunk] = chunker.chunk(context.indexable_docs)
     llm_tokenizer: BaseTokenizer | None = None
 
     # contextual RAG
@@ -1000,15 +1102,21 @@ def index_doc_batch(
 
         # Because the chunker's tokens are different from the LLM's tokens,
         # We add a fudge factor to ensure we truncate prompts to the LLM's token limit
-        chunks = add_contextual_summaries(
-            chunks=chunks,
-            llm=llm,
-            tokenizer=llm_tokenizer,
-            chunk_token_limit=chunker.chunk_token_limit * 2,
-        )
+        with time_stage_if_set(IndexAttemptStage.CONTEXTUAL_RAG, attempt_id):
+            chunks = add_contextual_summaries(
+                chunks=chunks,
+                llm=llm,
+                tokenizer=llm_tokenizer,
+                chunk_token_limit=chunker.chunk_token_limit * 2,
+            )
 
     logger.debug("Starting embedding")
-    with embed_and_stream(chunks, embedder, tenant_id, request_id) as (
+    # ``embed_and_stream`` records EMBEDDING internally so the timer captures
+    # only the actual embedding work (which finishes before ``yield``), not
+    # the surrounding vector-db write loop in the ``with`` body.
+    with embed_and_stream(
+        chunks, embedder, tenant_id, request_id, attempt_id=attempt_id
+    ) as (
         embedding_result,
         chunk_store,
     ):
@@ -1056,18 +1164,28 @@ def index_doc_batch(
                 None
             )
 
+            # Sum vector-db write time across all configured indices and
+            # record once per batch. Most deployments have a single index
+            # (primary), but during a switchover both primary and secondary
+            # are written; we want a single combined number per batch rather
+            # than one event per index (avoids inflating event_count).
+            vector_db_write_ms = 0
             for document_index in document_indices:
 
                 def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
                     for chunk in chunk_store.stream():
                         yield enricher.enrich_chunk(chunk, 1.0)
 
+                vector_db_write_start = time.monotonic()
                 insertion_records, write_failures = (
                     write_chunks_to_vector_db_with_backoff(
                         document_index=document_index,
                         make_chunks=_enriched_stream,
                         index_batch_params=index_batch_params,
                     )
+                )
+                vector_db_write_ms += max(
+                    0, int((time.monotonic() - vector_db_write_start) * 1000)
                 )
 
                 _verify_indexing_completeness(
@@ -1084,12 +1202,17 @@ def index_doc_batch(
                 if primary_doc_idx_vector_db_write_failures is None:
                     primary_doc_idx_vector_db_write_failures = write_failures
 
-            adapter.post_index(
-                context=context,
-                updatable_chunk_data=updatable_chunk_data,
-                filtered_documents=filtered_documents,
-                enrichment=enricher,
+            safe_record_single_event_if_set(
+                IndexAttemptStage.VECTOR_DB_WRITE, attempt_id, vector_db_write_ms
             )
+
+            with time_stage_if_set(IndexAttemptStage.POST_INDEX_DB_UPDATE, attempt_id):
+                adapter.post_index(
+                    context=context,
+                    updatable_chunk_data=updatable_chunk_data,
+                    filtered_documents=filtered_documents,
+                    enrichment=enricher,
+                )
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None

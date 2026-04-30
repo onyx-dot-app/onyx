@@ -17,7 +17,6 @@ from onyx.db.models import HookExecutionLog
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-
 # ── Hook CRUD ────────────────────────────────────────────────────────────
 
 

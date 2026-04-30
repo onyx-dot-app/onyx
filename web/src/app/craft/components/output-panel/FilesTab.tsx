@@ -10,7 +10,8 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
-import { cn, getFileIcon } from "@/lib/utils";
+import { getFileIcon } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgHardDrive,

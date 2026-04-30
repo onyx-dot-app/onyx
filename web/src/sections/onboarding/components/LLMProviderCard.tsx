@@ -4,7 +4,8 @@ import { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -12,7 +13,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
+import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -40,7 +41,7 @@ function LLMProviderCardInner({
 
     if (isConnected) {
       // If connected, redirect to admin page
-      window.location.href = "/admin/configuration/llm";
+      window.location.href = "/admin/configuration/language-models";
       return;
     }
 
@@ -49,7 +50,9 @@ function LLMProviderCardInner({
   }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
-    noProp(() => (window.location.href = "/admin/configuration/llm")),
+    noProp(
+      () => (window.location.href = "/admin/configuration/language-models")
+    ),
     []
   );
 
