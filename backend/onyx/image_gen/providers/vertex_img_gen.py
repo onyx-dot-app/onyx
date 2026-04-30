@@ -90,6 +90,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=model,
             provider="vertex_ai",
+            input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(
                 prompt=prompt,
@@ -148,6 +149,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_EDIT,
             model=model_name,
             provider="vertex_ai",
+            input_messages=[{"role": "user", "content": prompt}],
         ):
             response = client.models.generate_content(
                 model=model_name,

@@ -534,6 +534,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model or "azure-speech-tts",
             provider="azure",
+            input_messages=[{"role": "user", "content": text}],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, data=ssml) as response:

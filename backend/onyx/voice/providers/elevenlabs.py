@@ -764,6 +764,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model,
             provider="elevenlabs",
+            input_messages=[{"role": "user", "content": text}],
         ):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=payload) as response:

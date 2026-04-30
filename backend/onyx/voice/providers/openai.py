@@ -571,6 +571,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             flow=LLMFlow.TTS,
             model=self.tts_model,
             provider="openai",
+            input_messages=[{"role": "user", "content": text}],
         ):
             async with client.audio.speech.with_streaming_response.create(
                 model=self.tts_model,
