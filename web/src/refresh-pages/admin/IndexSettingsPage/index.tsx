@@ -317,7 +317,7 @@ function ProviderGroup({
     } catch {
       toast.error(`Failed to disconnect ${provider.displayName}`);
     }
-  }, [isCloud, provider.providerName, name, disconnectModal]);
+  }, [isCloud, provider.providerName, provider.displayName, disconnectModal]);
 
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
@@ -364,7 +364,7 @@ function ProviderGroup({
           <disconnectModal.Provider>
             <ConfirmationModalLayout
               icon={SvgUnplug}
-              title={`Disconnect ${name}`}
+              title={`Disconnect ${provider.displayName}`}
               submit={
                 <Button variant="danger" onClick={handleDisconnect}>
                   Disconnect
@@ -373,7 +373,7 @@ function ProviderGroup({
             >
               <Text font="main-ui-body" color="text-03" as="p">
                 {markdown(
-                  `This will disconnect all embedding models from provider **${name}**.`
+                  `This will disconnect all embedding models from provider **${provider.displayName}**.`
                 )}
               </Text>
             </ConfirmationModalLayout>
