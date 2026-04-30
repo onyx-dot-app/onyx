@@ -158,6 +158,7 @@ function StandardProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiKey: isEditing
@@ -165,7 +166,7 @@ function StandardProviderModal({
       : Yup.string().trim().required("API key is required"),
   });
 
-  const initialValues: StandardFormValues = { apiKey: "" };
+  const initialValues: StandardFormValues = { apiKey: maskedApiKey };
 
   return (
     <Formik<StandardFormValues>
@@ -173,12 +174,9 @@ function StandardProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
-        if (
-          await testAndSaveProviderCredentials({
-            provider,
-            apiKey: values.apiKey || null,
-          })
-        ) {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        if (await testAndSaveProviderCredentials({ provider, apiKey })) {
           onSubmit();
         }
       }}
@@ -269,6 +267,7 @@ function AzureProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
@@ -284,7 +283,7 @@ function AzureProviderModal({
 
   const initialValues: AzureFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: "",
+    apiKey: maskedApiKey,
     apiVersion: existingCredentials?.api_version ?? "",
     deploymentName: existingCredentials?.deployment_name ?? "",
   };
@@ -295,10 +294,12 @@ function AzureProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey || null,
+            apiKey,
             apiUrl: values.apiUrl,
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
@@ -352,6 +353,7 @@ function LiteLLMProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
@@ -366,7 +368,7 @@ function LiteLLMProviderModal({
 
   const initialValues: LiteLLMFormValues = {
     apiUrl: existingCredentials?.api_url ?? "",
-    apiKey: "",
+    apiKey: maskedApiKey,
     modelName: existingModel?.modelName ?? "",
     modelDim: existingModel?.modelDim ?? 0,
     queryPrefix: existingModel?.queryPrefix ?? "",
@@ -380,10 +382,12 @@ function LiteLLMProviderModal({
       validationSchema={schema}
       validateOnMount
       onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
         if (
           await testAndSaveProviderCredentials({
             provider,
-            apiKey: values.apiKey || null,
+            apiKey,
             apiUrl: values.apiUrl,
           })
         ) {

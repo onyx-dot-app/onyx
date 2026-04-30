@@ -34,7 +34,7 @@ export function ApiKeyField({ name, provider, isEditing }: ApiKeyFieldProps) {
       withLabel={name}
       subDescription={
         isEditing
-          ? "Leave blank to keep the existing key, or enter a new one to replace it."
+          ? "The existing key is shown masked. Enter a new key to replace it, or leave it unchanged to keep the current one."
           : markdown(
               `Paste your [API key](${provider.apiLink ?? ""}) from ${
                 provider.displayName
