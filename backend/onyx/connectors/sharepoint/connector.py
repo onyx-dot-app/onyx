@@ -75,9 +75,9 @@ from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
-from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -645,38 +645,12 @@ def _convert_driveitem_to_document_with_permissions(
                 f"Failed to extract tabular sections for '{driveitem.name}': {e}"
             )
     else:
-
-        def _store_embedded_image(img_data: bytes, img_name: str) -> None:
-            try:
-                img_mime = get_image_type_from_bytes(img_data)
-            except ValueError:
-                logger.debug(
-                    "Skipping embedded image with unknown format for %s",
-                    driveitem.name,
-                )
-                return
-
-            if img_mime in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
-                logger.debug(
-                    "Skipping embedded image of excluded type %s for %s",
-                    img_mime,
-                    driveitem.name,
-                )
-                return
-
-            image_section, _ = store_image_and_create_section(
-                image_data=img_data,
-                file_id=f"{driveitem.id}_img_{len(sections)}",
-                display_name=img_name or f"{driveitem.name} - image {len(sections)}",
-                file_origin=FileOrigin.CONNECTOR,
-            )
-            image_section.link = driveitem.web_url
-            sections.append(image_section)
-
         extraction_result = extract_text_and_images(
             file=io.BytesIO(content_bytes),
             file_name=driveitem.name,
-            image_callback=_store_embedded_image,
+            image_callback=make_image_callback(
+                sections, driveitem.id, driveitem.name, driveitem.web_url
+            ),
         )
         if extraction_result.text_content:
             sections.append(
