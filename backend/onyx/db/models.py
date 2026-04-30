@@ -2221,9 +2221,15 @@ class TargetedReindexJob(Base):
     # cancellation has a handle to revoke.
     celery_task_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    resolved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    still_failing_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    resolved_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    still_failing_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    skipped_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     # Snapshot of resolved error rows captured at completion. Outlives later
     # cleanup of the underlying `index_attempt_errors` rows.
@@ -2576,7 +2582,7 @@ class IndexAttemptError(Base):
     # target row has source_error_id pointing at this error). Arbitrary doc
     # reindexes don't touch this table.
     targeted_reindex_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
+        Integer, nullable=False, default=0, server_default="0"
     )
     last_targeted_reindex_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
