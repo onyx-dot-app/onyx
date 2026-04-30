@@ -2212,7 +2212,8 @@ class RetryJob(Base):
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False),
         nullable=False,
-        server_default=IndexingStatus.NOT_STARTED.name,
+        default=IndexingStatus.NOT_STARTED,
+        server_default="NOT_STARTED",
         index=True,
     )
 
@@ -2272,7 +2273,8 @@ class IndexAttempt(Base):
     attempt_type: Mapped[IndexAttemptType] = mapped_column(
         Enum(IndexAttemptType, native_enum=False),
         nullable=False,
-        server_default=IndexAttemptType.FULL_RUN.name,
+        default=IndexAttemptType.FULL_RUN,
+        server_default="FULL_RUN",
         index=True,
     )
     # Set on synthetic retry attempts; links back to the `retry_job` row
