@@ -214,6 +214,7 @@ async def create_customer_portal_session(
         license_data=license_data,
         return_url=return_url,
         tenant_id=tenant_id,
+        flow_type=request.flow_type if request else None,
     )
 
 

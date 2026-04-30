@@ -95,6 +95,7 @@ export interface CreateCheckoutSessionResponse {
 
 export interface CreateCustomerPortalSessionRequest {
   return_url?: string;
+  flow_type?: "payment_method_update";
 }
 
 export interface CreateCustomerPortalSessionResponse {

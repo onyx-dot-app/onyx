@@ -24,6 +24,7 @@ class CreateCustomerPortalSessionRequest(BaseModel):
     """Request to create a Stripe customer portal session."""
 
     return_url: str | None = None
+    flow_type: Literal["payment_method_update"] | None = None
 
 
 class CreateCustomerPortalSessionResponse(BaseModel):

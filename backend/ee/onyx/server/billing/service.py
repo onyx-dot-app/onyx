@@ -180,6 +180,7 @@ async def create_customer_portal_session(
     license_data: str | None = None,
     return_url: str | None = None,
     tenant_id: str | None = None,
+    flow_type: Literal["payment_method_update"] | None = None,
 ) -> CreateCustomerPortalSessionResponse:
     """Create a Stripe customer portal session.
 
@@ -187,6 +188,8 @@ async def create_customer_portal_session(
         license_data: License blob for authentication (self-hosted)
         return_url: URL to return to after portal session
         tenant_id: Tenant ID (cloud only)
+        flow_type: When "payment_method_update", deep-links the user to the
+            add-payment-method screen instead of the portal home.
 
     Returns:
         CreateCustomerPortalSessionResponse with portal URL
@@ -196,6 +199,8 @@ async def create_customer_portal_session(
         body["return_url"] = return_url
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
+    if flow_type:
+        body["flow_type"] = flow_type
 
     data = await _make_billing_request(
         method="POST",

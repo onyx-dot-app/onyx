@@ -223,10 +223,13 @@ function SubscriptionCard({
       await onRefresh?.();
     } catch (error) {
       if (error instanceof PaymentMethodRequiredError) {
-        // Route to Stripe customer portal to add a card, then return here.
+        // Deep-link the user to the Stripe add-payment-method screen, then
+        // return to /admin/billing with a marker that auto-retries the
+        // upgrade so they don't have to click the button again.
         try {
           const response = await createCustomerPortalSession({
-            return_url: `${window.location.origin}/admin/billing?portal_return=true`,
+            return_url: `${window.location.origin}/admin/billing?portal_return=true&retry_upgrade=1`,
+            flow_type: "payment_method_update",
           });
           if (response.stripe_customer_portal_url) {
             window.location.href = response.stripe_customer_portal_url;
