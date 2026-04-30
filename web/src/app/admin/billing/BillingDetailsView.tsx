@@ -248,7 +248,8 @@ function SubscriptionCard({
     }
   };
 
-  const isTrialing = billing?.status === "trialing";
+  const isTrialing =
+    NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === "trialing";
 
   return (
     <Card>
@@ -297,7 +298,7 @@ function SubscriptionCard({
             </OpalButton>
           ) : (
             <Section
-              flexDirection="column"
+              flexDirection="row"
               gap={0.5}
               alignItems="end"
               height="auto"
