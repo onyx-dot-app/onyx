@@ -7,10 +7,10 @@ import { markdown } from "@opal/utils";
 import { Divider, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import type { EmbeddingProvider } from "@/lib/indexing/interfaces";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 
 // ---------------------------------------------------------------------------
 // Formik-aware field components
@@ -28,7 +28,6 @@ interface ApiKeyFieldProps {
 }
 
 export function ApiKeyField({ name, provider, isEditing }: ApiKeyFieldProps) {
-  const [field] = useField<string>(name);
   return (
     <InputVertical
       title="API Key"
@@ -43,7 +42,7 @@ export function ApiKeyField({ name, provider, isEditing }: ApiKeyFieldProps) {
             )
       }
     >
-      <PasswordInputTypeIn id={name} {...field} />
+      <PasswordInputTypeInField name={name} />
     </InputVertical>
   );
 }
