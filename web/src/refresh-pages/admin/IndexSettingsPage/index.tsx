@@ -718,9 +718,9 @@ export default function IndexSettingsPage() {
     useCurrentEmbeddingModel();
 
   /**
-   * Camel-cased view of the active embedding model for modal preload. Only
-   * `LiteLLMProviderModal` reads this — other provider modals ignore the
-   * `existingModel` prop entirely. See `ProviderModalProps.existingModel`.
+   * Camel-cased view of the active embedding model for modal preload.
+   * Consumed by `LiteLLMProviderModal` and `CustomSelfHostedModal`.
+   * See `ProviderModalProps.existingModel`.
    */
   const currentEmbeddingModelSpec: EmbeddingModel | null = useMemo(() => {
     if (!currentEmbeddingModel) return null;
@@ -869,6 +869,7 @@ export default function IndexSettingsPage() {
             existingCredentials={configuredProviders?.get(
               currentProvider.providerName
             )}
+            existingModel={currentEmbeddingModelSpec ?? undefined}
             onSubmit={async () => {
               await mutate(SWR_KEYS.embeddingProviders);
               editModal.toggle(false);
@@ -999,6 +1000,11 @@ export default function IndexSettingsPage() {
                   <customModelModal.Provider>
                     <ProviderCredentialsModal
                       provider={CUSTOM_PROVIDER}
+                      existingModel={
+                        currentProviderName === EmbeddingProviderName.CUSTOM
+                          ? currentEmbeddingModelSpec ?? undefined
+                          : undefined
+                      }
                       onSubmit={(customModel) => {
                         if (customModel) {
                           void setFieldValue(

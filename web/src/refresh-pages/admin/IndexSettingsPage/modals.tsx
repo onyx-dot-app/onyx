@@ -21,7 +21,7 @@ import {
   BoolField,
   GoogleCredentialsField,
   TextField,
-} from "./shared";
+} from "@/refresh-pages/admin/IndexSettingsPage/shared";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
@@ -132,15 +132,14 @@ async function submitProviderCredentials({
 // Shared props
 // ---------------------------------------------------------------------------
 
-export interface ProviderModalProps {
+interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
    * Current model spec for THIS provider, when the active embedding model
-   * belongs to it. Only `LiteLLMProviderModal` consumes this — it preloads
-   * the model-spec fields (modelName, modelDim, prefixes, normalize) so the
-   * user doesn't have to retype them when editing creds. Other modals ignore
-   * this prop.
+   * belongs to it. `LiteLLMProviderModal` and `CustomSelfHostedModal` use
+   * this to preload model-spec fields (modelName, modelDim, prefixes,
+   * normalize) so the user doesn't have to retype them when editing.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -160,12 +159,10 @@ export interface ProviderModalProps {
 interface StandardFormValues {
   apiKey: string;
 }
-
 const standardSchema: Yup.ObjectSchema<StandardFormValues> = Yup.object({
   apiKey: Yup.string().trim().required("API key is required"),
 });
-
-export function StandardProviderModal({
+function StandardProviderModal({
   provider,
   existingCredentials,
   onSubmit,
@@ -198,13 +195,12 @@ export function StandardProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// Google provider modal (JSON file upload)
+// Google
 // ---------------------------------------------------------------------------
 
 interface GoogleFormValues {
   apiKey: string;
 }
-
 const googleSchema: Yup.ObjectSchema<GoogleFormValues> = Yup.object({
   apiKey: Yup.string()
     .required("Service account JSON is required")
@@ -226,8 +222,7 @@ const googleSchema: Yup.ObjectSchema<GoogleFormValues> = Yup.object({
       }
     ),
 });
-
-export function GoogleProviderModal({
+function GoogleProviderModal({
   provider,
   existingCredentials,
   onSubmit,
@@ -260,7 +255,7 @@ export function GoogleProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// Azure provider modal (Target URL + API Key + API Version + Deployment Name)
+// Azure
 // ---------------------------------------------------------------------------
 
 interface AzureFormValues {
@@ -269,7 +264,6 @@ interface AzureFormValues {
   apiVersion: string;
   deploymentName: string;
 }
-
 const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
   apiUrl: Yup.string()
     .trim()
@@ -279,8 +273,7 @@ const azureSchema: Yup.ObjectSchema<AzureFormValues> = Yup.object({
   apiVersion: Yup.string().trim().required("API version is required"),
   deploymentName: Yup.string().trim().required("Deployment name is required"),
 });
-
-export function AzureProviderModal({
+function AzureProviderModal({
   provider,
   existingCredentials,
   onSubmit,
@@ -339,7 +332,7 @@ export function AzureProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// LiteLLM provider modal (full config)
+// LiteLLM
 // ---------------------------------------------------------------------------
 
 interface LiteLLMFormValues {
@@ -351,7 +344,6 @@ interface LiteLLMFormValues {
   passagePrefix: string;
   normalize: boolean;
 }
-
 const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
   apiUrl: Yup.string()
     .trim()
@@ -369,8 +361,7 @@ const litellmSchema: Yup.ObjectSchema<LiteLLMFormValues> = Yup.object({
   passagePrefix: Yup.string().defined().default(""),
   normalize: Yup.boolean().defined().default(false),
 });
-
-export function LiteLLMProviderModal({
+function LiteLLMProviderModal({
   provider,
   existingCredentials,
   existingModel,
@@ -467,7 +458,7 @@ export function LiteLLMProviderModal({
 }
 
 // ---------------------------------------------------------------------------
-// Custom self-hosted model modal
+// Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
 interface CustomFormValues {
@@ -477,7 +468,6 @@ interface CustomFormValues {
   passagePrefix: string;
   normalize: boolean;
 }
-
 const customSchema: Yup.ObjectSchema<CustomFormValues> = Yup.object({
   modelName: Yup.string().trim().required("Model name is required"),
   modelDim: Yup.number()
@@ -490,18 +480,20 @@ const customSchema: Yup.ObjectSchema<CustomFormValues> = Yup.object({
   passagePrefix: Yup.string().defined().default(""),
   normalize: Yup.boolean().defined().default(false),
 });
-
-export function CustomSelfHostedModal({
+function CustomSelfHostedModal({
   provider,
+  existingModel,
   onSubmit,
   onCancel,
 }: ProviderModalProps) {
+  const isEditing = !!existingModel;
+
   const initialValues: CustomFormValues = {
-    modelName: "",
-    modelDim: 0,
-    queryPrefix: "",
-    passagePrefix: "",
-    normalize: false,
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
   };
 
   return (
@@ -520,76 +512,47 @@ export function CustomSelfHostedModal({
         });
       }}
     >
-      <Modal open onOpenChange={(isOpen) => !isOpen && onCancel()}>
-        <Modal.Content width="md">
-          <Modal.Header
-            icon={provider.icon}
-            moreIcon1={SvgArrowExchange}
-            moreIcon2={SvgOnyxLogo}
-            title={`Add ${provider.displayName}`}
-            description="Register a custom self-hosted embedding model."
-            onClose={onCancel}
-          />
-          <Modal.Body twoTone>
-            <GeneralLayouts.Section gap={1}>
-              <TextField
-                name="modelName"
-                title="Model Name"
-                placeholder="model-name"
-                subDescription="Onyx will connect to this model on your self-hosted endpoint."
-              />
+      <ModalShell provider={provider} isEditing={isEditing} onCancel={onCancel}>
+        <TextField
+          name="modelName"
+          title="Model Name"
+          placeholder="model-name"
+          subDescription="Onyx will connect to this model on your self-hosted endpoint."
+        />
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-              <TextField
-                name="modelDim"
-                title="Model Dimension"
-                placeholder="e.g., 768"
-                inputMode="numeric"
-                subDescription="Number of dimensions in the embeddings generated by this model."
-              />
+        <TextField
+          name="modelDim"
+          title="Model Dimension"
+          placeholder="e.g., 768"
+          inputMode="numeric"
+          subDescription="Number of dimensions in the embeddings generated by this model."
+        />
 
-              <TextField
-                name="queryPrefix"
-                title="Query Prefix"
-                suffix="optional"
-                placeholder="e.g., 'query: '"
-                subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-              />
+        <TextField
+          name="queryPrefix"
+          title="Query Prefix"
+          suffix="optional"
+          placeholder="e.g., 'query: '"
+          subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
+        />
 
-              <TextField
-                name="passagePrefix"
-                title="Passage Prefix"
-                suffix="optional"
-                placeholder="e.g., 'passage: '"
-                subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
-              />
+        <TextField
+          name="passagePrefix"
+          title="Passage Prefix"
+          suffix="optional"
+          placeholder="e.g., 'passage: '"
+          subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
+        />
 
-              <BoolField
-                name="normalize"
-                title="Normalize Embeddings"
-                description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
-              />
-            </GeneralLayouts.Section>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button prominence="secondary" onClick={onCancel}>
-              Cancel
-            </Button>
-            <CustomSelfHostedSubmitButton />
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
+        <BoolField
+          name="normalize"
+          title="Normalize Embeddings"
+          description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
+        />
+      </ModalShell>
     </Formik>
-  );
-}
-
-function CustomSelfHostedSubmitButton() {
-  const { isValid, submitForm } = useFormikContext();
-  return (
-    <Button disabled={!isValid} onClick={() => void submitForm()}>
-      Connect
-    </Button>
   );
 }
 
