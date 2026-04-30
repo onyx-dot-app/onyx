@@ -23,6 +23,7 @@ import {
   TextField,
 } from "@/refresh-pages/admin/IndexSettingsPage/shared";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
@@ -38,7 +39,7 @@ interface ModalShellProps {
 }
 
 function ModalShell({ provider, isEditing, children }: ModalShellProps) {
-  const { isValid, isSubmitting, submitForm } = useFormikContext();
+  const { isValid, isSubmitting, submitForm, dirty } = useFormikContext();
   const onClose = useModalClose();
 
   return (
@@ -68,16 +69,11 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
             Cancel
           </Button>
           <Button
-            disabled={!isValid || isSubmitting}
-            onClick={() => void submitForm()}
+            disabled={!isValid || !dirty || isSubmitting}
+            onClick={submitForm}
+            icon={isSubmitting ? SimpleLoader : undefined}
           >
-            {isSubmitting
-              ? isEditing
-                ? "Updating..."
-                : "Connecting..."
-              : isEditing
-                ? "Update"
-                : "Connect"}
+            {isEditing ? "Update" : "Connect"}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -146,7 +142,6 @@ interface ProviderModalProps {
    * staged into the Formik form.
    */
   onSubmit: (customModel?: EmbeddingModel) => void;
-  // onCancel: () => void;
 }
 
 // ---------------------------------------------------------------------------
