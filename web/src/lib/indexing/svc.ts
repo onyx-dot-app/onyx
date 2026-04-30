@@ -2,7 +2,6 @@ import type { Settings } from "@/interfaces/settings";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModel,
-  EmbeddingPrecision,
   EmbeddingProviderName,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
@@ -167,7 +166,6 @@ export async function setNewSearchSettings({
       api_url: null,
       index_name: null,
       multipass_indexing: false,
-      embedding_precision: EmbeddingPrecision.FLOAT,
       enable_contextual_rag: enableContextualRag,
       contextual_rag_llm_name: contextualRagLlmName,
       contextual_rag_llm_provider: contextualRagLlmProvider,

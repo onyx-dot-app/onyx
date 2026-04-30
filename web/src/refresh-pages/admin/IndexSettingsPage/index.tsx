@@ -303,6 +303,9 @@ function ProviderGroup({
   const editCredentialsModal = useCreateModal();
   const providerCreationModal = useCreateModal();
   const [pendingModel, setPendingModel] = useState<EmbeddingModel | null>(null);
+  const providerGroupContainsCurrentModelName = models.some(
+    (m) => m.modelName === currentModelName
+  );
 
   const handleDisconnect = useCallback(async () => {
     if (!isCloud) return;
@@ -447,9 +450,12 @@ function ProviderGroup({
                     icon={SvgUnplug}
                     prominence="tertiary"
                     size="sm"
-                    disabled={models.some(
-                      (m) => m.modelName === currentModelName
-                    )}
+                    disabled={providerGroupContainsCurrentModelName}
+                    tooltip={
+                      providerGroupContainsCurrentModelName
+                        ? "Cannot disconnect this embedding model because it is the current default. Select a new one before proceeding."
+                        : undefined
+                    }
                     onClick={() => disconnectModal.toggle(true)}
                   />
                   <Button
@@ -530,7 +536,7 @@ function EmbeddingModelCard({
             disabled={provider.deprecated}
             tooltip={
               provider.deprecated
-                ? "This embedding model is deprecated and cannot be selected."
+                ? "This embedding model is deprecated and cannot be connected to."
                 : undefined
             }
           >
@@ -543,6 +549,11 @@ function EmbeddingModelCard({
             prominence="tertiary"
             onClick={onSelect}
             disabled={provider.deprecated}
+            tooltip={
+              provider.deprecated
+                ? "This embedding model is deprecated and cannot be selected."
+                : undefined
+            }
           >
             Select Model
           </Button>
