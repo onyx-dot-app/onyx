@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -173,4 +174,53 @@ export function useCustomProviderNames() {
     isLoading,
     error,
   };
+}
+
+export interface DefaultLlmReference {
+  providerName: string;
+  modelName: string;
+}
+
+export interface LlmDefaults {
+  /** Raw provider list, passed through from `useLLMProviders`. */
+  llmProviders: LLMProviderDescriptor[] | undefined;
+  /** True iff any provider exposes at least one visible model. */
+  hasAnyLlm: boolean;
+  /**
+   * The admin-configured default text model, resolved to the form-friendly
+   * `{ providerName, modelName }` shape. The backend stores
+   * `default_text` as `{ provider_id, model_name }`; this hook joins
+   * `provider_id` against the providers list to recover the human-facing
+   * provider `name`, which is what `validate_contextual_rag_model` looks
+   * up via `fetch_existing_llm_provider(name=...)`.
+   */
+  defaultLlm: DefaultLlmReference | null;
+  isLoading: boolean;
+}
+
+/**
+ * Derived view over `useLLMProviders` for forms that need to:
+ *   - Disable LLM-dependent controls when no models are configured.
+ *   - Default to the global default text model when the user has not yet
+ *     made an explicit choice.
+ */
+export function useLlmDefaults(): LlmDefaults {
+  const { llmProviders, defaultText, isLoading } = useLLMProviders();
+
+  const hasAnyLlm = useMemo(
+    () =>
+      (llmProviders ?? []).some((p) =>
+        p.model_configurations.some((m) => m.is_visible)
+      ),
+    [llmProviders]
+  );
+
+  const defaultLlm = useMemo<DefaultLlmReference | null>(() => {
+    if (!llmProviders || !defaultText) return null;
+    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
+    if (!provider) return null;
+    return { providerName: provider.name, modelName: defaultText.model_name };
+  }, [llmProviders, defaultText]);
+
+  return { llmProviders, hasAnyLlm, defaultLlm, isLoading };
 }

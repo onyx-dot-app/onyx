@@ -19,7 +19,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { useCustomProviderNames } from "@/hooks/useLLMProviders";
+import { useCustomProviderNames } from "@/hooks/useLanguageModels";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
   KeyValue,

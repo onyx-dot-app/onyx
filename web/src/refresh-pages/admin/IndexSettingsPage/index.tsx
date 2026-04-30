@@ -18,6 +18,7 @@ import {
   Divider,
   LinkButton,
   MessageCard,
+  OpenButton,
   SelectCard,
   Text,
 } from "@opal/components";
@@ -78,11 +79,16 @@ import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
-  useLLMContextualCosts,
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
+import { useLlmDefaults } from "@/hooks/useLanguageModels";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
+import Popover from "@/refresh-components/Popover";
+import ModelListContent from "@/refresh-components/popovers/ModelListContent";
+import type { LLMOption } from "@/refresh-components/popovers/interfaces";
+import type { RichStr } from "@opal/types";
+import { getModelIcon } from "@/lib/llmConfig";
 import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -108,7 +114,7 @@ const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
  */
 interface CloudDisabledProps {
   disabled?: boolean;
-  tooltip?: string;
+  tooltip?: string | RichStr;
   children: React.ReactNode;
 }
 function CloudDisabled({
@@ -168,6 +174,93 @@ function EmbeddingProviderInfo({ providerType }: EmbeddingProviderInfoProps) {
         </LinkButton>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contextual RAG LLM picker
+// ---------------------------------------------------------------------------
+
+interface ContextualLlmPickerProps {
+  modelName: string | null;
+  providerName: string | null;
+  onChange: (next: { modelName: string; providerName: string }) => void;
+  disabled?: boolean;
+}
+
+/**
+ * Single-select LLM picker bound to external state (the Formik form), unlike
+ * `LLMPopover` which is wired to `LlmManager.currentLlm` and would mutate the
+ * user's default chat model on select. Reuses the same popover primitives
+ * (`Popover`, `OpenButton`, `ModelListContent`) for visual parity.
+ *
+ * Emits `providerName = LLMOption.name` (the LLM provider's instance name like
+ * "OpenAI"), which is what the backend's `validate_contextual_rag_model` looks
+ * up via `fetch_existing_llm_provider(name=...)`.
+ */
+function ContextualLlmPicker({
+  modelName,
+  providerName,
+  onChange,
+  disabled,
+}: ContextualLlmPickerProps) {
+  const [open, setOpen] = useState(false);
+  const { llmProviders, isLoading } = useLlmDefaults();
+
+  const isSelected = useCallback(
+    (option: LLMOption) =>
+      option.modelName === modelName && option.name === providerName,
+    [modelName, providerName]
+  );
+
+  const handleSelect = useCallback(
+    (option: LLMOption) => {
+      onChange({ modelName: option.modelName, providerName: option.name });
+      setOpen(false);
+    },
+    [onChange]
+  );
+
+  const { displayName, providerType } = useMemo(() => {
+    if (!modelName || !providerName || !llmProviders) {
+      return { displayName: null as string | null, providerType: null };
+    }
+    for (const p of llmProviders) {
+      if (p.name !== providerName) continue;
+      const cfg = p.model_configurations.find((m) => m.name === modelName);
+      if (cfg) {
+        return {
+          displayName: cfg.display_name || cfg.name,
+          providerType: p.provider,
+        };
+      }
+    }
+    return { displayName: modelName, providerType: null };
+  }, [llmProviders, modelName, providerName]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild disabled={disabled}>
+        <OpenButton
+          disabled={disabled}
+          icon={
+            providerType
+              ? getModelIcon(providerType, modelName ?? "")
+              : undefined
+          }
+        >
+          {displayName ?? "Select a model"}
+        </OpenButton>
+      </Popover.Trigger>
+      <Popover.Content side="top" align="end" width="xl">
+        <ModelListContent
+          llmProviders={llmProviders}
+          isLoading={isLoading}
+          onSelect={handleSelect}
+          isSelected={isSelected}
+        />
+      </Popover.Content>
+    </Popover>
   );
 }
 
@@ -604,22 +697,32 @@ export default function IndexSettingsPage() {
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings();
-  const { data: contextualCosts } = useLLMContextualCosts();
   const { data: configuredProviders } = useConfiguredEmbeddingProviders();
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
   const customModelModal = useCreateModal();
 
+  const {
+    hasAnyLlm,
+    defaultLlm,
+    isLoading: isLoadingLlmProviders,
+  } = useLlmDefaults();
+
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
       model_name: currentEmbeddingModel?.model_name ?? "",
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
-      contextual_rag_llm_name: searchSettings?.contextual_rag_llm_name ?? null,
+      contextual_rag_llm_name:
+        searchSettings?.contextual_rag_llm_name ??
+        defaultLlm?.modelName ??
+        null,
       contextual_rag_llm_provider:
-        searchSettings?.contextual_rag_llm_provider ?? null,
+        searchSettings?.contextual_rag_llm_provider ??
+        defaultLlm?.providerName ??
+        null,
     }),
-    [currentEmbeddingModel, searchSettings]
+    [currentEmbeddingModel, searchSettings, defaultLlm]
   );
 
   const handleCancelReindex = useCallback(async () => {
@@ -636,7 +739,11 @@ export default function IndexSettingsPage() {
     ]);
   }, [cancelReindexModal]);
 
-  if (isLoadingCurrentModel || isLoadingSearchSettings) {
+  if (
+    isLoadingCurrentModel ||
+    isLoadingSearchSettings ||
+    isLoadingLlmProviders
+  ) {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
@@ -1079,14 +1186,17 @@ export default function IndexSettingsPage() {
                                       onChange={(e) => setQuery(e.target.value)}
                                     />
                                     <div className="flex flex-row">
-                                      {dirty && (
+                                      {isModelStaged && (
                                         <Button
                                           icon={SvgRevert}
                                           prominence="internal"
-                                          onClick={() => {
-                                            resetForm();
-                                            setSwitchoverType(SWITCHOVER_NONE);
-                                          }}
+                                          tooltip="Revert embedding model selection"
+                                          onClick={() =>
+                                            void setFieldValue(
+                                              "model_name",
+                                              initialFormValues.model_name
+                                            )
+                                          }
                                         />
                                       )}
                                       <Button
@@ -1230,11 +1340,15 @@ export default function IndexSettingsPage() {
                     </CloudDisabled>
 
                     <CloudDisabled
-                      disabled={isReindexing}
+                      disabled={isReindexing || !hasAnyLlm}
                       tooltip={
                         isReindexing
                           ? "Cancel the in-progress re-index to change retrieval settings."
-                          : undefined
+                          : !hasAnyLlm
+                            ? markdown(
+                                "Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model](/admin/configuration/language-models) first."
+                              )
+                            : undefined
                       }
                     >
                       <Card
@@ -1269,35 +1383,23 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <InputSelect
-                                value={values.contextual_rag_llm_name ?? ""}
-                                onValueChange={(value) => {
-                                  const selected = contextualCosts?.find(
-                                    (cost) => cost.model_name === value
-                                  );
+                              <ContextualLlmPicker
+                                modelName={values.contextual_rag_llm_name}
+                                providerName={
+                                  values.contextual_rag_llm_provider
+                                }
+                                disabled={!values.enable_contextual_rag}
+                                onChange={({ modelName, providerName }) => {
                                   void setFieldValue(
                                     "contextual_rag_llm_name",
-                                    value
+                                    modelName
                                   );
                                   void setFieldValue(
                                     "contextual_rag_llm_provider",
-                                    selected?.provider ?? null
+                                    providerName
                                   );
                                 }}
-                                disabled={!values.enable_contextual_rag}
-                              >
-                                <InputSelect.Trigger placeholder="Select a model" />
-                                <InputSelect.Content>
-                                  {(contextualCosts ?? []).map((cost) => (
-                                    <InputSelect.Item
-                                      key={cost.model_name}
-                                      value={cost.model_name}
-                                    >
-                                      {cost.model_name}
-                                    </InputSelect.Item>
-                                  ))}
-                                </InputSelect.Content>
-                              </InputSelect>
+                              />
                             </InputHorizontal>
                           </Disabled>
                         </GeneralLayouts.Section>
