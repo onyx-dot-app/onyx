@@ -1,6 +1,8 @@
 import type { IconFunctionComponent } from "@opal/types";
 
-// Base embedding types
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
 
 export enum EmbeddingProviderName {
   // Cloud-based
@@ -19,29 +21,28 @@ export enum EmbeddingProviderName {
   CUSTOM = "custom",
 }
 
-// Backend API Response Type
-
-/**
- * The backend-persisted shape for an embedding model. Reflects what the
- * server actually sends/stores — notably **no `description`**, since
- * descriptions are frontend-only marketing copy on the registry types
- * ({@link EmbeddingModel}).
- */
-export interface EmbeddingModelResponse {
-  id?: number;
-  model_name: string;
-  model_dim: number;
-  normalize: boolean;
-  query_prefix: string | null;
-  passage_prefix: string | null;
-  provider_type: EmbeddingProviderName | null;
-  api_key: string | null;
-  api_url: string | null;
-  index_name: string | null;
-  switchover_type?: SwitchoverType;
+export enum RerankerProvider {
+  COHERE = "cohere",
+  LITELLM = "litellm",
+  BEDROCK = "bedrock",
 }
 
-// Embedding Providers + Models
+export enum SwitchoverType {
+  REINDEX = "reindex",
+  ACTIVE_ONLY = "active_only",
+  INSTANT = "instant",
+}
+
+export enum EmbeddingPrecision {
+  FLOAT = "float",
+  BFLOAT16 = "bfloat16",
+}
+
+// ---------------------------------------------------------------------------
+// Frontend / Registry Types
+// Frontend-only shapes that carry display info (icons, links, descriptions)
+// not stored on the backend.
+// ---------------------------------------------------------------------------
 
 export interface EmbeddingProvider {
   providerName: EmbeddingProviderName;
@@ -69,32 +70,6 @@ export interface EmbeddingModel {
   description: string;
 }
 
-export interface EmbeddingModelRequest {
-  modelName: string;
-  modelDim?: number | null;
-  normalize: boolean;
-  queryPrefix?: string | null;
-  passagePrefix?: string | null;
-  description?: string | null;
-}
-
-// Reranking
-
-export enum RerankerProvider {
-  COHERE = "cohere",
-  LITELLM = "litellm",
-  BEDROCK = "bedrock",
-}
-
-// This is a slightly different interface than used in the backend
-// but is always used in conjunction with `AdvancedSearchConfiguration`.
-export interface RerankingDetails {
-  rerank_model_name: string | null;
-  rerank_provider_type: RerankerProvider | null;
-  rerank_api_key: string | null;
-  rerank_api_url: string | null;
-}
-
 export interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
   modelName?: string;
@@ -104,17 +79,60 @@ export interface RerankingModel {
   cloud: boolean;
 }
 
-// Search / indexing settings
+export type EmbeddingModelState =
+  | "unconnected"
+  | "connected"
+  | "current"
+  | "selected";
 
-export enum SwitchoverType {
-  REINDEX = "reindex",
-  ACTIVE_ONLY = "active_only",
-  INSTANT = "instant",
+// ---------------------------------------------------------------------------
+// API Wire Types (Request / Response)
+// Exact shapes sent to / received from the backend. Use snake_case to mirror
+// the JSON payload; camelCase aliases live only in the frontend registry types
+// above.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape returned by the backend for a persisted embedding model.
+ * No `description` — that's frontend-only marketing copy.
+ */
+export interface EmbeddingModelResponse {
+  id?: number;
+  model_name: string;
+  model_dim: number;
+  normalize: boolean;
+  query_prefix: string | null;
+  passage_prefix: string | null;
+  provider_type: EmbeddingProviderName | null;
+  api_key: string | null;
+  api_url: string | null;
+  index_name: string | null;
+  switchover_type?: SwitchoverType;
 }
 
-export enum EmbeddingPrecision {
-  FLOAT = "float",
-  BFLOAT16 = "bfloat16",
+/** Payload sent when switching to a new embedding model. */
+export interface EmbeddingModelRequest {
+  modelName?: string | null;
+  modelDim?: number | null;
+  normalize: boolean;
+  queryPrefix?: string | null;
+  passagePrefix?: string | null;
+}
+
+/** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
+export interface ConfiguredEmbeddingProvider {
+  provider_type: EmbeddingProviderName;
+  api_key: string | null;
+  api_url: string | null;
+  api_version: string | null;
+  deployment_name: string | null;
+}
+
+export interface RerankingDetails {
+  rerank_model_name: string | null;
+  rerank_provider_type: RerankerProvider | null;
+  rerank_api_key: string | null;
+  rerank_api_url: string | null;
 }
 
 export interface AdvancedSearchConfiguration {
@@ -142,21 +160,4 @@ export interface LLMContextualCost {
   provider: string;
   model_name: string;
   cost: number;
-}
-
-// Embedding model card state
-
-export type EmbeddingModelState =
-  | "unconnected"
-  | "connected"
-  | "current"
-  | "selected";
-
-/** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
-export interface ConfiguredEmbeddingProvider {
-  provider_type: EmbeddingProviderName;
-  api_key: string | null;
-  api_url: string | null;
-  api_version: string | null;
-  deployment_name: string | null;
 }

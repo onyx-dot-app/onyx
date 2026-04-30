@@ -15,7 +15,7 @@ import {
   type EmbeddingModel,
   type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
-import { connectEmbeddingProvider } from "@/lib/indexing/svc";
+import { connectEmbeddingProvider, testEmbedding } from "@/lib/indexing/svc";
 import {
   ApiKeyField,
   ApiUrlField,
@@ -431,10 +431,10 @@ function CustomSelfHostedModal({
   const isEditing = !!existingModel;
 
   const initialValues: EmbeddingModelRequest = {
-    modelName: existingModel?.modelName ?? "",
+    modelName: existingModel?.modelName,
     modelDim: existingModel?.modelDim ?? null,
-    queryPrefix: existingModel?.queryPrefix ?? "",
-    passagePrefix: existingModel?.passagePrefix ?? "",
+    queryPrefix: existingModel?.queryPrefix,
+    passagePrefix: existingModel?.passagePrefix,
     normalize: existingModel?.normalize ?? false,
   };
 
@@ -443,14 +443,26 @@ function CustomSelfHostedModal({
       initialValues={initialValues}
       validationSchema={customSchema}
       validateOnMount
-      onSubmit={(values) => {
+      onSubmit={async (values) => {
+        const testResponse = await testEmbedding({
+          provider_type: "",
+          modelName: values.modelName ?? "",
+          apiKey: null,
+          apiUrl: null,
+          apiVersion: null,
+          deploymentName: null,
+        });
+        if (!testResponse.ok) {
+          const err = await testResponse.json();
+          toast.error(err.detail ?? "Embedding test failed");
+          return;
+        }
         onSubmit({
-          modelName: values.modelName.trim(),
+          modelName: values.modelName?.trim(),
           modelDim: values.modelDim,
           normalize: values.normalize,
           queryPrefix: values.queryPrefix || null,
           passagePrefix: values.passagePrefix || null,
-          description: "",
         });
       }}
     >
