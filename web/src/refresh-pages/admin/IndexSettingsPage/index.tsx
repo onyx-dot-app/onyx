@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
@@ -301,17 +301,6 @@ function ProviderGroup({
   const connectModal = useCreateModal();
   const editCredentialsModal = useCreateModal();
   const providerCreationModal = useCreateModal();
-  /**
-   * Tracks the model the user clicked "Connect" on, so the connect-modal's
-   * success handler can stage it after credentials are saved. A ref (not
-   * useState) is used here for two reasons:
-   *   1. Reading via `.current` sidesteps closure-capture issues across the
-   *      modal's async submit boundary.
-   *   2. Refs don't participate in Formik's dirty calculation, so the
-   *      "Re-index" banner only appears after a successful connect — not the
-   *      moment the user clicks "Connect".
-   */
-  const pendingConnectModelRef = useRef<EmbeddingModel | null>(null);
   const providerGroupContainsCurrentModelName = models.some(
     (m) => m.modelName === currentModelName
   );
@@ -322,11 +311,18 @@ function ProviderGroup({
       await disconnectEmbeddingProvider(provider.providerName);
       toast.success(`Disconnected ${provider.displayName}`);
       await mutate(SWR_KEYS.embeddingProviders);
+      onDeselectModel();
       disconnectModal.toggle(false);
     } catch {
       toast.error(`Failed to disconnect ${provider.displayName}`);
     }
-  }, [isCloud, provider.providerName, provider.displayName, disconnectModal]);
+  }, [
+    isCloud,
+    provider.providerName,
+    provider.displayName,
+    onDeselectModel,
+    disconnectModal,
+  ]);
 
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
@@ -349,7 +345,6 @@ function ProviderGroup({
       }
 
       if (state === "unconnected" && isCloud) {
-        pendingConnectModelRef.current = model;
         connectModal.toggle(true);
         return;
       }
@@ -394,10 +389,6 @@ function ProviderGroup({
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 connectModal.toggle(false);
-                if (pendingConnectModelRef.current) {
-                  onSelectModel(pendingConnectModelRef.current.modelName);
-                  pendingConnectModelRef.current = null;
-                }
               }}
             />
           </connectModal.Provider>
