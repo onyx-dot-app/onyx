@@ -67,7 +67,7 @@ if not MULTI_TENANT:
         {
             "name": "check-license-expiry-notifications",
             "task": OnyxCeleryTask.CHECK_LICENSE_EXPIRY_NOTIFICATIONS,
-            "schedule": timedelta(hours=1),
+            "schedule": timedelta(days=1),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
