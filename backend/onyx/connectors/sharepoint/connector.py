@@ -1007,35 +1007,39 @@ class SharepointConnector(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
 
-        # Probe RoleAssignments permission — required for permission sync.
-        # Only runs when credentials have been loaded.
-        if self.msal_app and self.sp_tenant_domain and self.sites:
-            try:
-                token_response = acquire_token_for_rest(
-                    self.msal_app,
-                    self.sp_tenant_domain,
-                    self.sharepoint_domain_suffix,
+    def probe_role_assignments_permission(self) -> None:
+        """Verify the Azure AD app can read SharePoint RoleAssignments.
+
+        Required for permission sync (RoleAssignments enumeration uses the
+        SharePoint REST surface, which is granted separately from Graph).
+        Only runs when credentials have been loaded.
+        """
+        if not (self.msal_app and self.sp_tenant_domain and self.sites):
+            return
+        try:
+            token_response = acquire_token_for_rest(
+                self.msal_app,
+                self.sp_tenant_domain,
+                self.sharepoint_domain_suffix,
+            )
+            probe_url = f"{self.sites[0].rstrip('/')}/_api/web/roleassignments?$top=1"
+            resp = requests.get(
+                probe_url,
+                headers={"Authorization": f"Bearer {token_response.accessToken}"},
+                timeout=10,
+            )
+            if resp.status_code in (401, 403):
+                raise ConnectorValidationError(
+                    "The Azure AD app registration is missing the required SharePoint permission "
+                    "to read role assignments. Please grant 'Sites.FullControl.All' "
+                    "(application permission) in the Azure portal and re-run admin consent."
                 )
-                probe_url = (
-                    f"{self.sites[0].rstrip('/')}/_api/web/roleassignments?$top=1"
-                )
-                resp = requests.get(
-                    probe_url,
-                    headers={"Authorization": f"Bearer {token_response.accessToken}"},
-                    timeout=10,
-                )
-                if resp.status_code in (401, 403):
-                    raise ConnectorValidationError(
-                        "The Azure AD app registration is missing the required SharePoint permission "
-                        "to read role assignments. Please grant 'Sites.FullControl.All' "
-                        "(application permission) in the Azure portal and re-run admin consent."
-                    )
-            except ConnectorValidationError:
-                raise
-            except Exception as e:
-                logger.warning(
-                    "RoleAssignments permission probe failed (non-blocking): %s", e
-                )
+        except ConnectorValidationError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "RoleAssignments permission probe failed (non-blocking): %s", e
+            )
 
     def _extract_tenant_domain_from_sites(self) -> str | None:
         """Extract the tenant domain from configured site URLs.
