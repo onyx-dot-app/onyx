@@ -620,7 +620,7 @@ partd==1.4.2
 passlib==1.7.4
 pathable==0.5.0
     # via jsonschema-path
-pdfminer-six==20251107
+pdfminer-six==20260107
     # via markitdown
 pillow==12.2.0
     # via python-pptx
