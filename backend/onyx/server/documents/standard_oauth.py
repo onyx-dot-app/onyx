@@ -5,7 +5,6 @@ from typing import cast
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from pydantic import BaseModel
@@ -20,6 +19,8 @@ from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
@@ -70,12 +71,10 @@ def _get_additional_kwargs(
         # validate
         connector_cls.AdditionalOauthKwargs(**additional_kwargs_dict)
     except ValidationError:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid additional kwargs. Got {additional_kwargs_dict}, expected "
-                f"{connector_cls.AdditionalOauthKwargs.model_json_schema()}"
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Invalid additional kwargs. Got {additional_kwargs_dict}, expected "
+            f"{connector_cls.AdditionalOauthKwargs.model_json_schema()}",
         )
 
     return additional_kwargs_dict
@@ -98,7 +97,9 @@ def oauth_authorize(
     oauth_connectors = _discover_oauth_connectors()
 
     if source not in oauth_connectors:
-        raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, f"Unknown OAuth source: {source}"
+        )
 
     connector_cls = oauth_connectors[source]
     base_url = WEB_DOMAIN
@@ -148,7 +149,9 @@ def oauth_callback(
     oauth_connectors = _discover_oauth_connectors()
 
     if source not in oauth_connectors:
-        raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, f"Unknown OAuth source: {source}"
+        )
 
     connector_cls = oauth_connectors[source]
 
@@ -158,7 +161,7 @@ def oauth_callback(
         bytes, redis_client.get(_OAUTH_STATE_KEY_FMT.format(state=state))
     )
     if not oauth_state_bytes:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Invalid OAuth state")
     oauth_state = json.loads(oauth_state_bytes.decode("utf-8"))
 
     desired_return_url = cast(str, oauth_state[_DESIRED_RETURN_URL_KEY])
