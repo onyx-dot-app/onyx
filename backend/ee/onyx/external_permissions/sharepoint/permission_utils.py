@@ -43,6 +43,16 @@ LIMITED_ACCESS_ROLE_NAMES = ["Limited Access", "Web-Only Limited Access"]
 
 AD_GROUP_ENUMERATION_THRESHOLD = 100_000
 
+# Page size for SharePoint REST RoleAssignments queries with
+# $expand=Member,RoleDefinitionBindings. Without an explicit $top, SharePoint
+# can stream the entire collection in one chunked response which has been
+# observed to be terminated mid-stream by upstream gateways
+# (ChunkedEncodingError: Response ended prematurely) on items with many
+# assignments. 100 matches Microsoft Graph / SharePoint UI defaults for
+# paged collections and keeps each page well under typical proxy buffer
+# limits while not making the round-trip count overwhelming.
+ROLE_ASSIGNMENTS_PAGE_SIZE = 100
+
 
 def _graph_api_get(
     url: str,
@@ -616,6 +626,7 @@ def get_external_access_from_sharepoint(
 
         sleep_and_retry(
             item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
+                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
                 page_loaded=add_user_and_group_to_sets,
             ),
             "get_external_access_from_sharepoint",
@@ -635,6 +646,7 @@ def get_external_access_from_sharepoint(
 
         sleep_and_retry(
             item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
+                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
                 page_loaded=add_user_and_group_to_sets,
             ),
             "get_external_access_from_sharepoint",
@@ -781,7 +793,7 @@ def get_sharepoint_external_groups(
     sleep_and_retry(
         client_context.web.role_assignments.expand(
             ["Member", "RoleDefinitionBindings"]
-        ).get_all(page_loaded=add_group_to_sets),
+        ).get_all(page_size=ROLE_ASSIGNMENTS_PAGE_SIZE, page_loaded=add_group_to_sets),
         "get_sharepoint_external_groups",
     )
     groups_and_members: GroupsResult = _get_groups_and_members_recursively(
