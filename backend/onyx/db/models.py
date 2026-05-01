@@ -2186,12 +2186,10 @@ class SearchSettings(Base):
 
 class TargetedReindexJob(Base):
     """
-    Lifecycle row for a single user-initiated targeted reindex request.
-
-    A request can span multiple `(cc_pair, search_settings)` tuples. One
-    synthetic `IndexAttempt` is created per tuple and links back via
-    `IndexAttempt.targeted_reindex_job_id`. The FE polls this row for
-    aggregate status. The actual targets live in `targeted_reindex_job_target`.
+    One row per user-initiated reindex request. Gives the FE a stable handle
+    to poll for aggregate status across a request that may span multiple
+    `(cc_pair, search_settings)` tuples. The per-doc work list lives in
+    `targeted_reindex_job_target`.
     """
 
     __tablename__ = "targeted_reindex_job"
@@ -2260,12 +2258,10 @@ class TargetedReindexJob(Base):
 
 class TargetedReindexJobTarget(Base):
     """
-    One row per `(cc_pair_id, document_id)` targeted by a reindex job.
-
-    `source_error_id` is set when the target was derived from a failed
-    `IndexAttemptError`. NULL means an arbitrary doc reindex with no failure
-    context. Resolution tracking at completion only fires for rows where
-    `source_error_id IS NOT NULL`.
+    One row per doc a reindex job will touch. Separate table (not JSONB on
+    the job) so each row can FK to its source `IndexAttemptError` for clean
+    resolution tracking and FK to its `cc_pair` for cascade cleanup. NULL
+    `source_error_id` means an arbitrary reindex with no failure context.
     """
 
     __tablename__ = "targeted_reindex_job_target"
