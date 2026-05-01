@@ -143,7 +143,11 @@ class NotionConnector(LoadConnector, PollConnector):
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
-        if not ("notion.so" in netloc or "notion.site" in netloc):
+        if not (
+            "notion.so" in netloc
+            or "notion.site" in netloc
+            or "app.notion.com" in netloc
+        ):
             return NormalizationResult(normalized_url=None, use_default=False)
 
         # Extract page ID from path (format: "Title-PageID")
