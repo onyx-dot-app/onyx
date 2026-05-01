@@ -2230,7 +2230,7 @@ class TargetedReindexJob(Base):
     # Snapshot of resolved error rows captured at completion. Outlives later
     # cleanup of the underlying `index_attempt_errors` rows.
     resolved_summary: Mapped[list[dict[str, Any]]] = mapped_column(
-        PGJSONB, nullable=False, server_default="[]"
+        PGJSONB, nullable=False, default=list, server_default="[]"
     )
 
     completed_at: Mapped[datetime.datetime | None] = mapped_column(
