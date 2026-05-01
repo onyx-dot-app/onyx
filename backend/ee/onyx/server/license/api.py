@@ -79,6 +79,8 @@ async def get_license_status(
         expires_at=metadata.expires_at,
         grace_period_end=metadata.grace_period_end,
         status=metadata.status,
+        expiry_warning_stage=metadata.expiry_warning_stage,
+        grace_days_remaining=metadata.grace_days_remaining,
         source=metadata.source,
     )
 
@@ -287,6 +289,8 @@ async def refresh_license_cache_endpoint(
         expires_at=metadata.expires_at,
         grace_period_end=metadata.grace_period_end,
         status=metadata.status,
+        expiry_warning_stage=metadata.expiry_warning_stage,
+        grace_days_remaining=metadata.grace_days_remaining,
         source=metadata.source,
     )
 
