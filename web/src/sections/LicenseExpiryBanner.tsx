@@ -185,7 +185,7 @@ export default function LicenseExpiryBanner() {
 
   return (
     <div
-      className="fixed top-3 z-[100] flex justify-center px-3 pointer-events-none"
+      className="fixed top-3 z-toast flex justify-center px-3 pointer-events-none"
       style={{ left, width: width || undefined }}
     >
       <div className="w-full max-w-3xl pointer-events-auto">

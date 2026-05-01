@@ -209,12 +209,17 @@ def update_license_cache(
     from ee.onyx.utils.license import get_license_status
     from ee.onyx.utils.license_expiry import get_expiry_warning_stage
     from ee.onyx.utils.license_expiry import get_grace_days_remaining
+    from ee.onyx.utils.license_expiry import get_grace_period_end
 
     tenant = tenant_id or get_current_tenant_id()
     cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
-    status = get_license_status(payload, grace_period_end)
+    # Default the grace window to 14 days past expires_at so the license-
+    # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
+    # that window — matching the banner copy and daily admin emails.
+    effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
+    status = get_license_status(payload, effective_grace_end)
     warning_stage = get_expiry_warning_stage(payload.expires_at)
     grace_days = get_grace_days_remaining(payload.expires_at)
 
@@ -226,7 +231,7 @@ def update_license_cache(
         plan_type=payload.plan_type,
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
-        grace_period_end=grace_period_end,
+        grace_period_end=effective_grace_end,
         status=status,
         expiry_warning_stage=warning_stage,
         grace_days_remaining=grace_days,

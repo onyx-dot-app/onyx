@@ -54,3 +54,48 @@ def test_grace_days_remaining_one_day_left() -> None:
 def test_grace_days_remaining_exhausted() -> None:
     expires = NOW - timedelta(days=LICENSE_GRACE_PERIOD_DAYS)
     assert get_grace_days_remaining(expires, now=NOW) == 0
+
+
+def test_get_grace_period_end_is_expires_plus_window() -> None:
+    from ee.onyx.utils.license_expiry import get_grace_period_end
+
+    expires = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert get_grace_period_end(expires) == expires + timedelta(
+        days=LICENSE_GRACE_PERIOD_DAYS
+    )
+
+
+def _status_with_default_grace(expires: datetime, now: datetime) -> str:
+    """Reproduce the wiring in `update_license_cache`: derive the grace
+    period end from `expires_at` and feed it to `get_license_status` so the
+    middleware-facing status is consistent with the banner stage."""
+    from unittest.mock import MagicMock
+
+    from ee.onyx.utils.license import get_license_status
+    from ee.onyx.utils.license_expiry import get_grace_period_end
+
+    payload = MagicMock()
+    payload.expires_at = expires
+    grace_end = get_grace_period_end(expires)
+    # Patch datetime.now inside get_license_status by passing a custom now is
+    # not supported; instead validate via boundary expiry values.
+    with __import__("unittest.mock", fromlist=["patch"]).patch(
+        "ee.onyx.utils.license.datetime"
+    ) as dt_mock:
+        dt_mock.now.return_value = now
+        return get_license_status(payload, grace_end).value
+
+
+def test_default_grace_keeps_active_status_pre_expiry() -> None:
+    expires = NOW + timedelta(days=10)
+    assert _status_with_default_grace(expires, now=NOW) == "active"
+
+
+def test_default_grace_returns_grace_period_within_window() -> None:
+    expires = NOW - timedelta(days=5)
+    assert _status_with_default_grace(expires, now=NOW) == "grace_period"
+
+
+def test_default_grace_gates_after_window_exhausted() -> None:
+    expires = NOW - timedelta(days=LICENSE_GRACE_PERIOD_DAYS + 1)
+    assert _status_with_default_grace(expires, now=NOW) == "gated_access"
