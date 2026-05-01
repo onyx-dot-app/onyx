@@ -69,6 +69,7 @@ from onyx.file_store.staging import RawFileCallback
 from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
+from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
@@ -862,6 +863,17 @@ def connector_document_extraction(
                     with time_stage(
                         IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id
                     ):
+                        try:
+                            RedisDocprocessing(
+                                index_attempt_id,
+                                get_redis_client(tenant_id=tenant_id),
+                            ).incr_pending()
+                        except Exception:
+                            logger.debug(
+                                "Failed to increment pending counter for attempt %s",
+                                index_attempt_id,
+                                exc_info=True,
+                            )
                         app.send_task(
                             OnyxCeleryTask.DOCPROCESSING_TASK,
                             kwargs=processing_batch_data,
@@ -1053,6 +1065,17 @@ def reissue_old_batches(
         if path_info.cc_pair_id != cc_pair_id:
             raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")
 
+        try:
+            RedisDocprocessing(
+                index_attempt_id,
+                get_redis_client(tenant_id=tenant_id),
+            ).incr_pending()
+        except Exception:
+            logger.debug(
+                "Failed to increment pending counter for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
         app.send_task(
             OnyxCeleryTask.DOCPROCESSING_TASK,
             kwargs={
