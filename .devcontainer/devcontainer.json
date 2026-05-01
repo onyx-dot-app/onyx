@@ -16,6 +16,8 @@
     "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
   ],
   "containerEnv": {
+    "COLORTERM": "truecolor",
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
     "MODEL_SERVER_HOST": "inference_model_server",
     "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",

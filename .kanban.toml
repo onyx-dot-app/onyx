@@ -1,0 +1,20 @@
+[[task]]
+label = "start backend"
+container_port = 8080
+
+[[task]]
+label = "start frontend"
+container_port = 3000
+
+[[task]]
+label = "start frontend (docker backend)"
+container_port = 3001
+
+[sync]
+allow_rebase = true
+allow_merge = false
+
+[merge]
+allow_merge_commit = false
+allow_squash = true
+allow_rebase = false

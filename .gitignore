@@ -3,7 +3,7 @@
 !/.vscode/env_template.txt
 !/.vscode/env.web_template.txt
 !/.vscode/launch.json
-!/.vscode/tasks.template.jsonc
+!/.vscode/tasks.json
 .zed
 .cursor
 !/.cursor/mcp.json
