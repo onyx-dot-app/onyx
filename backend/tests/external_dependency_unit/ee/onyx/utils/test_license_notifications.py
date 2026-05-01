@@ -79,8 +79,10 @@ def test_stage_none_short_circuits(db_session: Session) -> None:
     assert send_email.call_count == 0
 
 
-def test_no_active_admins_returns_zero(db_session: Session, basic_user: User) -> None:
-    """BASIC users must not be notified."""
+def test_basic_users_are_not_notified(
+    db_session: Session, admin: User, basic_user: User
+) -> None:
+    """The role filter excludes BASIC users — only ADMINs get notified."""
     with patch(
         "ee.onyx.utils.license_notifications._send_email_for_stage"
     ) as send_email:
@@ -88,8 +90,10 @@ def test_no_active_admins_returns_zero(db_session: Session, basic_user: User) ->
             db_session, ExpiryWarningStage.T_30D, EXPIRES_AT, today=TODAY
         )
     assert _count_license_notifs(db_session, basic_user.id) == 0
-    for call in send_email.call_args_list:
-        assert call.kwargs["user_email"] != basic_user.email
+    assert _count_license_notifs(db_session, admin.id, "t_30d") == 1
+    targeted = {c.kwargs["user_email"] for c in send_email.call_args_list}
+    assert basic_user.email not in targeted
+    assert admin.email in targeted
 
 
 def test_first_call_creates_notification_and_sends_email(
