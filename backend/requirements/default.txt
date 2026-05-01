@@ -210,6 +210,8 @@ distro==1.9.0
     #   zulip
 dnspython==2.8.0
     # via email-validator
+docker==7.1.0
+    # via onyx
 docstring-parser==0.17.0
     # via
     #   cyclopts
@@ -794,6 +796,7 @@ pytz==2025.2
 pywikibot==9.0.0
 pywin32==311 ; sys_platform == 'win32'
     # via
+    #   docker
     #   mcp
     #   pympler
 pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
@@ -826,6 +829,7 @@ requests==2.33.0
     #   atlassian-python-api
     #   braintrust
     #   cohere
+    #   docker
     #   dropbox
     #   exa-py
     #   google-api-core
@@ -1061,6 +1065,7 @@ urllib3==2.6.3
     #   botocore
     #   courlan
     #   distributed
+    #   docker
     #   htmldate
     #   hubspot-api-client
     #   kubernetes

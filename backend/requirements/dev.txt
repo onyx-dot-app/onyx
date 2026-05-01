@@ -114,6 +114,8 @@ distlib==0.4.0
     # via virtualenv
 distro==1.9.0
     # via openai
+docker==7.1.0
+    # via onyx
 docstring-parser==0.17.0
     # via google-cloud-aiplatform
 durationpy==0.10
@@ -448,7 +450,9 @@ python-multipart==0.0.26
 pytokens==0.4.1
     # via black
 pywin32==311 ; sys_platform == 'win32'
-    # via mcp
+    # via
+    #   docker
+    #   mcp
 pyyaml==6.0.3
     # via
     #   huggingface-hub
@@ -469,6 +473,7 @@ reorder-python-imports-black==3.14.0
 requests==2.33.0
     # via
     #   cohere
+    #   docker
     #   google-api-core
     #   google-cloud-bigquery
     #   google-cloud-storage
@@ -598,6 +603,7 @@ tzdata==2025.2 ; sys_platform == 'win32'
 urllib3==2.6.3
     # via
     #   botocore
+    #   docker
     #   kubernetes
     #   requests
     #   sentry-sdk

@@ -25,6 +25,7 @@ dependencies = [
     "claude-agent-sdk>=0.1.19",
     "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
+    "docker>=7.0.0,<8",
     "kubernetes>=31.0.0",
 ]
 
@@ -62,6 +63,7 @@ backend = [
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
+    "docker==7.1.0",
     "kubernetes==31.0.0",
     "trafilatura==1.12.2",
     "langchain-core==1.2.28",

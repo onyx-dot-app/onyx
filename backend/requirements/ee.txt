@@ -87,6 +87,8 @@ discord-py==2.4.0
     # via onyx
 distro==1.9.0
     # via openai
+docker==7.1.0
+    # via onyx
 docstring-parser==0.17.0
     # via google-cloud-aiplatform
 durationpy==0.10
@@ -312,7 +314,9 @@ python-dotenv==1.2.2
 python-multipart==0.0.26
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
-    # via mcp
+    # via
+    #   docker
+    #   mcp
 pyyaml==6.0.3
     # via
     #   huggingface-hub
@@ -326,6 +330,7 @@ regex==2025.11.3
 requests==2.33.0
     # via
     #   cohere
+    #   docker
     #   google-api-core
     #   google-cloud-bigquery
     #   google-cloud-storage
@@ -414,6 +419,7 @@ typing-inspection==0.4.2
 urllib3==2.6.3
     # via
     #   botocore
+    #   docker
     #   kubernetes
     #   requests
     #   sentry-sdk

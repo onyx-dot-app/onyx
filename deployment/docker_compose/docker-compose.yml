@@ -95,6 +95,14 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
+      # Sandbox backend selection. With ENABLE_CRAFT=true the supported default
+      # for docker-compose deployments is "docker" — uses the Docker Engine
+      # (via the mounted socket below) to run one container per user, with the
+      # same image family as the Kubernetes path. "local" is dev-only and
+      # provides NO container isolation. See sandbox/README.md.
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
+      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.5}
+      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -117,11 +125,24 @@ services:
       timeout: 20s
       retries: 3
       start_period: 25s
+    networks:
+      - default
+      # Shared bridge network with sandbox containers. The api_server reaches
+      # NextJS dev servers running inside sandbox containers by hostname over
+      # this network, mirroring how it reaches them via ClusterIP DNS in K8s.
+      - craft_sandbox
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
+      # WARNING: Mounting the Docker socket grants the api_server root-level
+      # access to the host. Required when SANDBOX_BACKEND=docker (the supported
+      # default for self-hosted Craft). To avoid the socket mount, set
+      # SANDBOX_BACKEND=local — but note that "local" provides NO container
+      # isolation and is intended for dev only. See sandbox/README.md for
+      # the full trust-boundary discussion.
+      - /var/run/docker.sock:/var/run/docker.sock
 
   background:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
@@ -181,16 +202,30 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
+      # Mirror the api_server's sandbox backend so the idle-cleanup beat task
+      # picks the same code path. The background container does not strictly
+      # need the docker socket (cleanup happens via the api_server-side manager
+      # that already has the socket), but it does need the env var for branch
+      # selection inside the manager factory.
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
+      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.5}
+      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - craft_sandbox
     # Optional, only for debugging purposes
     volumes:
       - background_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
+      # See note on the api_server socket mount. Beat uses the manager factory
+      # for idle cleanup (snapshot + terminate), so it needs Docker access too.
+      - /var/run/docker.sock:/var/run/docker.sock
     logging:
       driver: json-file
       options:
@@ -594,3 +629,16 @@ volumes:
   file-system:
   # Persistent data for OpenSearch.
   opensearch-data:
+
+networks:
+  # Default network used by the rest of the deployment.
+  default:
+  # Bridge network shared between the api_server, background workers, and
+  # sandbox containers when SANDBOX_BACKEND=docker. Sandbox containers are not
+  # published on the host — the api_server reaches their NextJS dev servers
+  # by container hostname over this network. Backed by the docker default
+  # bridge driver; idempotently created in DockerSandboxManager._ensure_network
+  # if not already present.
+  craft_sandbox:
+    name: ${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
+    driver: bridge

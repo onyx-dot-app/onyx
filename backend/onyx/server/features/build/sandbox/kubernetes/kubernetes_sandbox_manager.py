@@ -1797,6 +1797,46 @@ echo "Session config regeneration complete"
         )
         logger.info("Session configuration files regenerated")
 
+    def supports_idle_cleanup(self) -> bool:
+        return True
+
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID-shaped session directories under /workspace/sessions/."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+        except ApiException as e:
+            logger.warning(f"Failed to list session workspaces in {pod_name}: {e}")
+            return []
+
+        session_ids: list[UUID] = []
+        for line in resp.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                session_ids.append(UUID(line))
+            except ValueError:
+                continue
+        return session_ids
+
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         """Check if the sandbox pod is healthy (can exec into it).
 

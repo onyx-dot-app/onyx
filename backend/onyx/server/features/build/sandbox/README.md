@@ -15,16 +15,41 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 ### Deployment Modes
 
-1. **Local Mode** (`SANDBOX_BACKEND=local`)
-   - Sandboxes run as directories on the local filesystem
-   - No automatic cleanup or snapshots
-   - Suitable for development and testing
+| Backend | Isolation | Snapshots | Idle cleanup | Use case |
+|---|---|---|---|---|
+| `local` | None — runs in the api_server process | No | No | Dev-only |
+| `docker` | One container per user via Docker Engine | Yes (via FileStore) | Yes | Self-hosted production |
+| `kubernetes` | One pod per user, RBAC-controlled | Yes (S3 via s5cmd sidecar) | Yes | Cloud production |
 
-2. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`)
-   - Sandboxes run as Kubernetes pods
-   - Automatic snapshots to S3
-   - Auto-cleanup of idle sandboxes
-   - Production-ready with resource isolation
+1. **Local Mode** (`SANDBOX_BACKEND=local`)
+   - Sandboxes run as directories on the local filesystem in the api_server process
+   - **No container isolation.** The agent's bash, write, and edit tools execute on
+     the host as the api_server user. **Use only for dev.**
+   - No automatic cleanup or snapshots.
+
+2. **Docker Mode** (`SANDBOX_BACKEND=docker`)
+   - Sandboxes run as Docker containers, one per user, on the same host or
+     Docker daemon as the api_server. Driven directly via the Docker Engine API
+     (no separate runner microservice).
+   - Reuses the same `SANDBOX_CONTAINER_IMAGE` as Kubernetes — bug fixes to
+     skills, templates, OpenCode, LibreOffice, etc. land in both backends at once.
+   - Snapshots stream `tar -czf -` from inside the container through the docker
+     socket and are persisted via the existing `FileStore` abstraction. Works
+     against MinIO, S3, GCS, or local-disk file stores with no extra config.
+   - Idle cleanup is enabled — `cleanup_idle_sandboxes_task` snapshots and tears
+     down idle containers.
+   - **Trust boundary:** the api_server needs access to the Docker daemon
+     (typically by mounting `/var/run/docker.sock`). That is equivalent to root
+     on the host; same model as Kubernetes' RBAC for sandbox pods. If you do
+     not want to grant Docker access to the api_server, set
+     `SANDBOX_BACKEND=local` and accept the loss of isolation.
+   - **The supported self-hosted production path.**
+
+3. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`)
+   - Sandboxes run as Kubernetes pods.
+   - Automatic snapshots to S3 via an s5cmd sidecar container with IRSA.
+   - Auto-cleanup of idle sandboxes.
+   - Cloud-native production.
 
 ### Directory Structure
 
@@ -145,8 +170,16 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 ### Managers
 
 - **`base.py`** - Abstract base class defining the sandbox interface
-- **`local/manager.py`** - Filesystem-based sandbox manager for local development
-- **`kubernetes/manager.py`** - Kubernetes-based sandbox manager for production
+- **`local/local_sandbox_manager.py`** - Filesystem-based sandbox manager for local
+  development (no isolation)
+- **`docker/docker_sandbox_manager.py`** - Docker-Engine-backed sandbox manager
+  for self-hosted production. Drives the Docker SDK directly. The path
+  `kubernetes/docker/Dockerfile` is the image source and is shared with the
+  Kubernetes backend; it does not mean the docker backend is "Kubernetes-only."
+  (The path name is awkward — see the V1 plan note about not renaming `build/`
+  modules.)
+- **`kubernetes/kubernetes_sandbox_manager.py`** - Kubernetes-based sandbox
+  manager for cloud production
 
 ### Managers (Shared)
 
@@ -174,7 +207,9 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ```bash
 # Sandbox backend mode
-SANDBOX_BACKEND=local|kubernetes           # Default: local
+SANDBOX_BACKEND=local|docker|kubernetes    # Default: local
+                                           # docker-compose deployments default to docker
+                                           # helm chart defaults to kubernetes
 
 # Template paths (local mode)
 OUTPUTS_TEMPLATE_PATH=/templates/outputs   # Default: /templates/outputs
@@ -186,6 +221,30 @@ SANDBOX_BASE_PATH=/tmp/onyx-sandboxes     # Default: /tmp/onyx-sandboxes
 # OpenCode configuration
 OPENCODE_DISABLED_TOOLS=question          # Comma-separated list, default: question
 ```
+
+### Docker Settings
+
+```bash
+# Container image — same image family as Kubernetes
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.5
+
+# Bridge network shared between the api_server and sandbox containers.
+# Auto-created if missing.
+SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
+
+# Optional: talk to a remote Docker daemon. Empty = use docker.from_env()
+# (i.e. /var/run/docker.sock or the DOCKER_HOST env var).
+SANDBOX_DOCKER_HOST=
+
+# Per-container resource limits — mirror the K8s pod limits.
+SANDBOX_DOCKER_CPU_LIMIT=2.0              # in fractional cores
+SANDBOX_DOCKER_MEMORY_LIMIT=10g           # docker memory string
+```
+
+The docker-compose deployment mounts `/var/run/docker.sock` into the
+`api_server` and `background` containers when `SANDBOX_BACKEND=docker`. This
+grants those containers root-level access to the host. If you don't want to
+grant that, set `SANDBOX_BACKEND=local`.
 
 ### Kubernetes Settings
 
