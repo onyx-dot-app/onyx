@@ -9,8 +9,14 @@ import json
 import shutil
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
+from onyx.db.models import User
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    render_company_search_skill_md,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
@@ -296,14 +302,10 @@ class DirectoryManager:
         if agent_md_path.exists():
             return
 
-        # Get the files path (symlink to knowledge sources)
-        files_path = sandbox_path / "files"
-
         # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=files_path if files_path.exists() else None,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -363,6 +365,57 @@ class DirectoryManager:
                 exc_info=True,
             )
             raise
+
+    def render_company_search_skill(
+        self,
+        sandbox_path: Path,
+        user: User,
+        db_session: Session,
+    ) -> None:
+        """Materialize the per-session company-search SKILL.md.
+
+        ``setup_skills`` copies the bundle as-is (including SKILL.md.template).
+        This second pass renders the template into SKILL.md with the user's
+        currently-accessible connectors substituted into
+        ``{{AVAILABLE_SOURCES_SECTION}}``. The rendered file is a snapshot —
+        connectors added/removed mid-session aren't reflected until next session.
+        """
+        skill_dir = sandbox_path / ".opencode" / "skills" / "company-search"
+        template_path = skill_dir / "SKILL.md.template"
+        skill_md_path = skill_dir / "SKILL.md"
+
+        if not template_path.exists():
+            logger.warning(
+                f"company-search skill template missing at {template_path}; "
+                "skipping render"
+            )
+            return
+
+        try:
+            content = render_company_search_skill_md(
+                user=user,
+                db_session=db_session,
+                skill_template_path=template_path,
+            )
+        except Exception as e:
+            # Don't fail session setup if connector listing breaks — fall back
+            # to the un-rendered template content so the agent at least sees
+            # the skill, just without a personalized source list.
+            logger.warning(
+                f"company-search SKILL.md render failed; falling back to template: {e}"
+            )
+            content = template_path.read_text().replace(
+                "{{AVAILABLE_SOURCES_SECTION}}",
+                "_(connector list unavailable for this session — try `company_search` "
+                "anyway; results will be filtered to what you have access to)_",
+            )
+
+        skill_md_path.write_text(content)
+        # Remove the template so the agent only ever reads the rendered file.
+        try:
+            template_path.unlink()
+        except OSError:
+            pass
 
     def setup_opencode_config(
         self,

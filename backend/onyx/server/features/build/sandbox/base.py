@@ -118,6 +118,9 @@ class SandboxManager(ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        sandbox_session_token: str,
+        backend_url: str,
+        tenant_id: str,
         file_system_path: str | None = None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
@@ -126,6 +129,7 @@ class SandboxManager(ABC):
         user_level: str | None = None,
         use_demo_data: bool = False,
         excluded_user_library_paths: list[str] | None = None,
+        company_search_skill_md: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -143,6 +147,13 @@ class SandboxManager(ABC):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            sandbox_session_token: Bearer token the sandbox uses to authenticate
+                back to /api/build/sandbox/* endpoints (company_search etc.).
+                Injected as ``ONYX_BUILD_SESSION_TOKEN`` in the agent's env.
+            backend_url: Base URL of the Onyx backend the sandbox should call.
+                Injected as ``ONYX_BACKEND_URL`` in the agent's env.
+            tenant_id: Tenant id forwarded by the sandbox as ``X-Onyx-Tenant-ID``.
+                Injected as ``ONYX_TENANT_ID`` in the agent's env.
             file_system_path: Path to user's knowledge/source files
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
@@ -153,6 +164,10 @@ class SandboxManager(ABC):
             excluded_user_library_paths: List of paths within user_library to exclude
                 from the sandbox (e.g., ["/data/file.xlsx"]). Only applies when
                 use_demo_data=False. Files at these paths won't be accessible.
+            company_search_skill_md: Pre-rendered SKILL.md content for the
+                company-search skill (placeholders already substituted with
+                this user's connector list). When supplied, the implementation
+                writes it into ``.opencode/skills/company-search/SKILL.md``.
 
         Raises:
             RuntimeError: If workspace setup fails

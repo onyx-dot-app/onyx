@@ -102,10 +102,6 @@ COPY --exclude=__pycache__ skills/ /workspace/skills/
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
 
-# Copy scripts
-COPY generate_agents_md.py /usr/local/bin/generate_agents_md.py
-RUN chmod +x /usr/local/bin/generate_agents_md.py
-
 # Switch to non-root user
 USER sandbox
 WORKDIR /workspace

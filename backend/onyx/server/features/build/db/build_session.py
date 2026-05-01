@@ -1,5 +1,7 @@
 """Database operations for Build Mode sessions."""
 
+import hmac
+import secrets
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -50,6 +52,7 @@ def create_build_session__no_commit(
         name=name,
         status=BuildSessionStatus.ACTIVE,
         demo_data_enabled=demo_data_enabled,
+        sandbox_token=secrets.token_urlsafe(32),
     )
     db_session.add(session)
     db_session.flush()
@@ -74,6 +77,30 @@ def get_build_session(
         )
         .one_or_none()
     )
+
+
+def get_build_session_by_sandbox_token(
+    token: str,
+    db_session: Session,
+) -> BuildSession | None:
+    """Look up a build session by its sandbox token using a constant-time compare.
+
+    The DB index gets us the candidate row in O(1); we then verify the token
+    matches via ``hmac.compare_digest`` so the lookup itself never leaks token
+    contents through timing.
+    """
+    if not token:
+        return None
+    candidate = (
+        db_session.query(BuildSession)
+        .filter(BuildSession.sandbox_token == token)
+        .one_or_none()
+    )
+    if candidate is None:
+        return None
+    if not hmac.compare_digest(candidate.sandbox_token, token):
+        return None
+    return candidate
 
 
 def get_user_build_sessions(

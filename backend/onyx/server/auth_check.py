@@ -65,6 +65,11 @@ PUBLIC_ENDPOINT_SPECS = [
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),
+    # craft sandbox-callable endpoints — auth via per-session bearer token
+    # (Authorization: Bearer <BuildSession.sandbox_token>) handled by
+    # require_sandbox_session_token. The token replaces the cookie-based
+    # user dependency for these routes only.
+    ("/build/sandbox/search", {"POST"}),
 ]
 
 

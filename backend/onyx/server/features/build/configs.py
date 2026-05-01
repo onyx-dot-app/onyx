@@ -109,6 +109,14 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+
+# URL the sandbox uses to call back into Onyx (e.g. /api/build/sandbox/search).
+# - Local backend: defaults to localhost API server. Override if you run the
+#   API server on a non-default host or if the local sandbox is containerized.
+# - Kubernetes backend: should point at the internal Onyx api-server service
+#   (e.g. http://api-server.onyx.svc.cluster.local:8080).
+SANDBOX_BACKEND_URL = os.environ.get("SANDBOX_BACKEND_URL", "http://localhost:8080")
+
 # ============================================================================
 # SSE Streaming Configuration
 # ============================================================================

@@ -73,6 +73,7 @@ def build_session(
         user_id=test_user.id,
         name="Test Build Session",
         status=BuildSessionStatus.ACTIVE,
+        sandbox_token="test-sandbox-token",
     )
     db_session.add(session)
     db_session.commit()

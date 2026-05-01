@@ -7,6 +7,13 @@ that are shared between local and kubernetes sandbox managers.
 import threading
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
+from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSourceCraftDescription
+from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -24,62 +31,6 @@ PROVIDER_DISPLAY_NAMES = {
     "bedrock": "AWS Bedrock",
     "vertex": "Google Vertex AI",
 }
-
-# Type alias for connector info entries
-ConnectorInfoEntry = dict[str, str | int]
-
-# Connector information for generating knowledge sources section
-# Keys are normalized (lowercase, underscores) directory names
-# Each entry has: summary (with optional {subdirs}), file_pattern, scan_depth
-# NOTE: This is duplicated in kubernetes/docker/generate_agents_md.py to avoid circular imports
-CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
-    "google_drive": {
-        "summary": "Documents and files from Google Drive. This may contain information about a user and work they have done",
-        "file_pattern": "`FILE_NAME.json`",
-        "scan_depth": 0,
-    },
-    "gmail": {
-        "summary": "Email conversations and threads",
-        "file_pattern": "`FILE_NAME.json`",
-        "scan_depth": 0,
-    },
-    "linear": {
-        "summary": "Engineering tickets from teams: {subdirs}",
-        "file_pattern": "`[TEAM]/[TICKET_ID]_TICKET_TITLE.json`",
-        "scan_depth": 2,
-    },
-    "slack": {
-        "summary": "Team messages from channels: {subdirs}",
-        "file_pattern": "`[CHANNEL]/[AUTHOR]_in_[CHANNEL]__[MSG].json`",
-        "scan_depth": 1,
-    },
-    "github": {
-        "summary": "Pull requests and code from: {subdirs}",
-        "file_pattern": "`[ORG]/[REPO]/pull_requests/[PR_NUMBER]__[PR_TITLE].json`",
-        "scan_depth": 2,
-    },
-    "fireflies": {
-        "summary": "Meeting transcripts from: {subdirs}",
-        "file_pattern": "`[YYYY-MM]/CALL_TITLE.json`",
-        "scan_depth": 1,
-    },
-    "hubspot": {
-        "summary": "CRM data including: {subdirs}",
-        "file_pattern": "`[TYPE]/[RECORD_NAME].json`",
-        "scan_depth": 1,
-    },
-    "notion": {
-        "summary": "Documentation and notes: {subdirs}",
-        "file_pattern": "`PAGE_TITLE.json`",
-        "scan_depth": 1,
-    },
-    "user_library": {
-        "summary": "User-uploaded files (spreadsheets, documents, presentations, etc.)",
-        "file_pattern": "Any file format",
-        "scan_depth": 1,
-    },
-}
-DEFAULT_SCAN_DEPTH = 1
 
 
 def get_provider_display_name(provider: str | None) -> str | None:
@@ -251,6 +202,14 @@ def _scan_skills_directory(skills_path: Path) -> str:
                 continue
 
             skill_md = skill_dir / "SKILL.md"
+            # Fall back to the un-rendered template so per-session skills
+            # (like company-search) still surface a useful description before
+            # they're materialized.
+            if not skill_md.exists():
+                skill_md_template = skill_dir / "SKILL.md.template"
+                if skill_md_template.exists():
+                    skill_md = skill_md_template
+
             if skill_md.exists():
                 description = extract_skill_description(skill_md)
                 skills_list.append(f"- **{skill_dir.name}**: {description}")
@@ -296,142 +255,145 @@ def build_skills_section(skills_path: Path) -> str:
     return result
 
 
-def _normalize_connector_name(name: str) -> str:
-    """Normalize a connector directory name for lookup."""
-    return name.lower().replace(" ", "_").replace("-", "_")
+def _safe_craft_description(source: DocumentSource, fallback: str) -> str:
+    desc = DocumentSourceCraftDescription.get(source)
+    if desc:
+        return desc
+    return fallback
 
 
-def _scan_directory_to_depth(
-    directory: Path, current_depth: int, max_depth: int, indent: str = "  "
-) -> list[str]:
-    """Recursively scan directory up to max_depth levels.
+def _format_available_sources(
+    cc_pairs: list[ConnectorCredentialPair],
+) -> str:
+    """Render the user's accessible connectors as a bullet list for SKILL.md.
 
-    Args:
-        directory: Directory to scan
-        current_depth: Current depth level (0 = connector root)
-        max_depth: Maximum depth to scan
-        indent: Indentation string for current level
-
-    Returns:
-        List of formatted directory lines
+    One bullet per source id (deduplicated across multiple CC pairs that share
+    a source). Uses ``DocumentSourceCraftDescription`` as the source of truth
+    for what each source contains; falls back to the source id itself if a
+    new connector landed without a description (shouldn't happen — see the
+    coverage test — but we never crash on missing data).
     """
-    if current_depth >= max_depth:
-        return []
+    seen: dict[str, str] = {}
+    for cc_pair in cc_pairs:
+        source = cc_pair.connector.source
+        source_id = source.value
+        if source_id in seen:
+            continue
+        seen[source_id] = _safe_craft_description(source, source_id)
 
-    lines: list[str] = []
-    try:
-        subdirs = sorted(
-            d for d in directory.iterdir() if d.is_dir() and not d.name.startswith(".")
+    if not seen:
+        return (
+            "- _(no connectors are configured for this user — "
+            "company_search will return no results until an admin connects a source)_"
         )
 
-        for subdir in subdirs[:10]:  # Limit to 10 per level
-            lines.append(f"{indent}- {subdir.name}/")
-
-            # Recurse if we haven't hit max depth
-            if current_depth + 1 < max_depth:
-                nested = _scan_directory_to_depth(
-                    subdir, current_depth + 1, max_depth, indent + "  "
-                )
-                lines.extend(nested)
-
-        if len(subdirs) > 10:
-            lines.append(f"{indent}- ... and {len(subdirs) - 10} more")
-    except Exception:
-        pass
-
-    return lines
+    lines = [f"- `{source_id}` — {desc}" for source_id, desc in sorted(seen.items())]
+    # User-uploaded files always appear in `attachments/` regardless of
+    # connector setup; mention them so the agent doesn't think uploads are gone.
+    lines.append(
+        "- `(user_uploads)` — Files the user attached to this session, under `attachments/`"
+    )
+    return "\n".join(lines)
 
 
-def build_knowledge_sources_section(files_path: Path) -> str:
-    """Build combined knowledge sources section with summary, structure, and file patterns.
+def render_company_search_skill_md(
+    user: User,
+    db_session: Session,
+    skill_template_path: Path,
+) -> str:
+    """Render the per-session company-search SKILL.md from a template.
 
-    This creates a single section per connector that includes:
-    - What kind of data it contains (with actual subdirectory names)
-    - The directory structure
-    - The file naming pattern
-
-    Args:
-        files_path: Path to the files directory (symlink to knowledge sources)
-
-    Returns:
-        Formatted knowledge sources section
+    Templates live next to the skill bundle (``SKILL.md.template``) and are
+    rendered into the materialized ``.opencode/skills/company-search/SKILL.md``
+    at session setup. The rendered content is a snapshot — connectors added
+    or removed mid-session are not reflected until the user starts a new
+    session (see search.md design doc).
     """
-    if not files_path.exists():
-        return "No knowledge sources available."
+    if not skill_template_path.exists():
+        raise RuntimeError(
+            f"company-search SKILL.md.template not found at {skill_template_path}"
+        )
 
-    # Resolve the symlink to get the actual path
-    try:
-        actual_path = files_path.resolve()
-        if not actual_path.exists():
-            return "No knowledge sources available."
-    except Exception:
-        actual_path = files_path
+    template = skill_template_path.read_text()
 
-    sections: list[str] = []
-    try:
-        for item in sorted(files_path.iterdir()):
-            if not item.is_dir() or item.name.startswith("."):
-                continue
+    # Pull every CC pair the user can read — same source the
+    # /api/build/connectors endpoint uses for the connector list.
+    cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+        eager_load_connector=True,
+        processing_mode=None,
+    )
 
-            normalized = _normalize_connector_name(item.name)
-            info = CONNECTOR_INFO.get(normalized, {})
+    # Filter out non-connector sources (ingestion API, mock connector, etc.)
+    visible_sources = {
+        DocumentSource.SLACK,
+        DocumentSource.WEB,
+        DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.GMAIL,
+        DocumentSource.GITHUB,
+        DocumentSource.GITBOOK,
+        DocumentSource.GITLAB,
+        DocumentSource.BITBUCKET,
+        DocumentSource.GURU,
+        DocumentSource.BOOKSTACK,
+        DocumentSource.OUTLINE,
+        DocumentSource.CONFLUENCE,
+        DocumentSource.JIRA,
+        DocumentSource.SLAB,
+        DocumentSource.PRODUCTBOARD,
+        DocumentSource.NOTION,
+        DocumentSource.LINEAR,
+        DocumentSource.HUBSPOT,
+        DocumentSource.DOCUMENT360,
+        DocumentSource.GONG,
+        DocumentSource.GOOGLE_SITES,
+        DocumentSource.ZENDESK,
+        DocumentSource.LOOPIO,
+        DocumentSource.DROPBOX,
+        DocumentSource.SHAREPOINT,
+        DocumentSource.TEAMS,
+        DocumentSource.SALESFORCE,
+        DocumentSource.DISCOURSE,
+        DocumentSource.AXERO,
+        DocumentSource.CLICKUP,
+        DocumentSource.MEDIAWIKI,
+        DocumentSource.WIKIPEDIA,
+        DocumentSource.ASANA,
+        DocumentSource.S3,
+        DocumentSource.R2,
+        DocumentSource.GOOGLE_CLOUD_STORAGE,
+        DocumentSource.OCI_STORAGE,
+        DocumentSource.XENFORO,
+        DocumentSource.DISCORD,
+        DocumentSource.FRESHDESK,
+        DocumentSource.FIREFLIES,
+        DocumentSource.EGNYTE,
+        DocumentSource.AIRTABLE,
+        DocumentSource.HIGHSPOT,
+        DocumentSource.DRUPAL_WIKI,
+        DocumentSource.IMAP,
+        DocumentSource.TESTRAIL,
+        DocumentSource.REQUESTTRACKER,
+        DocumentSource.CODA,
+        DocumentSource.CANVAS,
+        DocumentSource.ZULIP,
+        DocumentSource.FILE,
+        DocumentSource.USER_FILE,
+        DocumentSource.CRAFT_FILE,
+    }
+    filtered_cc_pairs = [
+        cc_pair for cc_pair in cc_pairs if cc_pair.connector.source in visible_sources
+    ]
 
-            # Get subdirectory names
-            subdirs: list[str] = []
-            try:
-                subdirs = sorted(
-                    d.name
-                    for d in item.iterdir()
-                    if d.is_dir() and not d.name.startswith(".")
-                )[:5]
-            except Exception:
-                pass
-
-            # Build summary with subdirs
-            summary_template = str(info.get("summary", f"Data from {item.name}"))
-            if "{subdirs}" in summary_template and subdirs:
-                subdir_str = ", ".join(subdirs)
-                if len(subdirs) == 5:
-                    subdir_str += ", ..."
-                summary = summary_template.format(subdirs=subdir_str)
-            elif "{subdirs}" in summary_template:
-                summary = summary_template.replace(": {subdirs}", "").replace(
-                    " {subdirs}", ""
-                )
-            else:
-                summary = summary_template
-
-            # Build connector section
-            file_pattern = str(info.get("file_pattern", ""))
-            scan_depth = int(info.get("scan_depth", DEFAULT_SCAN_DEPTH))
-
-            lines = [f"### {item.name}/"]
-            lines.append(f"{summary}.\n")
-            # Add directory structure if depth > 0
-            if scan_depth > 0:
-                lines.append("Directory structure:\n")
-                nested = _scan_directory_to_depth(item, 0, scan_depth, "")
-                if nested:
-                    lines.append("")
-                    lines.extend(nested)
-
-            lines.append(f"\nFile format: {file_pattern}")
-
-            sections.append("\n".join(lines))
-    except Exception as e:
-        logger.warning(f"Error building knowledge sources section: {e}")
-        return "Error scanning knowledge sources."
-
-    if not sections:
-        return "No knowledge sources available."
-
-    return "\n\n".join(sections)
+    sources_section = _format_available_sources(filtered_cc_pairs)
+    return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section)
 
 
 def generate_agent_instructions(
     template_path: Path,
     skills_path: Path,
-    files_path: Path | None = None,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -446,7 +408,6 @@ def generate_agent_instructions(
     Args:
         template_path: Path to the AGENTS.template.md file
         skills_path: Path to the skills directory
-        files_path: Path to the files directory (symlink to knowledge sources)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -494,14 +455,5 @@ def generate_agent_instructions(
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
     content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
-
-    # Only replace file-related placeholders if files_path is provided.
-    # When files_path is None (e.g., Kubernetes), leave placeholders intact
-    # so the container can replace them after files are synced.
-    if files_path:
-        knowledge_sources_section = build_knowledge_sources_section(files_path)
-        content = content.replace(
-            "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
-        )
 
     return content

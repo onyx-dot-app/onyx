@@ -358,6 +358,11 @@ class KubernetesSandboxManager(SandboxManager):
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
+        # Per-session env (sandbox token + backend URL + tenant id) injected
+        # into the opencode subprocess started by ACPExecClient. Populated by
+        # setup_session_workspace; read by _create_ephemeral_acp_client.
+        self._session_env: dict[tuple[UUID, UUID], dict[str, str]] = {}
+
         logger.info(
             f"KubernetesSandboxManager initialized: namespace={self._namespace}, image={self._image}"
         )
@@ -385,7 +390,6 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
-        files_path: Path | None = None,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -395,32 +399,10 @@ class KubernetesSandboxManager(SandboxManager):
         use_demo_data: bool = False,
         include_org_info: bool = False,
     ) -> str:
-        """Load and populate agent instructions from template file.
-
-
-        Args:
-            files_path: Path to the files directory (symlink to knowledge sources)
-            provider: LLM provider type
-            model_name: Model name
-            nextjs_port: Next.js port
-            disabled_tools: List of disabled tools
-            user_name: User's name for personalization
-            user_role: User's role/title for personalization
-            use_demo_data: If True, exclude user context from AGENTS.md
-            include_org_info: Whether to include the org_info section (demo data mode)
-
-        Returns:
-            Populated agent instructions content
-
-        Note:
-            In Kubernetes mode, files_path refers to paths inside the pod.
-            Since the backend cannot access the pod filesystem, these are passed as None
-            to leave placeholders intact for the container script to resolve at runtime.
-        """
+        """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=files_path,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -1173,6 +1155,9 @@ done
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        sandbox_session_token: str,
+        backend_url: str,
+        tenant_id: str,
         file_system_path: str | None = None,  # noqa: ARG002
         snapshot_path: str | None = None,
         user_name: str | None = None,
@@ -1181,6 +1166,7 @@ done
         user_level: str | None = None,
         use_demo_data: bool = False,
         excluded_user_library_paths: list[str] | None = None,
+        company_search_skill_md: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1222,18 +1208,26 @@ done
                 f"Session {session_id} will start with fresh outputs template."
             )
 
+        # Stash per-session env up-front so any retry of setup still surfaces
+        # the right values to the agent process via _create_ephemeral_acp_client.
+        self._session_env[(sandbox_id, session_id)] = {
+            "ONYX_BUILD_SESSION_TOKEN": sandbox_session_token,
+            "ONYX_BACKEND_URL": backend_url,
+            "ONYX_TENANT_ID": tenant_id,
+        }
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
         # Paths inside the pod (created during workspace setup below):
-        # - {session_path}/files: symlink to knowledge sources
+        # - {session_path}/files: symlink to knowledge sources (kept for now
+        #   so demo data and uploaded user_library files remain reachable;
+        #   the legacy JSON corpus path is no longer the agent's source of
+        #   company knowledge — that's the company_search skill).
         # - {session_path}/attachments: user-uploaded files
         #
-        # Note: files_path=None leaves {{KNOWLEDGE_SOURCES_SECTION}} placeholder intact
-        # for generate_agents_md.py to resolve at container runtime by scanning /workspace/files.
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1324,6 +1318,40 @@ fi
             session_path, nextjs_port, check_node_modules=False
         )
 
+        # Materialize per-session company-search SKILL.md.
+        # Skills are symlinked from /workspace/skills (shared across sessions),
+        # so to write a session-specific SKILL.md we break the symlink for
+        # this one skill and copy the bundle into the session workspace.
+        company_search_skill_setup = ""
+        if company_search_skill_md is not None:
+            skill_md_escaped = company_search_skill_md.replace("'", "'\\''")
+            company_search_skill_setup = f"""
+# Materialize per-session company-search SKILL.md
+if [ -L {session_path}/.opencode/skills ]; then
+    real_skills=$(readlink -f {session_path}/.opencode/skills)
+    rm {session_path}/.opencode/skills
+    mkdir -p {session_path}/.opencode/skills
+    if [ -d "$real_skills" ]; then
+        for entry in "$real_skills"/*; do
+            [ -e "$entry" ] || continue
+            ln -sf "$entry" {session_path}/.opencode/skills/$(basename "$entry")
+        done
+    fi
+fi
+mkdir -p {session_path}/.opencode/skills/company-search
+# Replace any existing symlink/dir with a session-local copy
+if [ -L {session_path}/.opencode/skills/company-search ]; then
+    real_skill=$(readlink -f {session_path}/.opencode/skills/company-search)
+    rm {session_path}/.opencode/skills/company-search
+    mkdir -p {session_path}/.opencode/skills/company-search
+    if [ -d "$real_skill" ]; then
+        cp -r "$real_skill"/. {session_path}/.opencode/skills/company-search/ 2>/dev/null || true
+    fi
+fi
+rm -f {session_path}/.opencode/skills/company-search/SKILL.md.template
+printf '%s' '{skill_md_escaped}' > {session_path}/.opencode/skills/company-search/SKILL.md
+"""
+
         setup_script = f"""
 set -e
 
@@ -1341,13 +1369,10 @@ if [ -d /workspace/skills ]; then
     ln -sf /workspace/skills {session_path}/.opencode/skills
     echo "Linked skills to /workspace/skills"
 fi
-
+{company_search_skill_setup}
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"
@@ -1410,6 +1435,10 @@ echo "Session workspace setup complete"
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
+
+        # Drop the per-session env so we don't keep the sandbox token in
+        # process memory after the session has been torn down.
+        self._session_env.pop((sandbox_id, session_id), None)
 
         cleanup_script = f"""
 set -e
@@ -1731,7 +1760,6 @@ echo "SNAPSHOT_RESTORED"
         """
         # Generate AGENTS.md content
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1773,9 +1801,6 @@ ln -sf {symlink_target} {session_path}/files
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
-
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
@@ -1816,7 +1841,10 @@ echo "Session config regeneration complete"
         return exec_client.health_check(timeout=timeout)
 
     def _create_ephemeral_acp_client(
-        self, sandbox_id: UUID, session_path: str
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        session_path: str,
     ) -> ACPExecClient:
         """Create a new ephemeral ACP client for a single message exchange.
 
@@ -1828,6 +1856,8 @@ echo "Session config regeneration complete"
 
         Args:
             sandbox_id: The sandbox ID
+            session_id: The session ID — used to look up per-session env
+                (sandbox token, backend URL) to pass through to opencode.
             session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
                 XDG_DATA_HOME is set relative to this so opencode's session data
                 lives inside the snapshot directory.
@@ -1841,7 +1871,8 @@ echo "Session config regeneration complete"
             namespace=self._namespace,
             container="sandbox",
         )
-        acp_client.start(cwd=session_path)
+        extra_env = self._session_env.get((sandbox_id, session_id))
+        acp_client.start(cwd=session_path, extra_env=extra_env)
 
         logger.info(
             f"[SANDBOX-ACP] Created ephemeral ACP client: sandbox={sandbox_id} pod={pod_name} api_pod={_API_SERVER_HOSTNAME}"
@@ -1875,7 +1906,9 @@ echo "Session config regeneration complete"
         session_path = f"/workspace/sessions/{session_id}"
 
         # Create an ephemeral ACP client for this message
-        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
+        acp_client = self._create_ephemeral_acp_client(
+            sandbox_id, session_id, session_path
+        )
 
         try:
             # Resume (or create) the ACP session from opencode's on-disk storage

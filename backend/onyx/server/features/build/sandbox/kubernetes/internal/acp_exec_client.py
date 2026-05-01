@@ -160,7 +160,12 @@ class ACPExecClient:
             self._k8s_client = client.CoreV1Api()
         return self._k8s_client
 
-    def start(self, cwd: str = "/workspace", timeout: float = 30.0) -> None:
+    def start(
+        self,
+        cwd: str = "/workspace",
+        timeout: float = 30.0,
+        extra_env: dict[str, str] | None = None,
+    ) -> None:
         """Start the agent process via exec and initialize the ACP connection.
 
         Only performs the ACP `initialize` handshake. Sessions are created
@@ -169,6 +174,9 @@ class ACPExecClient:
         Args:
             cwd: Working directory for the `opencode acp` process
             timeout: Timeout for initialization
+            extra_env: Per-session env vars (sandbox token, backend URL,
+                tenant id) prepended to the exec command so opencode and
+                any skill subprocesses can call back into Onyx.
 
         Raises:
             RuntimeError: If startup fails
@@ -184,10 +192,20 @@ class ACPExecClient:
         # instead of the container-local ~/.local/share/ filesystem.
         data_dir = shlex.quote(f"{cwd}/.opencode-data")
         safe_cwd = shlex.quote(cwd)
+
+        env_prefix_parts = [f"XDG_DATA_HOME={data_dir}"]
+        for key, value in (extra_env or {}).items():
+            # Only allow plain identifier-shaped names through; the values
+            # are quoted, so a malformed name is the only way to break out.
+            if not key.replace("_", "").isalnum():
+                continue
+            env_prefix_parts.append(f"{key}={shlex.quote(value)}")
+        env_prefix = " ".join(env_prefix_parts)
+
         exec_command = [
             "/bin/sh",
             "-c",
-            f"XDG_DATA_HOME={data_dir} exec opencode acp --cwd {safe_cwd}",
+            f"{env_prefix} exec opencode acp --cwd {safe_cwd}",
         ]
 
         logger.info(f"[ACP] Starting client: pod={self._pod_name} cwd={cwd}")

@@ -91,6 +91,11 @@ class LocalSandboxManager(SandboxManager):
         # Each session within a sandbox has its own ACP client
         self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
 
+        # Per-session env overrides (sandbox token, backend URL, tenant id)
+        # injected when the agent subprocess starts. Populated by
+        # setup_session_workspace; read by send_message at client-create time.
+        self._session_env: dict[tuple[UUID, UUID], dict[str, str]] = {}
+
         # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
         # Used for clean shutdown when sessions are deleted.
         # Mutated from background threads; all access must hold _nextjs_lock.
@@ -379,12 +384,40 @@ class LocalSandboxManager(SandboxManager):
 
         logger.info(f"Terminated sandbox {sandbox_id}")
 
+    @staticmethod
+    def _materialize_company_search_skill(
+        session_path: Path,
+        company_search_skill_md: str | None,
+    ) -> None:
+        """Drop the rendered company-search SKILL.md into the session.
+
+        ``setup_skills`` copied the bundle as-is — including the unrendered
+        ``SKILL.md.template``. The SessionManager renders the per-user skill
+        body and hands us the resolved markdown; here we write it to disk
+        and remove the template so the agent only ever reads the rendered
+        copy.
+        """
+        if not company_search_skill_md:
+            return
+        skill_dir = session_path / ".opencode" / "skills" / "company-search"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(company_search_skill_md)
+        template_path = skill_dir / "SKILL.md.template"
+        if template_path.exists():
+            try:
+                template_path.unlink()
+            except OSError:
+                pass
+
     def setup_session_workspace(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        sandbox_session_token: str,
+        backend_url: str,
+        tenant_id: str,
         file_system_path: str | None = None,
         snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
@@ -393,6 +426,7 @@ class LocalSandboxManager(SandboxManager):
         user_level: str | None = None,
         use_demo_data: bool = False,
         excluded_user_library_paths: list[str] | None = None,
+        company_search_skill_md: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -435,6 +469,15 @@ class LocalSandboxManager(SandboxManager):
         logger.info(
             f"Setting up session workspace for session {session_id} in sandbox {sandbox_id}"
         )
+
+        # Stash the per-session env so send_message can wire it into the
+        # opencode subprocess. Done up-front so the values are available
+        # even if a later setup step fails and the caller retries.
+        self._session_env[(sandbox_id, session_id)] = {
+            "ONYX_BUILD_SESSION_TOKEN": sandbox_session_token,
+            "ONYX_BACKEND_URL": backend_url,
+            "ONYX_TENANT_ID": tenant_id,
+        }
 
         # Create session directory
         session_path = self._directory_manager.create_session_directory(
@@ -493,6 +536,9 @@ class LocalSandboxManager(SandboxManager):
 
             logger.debug("Setting up skills")
             self._directory_manager.setup_skills(session_path)
+            self._materialize_company_search_skill(
+                session_path, company_search_skill_md
+            )
             logger.debug("Skills ready")
 
             # Setup attachments directory
@@ -603,6 +649,10 @@ class LocalSandboxManager(SandboxManager):
                 logger.warning(
                     f"Failed to stop ACP client for session {session_id}: {e}"
                 )
+
+        # Drop the per-session env so we don't leak the sandbox token if a
+        # session_id ever gets reused.
+        self._session_env.pop(client_key, None)
 
         # Cleanup session directory
         sandbox_path = self._get_sandbox_path(sandbox_id)
@@ -932,8 +982,13 @@ class LocalSandboxManager(SandboxManager):
                 f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
             )
 
-            # Create and start ACP client for this session
-            client = ACPAgentClient(cwd=str(session_path))
+            # Create and start ACP client for this session, threading through
+            # any per-session env (sandbox token + backend URL) so skills can
+            # call back into Onyx as this user.
+            client = ACPAgentClient(
+                cwd=str(session_path),
+                extra_env=self._session_env.get(client_key),
+            )
             self._acp_clients[client_key] = client
 
         # Log the send_message call at sandbox manager level

@@ -5059,6 +5059,12 @@ class BuildSession(Base):
         default=SharingScope.PRIVATE,
         server_default="private",
     )
+    # Per-session token used by the sandbox to authenticate calls back to the
+    # Onyx backend (e.g. the company_search skill). Generated via
+    # secrets.token_urlsafe(32) at session creation.
+    sandbox_token: Mapped[str] = mapped_column(
+        String, nullable=False, unique=True, index=True
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])

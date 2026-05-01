@@ -1,0 +1,38 @@
+---
+name: company_search
+description: "Search the company's knowledge — documents, messages, tickets, and other connected sources, restricted to what the current user has permission to see. Use this whenever you need company context (people, decisions, history, internal docs). It is the only path to company knowledge in this sandbox; there is no `files/` directory."
+---
+
+# company_search
+
+Search the company's knowledge — restricted to what the current user has permission to see.
+
+## Sources available in this session
+
+{{AVAILABLE_SOURCES_SECTION}}
+
+If a source you'd expect isn't listed above, it isn't connected for this user — don't assume it.
+
+## Usage
+
+```
+.opencode/skills/company-search/run.sh "<query>" [--limit N] [--source slack,google_drive] [--days N]
+```
+
+- `--limit N` — number of results (default 10, max 25)
+- `--source slack,linear` — comma-separated source ids; values must match the source identifiers shown in the list above (e.g. `slack`, `google_drive`, `linear`)
+- `--days N` — only return documents updated within the last N days
+
+## Output
+
+Stdout is markdown with numbered citations like `[1]`, `[2]`, each followed by the title, source, last-updated date, link, and stable document id. Cite results by their citation number when you reference them in your response to the user.
+
+A non-zero exit code with a one-line stderr message means the search failed (auth, rate-limit, or backend error). Don't retry blindly — read the error first.
+
+## When to use this skill
+
+- The user asks about a person, project, decision, document, ticket, message, or anything else the company has produced.
+- You're drafting a response that should cite internal context rather than make general claims.
+- You need to verify a fact before stating it.
+
+Iterate (run additional searches with refined queries) until you have enough context to answer accurately.
