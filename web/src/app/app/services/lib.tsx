@@ -25,12 +25,18 @@ import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { Packet } from "./streamingModels";
+import { awaitChatStateInput } from "@/app/app/stores/useChatSessionStore";
 
 // Tracks the latest in-flight PUT that mutates the backend's
 // `latest_child_message_id` mainline pointer (set-message-as-latest,
 // set-preferred-response). The next send must wait for it so the backend's
 // mainline-walk lookup can find the supplied parent_message_id and avoid the
 // 500 "The new message sent is not on the latest mainline of messages".
+//
+// PUTs are deferred until the session's stream has fully finished —
+// otherwise the streaming save-completion writes
+// `parent.latest_child_message_id = streaming_msg.id` AFTER our PUT and
+// clobbers it.
 let pendingMainlineSync: Promise<unknown> | null = null;
 
 export async function updateLlmOverrideForChatSession(
@@ -222,21 +228,25 @@ export async function* sendMessage({
 
 export async function setPreferredResponse(
   userMessageId: number,
-  preferredResponseId: number
+  preferredResponseId: number,
+  chatSessionId: string
 ): Promise<Response> {
-  const request = fetch("/api/chat/set-preferred-response", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_message_id: userMessageId,
-      preferred_response_id: preferredResponseId,
-    }),
-  });
-  pendingMainlineSync = (pendingMainlineSync ?? Promise.resolve()).then(
-    () => request,
-    () => request
-  );
-  return request;
+  const work = (): Promise<Response> =>
+    fetch("/api/chat/set-preferred-response", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_message_id: userMessageId,
+        preferred_response_id: preferredResponseId,
+      }),
+    });
+  const previous = pendingMainlineSync ?? Promise.resolve();
+  const chained = previous
+    .catch(() => undefined)
+    .then(() => awaitChatStateInput(chatSessionId))
+    .then(() => work());
+  pendingMainlineSync = chained;
+  return chained;
 }
 
 export async function nameChatSession(chatSessionId: string) {
@@ -253,21 +263,23 @@ export async function nameChatSession(chatSessionId: string) {
   return response;
 }
 
-export async function patchMessageToBeLatest(messageId: number) {
-  const request = fetch("/api/chat/set-message-as-latest", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      message_id: messageId,
-    }),
-  });
-  pendingMainlineSync = (pendingMainlineSync ?? Promise.resolve()).then(
-    () => request,
-    () => request
-  );
-  return request;
+export async function patchMessageToBeLatest(
+  messageId: number,
+  chatSessionId: string
+): Promise<Response> {
+  const work = (): Promise<Response> =>
+    fetch("/api/chat/set-message-as-latest", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message_id: messageId }),
+    });
+  const previous = pendingMainlineSync ?? Promise.resolve();
+  const chained = previous
+    .catch(() => undefined)
+    .then(() => awaitChatStateInput(chatSessionId))
+    .then(() => work());
+  pendingMainlineSync = chained;
+  return chained;
 }
 
 export async function handleChatFeedback(

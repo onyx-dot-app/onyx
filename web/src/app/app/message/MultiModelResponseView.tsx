@@ -238,8 +238,12 @@ export default function MultiModelResponseView({
       // frontend chain walk disagrees, the next follow-up fails with
       // "not on the latest mainline".
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
-        setPreferredResponse(parentMessage.messageId, response.messageId).catch(
-          (err) => console.error("Failed to persist preferred response:", err)
+        setPreferredResponse(
+          parentMessage.messageId,
+          response.messageId,
+          currentSessionId
+        ).catch((err) =>
+          console.error("Failed to persist preferred response:", err)
         );
 
         const tree = useChatSessionStore

@@ -717,3 +717,30 @@ export const useCurrentQueuedMessages = () =>
       : null;
     return currentSession?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   });
+
+// Resolves when the session's chatState becomes "input" (no stream in
+// progress). If already idle, resolves immediately. Used by mainline-pointer
+// PUTs that must land AFTER the streaming save-completion writeback —
+// otherwise the stream's `parent.latest_child_message_id` write clobbers
+// ours and the next send is rejected as not-on-mainline.
+export function awaitChatStateInput(sessionId: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const idle = (): boolean => {
+      const session = useChatSessionStore.getState().sessions.get(sessionId);
+      return !session || session.chatState === "input";
+    };
+
+    if (idle()) {
+      resolve();
+      return;
+    }
+
+    const unsubscribe = useChatSessionStore.subscribe((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session || session.chatState === "input") {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+}
