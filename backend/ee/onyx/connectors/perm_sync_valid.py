@@ -20,12 +20,16 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
 
-    SharePoint RoleAssignments enumeration uses the SharePoint REST surface,
-    which is granted separately from the Graph permissions used by the
-    non-perm-sync indexing path. Probe it here so non-perm-sync connectors
-    aren't forced to grant 'Sites.FullControl.All'.
+    Two distinct permission surfaces are needed for SharePoint perm sync,
+    neither of which the non-perm-sync indexing path requires:
+      1. SharePoint REST 'Sites.FullControl.All' to enumerate RoleAssignments.
+      2. Microsoft Graph 'GroupMember.Read.All' (or equivalent) to expand
+         Azure AD groups attached to those RoleAssignments.
+    Probe both here so misconfigured apps fail fast at connector creation
+    instead of mid-index.
     """
     connector.probe_role_assignments_permission()
+    connector.probe_group_members_permission()
 
 
 def validate_perm_sync(connector: BaseConnector) -> None:
