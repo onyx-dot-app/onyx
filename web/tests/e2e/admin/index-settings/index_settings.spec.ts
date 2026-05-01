@@ -53,9 +53,8 @@ async function navigateToIndexSettings(page: Page): Promise<void> {
 
 async function expandModelPicker(page: Page): Promise<void> {
   const viewAllButton = page.getByRole("button", { name: /view all models/i });
-  if (await viewAllButton.isVisible()) {
-    await viewAllButton.click();
-  }
+  await expect(viewAllButton).toBeVisible({ timeout: 10000 });
+  await viewAllButton.click();
 }
 
 async function openConnectModal(
@@ -88,6 +87,7 @@ test.describe("Index Settings Page @exclusive", () => {
 
   test("page loads and shows the embedding model picker", async ({ page }) => {
     await navigateToIndexSettings(page);
+    await expandModelPicker(page);
 
     // Cloud Hosted and Self Hosted tabs
     await expect(
