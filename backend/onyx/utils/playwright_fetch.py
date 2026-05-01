@@ -11,6 +11,9 @@ Two consumers:
   one-shot navigation per URL.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
@@ -156,6 +159,36 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
+@contextmanager
+def playwright_session() -> Iterator[BrowserContext]:
+    """Context-manager wrapper around `start_playwright()` for one-shot use.
+
+    Yields a `BrowserContext` and guarantees both the context and the
+    underlying `Playwright` instance are torn down when the `with` block
+    exits, including when setup itself raises (e.g. missing Chromium binary).
+    Use this for short-lived fetches that own their Playwright lifecycle
+    end-to-end. Long-lived crawls that need to detach setup from teardown
+    across method boundaries (see `WebConnector`) should keep using
+    `start_playwright()` directly.
+    """
+    playwright: Playwright | None = None
+    context: BrowserContext | None = None
+    try:
+        playwright, context = start_playwright()
+        yield context
+    finally:
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                logger.debug("Failed to close Playwright context", exc_info=True)
+        if playwright is not None:
+            try:
+                playwright.stop()
+            except Exception:
+                logger.debug("Failed to stop Playwright", exc_info=True)
+
+
 def _looks_like_bot_challenge(status: int, cf_ray_header: str | None) -> bool:
     """Heuristic: did this response look like a Cloudflare/Imperva challenge?
 
@@ -234,43 +267,45 @@ def fetch_rendered_html(
         )
         return None
 
-    playwright: Playwright | None = None
-    context: BrowserContext | None = None
     try:
-        playwright, context = start_playwright()
-        page = context.new_page()
-        try:
-            # Use "commit" instead of "domcontentloaded" to avoid hanging
-            # on bot-detection pages that may never fire domcontentloaded.
-            response = page.goto(
-                url,
-                timeout=navigation_timeout_ms,
-                wait_until="commit",
-            )
-
-            cf_ray = response.header_value("cf-ray") if response else None
-            status = response.status if response else None
-
-            if status is not None and _looks_like_bot_challenge(status, cf_ray):
-                page.wait_for_timeout(bot_challenge_grace_ms)
-
-            # Best-effort wait for network to settle (SPA / CF challenge JS).
+        with playwright_session() as context:
+            page = context.new_page()
             try:
-                page.wait_for_load_state("networkidle", timeout=bot_challenge_grace_ms)
-            except PlaywrightTimeoutError:
-                pass
+                # Use "commit" instead of "domcontentloaded" to avoid hanging
+                # on bot-detection pages that may never fire domcontentloaded.
+                response = page.goto(
+                    url,
+                    timeout=navigation_timeout_ms,
+                    wait_until="commit",
+                )
 
-            html = page.content()
-            final_url = page.url
-            last_modified = response.header_value("Last-Modified") if response else None
-            return RenderedPage(
-                html=html,
-                final_url=final_url,
-                last_modified=last_modified,
-                status=status,
-            )
-        finally:
-            page.close()
+                cf_ray = response.header_value("cf-ray") if response else None
+                status = response.status if response else None
+
+                if status is not None and _looks_like_bot_challenge(status, cf_ray):
+                    page.wait_for_timeout(bot_challenge_grace_ms)
+
+                # Best-effort wait for network to settle (SPA / CF challenge JS).
+                try:
+                    page.wait_for_load_state(
+                        "networkidle", timeout=bot_challenge_grace_ms
+                    )
+                except PlaywrightTimeoutError:
+                    pass
+
+                html = page.content()
+                final_url = page.url
+                last_modified = (
+                    response.header_value("Last-Modified") if response else None
+                )
+                return RenderedPage(
+                    html=html,
+                    final_url=final_url,
+                    last_modified=last_modified,
+                    status=status,
+                )
+            finally:
+                page.close()
     except Exception as exc:
         msg = str(exc)
         if "Executable doesn't exist" in msg:
@@ -291,14 +326,3 @@ def fetch_rendered_html(
                 msg.splitlines()[0] if msg else "",
             )
         return None
-    finally:
-        if context is not None:
-            try:
-                context.close()
-            except Exception:
-                logger.debug("Failed to close Playwright context", exc_info=True)
-        if playwright is not None:
-            try:
-                playwright.stop()
-            except Exception:
-                logger.debug("Failed to stop Playwright", exc_info=True)

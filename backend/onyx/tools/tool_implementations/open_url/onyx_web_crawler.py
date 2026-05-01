@@ -99,7 +99,9 @@ def _should_try_playwright_fallback(response: requests.Response) -> bool:
     retry through a real browser (some sites serve JS-protected interstitials
     without CF headers). Real 401/404/410/5xx errors fall through unchanged.
     """
-    return response.status_code == 403 or _has_cloudflare_signals(response)
+    return response.status_code >= 300 and (
+        response.status_code == 403 or _has_cloudflare_signals(response)
+    )
 
 
 def _failure_reason_for_status(
