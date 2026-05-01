@@ -288,6 +288,7 @@ jobs:
             AZURE_API_KEY, test/azure-api-key
             OLLAMA_API_KEY, test/ollama-api-key
             OPENROUTER_API_KEY, test/openrouter-api-key
+            ONYX_DEV_LICENSE, test/onyx-dev-license
 
       - name: Run nightly provider chat test
         uses: ./.github/actions/run-nightly-provider-chat-test

@@ -7,6 +7,7 @@ import psycopg2
 import requests
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
@@ -289,6 +290,33 @@ def reset_postgres(
         logger.info("Setting up Postgres...")
         with get_session_with_current_tenant() as db_session:
             setup_postgres(db_session)
+            _seed_dev_license_if_set(db_session)
+
+
+_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
+_PEM_END = "-----END ONYX LICENSE-----"
+
+
+def _seed_dev_license_if_set(db_session: Session) -> None:
+    """Seed the ONYX_DEV_LICENSE blob into the License table.
+
+    Called after every Postgres reset so EE-gated routes don't return 402
+    after the License row is wiped by alembic downgrade. No-ops when the
+    env var is unset.
+    """
+    blob = os.environ.get("ONYX_DEV_LICENSE", "").strip()
+    if not blob:
+        return
+
+    if blob.startswith(_PEM_BEGIN) and blob.endswith(_PEM_END):
+        blob = "\n".join(blob.split("\n")[1:-1]).strip()
+
+    from ee.onyx.db.license import upsert_license
+    from ee.onyx.utils.license import verify_license_signature
+
+    verify_license_signature(blob)
+    upsert_license(db_session, blob)
+    logger.info("Dev license seeded after Postgres reset")
 
 
 def reset_vespa() -> None:

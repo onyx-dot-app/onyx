@@ -40,7 +40,8 @@ jobs:
 
       - name: Generate OpenAPI schema and Python client
         shell: bash
-        # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+        # OpenAPI client codegen does not handle some EE-only schema shapes;
+        # disable enforcement so the MIT route set is exported.
         env:
           LICENSE_ENFORCEMENT_ENABLED: "false"
         run: |
