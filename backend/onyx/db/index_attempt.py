@@ -41,6 +41,7 @@ def get_last_attempt_for_cc_pair(
         .filter(
             IndexAttempt.connector_credential_pair_id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .order_by(IndexAttempt.time_updated.desc())
         .first()
@@ -59,6 +60,7 @@ def get_recent_completed_attempts_for_cc_pair(
         .filter(
             IndexAttempt.connector_credential_pair_id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
             IndexAttempt.status.notin_(
                 [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
             ),
@@ -81,6 +83,7 @@ def get_recent_attempts_for_cc_pair(
         .filter(
             IndexAttempt.connector_credential_pair_id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .order_by(IndexAttempt.time_updated.desc())
         .limit(limit)
@@ -437,6 +440,7 @@ def get_last_attempt(
             ConnectorCredentialPair.connector_id == connector_id,
             ConnectorCredentialPair.credential_id == credential_id,
             IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
     )
 
@@ -468,6 +472,7 @@ def get_latest_index_attempts_by_status(
                 IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
             ),
             IndexAttempt.status == status,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .group_by(IndexAttempt.connector_credential_pair_id)
         .subquery()
@@ -508,7 +513,10 @@ def get_latest_index_attempts(
     ).join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
 
     status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
-    ids_stmt = ids_stmt.where(SearchSettings.status == status)
+    ids_stmt = ids_stmt.where(
+        SearchSettings.status == status,
+        IndexAttempt.targeted_reindex_job_id.is_(None),
+    )
 
     if only_finished:
         ids_stmt = _add_only_finished_clause(ids_stmt)
@@ -567,6 +575,7 @@ def get_latest_index_attempt_for_cc_pair_id(
     stmt = select(IndexAttempt)
     stmt = stmt.where(
         IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+        IndexAttempt.targeted_reindex_job_id.is_(None),
     )
     if only_finished:
         stmt = _add_only_finished_clause(stmt)
@@ -594,6 +603,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
             IndexAttempt.status.in_(
                 [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
             ),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .join(SearchSettings)
         .where(SearchSettings.status == status)
@@ -623,6 +633,7 @@ def get_latest_successful_index_attempts_parallel(
                 IndexAttempt.status.in_(
                     [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
                 ),
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
             .group_by(IndexAttempt.connector_credential_pair_id)
             .subquery()
@@ -646,7 +657,8 @@ def count_index_attempts_for_cc_pair(
     disinclude_finished: bool = False,
 ) -> int:
     stmt = select(IndexAttempt).where(
-        IndexAttempt.connector_credential_pair_id == cc_pair_id
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.targeted_reindex_job_id.is_(None),
     )
     if disinclude_finished:
         stmt = stmt.where(
@@ -673,7 +685,8 @@ def get_paginated_index_attempts_for_cc_pair_id(
     disinclude_finished: bool = False,
 ) -> list[IndexAttempt]:
     stmt = select(IndexAttempt).where(
-        IndexAttempt.connector_credential_pair_id == cc_pair_id
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.targeted_reindex_job_id.is_(None),
     )
     if disinclude_finished:
         stmt = stmt.where(
@@ -708,6 +721,7 @@ def get_index_attempts_for_cc_pair(
                 ConnectorCredentialPair.connector_id == cc_pair_identifier.connector_id,
                 ConnectorCredentialPair.credential_id
                 == cc_pair_identifier.credential_id,
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
         )
     )
@@ -852,6 +866,7 @@ def count_unique_cc_pairs_with_successful_index_attempts(
         .filter(
             IndexAttempt.search_settings_id == search_settings_id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .distinct()
         .count()
@@ -874,6 +889,7 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
         .filter(
             IndexAttempt.search_settings_id == search_settings_id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
             ConnectorCredentialPair.status != ConnectorCredentialPairStatus.PAUSED,
         )
         .distinct()

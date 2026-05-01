@@ -50,7 +50,10 @@ class IndexingCoordination:
         and transactions to prevent duplicate attempts.
         """
         try:
-            # Check for existing active attempts (this is the "fence" check)
+            # Check for existing active full-run attempts (the "fence" check).
+            # Targeted reindex attempts are allowed to overlap with a full crawl
+            # by design (per-doc row-locks handle write conflicts), so they're
+            # excluded here.
             existing_attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(
@@ -59,6 +62,7 @@ class IndexingCoordination:
                     IndexAttempt.status.in_(
                         [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                     ),
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
                 .with_for_update(nowait=True)
             ).first()

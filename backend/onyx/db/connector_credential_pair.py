@@ -349,6 +349,7 @@ def get_last_successful_attempt_poll_range_end(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.targeted_reindex_job_id.is_(None),
         )
         .order_by(IndexAttempt.poll_range_end.desc())
         .first()
@@ -728,6 +729,7 @@ def resync_cc_pair(
                 ConnectorCredentialPair.connector_id == connector_id,
                 ConnectorCredentialPair.credential_id == credential_id,
                 IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
         )
 
