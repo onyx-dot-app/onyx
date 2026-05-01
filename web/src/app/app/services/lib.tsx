@@ -27,17 +27,19 @@ import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { Packet } from "./streamingModels";
 import { awaitChatStateInput } from "@/app/app/stores/useChatSessionStore";
 
-// Tracks the latest in-flight PUT that mutates the backend's
+// Per-session tracker for the latest in-flight PUT that mutates the backend's
 // `latest_child_message_id` mainline pointer (set-message-as-latest,
-// set-preferred-response). The next send must wait for it so the backend's
-// mainline-walk lookup can find the supplied parent_message_id and avoid the
-// 500 "The new message sent is not on the latest mainline of messages".
+// set-preferred-response). The next send for that session must wait for it
+// so the backend's mainline-walk lookup can find the supplied
+// parent_message_id and avoid the 500 "The new message sent is not on the
+// latest mainline of messages".
 //
-// PUTs are deferred until the session's stream has fully finished —
+// Keyed by chatSessionId so a stream in one session doesn't block sends in
+// another. PUTs are deferred until that session's stream has finished —
 // otherwise the streaming save-completion writes
 // `parent.latest_child_message_id = streaming_msg.id` AFTER our PUT and
 // clobbers it.
-let pendingMainlineSync: Promise<unknown> | null = null;
+const pendingMainlineSync = new Map<string, Promise<unknown>>();
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -199,13 +201,14 @@ export async function* sendMessage({
 
   const body = JSON.stringify(payload);
 
-  // Wait for any in-flight mainline-pointer PUT to land so the backend's
-  // chat_history walk can locate parentMessageId.
-  if (pendingMainlineSync) {
-    const promise = pendingMainlineSync;
-    await promise.catch(() => undefined);
-    if (pendingMainlineSync === promise) {
-      pendingMainlineSync = null;
+  // Wait for any in-flight mainline-pointer PUT for THIS session to land so
+  // the backend's chat_history walk can locate parentMessageId. Other
+  // sessions' PUTs are not awaited.
+  const pending = pendingMainlineSync.get(chatSessionId);
+  if (pending) {
+    await pending.catch(() => undefined);
+    if (pendingMainlineSync.get(chatSessionId) === pending) {
+      pendingMainlineSync.delete(chatSessionId);
     }
   }
 
@@ -240,12 +243,12 @@ export async function setPreferredResponse(
         preferred_response_id: preferredResponseId,
       }),
     });
-  const previous = pendingMainlineSync ?? Promise.resolve();
+  const previous = pendingMainlineSync.get(chatSessionId) ?? Promise.resolve();
   const chained = previous
     .catch(() => undefined)
     .then(() => awaitChatStateInput(chatSessionId))
     .then(() => work());
-  pendingMainlineSync = chained;
+  pendingMainlineSync.set(chatSessionId, chained);
   return chained;
 }
 
@@ -273,12 +276,12 @@ export async function patchMessageToBeLatest(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message_id: messageId }),
     });
-  const previous = pendingMainlineSync ?? Promise.resolve();
+  const previous = pendingMainlineSync.get(chatSessionId) ?? Promise.resolve();
   const chained = previous
     .catch(() => undefined)
     .then(() => awaitChatStateInput(chatSessionId))
     .then(() => work());
-  pendingMainlineSync = chained;
+  pendingMainlineSync.set(chatSessionId, chained);
   return chained;
 }
 
