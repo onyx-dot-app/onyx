@@ -65,7 +65,7 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_chat_message
+from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
@@ -750,20 +750,26 @@ def build_chat_turn(
         # message creation/completion — those writers race and produce false
         # rejections of "not on the latest mainline" when the client targets a
         # branch the server's current mainline pointer doesn't reflect.
-        parent_message = get_chat_message(
-            chat_message_id=new_msg_req.parent_message_id,
+        # Bulk-fetch session messages with tool calls eagerly loaded so the
+        # ancestor walk and downstream history iteration stay at one round trip.
+        all_messages = get_chat_messages_by_session(
+            chat_session_id=chat_session.id,
             user_id=user_id,
             db_session=db_session,
+            prefetch_top_two_level_tool_calls=True,
         )
-        if parent_message.chat_session_id != chat_session.id:
+        by_id: dict[int, ChatMessage] = {m.id: m for m in all_messages}
+        target = by_id.get(new_msg_req.parent_message_id)
+        if target is None:
             raise ValueError(
                 f"parent_message_id {new_msg_req.parent_message_id} is not in this chat session"
             )
+        parent_message = target
         chain_leaf_to_root: list[ChatMessage] = []
         cur: ChatMessage | None = parent_message
         while cur is not None and cur.parent_message_id is not None:
             chain_leaf_to_root.append(cur)
-            cur = cur.parent_message
+            cur = by_id.get(cur.parent_message_id)
         chat_history = list(reversed(chain_leaf_to_root))
 
     # ── Query Processing hook + user message ─────────────────────────────────
