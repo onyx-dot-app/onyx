@@ -14,7 +14,6 @@ from uuid import UUID
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "505c488f6662"
 down_revision = "d09fc20a3c66"

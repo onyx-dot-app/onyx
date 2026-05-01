@@ -16,7 +16,6 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_visible_model_names_for_provider_as_set,
 )
 
-
 # revision identifiers, used by Alembic.
 revision = "47a07e1a38f1"
 down_revision = "7a70b7664e37"

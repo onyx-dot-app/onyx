@@ -188,7 +188,9 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warning(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(
+                    "Failed to fetch message email_id=%r; skipping", email_id
+                )
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -261,7 +263,9 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
             mailboxes_str = mailboxes_raw
         else:
             logger.warning(
-                f"Expected the mailbox data to be of type str, instead got {type(mailboxes_raw)=} {mailboxes_raw}; skipping"
+                "Expected the mailbox data to be of type str, instead got type(mailboxes_raw)=%r %s; skipping",
+                type(mailboxes_raw),
+                mailboxes_raw,
             )
             continue
 
@@ -275,7 +279,8 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
         if not match:
             logger.warning(
-                f"Invalid mailbox-data formatting structure: {mailboxes_str=}; skipping"
+                "Invalid mailbox-data formatting structure: mailboxes_str=%r; skipping",
+                mailboxes_str,
             )
             continue
 
@@ -392,8 +397,9 @@ def _parse_email_body(
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
                 logger.warning(
-                    "Payload section from email was expected to be an array of bytes, instead got "
-                    f"{type(raw_payload)=}, {raw_payload=}"
+                    "Payload section from email was expected to be an array of bytes, instead got type(raw_payload)=%r, raw_payload=%r",
+                    type(raw_payload),
+                    raw_payload,
                 )
                 continue
             body = raw_payload.decode(charset)
@@ -404,7 +410,8 @@ def _parse_email_body(
 
     if not body:
         logger.warning(
-            f"Email with {email_headers.id=} has an empty body; returning an empty string"
+            "Email with email_headers.id=%r has an empty body; returning an empty string",
+            email_headers.id,
         )
         return ""
 

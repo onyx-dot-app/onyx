@@ -151,7 +151,9 @@ def on_task_postrun(
     if not task:
         return
 
-    task_logger.debug(f"Task {task.name} (ID: {task_id}) completed with state: {state}")
+    task_logger.debug(
+        "Task %s (ID: %s) completed with state: %s", task.name, task_id, state
+    )
 
     if state not in READY_STATES:
         return
@@ -165,13 +167,17 @@ def on_task_postrun(
 
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg
     if not kwargs:
-        logger.error(f"Task {task.name} (ID: {task_id}) is missing kwargs")
+        logger.error("Task %s (ID: %s) is missing kwargs", task.name, task_id)
         tenant_id = POSTGRES_DEFAULT_SCHEMA
     else:
         tenant_id = cast(str, kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     task_logger.debug(
-        f"Task {task.name} (ID: {task_id}) completed with state: {state} {f'for tenant_id={tenant_id}' if tenant_id else ''}"
+        "Task %s (ID: %s) completed with state: %s %s",
+        task.name,
+        task_id,
+        state,
+        f"for tenant_id={tenant_id}" if tenant_id else "",
     )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -238,7 +244,7 @@ def on_celeryd_init(
     # force=True. so we use force=True as a fallback.
 
     all_start_methods: list[str] = multiprocessing.get_all_start_methods()
-    logger.info(f"Multiprocessing all start methods: {all_start_methods}")
+    logger.info("Multiprocessing all start methods: %s", all_start_methods)
 
     try:
         multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
@@ -256,7 +262,7 @@ def on_celeryd_init(
             )
 
     logger.info(
-        f"Multiprocessing selected start method: {multiprocessing.get_start_method()}"
+        "Multiprocessing selected start method: %s", multiprocessing.get_start_method()
     )
 
     # Initialize tracing in workers if credentials are available.
@@ -289,7 +295,9 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
             break
 
         logger.info(
-            f"Redis: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Redis: Readiness probe ongoing. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
 
         time.sleep(WAIT_INTERVAL)
@@ -328,7 +336,9 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
             break
 
         logger.info(
-            f"Database: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Database: Readiness probe ongoing. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
 
         time.sleep(WAIT_INTERVAL)
@@ -343,7 +353,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    logger.info(f"Running as a secondary celery worker: pid={os.getpid()}")
+    logger.info("Running as a secondary celery worker: pid=%s", os.getpid())
 
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
@@ -358,7 +368,9 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
         time_elapsed = time.monotonic() - time_start
         logger.info(
-            f"Primary worker is not ready yet. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Primary worker is not ready yet. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
         if time_elapsed > WAIT_LIMIT:
             msg = f"Primary worker was not ready within the timeout. ({WAIT_LIMIT} seconds). Exiting..."
@@ -381,7 +393,7 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.touch()
-    logger.info(f"Readiness signal touched at {path}.")
+    logger.info("Readiness signal touched at %s.", path)
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001

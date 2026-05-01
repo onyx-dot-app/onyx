@@ -51,12 +51,12 @@ def start_metrics_server(worker_type: str) -> int | None:
 
     with _server_lock:
         if _server_started:
-            logger.debug(f"Metrics server already started for {worker_type}")
+            logger.debug("Metrics server already started for %s", worker_type)
             return None
 
         enabled = os.environ.get("PROMETHEUS_METRICS_ENABLED", "true").lower()
         if enabled in ("false", "0", "no"):
-            logger.info(f"Prometheus metrics server disabled for {worker_type}")
+            logger.info("Prometheus metrics server disabled for %s", worker_type)
             return None
 
         port_str = os.environ.get("PROMETHEUS_METRICS_PORT")
@@ -65,16 +65,17 @@ def start_metrics_server(worker_type: str) -> int | None:
                 port = int(port_str)
             except ValueError:
                 logger.warning(
-                    f"Invalid PROMETHEUS_METRICS_PORT '{port_str}' for {worker_type}, "
-                    "must be a numeric port. Skipping metrics server."
+                    "Invalid PROMETHEUS_METRICS_PORT '%s' for %s, must be a numeric port. Skipping metrics server.",
+                    port_str,
+                    worker_type,
                 )
                 return None
         elif worker_type in _DEFAULT_PORTS:
             port = _DEFAULT_PORTS[worker_type]
         else:
             logger.info(
-                f"No default metrics port for worker type '{worker_type}' "
-                "and PROMETHEUS_METRICS_PORT not set. Skipping metrics server."
+                "No default metrics port for worker type '%s' and PROMETHEUS_METRICS_PORT not set. Skipping metrics server.",
+                worker_type,
             )
             return None
 
@@ -82,11 +83,11 @@ def start_metrics_server(worker_type: str) -> int | None:
             start_http_server(port)
             _server_started = True
             logger.info(
-                f"Prometheus metrics server started on :{port} for {worker_type}"
+                "Prometheus metrics server started on :%s for %s", port, worker_type
             )
             return port
         except OSError as e:
             logger.warning(
-                f"Failed to start metrics server on :{port} for {worker_type}: {e}"
+                "Failed to start metrics server on :%s for %s: %s", port, worker_type, e
             )
             return None

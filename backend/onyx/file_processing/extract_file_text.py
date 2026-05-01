@@ -446,7 +446,9 @@ def read_docx_file(
         UnsupportedFormatException,
     ) as e:
         logger.warning(
-            f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
+            "Failed to extract docx %s: %s. Attempting to read as text file.",
+            file_name or "docx file",
+            e,
         )
 
         # May be an invalid docx, but still a valid text file
@@ -631,7 +633,9 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.warning(
-                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
+                file_name or "xlsx file",
+                e,
             )
             return []
         raise
@@ -669,7 +673,8 @@ def eml_to_text(file: IO[Any]) -> str:
             raw_file = text_file.detach()
         except Exception as detach_error:
             logger.warning(
-                f"Failed to detach TextIOWrapper for EML upload, using original file: {detach_error}"
+                "Failed to detach TextIOWrapper for EML upload, using original file: %s",
+                detach_error,
             )
             raw_file = file
         try:
@@ -686,7 +691,7 @@ def eml_to_text(file: IO[Any]) -> str:
             elif isinstance(payload, list):
                 text_content.extend(item for item in payload if isinstance(item, str))
             else:
-                logger.warning(f"Unexpected payload type: {type(payload)}")
+                logger.warning("Unexpected payload type: %s", type(payload))
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
@@ -735,7 +740,8 @@ def extract_file_text(
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
+                    "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                    str(unstructured_error),
                 )
         if extension is None:
             extension = get_file_ext(file_name)
@@ -757,7 +763,7 @@ def extract_file_text(
             raise RuntimeError(
                 f"Failed to process file {file_name or 'Unknown'}: {str(e)}"
             ) from e
-        logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
+        logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
 
 
@@ -814,7 +820,7 @@ def extract_text_and_images(
     )
     # Clean up any temporary objects and force garbage collection
     unreachable = gc.collect()
-    logger.info(f"Unreachable objects: {unreachable}")
+    logger.info("Unreachable objects: %s", unreachable)
 
     return res
 
@@ -836,7 +842,8 @@ def _extract_text_and_images(
             )
         except Exception as e:
             logger.error(
-                f"Failed to process with Unstructured: {str(e)}. Falling back to normal processing."
+                "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                str(e),
             )
             file.seek(0)  # Reset file pointer just in case
 
@@ -913,7 +920,7 @@ def _extract_text_and_images(
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
-        logger.exception(f"Failed to extract text/images from {file_name}: {e}")
+        logger.exception("Failed to extract text/images from %s: %s", file_name, e)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 

@@ -110,7 +110,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         self._logger = setup_logger()
 
         self._logger.info(
-            f"ElevenLabsStreamingTranscriber: initializing with model {model}"
+            "ElevenLabsStreamingTranscriber: initializing with model %s", model
         )
         self.api_key = api_key
         self.model = model
@@ -149,8 +149,11 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
             f"&min_silence_duration_ms={DEFAULT_MIN_SILENCE_DURATION_MS}"
         )
         self._logger.info(
-            f"ElevenLabsStreamingTranscriber: connecting to {url} "
-            f"(input={self.input_sample_rate}Hz, target={self.target_sample_rate}Hz)"
+            "ElevenLabsStreamingTranscriber: connecting to %s "
+            "(input=%sHz, target=%sHz)",
+            url,
+            self.input_sample_rate,
+            self.target_sample_rate,
         )
 
         try:
@@ -159,12 +162,14 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 headers={"xi-api-key": self.api_key},
             )
             self._logger.info(
-                f"ElevenLabsStreamingTranscriber: connected successfully, "
-                f"ws.closed={self._ws.closed}, close_code={self._ws.close_code}"
+                "ElevenLabsStreamingTranscriber: connected successfully, "
+                "ws.closed=%s, close_code=%s",
+                self._ws.closed,
+                self._ws.close_code,
             )
         except Exception as e:
             self._logger.error(
-                f"ElevenLabsStreamingTranscriber: failed to connect: {e}"
+                "ElevenLabsStreamingTranscriber: failed to connect: %s", e
             )
             if self._session:
                 await self._session.close()
@@ -185,7 +190,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         try:
             async for msg in self._ws:
                 self._logger.debug(
-                    f"ElevenLabsStreamingTranscriber: raw message type: {msg.type}"
+                    "ElevenLabsStreamingTranscriber: raw message type: %s", msg.type
                 )
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     parsed_data: Any = None
@@ -194,7 +199,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         parsed_data = json.loads(msg.data)
                     except json.JSONDecodeError:
                         self._logger.error(
-                            f"ElevenLabsStreamingTranscriber: failed to parse JSON: {msg.data[:200]}"
+                            "ElevenLabsStreamingTranscriber: failed to parse JSON: %s",
+                            msg.data[:200],
                         )
                         continue
                     if not isinstance(parsed_data, dict):
@@ -207,18 +213,21 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                     # ElevenLabs uses message_type field - fail fast if missing
                     if "message_type" not in data and "type" not in data:
                         self._logger.error(
-                            f"ElevenLabsStreamingTranscriber: malformed packet missing 'message_type' field: {data}"
+                            "ElevenLabsStreamingTranscriber: malformed packet missing 'message_type' field: %s",
+                            data,
                         )
                         continue
                     msg_type = data.get("message_type", data.get("type", ""))
                     self._logger.info(
-                        f"ElevenLabsStreamingTranscriber: received message_type: '{msg_type}', data keys: {list(data.keys())}"
+                        "ElevenLabsStreamingTranscriber: received message_type: '%s', data keys: %s",
+                        msg_type,
+                        list(data.keys()),
                     )
                     # Check for error in various formats
                     if "error" in data or msg_type == ElevenLabsSTTMessageType.ERROR:
                         error_msg = data.get("error", data.get("message", data))
                         self._logger.error(
-                            f"ElevenLabsStreamingTranscriber: API error: {error_msg}"
+                            "ElevenLabsStreamingTranscriber: API error: %s", error_msg
                         )
                         continue
 
@@ -226,15 +235,18 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                     # See https://elevenlabs.io/docs/api-reference/speech-to-text/realtime
                     if msg_type == ElevenLabsSTTMessageType.SESSION_STARTED:
                         self._logger.info(
-                            f"ElevenLabsStreamingTranscriber: session started, "
-                            f"id={data.get('session_id')}, config={data.get('config')}"
+                            "ElevenLabsStreamingTranscriber: session started, "
+                            "id=%s, config=%s",
+                            data.get("session_id"),
+                            data.get("config"),
                         )
                     elif msg_type == ElevenLabsSTTMessageType.PARTIAL_TRANSCRIPT:
                         # Interim result — updated as more audio is processed
                         text = data.get("text", "")
                         if text:
                             self._logger.info(
-                                f"ElevenLabsStreamingTranscriber: partial_transcript: {text[:50]}..."
+                                "ElevenLabsStreamingTranscriber: partial_transcript: %s...",
+                                text[:50],
                             )
                             self._final_transcript = text
                             await self._transcript_queue.put(
@@ -245,7 +257,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         text = data.get("text", "")
                         if text:
                             self._logger.info(
-                                f"ElevenLabsStreamingTranscriber: committed_transcript: {text[:50]}..."
+                                "ElevenLabsStreamingTranscriber: committed_transcript: %s...",
+                                text[:50],
                             )
                             self._final_transcript = text
                             await self._transcript_queue.put(
@@ -256,7 +269,8 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         text = data.get("text", "") or self._final_transcript
                         if text:
                             self._logger.info(
-                                f"ElevenLabsStreamingTranscriber: utterance_end: {text[:50]}..."
+                                "ElevenLabsStreamingTranscriber: utterance_end: %s...",
+                                text[:50],
                             )
                             self._final_transcript = text
                             await self._transcript_queue.put(
@@ -270,37 +284,46 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                     else:
                         # Log unhandled message types with full data for debugging
                         self._logger.warning(
-                            f"ElevenLabsStreamingTranscriber: unhandled message_type: {msg_type}, full data: {data}"
+                            "ElevenLabsStreamingTranscriber: unhandled message_type: %s, full data: %s",
+                            msg_type,
+                            data,
                         )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
                     self._logger.debug(
-                        f"ElevenLabsStreamingTranscriber: received binary message: {len(msg.data)} bytes"
+                        "ElevenLabsStreamingTranscriber: received binary message: %s bytes",
+                        len(msg.data),
                     )
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
                     close_code = self._ws.close_code if self._ws else "N/A"
                     self._logger.info(
-                        f"ElevenLabsStreamingTranscriber: WebSocket closed by server, close_code={close_code}"
+                        "ElevenLabsStreamingTranscriber: WebSocket closed by server, close_code=%s",
+                        close_code,
                     )
                     break
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     self._logger.error(
-                        f"ElevenLabsStreamingTranscriber: WebSocket error: {self._ws.exception() if self._ws else 'N/A'}"
+                        "ElevenLabsStreamingTranscriber: WebSocket error: %s",
+                        self._ws.exception() if self._ws else "N/A",
                     )
                     break
                 elif msg.type == aiohttp.WSMsgType.CLOSE:
                     self._logger.info(
-                        f"ElevenLabsStreamingTranscriber: WebSocket CLOSE frame received, data={msg.data}, extra={msg.extra}"
+                        "ElevenLabsStreamingTranscriber: WebSocket CLOSE frame received, data=%s, extra=%s",
+                        msg.data,
+                        msg.extra,
                     )
                     break
         except Exception as e:
             self._logger.error(
-                f"ElevenLabsStreamingTranscriber: error in receive loop: {e}",
+                "ElevenLabsStreamingTranscriber: error in receive loop: %s",
+                e,
                 exc_info=True,
             )
         finally:
             close_code = self._ws.close_code if self._ws else "N/A"
             self._logger.info(
-                f"ElevenLabsStreamingTranscriber: receive loop ended, close_code={close_code}"
+                "ElevenLabsStreamingTranscriber: receive loop ended, close_code=%s",
+                close_code,
             )
             await self._transcript_queue.put(None)  # Signal end
 
@@ -343,7 +366,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
             return
         if self._ws.closed:
             self._logger.warning(
-                f"send_audio: WebSocket is closed, close_code={self._ws.close_code}"
+                "send_audio: WebSocket is closed, close_code=%s", self._ws.close_code
             )
             return
 
@@ -358,12 +381,15 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 "sample_rate": self.target_sample_rate,
             }
             self._logger.info(
-                f"send_audio: {len(chunk)} bytes -> {len(resampled)} bytes (resampled) -> {len(audio_b64)} chars base64"
+                "send_audio: %s bytes -> %s bytes (resampled) -> %s chars base64",
+                len(chunk),
+                len(resampled),
+                len(audio_b64),
             )
             await self._ws.send_str(json.dumps(message))
             self._logger.info("send_audio: message sent successfully")
         except Exception as e:
-            self._logger.error(f"send_audio: failed to send: {e}", exc_info=True)
+            self._logger.error("send_audio: failed to send: %s", e, exc_info=True)
             raise
 
     async def receive_transcript(self) -> TranscriptResult | None:
@@ -387,7 +413,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 )
                 await self._ws.close()
             except Exception as e:
-                self._logger.debug(f"Error closing WebSocket: {e}")
+                self._logger.debug("Error closing WebSocket: %s", e)
         if self._receive_task and not self._receive_task.done():
             self._receive_task.cancel()
             try:
@@ -504,8 +530,11 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
                     # Check isFinal separately - a message can have both audio AND isFinal
                     if "isFinal" in data:
                         self._logger.info(
-                            f"ElevenLabsStreamingSynthesizer: received isFinal={data['isFinal']}, "
-                            f"chunks so far: {chunk_count}, bytes: {total_bytes}"
+                            "ElevenLabsStreamingSynthesizer: received isFinal=%s, "
+                            "chunks so far: %s, bytes: %s",
+                            data["isFinal"],
+                            chunk_count,
+                            total_bytes,
                         )
                         if data.get("isFinal"):
                             self._logger.info(
@@ -516,7 +545,7 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
                     # Check for errors
                     if "error" in data or data.get("type") == "error":
                         self._logger.error(
-                            f"ElevenLabsStreamingSynthesizer: received error: {data}"
+                            "ElevenLabsStreamingSynthesizer: received error: %s", data
                         )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
                     chunk_count += 1
@@ -527,14 +556,17 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
                     aiohttp.WSMsgType.ERROR,
                 ):
                     self._logger.info(
-                        f"ElevenLabsStreamingSynthesizer: WebSocket closed/error, type={msg.type}"
+                        "ElevenLabsStreamingSynthesizer: WebSocket closed/error, type=%s",
+                        msg.type,
                     )
                     break
         except Exception as e:
-            self._logger.error(f"ElevenLabsStreamingSynthesizer receive error: {e}")
+            self._logger.error("ElevenLabsStreamingSynthesizer receive error: %s", e)
         finally:
             self._logger.info(
-                f"ElevenLabsStreamingSynthesizer: receive loop ended, {chunk_count} chunks, {total_bytes} bytes"
+                "ElevenLabsStreamingSynthesizer: receive loop ended, %s chunks, %s bytes",
+                chunk_count,
+                total_bytes,
             )
             await self._audio_queue.put(None)  # Signal end of stream
 
@@ -550,7 +582,9 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
         """
         if self._ws and not self._closed and text.strip():
             self._logger.info(
-                f"ElevenLabsStreamingSynthesizer: sending text ({len(text)} chars): '{text}'"
+                "ElevenLabsStreamingSynthesizer: sending text (%s chars): '%s'",
+                len(text),
+                text,
             )
             # Let ElevenLabs buffer and auto-generate based on chunk_length_schedule
             # Don't trigger generation here - wait for flush() at the end
@@ -564,8 +598,11 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             self._logger.info("ElevenLabsStreamingSynthesizer: text sent successfully")
         else:
             self._logger.warning(
-                f"ElevenLabsStreamingSynthesizer: skipping send_text - "
-                f"ws={self._ws is not None}, closed={self._closed}, text='{text[:30] if text else ''}'"
+                "ElevenLabsStreamingSynthesizer: skipping send_text - "
+                "ws=%s, closed=%s, text='%s'",
+                self._ws is not None,
+                self._closed,
+                text[:30] if text else "",
             )
 
     async def receive_audio(self) -> bytes | None:
@@ -588,7 +625,9 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             self._logger.info("ElevenLabsStreamingSynthesizer: end-of-input sent")
         else:
             self._logger.warning(
-                f"ElevenLabsStreamingSynthesizer: skipping flush - ws={self._ws is not None}, closed={self._closed}"
+                "ElevenLabsStreamingSynthesizer: skipping flush - ws=%s, closed=%s",
+                self._ws is not None,
+                self._closed,
             )
 
     async def close(self) -> None:
@@ -691,7 +730,9 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         form_data.add_field("model_id", batch_model)
 
         logger.info(
-            f"ElevenLabs transcribe: sending {len(audio_data)} bytes, format={audio_format}"
+            "ElevenLabs transcribe: sending %s bytes, format=%s",
+            len(audio_data),
+            audio_format,
         )
 
         with traced_llm_call(
@@ -705,14 +746,14 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"ElevenLabs transcribe failed: {error_text}")
+                        logger.error("ElevenLabs transcribe failed: %s", error_text)
                         raise RuntimeError(
                             f"ElevenLabs transcription failed: {error_text}"
                         )
 
                     result = await response.json()
                     text = result.get("text", "")
-                    logger.info(f"ElevenLabs transcribe: got result: {text[:50]}...")
+                    logger.info("ElevenLabs transcribe: got result: %s...", text[:50])
                     return text
 
     async def synthesize_stream(
@@ -741,7 +782,11 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         url = f"{self.api_base}/v1/text-to-speech/{voice_id}/stream"
 
         logger.info(
-            f"ElevenLabs TTS: starting synthesis, text='{text[:50]}...', voice={voice_id}, model={self.tts_model}, speed={speed}"
+            "ElevenLabs TTS: starting synthesis, text='%s...', voice=%s, model=%s, speed=%s",
+            text[:50],
+            voice_id,
+            self.tts_model,
+            speed,
         )
 
         headers = {
@@ -769,11 +814,13 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     logger.info(
-                        f"ElevenLabs TTS: got response status={response.status}, content-type={response.headers.get('content-type')}"
+                        "ElevenLabs TTS: got response status=%s, content-type=%s",
+                        response.status,
+                        response.headers.get("content-type"),
                     )
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"ElevenLabs TTS failed: {error_text}")
+                        logger.error("ElevenLabs TTS failed: %s", error_text)
                         raise RuntimeError(f"ElevenLabs TTS failed: {error_text}")
 
                     # Use 8192 byte chunks for smoother streaming
@@ -785,7 +832,9 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                             total_bytes += len(chunk)
                             yield chunk
                     logger.info(
-                        f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, {total_bytes} total bytes"
+                        "ElevenLabs TTS: streaming complete, %s chunks, %s total bytes",
+                        chunk_count,
+                        total_bytes,
                     )
 
     async def validate_credentials(self) -> None:

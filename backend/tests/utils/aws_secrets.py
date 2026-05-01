@@ -124,7 +124,7 @@ def _get_aws_secrets(
                     secrets[enum_type(key_name)] = secret_value
                 except ValueError:
                     logger.warning(
-                        f"Secret '{key_name}' not in {enum_type.__name__}, skipping"
+                        "Secret '%s' not in %s, skipping", key_name, enum_type.__name__
                     )
 
         for error in response.get("Errors", []):
@@ -132,7 +132,7 @@ def _get_aws_secrets(
             error_code = error.get("ErrorCode", "unknown")
             message = error.get("Message", "unknown error")
             logger.warning(
-                f"Failed to fetch secret '{secret_id}': [{error_code}] {message}"
+                "Failed to fetch secret '%s': [%s] %s", secret_id, error_code, message
             )
 
     return secrets
@@ -165,15 +165,17 @@ def get_secrets(
 
     if secrets:
         local_names = ", ".join(k.value for k in secrets)
-        logger.info(f"Resolved {len(secrets)} secret(s) locally: {local_names}")
+        logger.info("Resolved %s secret(s) locally: %s", len(secrets), local_names)
 
     remaining: list[AnySecret] = [k for k in keys if k not in secrets]
     if remaining:
         aws_secrets = _get_aws_secrets(remaining, enum_type)
         secrets.update(aws_secrets)
         logger.info(
-            f"Fetched {len(aws_secrets)}/{len(remaining)} secret(s) from AWS "
-            f"(prefix: {enum_type.aws_prefix()!r})"
+            "Fetched %s/%s secret(s) from AWS (prefix: %r)",
+            len(aws_secrets),
+            len(remaining),
+            enum_type.aws_prefix(),
         )
 
     return cast("dict[TestSecret, str] | dict[DeploySecret, str]", secrets)

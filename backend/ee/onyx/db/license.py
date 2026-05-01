@@ -163,7 +163,7 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
         )
         return LicenseMetadata.model_validate_json(cached_str)
     except Exception as e:
-        logger.warning(f"Failed to parse cached license metadata: {e}")
+        logger.warning("Failed to parse cached license metadata: %s", e)
         return None
 
 
@@ -234,7 +234,9 @@ def update_license_cache(
         ex=LICENSE_CACHE_TTL_SECONDS,
     )
 
-    logger.info(f"License cache updated: {metadata.seats} seats, status={status.value}")
+    logger.info(
+        "License cache updated: %s seats, status=%s", metadata.seats, status.value
+    )
     return metadata
 
 
@@ -273,7 +275,7 @@ def refresh_license_cache(
             tenant_id=tenant_id,
         )
     except ValueError as e:
-        logger.error(f"Failed to verify license during cache refresh: {e}")
+        logger.error("Failed to verify license during cache refresh: %s", e)
         invalidate_license_cache(tenant_id)
         return None
 

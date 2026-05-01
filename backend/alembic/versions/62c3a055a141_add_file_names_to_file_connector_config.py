@@ -12,7 +12,6 @@ import json
 import os
 import logging
 
-
 # revision identifiers, used by Alembic.
 revision = "62c3a055a141"
 down_revision = "3fc5d75723b3"

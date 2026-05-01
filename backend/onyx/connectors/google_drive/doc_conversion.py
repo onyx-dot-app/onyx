@@ -91,7 +91,7 @@ def _get_folder_info(
         _folder_cache[folder_id] = (folder_name, parent_id)
         return folder_name, parent_id
     except HttpError as e:
-        logger.warning(f"Failed to get folder info for {folder_id}: {e}")
+        logger.warning("Failed to get folder info for %s: %s", folder_id, e)
         _folder_cache[folder_id] = ("Unknown", None)
         return "Unknown", None
 
@@ -112,7 +112,7 @@ def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
         _folder_cache[cache_key] = (drive_name, None)
         return drive_name
     except HttpError as e:
-        logger.warning(f"Failed to get drive name for {drive_id}: {e}")
+        logger.warning("Failed to get drive name for %s: %s", drive_id, e)
         _folder_cache[cache_key] = (f"Shared Drive {drive_id}", None)
         return f"Shared Drive {drive_id}"
 
@@ -289,13 +289,15 @@ def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
         )
         if download_progress.resumable_progress > size_threshold:
             logger.warning(
-                f"File {file_id} exceeds size threshold of {size_threshold}. Skipping2."
+                "File %s exceeds size threshold of %s. Skipping2.",
+                file_id,
+                size_threshold,
             )
             return bytes()
 
     response = response_bytes.getvalue()
     if not response:
-        logger.warning(f"Failed to download {file_id}")
+        logger.warning("Failed to download %s", file_id)
         return bytes()
     return response
 
@@ -362,7 +364,7 @@ def _download_and_extract_sections_basic(
             )
             sections.append(section)
         except Exception as e:
-            logger.error(f"Failed to process image {file_name}: {e}")
+            logger.error("Failed to process image %s: %s", file_name, e)
         return FileExtractionResult(sections=sections)
 
     # For Google Docs, Sheets, and Slides, export via the Drive API
@@ -373,7 +375,7 @@ def _download_and_extract_sections_basic(
         )
         response = _download_request(request, file_id, size_threshold)
         if not response:
-            logger.warning(f"Failed to export {file_name} as {export_mime_type}")
+            logger.warning("Failed to export %s as %s", file_name, export_mime_type)
             return FileExtractionResult(sections=[])
 
         if export_mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
@@ -408,7 +410,7 @@ def _download_and_extract_sections_basic(
             text = response_call().decode("utf-8")
             return FileExtractionResult(sections=[TextSection(link=link, text=text)])
         except UnicodeDecodeError as e:
-            logger.warning(f"Failed to extract text from {file_name}: {e}")
+            logger.warning("Failed to extract text from %s: %s", file_name, e)
             return FileExtractionResult(sections=[])
 
     elif (
@@ -467,20 +469,20 @@ def _download_and_extract_sections_basic(
                 )
                 pdf_sections.append(section)
         except Exception as e:
-            logger.error(f"Failed to process PDF images in {file_name}: {e}")
+            logger.error("Failed to process PDF images in %s: %s", file_name, e)
         return FileExtractionResult(sections=pdf_sections)
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
     if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-        logger.warning(f"Skipping file {file.get('name')} due to extension.")
+        logger.warning("Skipping file %s due to extension.", file.get("name"))
         return FileExtractionResult(sections=[])
 
     try:
         text = extract_file_text(io.BytesIO(response_call()), file_name)
         return FileExtractionResult(sections=[TextSection(link=link, text=text)])
     except Exception as e:
-        logger.warning(f"Failed to extract text from {file_name}: {e}")
+        logger.warning("Failed to extract text from %s: %s", file_name, e)
         return FileExtractionResult(sections=[])
 
 
@@ -522,7 +524,8 @@ def align_basic_advanced(
         ).strip()
         if heading_key == "":
             logger.warning(
-                f"Cannot match heading: {heading}, its link will come from the following section"
+                "Cannot match heading: %s, its link will come from the following section",
+                heading,
             )
             continue
         heading_offset = heading.find(heading_key)
@@ -537,7 +540,9 @@ def align_basic_advanced(
         )
         if heading_start < 0:
             logger.warning(
-                f"Heading key {heading_key} from heading {heading} not found in basic text"
+                "Heading key %s from heading %s not found in basic text",
+                heading_key,
+                heading,
             )
             heading_start = prev_start
             continue
@@ -666,9 +671,11 @@ def convert_drive_item_to_document(
         # This SHOULD happen very rarely, and we don't want to break the indexing process when
         # a high volume of 403s occurs early. We leave a verbose log to help investigate.
         logger.error(
-            f"Skipping file id: {file.get('id')} name: {file.get('name')} due to 403 error."
-            f"Attempted to retrieve with {retriever_emails},"
-            f"got the following errors: {first_error.failure_message}"
+            "Skipping file id: %s name: %s due to 403 error.Attempted to retrieve with %s,got the following errors: %s",
+            file.get("id"),
+            file.get("name"),
+            retriever_emails,
+            first_error.failure_message,
         )
         return None
     return first_error
@@ -711,18 +718,20 @@ def _convert_drive_item_to_document(
             try:
                 size_int = int(size_str)
             except ValueError:
-                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+                logger.warning("Parsing string to int failed: size_str=%s", size_str)
             else:
                 if size_int > size_threshold:
                     logger.warning(
-                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                        "%s exceeds size threshold of %s. Skipping.",
+                        file.get("name"),
+                        size_threshold,
                     )
                     return None
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
-                logger.debug(f"starting advanced parsing for {file.get('name')}")
+                logger.debug("starting advanced parsing for %s", file.get("name"))
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
                     docs_service=_get_docs_service(),
@@ -734,7 +743,8 @@ def _convert_drive_item_to_document(
                     )
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
-                            f"found smart chips in {file.get('name')}, aligning with basic sections"
+                            "found smart chips in %s, aligning with basic sections",
+                            file.get("name"),
                         )
                         basic_extraction = _download_and_extract_sections_basic(
                             file,
@@ -750,7 +760,8 @@ def _convert_drive_item_to_document(
 
             except Exception as e:
                 logger.warning(
-                    f"Error in advanced parsing: {e}. Falling back to basic extraction."
+                    "Error in advanced parsing: %s. Falling back to basic extraction.",
+                    e,
                 )
         # Not Google Doc, attempt basic extraction
         else:
@@ -766,7 +777,7 @@ def _convert_drive_item_to_document(
 
         # If we still don't have any sections, skip this file
         if not sections:
-            logger.warning(f"No content extracted from {file.get('name')}. Skipping.")
+            logger.warning("No content extracted from %s. Skipping.", file.get("name"))
             return None
 
         doc_id = onyx_document_id_from_drive_file(file)
@@ -830,7 +841,7 @@ def _convert_drive_item_to_document(
         try:
             doc_id = onyx_document_id_from_drive_file(file)
         except Exception as e2:
-            logger.warning(f"Error getting document id from file: {e2}")
+            logger.warning("Error getting document id from file: %s", e2)
 
         file_name = file.get("name")
         error_str = (
@@ -838,9 +849,9 @@ def _convert_drive_item_to_document(
         )
         if isinstance(e, HttpError) and e.status_code == 403:
             logger.warning(
-                f"Uncommon permissions error while downloading file. User "
-                f"{retriever_email} was able to see file {file_name} "
-                "but cannot download it."
+                "Uncommon permissions error while downloading file. User %s was able to see file %s but cannot download it.",
+                retriever_email,
+                file_name,
             )
             logger.warning(error_str)
 

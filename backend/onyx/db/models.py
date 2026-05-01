@@ -273,7 +273,7 @@ class NullFilteredString(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         if value is not None and "\x00" in value:
-            logger.warning(f"NUL characters found in value: {value}")
+            logger.warning("NUL characters found in value: %s", value)
             return value.replace("\x00", "")
         return value
 

@@ -218,7 +218,8 @@ def _try_fallback_tool_extraction(
         )
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text as fallback"
+            "Extracted %s tool call(s) from response text as fallback",
+            len(extracted_tool_calls),
         )
         return (
             LlmStepResult(
@@ -457,7 +458,8 @@ def construct_message_history(
         ]
         if forgotten_meta:
             logger.debug(
-                f"FileReader: building forgotten-files message for {[(m.file_id, m.filename) for m in forgotten_meta]}"
+                "FileReader: building forgotten-files message for %s",
+                [(m.file_id, m.filename) for m in forgotten_meta],
             )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter

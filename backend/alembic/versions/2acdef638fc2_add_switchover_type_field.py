@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from onyx.db.enums import SwitchoverType
 
-
 # revision identifiers, used by Alembic.
 revision = "2acdef638fc2"
 down_revision = "a4f23d6b71c8"

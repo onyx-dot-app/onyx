@@ -180,7 +180,7 @@ def verify_auth_setting() -> None:
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
 
-    logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
+    logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 
 
 def get_display_email(email: str | None, space_less: bool = False) -> str:
@@ -394,7 +394,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     else "unknown"
                 )
                 logger.warning(
-                    f"Blocked disposable email registration attempt: {domain}",
+                    "Blocked disposable email registration attempt: %s",
+                    domain,
                     extra={"email_domain": domain},
                 )
             raise
@@ -850,7 +851,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     domain=None,
                     secure=WEB_DOMAIN.startswith("https"),
                 )
-                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+                logger.debug("Deleted anonymous user cookie for user %s", user.email)
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
@@ -882,7 +883,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
-            logger.debug(f"Current tenant user count: {user_count}")
+            logger.debug("Current tenant user count: %s", user_count)
 
             # Link the anonymous PostHog session to the identified user so
             # that pre-signup session recordings merge into one person profile.
@@ -979,7 +980,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 properties=properties,
             )
 
-        logger.debug(f"User {user.id} has registered.")
+        logger.debug("User %s has registered.", user.id)
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},
@@ -1017,7 +1018,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         verify_email_domain(user.email)
 
         logger.notice(
-            f"Verification requested for user {user.id}. Verification token: {token}"
+            "Verification requested for user %s. Verification token: %s", user.id, token
         )
         user_count = await get_user_count()
         send_user_verification_email(
@@ -1041,7 +1042,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         except Exception as e:
             logger.warning(
-                f"User attempted to login with invalid credentials: {str(e)}"
+                "User attempted to login with invalid credentials: %s", str(e)
             )
 
         if not tenant_id:
@@ -1436,7 +1437,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         ) -> Response:
             try:
                 user, token = user_token
-                logger.info(f"Processing token refresh request for user {user.email}")
+                logger.info("Processing token refresh request for user %s", user.email)
 
                 # Check if user has OAuth accounts that need refreshing
                 await check_and_refresh_oauth_tokens(
@@ -1455,11 +1456,12 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                         refresh_method = getattr(strategy, "refresh_token")
                         new_token = await refresh_method(token, user)
                         logger.info(
-                            f"Successfully refreshed session token for user {user.email}"
+                            "Successfully refreshed session token for user %s",
+                            user.email,
                         )
                         return await backend.transport.get_login_response(new_token)
                     except Exception as e:
-                        logger.error(f"Error refreshing session token: {str(e)}")
+                        logger.error("Error refreshing session token: %s", str(e))
                         # Fallback to logout and login if refresh fails
                         await backend.logout(strategy, user, token)
                         return await backend.login(strategy, user)
@@ -1471,7 +1473,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
             except Exception as e:
-                logger.error(f"Unexpected error in refresh endpoint: {str(e)}")
+                logger.error("Unexpected error in refresh endpoint: %s", str(e))
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Token refresh failed: {str(e)}",
@@ -1807,7 +1809,9 @@ async def current_user_from_websocket(
         raise BasicAuthenticationError(detail="Access denied. Missing origin.")
 
     if not _is_same_origin(origin, WEB_DOMAIN):
-        logger.warning(f"WS auth: origin mismatch. Expected {WEB_DOMAIN}, got {origin}")
+        logger.warning(
+            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
+        )
         raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
@@ -1820,7 +1824,7 @@ async def current_user_from_websocket(
     except BasicAuthenticationError:
         raise
     except Exception as e:
-        logger.error(f"WS auth: error during token validation: {e}")
+        logger.error("WS auth: error during token validation: %s", e)
         raise BasicAuthenticationError(
             detail="Authentication verification failed."
         ) from e
@@ -1828,7 +1832,7 @@ async def current_user_from_websocket(
     # Get user from token data
     user = await _get_user_from_token_data(token_data)
     if user is None:
-        logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
+        logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
         raise BasicAuthenticationError(
             detail="Access denied. User not found or inactive."
         )
@@ -1838,12 +1842,12 @@ async def current_user_from_websocket(
 
     # Block limited users (same as current_user)
     if is_limited_user(user):
-        logger.warning(f"WS auth: user {user.email} is limited")
+        logger.warning("WS auth: user %s is limited", user.email)
         raise BasicAuthenticationError(
             detail="Access denied. User has limited permissions.",
         )
 
-    logger.debug(f"WS auth: authenticated {user.email}")
+    logger.debug("WS auth: authenticated %s", user.email)
     return user
 
 

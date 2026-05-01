@@ -95,15 +95,18 @@ def get_channel_type_from_id(web_client: WebClient, channel_id: str) -> ChannelT
                 return ChannelType.PUBLIC_CHANNEL  # Public channel
             else:
                 logger.warning(
-                    f"Could not determine channel type for {channel_id}, defaulting to unknown"
+                    "Could not determine channel type for %s, defaulting to unknown",
+                    channel_id,
                 )
                 return ChannelType.UNKNOWN
         else:
-            logger.warning(f"Invalid channel info response for {channel_id}")
+            logger.warning("Invalid channel info response for %s", channel_id)
             return ChannelType.UNKNOWN
     except Exception as e:
         logger.warning(
-            f"Error getting channel info for {channel_id}, defaulting to unknown: {e}"
+            "Error getting channel info for %s, defaulting to unknown: %s",
+            channel_id,
+            e,
         )
         return ChannelType.UNKNOWN
 
@@ -124,9 +127,11 @@ def check_message_limit() -> bool:
         _ONYX_BOT_COUNT_START_TIME = time.time()
     if (_ONYX_BOT_MESSAGE_COUNT + 1) > ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
         logger.error(
-            f"OnyxBot has reached the message limit {ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
-            f" for the time period {ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
-            " These limits are configurable in backend/onyx/configs/onyxbot_configs.py"
+            "OnyxBot has reached the message limit %s"
+            " for the time period %s seconds."
+            " These limits are configurable in backend/onyx/configs/onyxbot_configs.py",
+            ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+            ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
         )
         return False
     _ONYX_BOT_MESSAGE_COUNT += 1
@@ -142,7 +147,11 @@ def update_emote_react(
 ) -> None:
     if not message_ts:
         action = "remove" if remove else "add"
-        logger.error(f"update_emote_react - no message specified: {channel=} {action=}")
+        logger.error(
+            "update_emote_react - no message specified: channel=%s action=%s",
+            channel,
+            action,
+        )
         return
 
     if remove:
@@ -153,7 +162,7 @@ def update_emote_react(
                 timestamp=message_ts,
             )
         except SlackApiError as e:
-            logger.error(f"Failed to remove Reaction due to: {e}")
+            logger.error("Failed to remove Reaction due to: %s", e)
 
         return
 
@@ -164,7 +173,7 @@ def update_emote_react(
             timestamp=message_ts,
         )
     except SlackApiError as e:
-        logger.error(f"Was not able to react to user message due to: {e}")
+        logger.error("Was not able to react to user message due to: %s", e)
 
     return
 
@@ -242,7 +251,7 @@ def respond_in_thread_or_channel(
             )
         except Exception as e:
             blocks_str = str(blocks)[:1024]  # truncate block logging
-            logger.warning(f"Failed to post message: {e} \n blocks: {blocks_str}")
+            logger.warning("Failed to post message: %s \n blocks: %s", e, blocks_str)
             logger.warning("Trying again without blocks that have urls")
 
             if not blocks:
@@ -280,7 +289,9 @@ def respond_in_thread_or_channel(
                 )
             except Exception as e:
                 blocks_str = str(blocks)[:1024]  # truncate block logging
-                logger.warning(f"Failed to post message: {e} \n blocks: {blocks_str}")
+                logger.warning(
+                    "Failed to post message: %s \n blocks: %s", e, blocks_str
+                )
                 logger.warning("Trying again without blocks that have urls")
 
                 if not blocks:
@@ -435,7 +446,7 @@ def get_channel_name_from_id(
         is_dm = any([channel_info.get("is_im"), channel_info.get("is_mpim")])
         return name, is_dm
     except SlackApiError as e:
-        logger.exception(f"Couldn't fetch channel name from id: {channel_id}")
+        logger.exception("Couldn't fetch channel name from id: %s", channel_id)
         raise e
 
 
@@ -451,7 +462,7 @@ def fetch_slack_user_ids_from_emails(
                 user.data["user"]["id"]  # ty: ignore[invalid-argument-type]
             )
         except Exception:
-            logger.error(f"Was not able to find slack user by email: {email}")
+            logger.error("Was not able to find slack user by email: %s", email)
             failed_to_find.append(email)
 
     return user_ids, failed_to_find
@@ -485,10 +496,10 @@ def fetch_user_ids_from_groups(
                 else:
                     failed_to_find.append(given_name)
             except Exception as e:
-                logger.error(f"Error fetching user group ids: {str(e)}")
+                logger.error("Error fetching user group ids: %s", e)
                 failed_to_find.append(given_name)
     except Exception as e:
-        logger.error(f"Error fetching user groups: {str(e)}")
+        logger.error("Error fetching user groups: %s", e)
         failed_to_find = given_names
 
     return user_ids, failed_to_find
@@ -520,7 +531,7 @@ def fetch_group_ids_from_names(
                 failed_to_find.append(given_name)
     except Exception as e:
         failed_to_find = given_names
-        logger.error(f"Error fetching user groups: {str(e)}")
+        logger.error("Error fetching user groups: %s", e)
 
     return group_data, failed_to_find
 
@@ -584,7 +595,7 @@ def read_slack_thread(
                 # auto-detected filters
                 blocks = reply.get("blocks")
                 if not blocks:
-                    logger.warning(f"OnyxBot response has no blocks: {reply}")
+                    logger.warning("OnyxBot response has no blocks: %s", reply)
                     continue
 
                 message = blocks[0].get("text", {}).get("text")
@@ -593,7 +604,7 @@ def read_slack_thread(
                 # The first block is the auto-detected filters
                 if message is not None and message.startswith("_Filters"):
                     if len(blocks) < 2:
-                        logger.warning(f"Only filter blocks found: {reply}")
+                        logger.warning("Only filter blocks found: %s", reply)
                         continue
                     # This is the OnyxBot answer format, if there is a change to how we respond,
                     # this will need to be updated to get the correct "answer" portion

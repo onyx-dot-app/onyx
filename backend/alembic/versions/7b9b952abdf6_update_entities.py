@@ -11,7 +11,6 @@ import json
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "7b9b952abdf6"
 down_revision = "36e9220ab794"

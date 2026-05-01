@@ -70,8 +70,8 @@ def _update_relationship_shelves(
             parent_to_child_db.sync()
 
     except Exception as e:
-        logger.error(f"Error updating relationship shelves: {e}")
-        logger.error(f"Child ID: {child_id}, Parent IDs: {parent_ids}")
+        logger.error("Error updating relationship shelves: %s", e)
+        logger.error("Child ID: %s, Parent IDs: %s", child_id, parent_ids)
         raise
 
 
@@ -134,7 +134,7 @@ def get_type_from_id(object_id: str) -> str | None:
     # Look up the object type from the ID-to-type mapping
     with shelve.open(get_id_type_shelf_path()) as id_type_db:
         if object_id not in id_type_db:
-            logger.warning(f"Object ID {object_id} not found in ID-to-type mapping")
+            logger.warning("Object ID %s not found in ID-to-type mapping", object_id)
             return None
         return id_type_db[object_id]
 
@@ -153,7 +153,7 @@ def get_record(
     shelf_path = get_object_shelf_path(object_type)
     with shelve.open(shelf_path) as db:
         if object_id not in db:
-            logger.warning(f"Object ID {object_id} not found in {shelf_path}")
+            logger.warning("Object ID %s not found in %s", object_id, shelf_path)
             return None
         data = db[object_id]
         return SalesforceObject(

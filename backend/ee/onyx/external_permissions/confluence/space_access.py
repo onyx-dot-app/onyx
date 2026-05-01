@@ -58,13 +58,15 @@ def _get_server_space_permissions(
         if user_email:
             user_emails.add(user_email)
         else:
-            logger.warning(f"Email for user {user_name} not found in Confluence")
+            logger.warning("Email for user %s not found in Confluence", user_name)
 
     if not user_emails and not group_names:
         logger.warning(
             "No user emails or group names found in Confluence space permissions"
-            f"\nSpace key: {space_key}"
-            f"\nSpace permissions: {space_permissions}"
+            "\nSpace key: %s"
+            "\nSpace permissions: %s",
+            space_key,
+            space_permissions,
         )
 
     return ExternalAccess(
@@ -126,10 +128,12 @@ def get_space_permission(
         and not space_permissions.external_user_group_ids
     ):
         logger.warning(
-            f"No permissions found for space '{space_key}'. This is very unlikely "
+            "No permissions found for space '%s'. This is very unlikely "
             "to be correct and is more likely caused by an access token with "
             "insufficient permissions. Make sure that the access token has Admin "
-            f"permissions for space '{space_key}'"
+            "permissions for space '%s'",
+            space_key,
+            space_key,
         )
 
     # Prefix group IDs with source type if requested (for indexing path)
@@ -169,7 +173,7 @@ def get_all_space_permissions(
     ]
 
     # Gets the permissions for each space
-    logger.debug(f"Got {len(all_space_keys)} spaces from confluence")
+    logger.debug("Got %s spaces from confluence", len(all_space_keys))
     space_permissions_by_space_key: dict[str, ExternalAccess] = {}
     for space_key in all_space_keys:
         space_permissions = get_space_permission(

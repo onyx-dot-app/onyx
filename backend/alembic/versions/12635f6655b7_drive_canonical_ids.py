@@ -155,7 +155,7 @@ def update_document_id_in_database(
         # print(f"Successfully updated database tables for document {old_doc_id} -> {new_doc_id}")
     except Exception as e:
         # If the full INSERT fails, try a more basic version with only core columns
-        logger.warning(f"Full INSERT failed, trying basic version: {e}")
+        logger.warning("Full INSERT failed, trying basic version: %s", e)
         bind.execute(
             sa.text(
                 """
@@ -273,7 +273,7 @@ def update_document_id_in_database(
         )
         # print(f"Successfully updated chunk_stats ID field for document {old_doc_id} -> {new_doc_id}")
     except Exception as e:
-        logger.warning(f"Some KG/chunk tables may not exist or failed to update: {e}")
+        logger.warning("Some KG/chunk tables may not exist or failed to update: %s", e)
 
     # Step 3: Delete the old document row (this should now be safe since all FKs point to new row)
     bind.execute(
@@ -498,7 +498,7 @@ def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
 
         except Exception as e:
             logger.warning(
-                f"Some KG/chunk tables may not exist or failed to delete from: {e}"
+                "Some KG/chunk tables may not exist or failed to delete from: %s", e
             )
 
         # Finally delete the document itself
@@ -581,7 +581,7 @@ def upgrade() -> None:
             # Continue with other documents instead of failing the entire migration
             continue
 
-    logger.info(f"Migration complete. Updated {updated_count} Google Drive documents")
+    logger.info("Migration complete. Updated %s Google Drive documents", updated_count)
 
 
 def downgrade() -> None:

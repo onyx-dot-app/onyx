@@ -91,7 +91,7 @@ def _perform_index_swap(
             contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
         )
     except ValueError as e:
-        logger.error(f"Model not found, defaulting to no contextual model: {e}")
+        logger.error("Model not found, defaulting to no contextual model: %s", e)
         update_no_default_contextual_rag_provider(
             db_session=db_session,
         )
@@ -111,7 +111,10 @@ def _perform_index_swap(
         for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
             try:
                 logger.notice(
-                    f"Document index {document_index.__class__.__name__} swap (attempt {x + 1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
+                    "Document index %s swap (attempt %s/%s)...",
+                    document_index.__class__.__name__,
+                    x + 1,
+                    VESPA_NUM_ATTEMPTS_ON_STARTUP,
                 )
                 document_index.ensure_indices_exist(
                     primary_embedding_dim=new_search_settings.final_embedding_dim,
@@ -126,15 +129,17 @@ def _perform_index_swap(
                 break
             except Exception:
                 logger.exception(
-                    f"Document index swap for {document_index.__class__.__name__} did not succeed. "
-                    f"The document index services may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
+                    "Document index swap for %s did not succeed. The document index services may not be ready yet. Retrying in %s seconds.",
+                    document_index.__class__.__name__,
+                    WAIT_SECONDS,
                 )
                 time.sleep(WAIT_SECONDS)
 
         if not success:
             logger.error(
-                f"Document index swap for {document_index.__class__.__name__} did not succeed. "
-                f"Attempt limit reached. ({VESPA_NUM_ATTEMPTS_ON_STARTUP})"
+                "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
+                document_index.__class__.__name__,
+                VESPA_NUM_ATTEMPTS_ON_STARTUP,
             )
             return None
 
@@ -230,5 +235,5 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         return None
 
     # Should not reach here, but handle gracefully
-    logger.error(f"Unknown switchover_type: {switchover_type}")
+    logger.error("Unknown switchover_type: %s", switchover_type)
     return None

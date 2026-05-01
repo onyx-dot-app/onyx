@@ -190,13 +190,13 @@ def process_all_chat_feedback(onyx_url: str, api_key: str | None) -> None:
     if not all_users:
         raise RuntimeError("manage_users returned None")
 
-    logger.info(f"Accepted users: {len(all_users.accepted)}")
+    logger.info("Accepted users: %s", len(all_users.accepted))
 
     user_ids: list[UUID] = [user.id for user in all_users.accepted]
 
     for user_id in user_ids:
         r_sessions = get_chat_sessions(onyx_url, headers, user_id)
-        logger.info(f"user={user_id} num_sessions={len(r_sessions.sessions)}")
+        logger.info("user=%s num_sessions=%s", user_id, len(r_sessions.sessions))
         for session in r_sessions.sessions:
             s: ChatSessionSnapshot
             try:
@@ -206,11 +206,12 @@ def process_all_chat_feedback(onyx_url: str, api_key: str | None) -> None:
 
             for m in s.messages:  # ty: ignore[possibly-unresolved-reference]
                 logger.info(
-                    f"user={user_id} "
-                    f"session={session.id} "
-                    f"message={m.message} "
-                    f"feedback_type={m.feedback_type} "
-                    f"feedback_text={m.feedback_text}"
+                    "user=%s session=%s message=%s feedback_type=%s feedback_text=%s",
+                    user_id,
+                    session.id,
+                    m.message,
+                    m.feedback_type,
+                    m.feedback_text,
                 )
 
 

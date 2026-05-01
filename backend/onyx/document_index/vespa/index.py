@@ -274,7 +274,7 @@ class VespaIndex(DocumentIndex):
         jinja_env = jinja2.Environment()
 
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
-        logger.notice(f"Deploying Vespa application package to {deploy_url}")
+        logger.notice("Deploying Vespa application package to %s", deploy_url)
 
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
@@ -359,7 +359,7 @@ class VespaIndex(DocumentIndex):
         response = requests.post(deploy_url, headers=headers, data=zip_file)
         if response.status_code != 200:
             logger.error(
-                f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
+                "Failed to prepare Vespa Onyx Index. Response: %s", response.text
             )
             raise RuntimeError(
                 f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
@@ -375,7 +375,7 @@ class VespaIndex(DocumentIndex):
             raise ValueError("Multi-tenant is not enabled")
 
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
-        logger.info(f"Deploying Vespa application package to {deploy_url}")
+        logger.info("Deploying Vespa application package to %s", deploy_url)
 
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
@@ -437,7 +437,9 @@ class VespaIndex(DocumentIndex):
             embedding_dim = embedding_dims[i]
             embedding_precision = embedding_precisions[i]
             logger.info(
-                f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
+                "Creating index: %s with embedding dimension: %s",
+                index_name,
+                embedding_dim,
             )
 
             schema = schema_template.render(
@@ -535,7 +537,9 @@ class VespaIndex(DocumentIndex):
             update: _VespaUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:
             logger.debug(
-                f"Updating with request to {update.url} with body {update.update_request}"
+                "Updating with request to %s with body %s",
+                update.url,
+                update.update_request,
             )
             return http_client.put(
                 update.url,
@@ -669,7 +673,8 @@ class VespaIndex(DocumentIndex):
         """
         if fields is None and user_fields is None:
             logger.warning(
-                f"Tried to update document {doc_id} with no updated fields or user fields."
+                "Tried to update document %s with no updated fields or user fields.",
+                doc_id,
             )
             return
 
@@ -930,7 +935,7 @@ class VespaIndex(DocumentIndex):
             int: The number of documents deleted.
         """
         logger.info(
-            f"Deleting entries with tenant_id: {tenant_id} from index: {index_name}"
+            "Deleting entries with tenant_id: %s from index: %s", tenant_id, index_name
         )
 
         # Step 1: Retrieve all document IDs with the given tenant_id
@@ -938,7 +943,9 @@ class VespaIndex(DocumentIndex):
 
         if not document_ids:
             logger.info(
-                f"No documents found with tenant_id: {tenant_id} in index: {index_name}"
+                "No documents found with tenant_id: %s in index: %s",
+                tenant_id,
+                index_name,
             )
             return 0
 
@@ -972,7 +979,9 @@ class VespaIndex(DocumentIndex):
         document_ids = []
 
         logger.debug(
-            f"Starting document ID retrieval for tenant_id: {tenant_id} in index: {index_name}"
+            "Starting document ID retrieval for tenant_id: %s in index: %s",
+            tenant_id,
+            index_name,
         )
 
         while True:
@@ -989,7 +998,9 @@ class VespaIndex(DocumentIndex):
             url = f"{VESPA_APPLICATION_ENDPOINT}/search/"
 
             logger.debug(
-                f"Querying for document IDs with tenant_id: {tenant_id}, offset: {offset}"
+                "Querying for document IDs with tenant_id: %s, offset: %s",
+                tenant_id,
+                offset,
             )
 
             with get_vespa_http_client() as http_client:
@@ -1010,7 +1021,7 @@ class VespaIndex(DocumentIndex):
                 offset += limit  # Move to the next page
 
         logger.debug(
-            f"Retrieved {len(document_ids)} document IDs for tenant_id: {tenant_id}"
+            "Retrieved %s document IDs for tenant_id: %s", len(document_ids), tenant_id
         )
         return document_ids
 
@@ -1036,7 +1047,7 @@ class VespaIndex(DocumentIndex):
         def _delete_document(
             delete_request: "_VespaDeleteRequest", http_client: httpx.Client
         ) -> None:
-            logger.debug(f"Deleting document with ID {delete_request.document_id}")
+            logger.debug("Deleting document with ID %s", delete_request.document_id)
             response = http_client.delete(
                 delete_request.url,
                 headers={"Content-Type": "application/json"},
@@ -1044,7 +1055,7 @@ class VespaIndex(DocumentIndex):
             )
             response.raise_for_status()
 
-        logger.debug(f"Starting batch deletion for {len(delete_requests)} documents")
+        logger.debug("Starting batch deletion for %s documents", len(delete_requests))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
             with get_vespa_http_client() as http_client:
@@ -1066,9 +1077,9 @@ class VespaIndex(DocumentIndex):
                         doc_id = future_to_document_id[future]
                         try:
                             future.result()
-                            logger.debug(f"Successfully deleted document: {doc_id}")
+                            logger.debug("Successfully deleted document: %s", doc_id)
                         except httpx.HTTPError as e:
-                            logger.error(f"Failed to delete document {doc_id}: {e}")
+                            logger.error("Failed to delete document %s: %s", doc_id, e)
                             # Optionally, implement retry logic or error handling here
 
         logger.info("Batch deletion completed")

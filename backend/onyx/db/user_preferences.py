@@ -126,7 +126,7 @@ def get_latest_access_token_for_user(
         )
         return result.scalar_one_or_none()
     except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
+        logger.error("Error fetching AccessToken: %s", e)
         return None
 
 

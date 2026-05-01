@@ -41,7 +41,7 @@ def upgrade() -> None:
         ).scalar_one()
 
         if null_count > 0:
-            logger.info(f"Generating UUIDs for {null_count} user_file records...")
+            logger.info("Generating UUIDs for %s user_file records...", null_count)
 
             # Populate in batches to avoid long locks
             batch_size = 10000
@@ -70,9 +70,9 @@ def upgrade() -> None:
                 if updated < batch_size:
                     break
 
-                logger.info(f"  Updated {total_updated}/{null_count} records...")
+                logger.info("  Updated %s/%s records...", total_updated, null_count)
 
-            logger.info(f"Generated UUIDs for {total_updated} user_file records")
+            logger.info("Generated UUIDs for %s user_file records", total_updated)
 
         # Verify all records have UUIDs
         remaining_null = bind.execute(
@@ -108,7 +108,7 @@ def upgrade() -> None:
         ).scalar_one()
 
         if null_count > 0:
-            logger.info(f"Updating {null_count} persona__user_file records...")
+            logger.info("Updating %s persona__user_file records...", null_count)
 
             # Update in batches
             batch_size = 10000
@@ -140,9 +140,9 @@ def upgrade() -> None:
                 if updated < batch_size:
                     break
 
-                logger.info(f"  Updated {total_updated}/{null_count} records...")
+                logger.info("  Updated %s/%s records...", total_updated, null_count)
 
-            logger.info(f"Updated {total_updated} persona__user_file records")
+            logger.info("Updated %s persona__user_file records", total_updated)
 
         # Verify all records are populated
         remaining_null = bind.execute(
@@ -181,7 +181,7 @@ def upgrade() -> None:
             )
         )
 
-        logger.info(f"Created {result.rowcount} user_project records from chat_folder")
+        logger.info("Created %s user_project records from chat_folder", result.rowcount)
 
     # === Step 4: Populate chat_session.project_id ===
     chat_session_columns = [
@@ -202,7 +202,7 @@ def upgrade() -> None:
         ).scalar_one()
 
         if null_count > 0:
-            logger.info(f"Updating {null_count} chat_session records...")
+            logger.info("Updating %s chat_session records...", null_count)
 
             result = bind.execute(
                 text(
@@ -216,7 +216,7 @@ def upgrade() -> None:
                 )
             )
 
-            logger.info(f"Updated {result.rowcount} chat_session records")
+            logger.info("Updated %s chat_session records", result.rowcount)
 
         # Verify all records are populated
         remaining_null = bind.execute(
@@ -230,7 +230,8 @@ def upgrade() -> None:
 
         if remaining_null > 0:
             logger.warning(
-                f"Warning: {remaining_null} chat_session records could not be mapped to projects"
+                "Warning: %s chat_session records could not be mapped to projects",
+                remaining_null,
             )
 
     # === Step 5: Update plaintext FileRecord IDs/display names to UUID scheme ===
@@ -251,7 +252,7 @@ def upgrade() -> None:
     legacy_count = bind.execute(count_query).scalar_one()
 
     if legacy_count and legacy_count > 0:
-        logger.info(f"Found {legacy_count} legacy plaintext file records to update")
+        logger.info("Found %s legacy plaintext file records to update", legacy_count)
 
         # Update display_name first for readability (safe regardless of rename)
         bind.execute(
@@ -281,7 +282,7 @@ def upgrade() -> None:
             )
         )
         logger.info(
-            f"Updated {result.rowcount} plaintext file_record ids to UUID scheme"
+            "Updated %s plaintext file_record ids to UUID scheme", result.rowcount
         )
 
     # === Step 6: Ensure document_id_migrated default TRUE and backfill existing FALSE ===
@@ -338,7 +339,7 @@ def upgrade() -> None:
         )
     )
 
-    logger.info(f"Updated status for {result.rowcount} user_file records")
+    logger.info("Updated status for %s user_file records", result.rowcount)
 
     logger.info("Migration 2 (data preparation) completed successfully")
 

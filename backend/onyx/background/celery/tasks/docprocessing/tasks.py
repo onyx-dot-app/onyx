@@ -368,7 +368,9 @@ def monitor_indexing_attempt_progress(
         )
     except Exception as e:
         logger.exception(
-            f"Failed to monitor document processing completion: attempt={attempt.id} error={str(e)}"
+            "Failed to monitor document processing completion: attempt=%s error=%s",
+            attempt.id,
+            str(e),
         )
 
         # Mark the attempt as failed if monitoring fails
@@ -386,7 +388,7 @@ def monitor_indexing_attempt_progress(
 
         # Try to clean up storage
         try:
-            logger.info(f"Cleaning up storage after monitoring failure: {storage}")
+            logger.info("Cleaning up storage after monitoring failure: %s", storage)
             storage.cleanup_all_batches()
         except Exception:
             logger.exception("Failed to cleanup storage after monitoring failure")
@@ -416,7 +418,9 @@ def check_indexing_completion(
     task: Task,
 ) -> None:
     logger.info(
-        f"Checking for indexing completion: attempt={index_attempt_id} tenant={tenant_id}"
+        "Checking for indexing completion: attempt=%s tenant=%s",
+        index_attempt_id,
+        tenant_id,
     )
 
     # Check if indexing is complete and all batches are processed
@@ -427,12 +431,13 @@ def check_indexing_completion(
     )
 
     logger.info(
-        f"Indexing status: "
-        f"indexing_completed={indexing_completed} "
-        f"batches_processed={batches_processed}/{batches_total if batches_total is not None else '?'} "
-        f"total_docs={coordination_status.total_docs} "
-        f"total_chunks={coordination_status.total_chunks} "
-        f"total_failures={coordination_status.total_failures}"
+        "Indexing status: indexing_completed=%s batches_processed=%s/%s total_docs=%s total_chunks=%s total_failures=%s",
+        indexing_completed,
+        batches_processed,
+        batches_total if batches_total is not None else "?",
+        coordination_status.total_docs,
+        coordination_status.total_chunks,
+        coordination_status.total_failures,
     )
 
     # Update progress tracking and check for stalls
@@ -465,9 +470,10 @@ def check_indexing_completion(
         if attempt and timed_out:
             if attempt.status == IndexingStatus.IN_PROGRESS:
                 logger.error(
-                    f"Indexing attempt {index_attempt_id} has been indexing for "
-                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without progress. "
-                    f"Marking it as failed."
+                    "Indexing attempt %s has been indexing for %s-%s hours without progress. Marking it as failed.",
+                    index_attempt_id,
+                    stalled_timeout_hours // 2,
+                    stalled_timeout_hours,
                 )
                 mark_attempt_failed(
                     index_attempt_id, db_session, failure_reason="Stalled indexing"
@@ -496,9 +502,9 @@ def check_indexing_completion(
                     attempt = get_index_attempt(db_session, index_attempt_id)
                     if attempt and attempt.status == IndexingStatus.NOT_STARTED:
                         logger.error(
-                            f"Task {attempt.celery_task_id} attached to indexing attempt "
-                            f"{index_attempt_id} does not exist in the queue. "
-                            f"Marking indexing attempt as failed."
+                            "Task %s attached to indexing attempt %s does not exist in the queue. Marking indexing attempt as failed.",
+                            attempt.celery_task_id,
+                            index_attempt_id,
                         )
                         mark_attempt_failed(
                             index_attempt_id,
@@ -507,9 +513,11 @@ def check_indexing_completion(
                         )
             else:
                 logger.info(
-                    f"Indexing attempt {index_attempt_id} is {attempt.status}. "
-                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without heartbeat "
-                    "but task is in the queue. Likely underprovisioned docfetching worker."
+                    "Indexing attempt %s is %s. %s-%s hours without heartbeat but task is in the queue. Likely underprovisioned docfetching worker.",
+                    index_attempt_id,
+                    attempt.status,
+                    stalled_timeout_hours // 2,
+                    stalled_timeout_hours,
                 )
                 # Update last progress time so we won't time out again for
                 # another `stalled_timeout_hours / 2` window.
@@ -528,7 +536,7 @@ def check_indexing_completion(
         return
 
     # If processing is complete, handle completion
-    logger.info(f"Connector indexing finished for index attempt {index_attempt_id}.")
+    logger.info("Connector indexing finished for index attempt %s.", index_attempt_id)
 
     # All processing is complete
     total_failures = coordination_status.total_failures
@@ -536,11 +544,13 @@ def check_indexing_completion(
     with get_session_with_current_tenant() as db_session:
         if total_failures == 0:
             attempt = mark_attempt_succeeded(index_attempt_id, db_session)
-            logger.info(f"Index attempt {index_attempt_id} completed successfully")
+            logger.info("Index attempt %s completed successfully", index_attempt_id)
         else:
             attempt = mark_attempt_partially_succeeded(index_attempt_id, db_session)
             logger.info(
-                f"Index attempt {index_attempt_id} completed with {total_failures} failures"
+                "Index attempt %s completed with %s failures",
+                index_attempt_id,
+                total_failures,
             )
 
         # Update CC pair status if successful
@@ -622,7 +632,7 @@ def check_indexing_completion(
 
             if attempt.status == IndexingStatus.SUCCESS:
                 logger.info(
-                    f"Resolving indexing entity errors for attempt {index_attempt_id}"
+                    "Resolving indexing entity errors for attempt %s", index_attempt_id
                 )
                 _resolve_indexing_entity_errors(
                     cc_pair_id=attempt.connector_credential_pair_id,
@@ -631,7 +641,7 @@ def check_indexing_completion(
 
     # Clean up FileStore storage (still needed for document batches during transition)
     try:
-        logger.info(f"Cleaning up storage after indexing completion: {storage}")
+        logger.info("Cleaning up storage after indexing completion: %s", storage)
         storage.cleanup_all_batches()
     except Exception:
         logger.exception("Failed to clean up document batches - continuing")
@@ -653,7 +663,7 @@ def check_indexing_completion(
             "caught by the next attempt's start-of-run sweep."
         )
 
-    logger.info(f"Database coordination completed for attempt {index_attempt_id}")
+    logger.info("Database coordination completed for attempt %s", index_attempt_id)
 
 
 def active_indexing_attempt(
@@ -871,7 +881,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 if is_fence(key_bytes) and not redis_client.sismember(
                     OnyxRedisConstants.ACTIVE_FENCES, key_bytes
                 ):
-                    logger.warning(f"Adding {key_bytes} to the lookup table.")
+                    logger.warning("Adding %s to the lookup table.", key_bytes)
                     redis_client.sadd(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
 
             redis_client.set(
@@ -1377,7 +1387,9 @@ def _check_failure_threshold(
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
+            "Connector run failed with '%s' errors after '%s' batches.",
+            total_failures,
+            batch_num,
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
@@ -1421,7 +1433,7 @@ def _resolve_indexing_document_errors(
             if document_id not in doc_id_to_unresolved_errors:
                 continue
 
-            logger.info(f"Resolving IndexAttemptError for document '{document_id}'")
+            logger.info("Resolving IndexAttemptError for document '%s'", document_id)
             for error in doc_id_to_unresolved_errors[document_id]:
                 error.is_resolved = True
                 db_session_temp.add(error)

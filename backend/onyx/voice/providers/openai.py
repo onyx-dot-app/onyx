@@ -73,7 +73,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._logger = setup_logger()
 
         self._logger.info(
-            f"OpenAIStreamingTranscriber: initializing with model {model}"
+            "OpenAIStreamingTranscriber: initializing with model %s", model
         )
         self.api_key = api_key
         self.model = model
@@ -102,7 +102,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._ws = await self._session.ws_connect(url, headers=headers)
             self._logger.info("Connected to OpenAI Realtime API")
         except Exception as e:
-            self._logger.error(f"Failed to connect to OpenAI Realtime API: {e}")
+            self._logger.error("Failed to connect to OpenAI Realtime API: %s", e)
             raise
 
         # Configure the session for transcription
@@ -123,7 +123,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             },
         }
         await self._ws.send_str(json.dumps(config_message))
-        self._logger.info(f"Sent config for model: {self.model} with server VAD")
+        self._logger.info("Sent config for model: %s with server VAD", self.model)
 
         # Start receiving transcripts
         self._receive_task = asyncio.create_task(self._receive_loop())
@@ -138,12 +138,12 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     msg_type = data.get("type", "")
-                    self._logger.debug(f"Received message type: {msg_type}")
+                    self._logger.debug("Received message type: %s", msg_type)
 
                     # Handle errors
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
-                        self._logger.error(f"OpenAI error: {error}")
+                        self._logger.error("OpenAI error: %s", error)
                         continue
 
                     # Handle VAD events
@@ -165,7 +165,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     if msg_type == OpenAIRealtimeMessageType.TRANSCRIPTION_DELTA:
                         delta = data.get("delta", "")
                         if delta:
-                            self._logger.info(f"OpenAI: Transcription delta: {delta}")
+                            self._logger.info("OpenAI: Transcription delta: %s", delta)
                             self._current_turn_transcript += delta
                             # Show accumulated + current turn transcript
                             full_transcript = self._accumulated_transcript
@@ -179,7 +179,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                         transcript = data.get("transcript", "")
                         if transcript:
                             self._logger.info(
-                                f"OpenAI: Transcription completed (VAD turn end): {transcript[:50]}..."
+                                "OpenAI: Transcription completed (VAD turn end): %s...",
+                                transcript[:50],
                             )
                             # This is the final transcript for this VAD turn
                             self._current_turn_transcript = transcript
@@ -202,17 +203,17 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     ):
                         # Log any other message types we might be missing
                         self._logger.info(
-                            f"OpenAI: Unhandled message type '{msg_type}': {data}"
+                            "OpenAI: Unhandled message type '%s': %s", msg_type, data
                         )
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    self._logger.error(f"WebSocket error: {self._ws.exception()}")
+                    self._logger.error("WebSocket error: %s", self._ws.exception())
                     break
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
                     self._logger.info("WebSocket closed by server")
                     break
         except Exception as e:
-            self._logger.error(f"Error in receive loop: {e}")
+            self._logger.error("Error in receive loop: %s", e)
         finally:
             await self._transcript_queue.put(None)
 
@@ -224,8 +225,10 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             # So chunk_bytes / 48000 = duration in seconds
             duration_ms = (len(chunk) / 48000) * 1000
             self._logger.debug(
-                f"Sending {len(chunk)} bytes ({duration_ms:.1f}ms) of audio to OpenAI. "
-                f"First 10 bytes: {chunk[:10].hex() if len(chunk) >= 10 else chunk.hex()}"
+                "Sending %s bytes (%sms) of audio to OpenAI. " "First 10 bytes: %s",
+                len(chunk),
+                format(duration_ms, ".1f"),
+                chunk[:10].hex() if len(chunk) >= 10 else chunk.hex(),
             )
             message = {
                 "type": "input_audio_buffer.append",
@@ -257,7 +260,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     json.dumps({"type": "input_audio_buffer.commit"})
                 )
             except Exception as e:
-                self._logger.debug(f"Error sending commit (may be expected): {e}")
+                self._logger.debug("Error sending commit (may be expected): %s", e)
 
             # Wait for *new* transcription to arrive (up to 5 seconds)
             self._logger.info("Waiting for transcription to complete...")
@@ -266,7 +269,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 await asyncio.sleep(0.1)
                 if self._accumulated_transcript != transcript_before_commit:
                     self._logger.info(
-                        f"Got final transcript: {self._accumulated_transcript[:50]}..."
+                        "Got final transcript: %s...", self._accumulated_transcript[:50]
                     )
                     break
             else:
@@ -387,7 +390,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self._logger.error(f"Error processing text queue: {e}")
+                self._logger.error("Error processing text queue: %s", e)
 
     async def _synthesize_text(self, text: str) -> None:
         """Make HTTP TTS request and stream audio to queue."""
@@ -413,7 +416,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self._logger.error(f"OpenAI TTS error: {error_text}")
+                    self._logger.error("OpenAI TTS error: %s", error_text)
                     return
 
                 # Use 8192 byte chunks for smoother streaming
@@ -424,7 +427,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
                     if chunk:
                         await self._audio_queue.put(chunk)
         except Exception as e:
-            self._logger.error(f"OpenAIStreamingSynthesizer synthesis error: {e}")
+            self._logger.error("OpenAIStreamingSynthesizer synthesis error: %s", e)
 
     async def send_text(self, text: str) -> None:
         """Queue text to be synthesized via HTTP streaming."""

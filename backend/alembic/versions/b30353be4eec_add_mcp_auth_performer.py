@@ -10,7 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from onyx.db.enums import MCPAuthenticationPerformer, MCPTransport
 
-
 # revision identifiers, used by Alembic.
 revision = "b30353be4eec"
 down_revision = "2b75d0a8ffcb"

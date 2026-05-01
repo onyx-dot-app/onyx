@@ -17,7 +17,6 @@ from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
-
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
 down_revision = "ca04500b9ee8"

@@ -561,7 +561,7 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug(f"Received new chat message: {chat_message_req.message}")
+    logger.debug("Received new chat message: %s", chat_message_req.message)
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(

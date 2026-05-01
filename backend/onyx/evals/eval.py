@@ -249,8 +249,11 @@ def _get_answer_with_tools(
             )
 
             logger.info(
-                f"Eval completed. Tools called: {result.tools_called}.\n"
-                f"Assertion passed: {assertion_passed}. Details: {assertion_details}\n"
+                "Eval completed. Tools called: %s.\n"
+                "Assertion passed: %s. Details: %s",
+                result.tools_called,
+                assertion_passed,
+                assertion_details,
             )
 
             return EvalToolResult(
@@ -333,7 +336,10 @@ def _get_multi_turn_answer_with_tools(
             # Process each turn sequentially
             for turn_idx, msg in enumerate(messages):
                 logger.info(
-                    f"Processing turn {turn_idx + 1}/{len(messages)}: {msg.message[:50]}..."
+                    "Processing turn %s/%s: %s...",
+                    turn_idx + 1,
+                    len(messages),
+                    msg.message[:50],
                 )
 
                 # Handle per-turn tool forcing
@@ -403,8 +409,12 @@ def _get_multi_turn_answer_with_tools(
                 )
 
                 logger.info(
-                    f"Turn {turn_idx + 1} completed. Tools called: {result.tools_called}.\n"
-                    f"Assertion passed: {assertion_passed}. Details: {assertion_details}\n"
+                    "Turn %s completed. Tools called: %s.\n"
+                    "Assertion passed: %s. Details: %s",
+                    turn_idx + 1,
+                    result.tools_called,
+                    assertion_passed,
+                    assertion_details,
                 )
 
                 turn_results.append(

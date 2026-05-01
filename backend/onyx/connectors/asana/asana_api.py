@@ -75,13 +75,13 @@ class AsanaAPI:
                 projects_list.append(project_gid)
             else:
                 logger.debug(
-                    f"Skipping project: {project_gid} - not in accepted project_gids"
+                    "Skipping project: %s - not in accepted project_gids", project_gid
                 )
             project_count += 1
             if project_count % 100 == 0:
-                logger.info(f"Processed {project_count} projects")
+                logger.info("Processed %s projects", project_count)
 
-        logger.info(f"Found {len(projects_list)} projects to process")
+        logger.info("Found %s projects to process", len(projects_list))
         # Asana tasks can belong to multiple projects and thus tasks
         # can get reported multiple times
         seen_task_gids: set[str] = set()
@@ -90,10 +90,10 @@ class AsanaAPI:
                 project_gid, start_date, start_seconds, seen_task_gids
             ):
                 yield task
-        logger.info(f"Completed fetching {self.task_count} tasks from Asana")
+        logger.info("Completed fetching %s tasks from Asana", self.task_count)
         if self.api_error_count > 0:
             logger.warning(
-                f"Encountered {self.api_error_count} API errors during task fetching"
+                "Encountered %s API errors during task fetching", self.api_error_count
             )
 
     def _get_tasks_for_project(
@@ -109,26 +109,33 @@ class AsanaAPI:
         team_gid = team.get("gid")
 
         if project.get("archived"):
-            logger.info(f"Skipping archived project: {project_name} ({project_gid})")
+            logger.info("Skipping archived project: %s (%s)", project_name, project_gid)
             return
         if not team_gid:
             logger.info(
-                f"Skipping project without a team: {project_name} ({project_gid})"
+                "Skipping project without a team: %s (%s)", project_name, project_gid
             )
             return
         if project.get("privacy_setting") == "private":
             if self.team_gid and team_gid != self.team_gid:
                 logger.info(
-                    f"Skipping private project not in configured team: {project_name} ({project_gid})"
+                    "Skipping private project not in configured team: %s (%s)",
+                    project_name,
+                    project_gid,
                 )
                 return
             logger.info(
-                f"Processing private project in configured team: {project_name} ({project_gid})"
+                "Processing private project in configured team: %s (%s)",
+                project_name,
+                project_gid,
             )
 
         simple_start_date = start_date.split(".")[0].split("+")[0]
         logger.info(
-            f"Fetching tasks modified since {simple_start_date} for project: {project_name} ({project_gid})"
+            "Fetching tasks modified since %s for project: %s (%s)",
+            simple_start_date,
+            project_name,
+            project_gid,
         )
 
         opts = {
@@ -143,8 +150,8 @@ class AsanaAPI:
             gid = data["gid"]
             if gid in seen_task_gids:
                 logger.debug(
-                    f"Skipping duplicate Asana task {gid} "
-                    f"(already yielded for another project)"
+                    "Skipping duplicate Asana task %s (already yielded for another project)",
+                    gid,
                 )
                 continue
             seen_task_gids.add(gid)
@@ -155,11 +162,13 @@ class AsanaAPI:
                 runtime_seconds = end_seconds - start_seconds
                 if runtime_seconds > 0:
                     logger.info(
-                        f"Processed {self.task_count} tasks in {runtime_seconds:.0f} seconds "
-                        f"({self.task_count / runtime_seconds:.2f} tasks/second)"
+                        "Processed %s tasks in %s seconds (%s tasks/second)",
+                        self.task_count,
+                        format(runtime_seconds, ".0f"),
+                        format(self.task_count / runtime_seconds, ".2f"),
                     )
 
-            logger.debug(f"Processing Asana task: {data['name']}")
+            logger.debug("Processing Asana task: %s", data["name"])
 
             text = self._construct_task_text(data)
 
@@ -181,7 +190,9 @@ class AsanaAPI:
                 yield task
             except Exception:
                 logger.error(
-                    f"Error processing task {data['gid']} in project {project_gid}",
+                    "Error processing task %s in project %s",
+                    data["gid"],
+                    project_gid,
                     exc_info=True,
                 )
                 self.api_error_count += 1
@@ -229,7 +240,10 @@ class AsanaAPI:
 
         story_duration = time.time() - story_start
         logger.debug(
-            f"Processed {story_count} stories (including {comment_count} comments) in {story_duration:.2f} seconds"
+            "Processed %s stories (including %s comments) in %s seconds",
+            story_count,
+            comment_count,
+            format(story_duration, ".2f"),
         )
 
         return text
@@ -240,7 +254,9 @@ class AsanaAPI:
         self._user = self.users_api.get_user(user_gid, {"opt_fields": "name,email"})
 
         if not self._user:
-            logger.warning(f"Unable to fetch user information for user_gid: {user_gid}")
+            logger.warning(
+                "Unable to fetch user information for user_gid: %s", user_gid
+            )
             return {"name": "Unknown"}
         return self._user
 

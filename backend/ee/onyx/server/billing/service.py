@@ -122,7 +122,7 @@ async def _make_billing_request(
             detail = error_data.get("detail", detail)
         except Exception:
             pass
-        logger.error(f"{error_message}: {e.response.status_code} - {detail}")
+        logger.error("%s: %s - %s", error_message, e.response.status_code, detail)
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             detail,

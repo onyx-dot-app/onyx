@@ -116,7 +116,7 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     try:
         addr_info = socket.getaddrinfo(hostname, port)
     except socket.gaierror as e:
-        logger.warning(f"DNS resolution failed for hostname '{hostname}': {e}")
+        logger.warning("DNS resolution failed for hostname '%s': %s", hostname, e)
         raise SSRFException(f"Could not resolve hostname '{hostname}': {e}")
 
     if not addr_info:

@@ -350,12 +350,13 @@ def update_cc_pair_status(
                 if attempt.celery_task_id:
                     client_app.control.revoke(attempt.celery_task_id)
                 logger.info(
-                    f"Requested cancellation for active indexing attempt {attempt.id} "
-                    f"due to connector pause: cc_pair={cc_pair_id}"
+                    "Requested cancellation for active indexing attempt %s due to connector pause: cc_pair=%s",
+                    attempt.id,
+                    cc_pair_id,
                 )
             except Exception:
                 logger.exception(
-                    f"Failed to request cancellation for indexing attempt {attempt.id}"
+                    "Failed to request cancellation for indexing attempt %s", attempt.id
                 )
 
     else:
@@ -502,10 +503,11 @@ def prune_cc_pair(
         )
 
     logger.info(
-        f"Pruning cc_pair: cc_pair={cc_pair_id} "
-        f"connector={cc_pair.connector_id} "
-        f"credential={cc_pair.credential_id} "
-        f"{cc_pair.connector.name} connector."
+        "Pruning cc_pair: cc_pair=%s connector=%s credential=%s %s connector.",
+        cc_pair_id,
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        cc_pair.connector.name,
     )
     payload_id = try_creating_prune_generator_task(
         client_app, cc_pair, db_session, r, tenant_id
@@ -516,7 +518,7 @@ def prune_cc_pair(
             detail="Pruning task creation failed.",
         )
 
-    logger.info(f"Pruning queued: cc_pair={cc_pair.id} id={payload_id}")
+    logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
 
     return StatusResponse(
         success=True,
@@ -635,7 +637,8 @@ def associate_credential_to_connector(
         )
 
         logger.info(
-            f"associate_credential_to_connector - running check_for_indexing: cc_pair={response.data}"
+            "associate_credential_to_connector - running check_for_indexing: cc_pair=%s",
+            response.data,
         )
 
         return response
@@ -651,14 +654,14 @@ def associate_credential_to_connector(
             status_code=400, detail="Connector validation error: " + str(e)
         )
     except IntegrityError as e:
-        logger.error(f"IntegrityError: {e}")
+        logger.error("IntegrityError: %s", e)
         delete_connector(db_session, connector_id)
         db_session.commit()
 
         raise HTTPException(status_code=400, detail="Name must be unique")
 
     except Exception as e:
-        logger.exception(f"Unexpected error: {e}")
+        logger.exception("Unexpected error: %s", e)
 
         raise HTTPException(status_code=500, detail="Unexpected error")
 

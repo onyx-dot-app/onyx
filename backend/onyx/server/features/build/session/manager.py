@@ -342,7 +342,8 @@ class SessionManager:
                 )
             else:
                 logger.warning(
-                    f"Requested provider type {requested_provider_type} not found, falling back to default"
+                    "Requested provider type %s not found, falling back to default",
+                    requested_provider_type,
                 )
 
         # Fallback to system default
@@ -462,7 +463,10 @@ class SessionManager:
         self._db_session.flush()
         session_id = str(build_session.id)
         logger.info(
-            f"Created build session {session_id} for user {user_id} (port: {nextjs_port})"
+            "Created build session %s for user %s (port: %s)",
+            session_id,
+            user_id,
+            nextjs_port,
         )
 
         # Check if user already has a sandbox (one sandbox per user model)
@@ -480,7 +484,10 @@ class SessionManager:
             ):
                 # Re-provision sandbox (pod doesn't exist or failed)
                 logger.info(
-                    f"Re-provisioning {sandbox.status.value} sandbox {sandbox_id} for user {user_id}"
+                    "Re-provisioning %s sandbox %s for user %s",
+                    sandbox.status.value,
+                    sandbox_id,
+                    user_id,
                 )
                 sandbox_info = self._sandbox_manager.provision(
                     sandbox_id=sandbox_id,
@@ -496,7 +503,9 @@ class SessionManager:
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
                     logger.warning(
-                        f"Sandbox {sandbox_id} marked as {sandbox.status} but pod is unhealthy/missing. Entering recovery mode."
+                        "Sandbox %s marked as %s but pod is unhealthy/missing. Entering recovery mode.",
+                        sandbox_id,
+                        sandbox.status,
                     )
                     # Terminate to clean up any lingering K8s resources
                     self._sandbox_manager.terminate(sandbox_id)
@@ -507,7 +516,7 @@ class SessionManager:
                     )
 
                     logger.info(
-                        f"Re-provisioning sandbox {sandbox_id} for user {user_id}"
+                        "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
                     )
                     sandbox_info = self._sandbox_manager.provision(
                         sandbox_id=sandbox_id,
@@ -521,7 +530,10 @@ class SessionManager:
                     )
                 else:
                     logger.info(
-                        f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) for new session {session_id}"
+                        "Reusing existing sandbox %s (status: %s) for new session %s",
+                        sandbox_id,
+                        sandbox.status,
+                        session_id,
                     )
             else:
                 # PROVISIONING status - sandbox is being created by another request
@@ -539,7 +551,9 @@ class SessionManager:
                 user_id=user_id,
             )
             sandbox_id = sandbox.id
-            logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
+            logger.info(
+                "Created sandbox record %s for session %s", sandbox_id, session_id
+            )
 
             # Provision sandbox (no DB operations inside)
             sandbox_info = self._sandbox_manager.provision(
@@ -556,7 +570,7 @@ class SessionManager:
 
         # Set up session workspace within the sandbox
         logger.info(
-            f"Setting up session workspace {session_id} in sandbox {sandbox.id}"
+            "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
         # Fetch user data for personalization in AGENTS.md
         user = fetch_user_by_id(self._db_session, user_id)
@@ -572,7 +586,8 @@ class SessionManager:
             )
             if excluded_user_library_paths:
                 logger.debug(
-                    f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
+                    "Excluding %s disabled user library paths",
+                    len(excluded_user_library_paths),
                 )
 
         self._sandbox_manager.setup_session_workspace(
@@ -592,7 +607,9 @@ class SessionManager:
 
         sandbox_id = sandbox.id
         logger.info(
-            f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
+            "Successfully created session %s with workspace in sandbox %s",
+            session_id,
+            sandbox.id,
         )
 
         return build_session
@@ -636,7 +653,7 @@ class SessionManager:
         )
         if existing:
             logger.info(
-                f"Existing empty session {existing.id} found for user {user_id}"
+                "Existing empty session %s found for user %s", existing.id, user_id
             )
             # Verify sandbox is healthy before returning existing session
             sandbox = get_sandbox_by_user_id(self._db_session, user_id)
@@ -654,23 +671,28 @@ class SessionManager:
                 )
                 if is_healthy and workspace_exists:
                     logger.info(
-                        f"Returning existing empty session {existing.id} for user {user_id}"
+                        "Returning existing empty session %s for user %s",
+                        existing.id,
+                        user_id,
                     )
                     return existing
                 elif not is_healthy:
                     logger.warning(
-                        f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. Deleting and creating fresh session."
+                        "Empty session %s has unhealthy sandbox %s. Deleting and creating fresh session.",
+                        existing.id,
+                        sandbox.id,
                     )
                 else:
                     logger.warning(
-                        f"Empty session {existing.id} workspace missing in sandbox "
-                        f"{sandbox.id}. Deleting and creating fresh session."
+                        "Empty session %s workspace missing in sandbox %s. Deleting and creating fresh session.",
+                        existing.id,
+                        sandbox.id,
                     )
             else:
                 logger.warning(
-                    f"Empty session {existing.id} has no active sandbox "
-                    f"(sandbox={'missing' if not sandbox else sandbox.status}). "
-                    f"Deleting and creating fresh session."
+                    "Empty session %s has no active sandbox (sandbox=%s). Deleting and creating fresh session.",
+                    existing.id,
+                    "missing" if not sandbox else sandbox.status,
                 )
 
             # Delete the stale empty session - create_session__no_commit will
@@ -702,7 +724,7 @@ class SessionManager:
         empty_session = get_empty_session_for_user(user_id, self._db_session)
 
         if not empty_session:
-            logger.info(f"No empty session found for user {user_id}")
+            logger.info("No empty session found for user %s", user_id)
             return False
 
         session_id = empty_session.id
@@ -717,15 +739,19 @@ class SessionManager:
                     nextjs_port=empty_session.nextjs_port,
                 )
                 logger.info(
-                    f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
+                    "Cleaned up session workspace %s in sandbox %s",
+                    session_id,
+                    sandbox.id,
                 )
             except Exception as e:
                 # Log but don't fail - session can still be deleted
-                logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
+                logger.warning(
+                    "Failed to cleanup session workspace %s: %s", session_id, e
+                )
 
         # Delete session (cascade deletes artifacts)
         delete_build_session__no_commit(session_id, user_id, self._db_session)
-        logger.info(f"Deleted empty session {session_id} for user {user_id}")
+        logger.info("Deleted empty session %s for user %s", session_id, user_id)
 
         return True
 
@@ -878,7 +904,7 @@ class SessionManager:
                 else f"Build Session {str(session_id)[:8]}"
             )
         except Exception as e:
-            logger.warning(f"Failed to generate session name with LLM: {e}")
+            logger.warning("Failed to generate session name with LLM: %s", e)
             # Fallback to simple truncation
             return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
 
@@ -928,7 +954,7 @@ class SessionManager:
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
-            logger.warning(f"Failed to generate follow-up suggestions with LLM: {e}")
+            logger.warning("Failed to generate follow-up suggestions with LLM: %s", e)
             return []
 
     def _parse_suggestions(self, raw_output: str) -> list[dict[str, str]]:
@@ -998,7 +1024,7 @@ class SessionManager:
 
         # Silent fail - return empty list
         logger.warning(
-            f"Failed to parse suggestions from LLM output: {raw_output[:200]}"
+            "Failed to parse suggestions from LLM output: %s", raw_output[:200]
         )
         return []
 
@@ -1038,12 +1064,16 @@ class SessionManager:
                     nextjs_port=session.nextjs_port,
                 )
                 logger.info(
-                    f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
+                    "Cleaned up session workspace %s in sandbox %s",
+                    session_id,
+                    sandbox.id,
                 )
             except Exception as e:
                 # Log but don't fail - session can still be deleted even if
                 # workspace cleanup fails (e.g., if pod is already terminated)
-                logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
+                logger.warning(
+                    "Failed to cleanup session workspace %s: %s", session_id, e
+                )
 
         # Delete snapshot files from S3 before removing DB records
         snapshots = get_snapshots_for_session(self._db_session, session_id)
@@ -1059,7 +1089,9 @@ class SessionManager:
                     snapshot_manager.delete_snapshot(snapshot.storage_path)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to delete snapshot file {snapshot.storage_path}: {e}"
+                        "Failed to delete snapshot file %s: %s",
+                        snapshot.storage_path,
+                        e,
                     )
 
         # Delete session (uses flush, caller commits)
@@ -1508,7 +1540,7 @@ class SessionManager:
                     "error": str(e),
                 },
             )
-            logger.exception(f"RuntimeError in build message streaming: {e}")
+            logger.exception("RuntimeError in build message streaming: %s", e)
             yield _format_packet_event(error_packet)
         except Exception as e:
             error_packet = ErrorPacket(message=str(e))
@@ -2241,13 +2273,13 @@ class SessionManager:
             return False
 
         if sandbox.status == SandboxStatus.TERMINATED:
-            logger.info(f"Sandbox {sandbox.id} already terminated")
+            logger.info("Sandbox %s already terminated", sandbox.id)
             return True
 
         try:
             # Terminate the sandbox (this cleans up all resources)
             self._sandbox_manager.terminate(sandbox.id)
-            logger.info(f"Terminated sandbox {sandbox.id} for user {user_id}")
+            logger.info("Terminated sandbox %s for user %s", sandbox.id, user_id)
 
             # Update status in database
             update_sandbox_status__no_commit(
@@ -2258,5 +2290,5 @@ class SessionManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to terminate sandbox {sandbox.id}: {e}")
+            logger.error("Failed to terminate sandbox %s: %s", sandbox.id, e)
             raise RuntimeError(f"Failed to terminate sandbox: {e}") from e

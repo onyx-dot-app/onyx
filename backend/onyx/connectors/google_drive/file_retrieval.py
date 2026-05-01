@@ -146,11 +146,11 @@ def get_folder_metadata(
         )
     except HttpError as e:
         if e.resp.status in (403, 404):
-            logger.debug(f"Cannot access folder {folder_id}: {e}")
+            logger.debug("Cannot access folder %s: %s", folder_id, e)
         else:
             raise e
     except RefreshError:
-        logger.debug(f"Cannot access folder {folder_id}: impersonation failed")
+        logger.debug("Cannot access folder %s: impersonation failed", folder_id)
     return None
 
 
@@ -179,11 +179,11 @@ def get_shared_drive_name(
         return drive.get("name")
     except HttpError as e:
         if e.resp.status in (403, 404):
-            logger.debug(f"Cannot access drive {drive_id}: {e}")
+            logger.debug("Cannot access drive %s: %s", drive_id, e)
         else:
             raise
     except RefreshError:
-        logger.debug(f"Cannot access drive {drive_id}: impersonation failed")
+        logger.debug("Cannot access drive %s: impersonation failed", drive_id)
     return None
 
 
@@ -308,7 +308,7 @@ def crawl_folders_for_files(
                 start=start,
                 end=end,
             ):
-                logger.info(f"Found file: {file['name']}, user email: {user_email}")
+                logger.info("Found file: %s, user email: %s", file["name"], user_email)
                 found_files = True
                 yield RetrievedDriveFile(
                     drive_file=file,
@@ -327,9 +327,9 @@ def crawl_folders_for_files(
             if isinstance(e, HttpError) and e.status_code == 403:
                 # don't yield an error here because this is expected behavior
                 # when a user doesn't have access to a folder
-                logger.debug(f"Error getting files in parent {parent_id}: {e}")
+                logger.debug("Error getting files in parent %s: %s", parent_id, e)
             else:
-                logger.error(f"Error getting files in parent {parent_id}: {e}")
+                logger.error("Error getting files in parent %s: %s", parent_id, e)
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,
@@ -338,7 +338,7 @@ def crawl_folders_for_files(
                     error=e,
                 )
     else:
-        logger.info(f"Skipping subfolder files since already traversed: {parent_id}")
+        logger.info("Skipping subfolder files since already traversed: %s", parent_id)
 
     for subfolder in _get_folders_in_parent(
         service=service,
@@ -370,7 +370,7 @@ def get_files_in_shared_drive(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
@@ -432,7 +432,7 @@ def get_all_files_in_my_drive_and_shared(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
@@ -487,7 +487,7 @@ def get_all_files_for_oauth(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     should_get_all = (
@@ -615,7 +615,7 @@ def _get_files_by_web_view_links_batch(
         exception: Exception | None,
     ) -> None:
         if exception:
-            logger.warning(f"Error retrieving file {request_id}: {exception}")
+            logger.warning("Error retrieving file %s: %s", request_id, exception)
             result.errors[request_id] = exception
         else:
             result.files[request_id] = response
@@ -637,7 +637,7 @@ def _get_files_by_web_view_links_batch(
             )
             batch.add(request, request_id=web_view_link)
         except ValueError as e:
-            logger.warning(f"Failed to extract file ID from {web_view_link}: {e}")
+            logger.warning("Failed to extract file ID from %s: %s", web_view_link, e)
             result.errors[web_view_link] = e
 
     batch.execute()

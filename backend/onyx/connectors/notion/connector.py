@@ -186,7 +186,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self, block_id: str, cursor: str | None = None
     ) -> dict[str, Any] | None:
         """Fetch all child blocks via the Notion API."""
-        logger.debug(f"Fetching children of block with ID '{block_id}'")
+        logger.debug("Fetching children of block with ID '%s'", block_id)
         block_url = f"https://api.notion.com/v1/blocks/{block_id}/children"
         query_params = None if not cursor else {"start_cursor": cursor}
         res = rl_requests.get(
@@ -202,13 +202,17 @@ class NotionConnector(LoadConnector, PollConnector):
                 # this happens when a page is not shared with the integration
                 # in this case, we should just ignore the page
                 logger.error(
-                    f"Unable to access block with ID '{block_id}'. "
-                    f"This is likely due to the block not being shared "
-                    f"with the Onyx integration. Exact exception:\n\n{e}"
+                    "Unable to access block with ID '%s'. "
+                    "This is likely due to the block not being shared "
+                    "with the Onyx integration. Exact exception:\n\n%s",
+                    block_id,
+                    e,
                 )
             else:
                 logger.exception(
-                    f"Error fetching blocks with status code {res.status_code}: {res.json()}"
+                    "Error fetching blocks with status code %s: %s",
+                    res.status_code,
+                    res.json(),
                 )
 
             # This can occasionally happen, the reason is unknown and cannot be reproduced on our internal Notion
@@ -219,7 +223,7 @@ class NotionConnector(LoadConnector, PollConnector):
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_page(self, page_id: str) -> NotionPage:
         """Fetch a page from its ID via the Notion API, retry with database if page fetch fails."""
-        logger.debug(f"Fetching page for ID '{page_id}'")
+        logger.debug("Fetching page for ID '%s'", page_id)
         page_url = f"https://api.notion.com/v1/pages/{page_id}"
         res = rl_requests.get(
             page_url,
@@ -230,7 +234,9 @@ class NotionConnector(LoadConnector, PollConnector):
             res.raise_for_status()
         except Exception as e:
             logger.warning(
-                f"Failed to fetch page, trying database for ID '{page_id}'. Exception: {e}"
+                "Failed to fetch page, trying database for ID '%s'. Exception: %s",
+                page_id,
+                e,
             )
             # Try fetching as a database if page fetch fails, this happens if the page is set to a wiki
             # it becomes a database from the notion perspective
@@ -244,7 +250,7 @@ class NotionConnector(LoadConnector, PollConnector):
         Note: As of API 2025-09-03, database objects no longer include
         `properties` (schema moved to individual data sources).
         """
-        logger.debug(f"Fetching database for ID '{database_id}' as a page")
+        logger.debug("Fetching database for ID '%s' as a page", database_id)
         database_url = f"https://api.notion.com/v1/databases/{database_id}"
         res = rl_requests.get(
             database_url,
@@ -254,7 +260,7 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            logger.exception(f"Error fetching database as page - {res.json()}")
+            logger.exception("Error fetching database as page - %s", res.json())
             raise e
         db_data = res.json()
         database_name = db_data.get("title")
@@ -271,7 +277,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self, database_id: str
     ) -> list[NotionDataSource]:
         """Fetch the list of data sources for a database."""
-        logger.debug(f"Fetching data sources for database '{database_id}'")
+        logger.debug("Fetching data sources for database '%s'", database_id)
         res = rl_requests.get(
             f"https://api.notion.com/v1/databases/{database_id}",
             headers=self.headers,
@@ -282,12 +288,14 @@ class NotionConnector(LoadConnector, PollConnector):
         except Exception as e:
             if res.status_code in (403, 404):
                 logger.error(
-                    f"Unable to access database with ID '{database_id}'. "
-                    f"This is likely due to the database not being shared "
-                    f"with the Onyx integration. Exact exception:\n{e}"
+                    "Unable to access database with ID '%s'. "
+                    "This is likely due to the database not being shared "
+                    "with the Onyx integration. Exact exception:\n%s",
+                    database_id,
+                    e,
                 )
                 return []
-            logger.exception(f"Error fetching database - {res.json()}")
+            logger.exception("Error fetching database - %s", res.json())
             raise e
 
         db_data = res.json()
@@ -303,7 +311,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
         """Query a data source via POST /v1/data_sources/{id}/query."""
-        logger.debug(f"Querying data source '{data_source_id}'")
+        logger.debug("Querying data source '%s'", data_source_id)
         url = f"https://api.notion.com/v1/data_sources/{data_source_id}/query"
         body = None if not cursor else {"start_cursor": cursor}
         res = rl_requests.post(
@@ -317,12 +325,14 @@ class NotionConnector(LoadConnector, PollConnector):
         except Exception as e:
             if res.status_code in (403, 404):
                 logger.error(
-                    f"Unable to access data source with ID '{data_source_id}'. "
-                    f"This is likely due to it not being shared "
-                    f"with the Onyx integration. Exact exception:\n{e}"
+                    "Unable to access data source with ID '%s'. "
+                    "This is likely due to it not being shared "
+                    "with the Onyx integration. Exact exception:\n%s",
+                    data_source_id,
+                    e,
                 )
                 return {"results": [], "next_cursor": None}
-            logger.exception(f"Error querying data source - {res.json()}")
+            logger.exception("Error querying data source - %s", res.json())
             raise e
         return res.json()
 
@@ -499,7 +509,7 @@ class NotionConnector(LoadConnector, PollConnector):
                     logger.debug("Skipping Notion object id field property")
                     return None
 
-            logger.debug(f"Unreadable property from innermost prop: {sub_inner_dict}")
+            logger.debug("Unreadable property from innermost prop: %s", sub_inner_dict)
             return None
 
         result = ""
@@ -512,7 +522,7 @@ class NotionConnector(LoadConnector, PollConnector):
             except Exception as e:
                 # This is not a critical failure, these properties are not the actual contents of the page
                 # more similar to metadata
-                logger.warning(f"Error recursing properties for {prop_name}: {e}")
+                logger.warning("Error recursing properties for %s: %s", prop_name, e)
                 continue
             # Not a perfect way to format Notion database tables but there's no perfect representation
             # since this must be represented as plaintext
@@ -555,8 +565,9 @@ class NotionConnector(LoadConnector, PollConnector):
         data_sources = self._fetch_data_sources_for_database(database_id)
         if not data_sources:
             logger.warning(
-                f"Database '{database_id}' returned zero data sources — "
-                f"no pages will be indexed from this database."
+                "Database '%s' returned zero data sources — "
+                "no pages will be indexed from this database.",
+                database_id,
             )
         for ds in data_sources:
             self._data_source_to_database_map[ds.id] = database_id
@@ -578,12 +589,16 @@ class NotionConnector(LoadConnector, PollConnector):
 
                     if obj_type == "page":
                         logger.debug(
-                            f"Found page with ID '{obj_id}' in database '{database_id}'"
+                            "Found page with ID '%s' in database '%s'",
+                            obj_id,
+                            database_id,
                         )
                         result_pages.append(result["id"])
                     elif obj_type == "database":
                         logger.debug(
-                            f"Found database with ID '{obj_id}' in database '{database_id}'"
+                            "Found database with ID '%s' in database '%s'",
+                            obj_id,
+                            database_id,
                         )
                         nested_db_title = result.get("title", [])
                         nested_db_name = None
@@ -640,7 +655,9 @@ class NotionConnector(LoadConnector, PollConnector):
 
             for result in data["results"]:
                 logger.debug(
-                    f"Found child block for block with ID '{base_block_id}': {result}"
+                    "Found child block for block with ID '%s': %s",
+                    base_block_id,
+                    result,
                 )
                 result_block_id = result["id"]
                 result_type = result["type"]
@@ -648,25 +665,32 @@ class NotionConnector(LoadConnector, PollConnector):
 
                 if result_type == "ai_block":
                     logger.warning(
-                        f"Skipping 'ai_block' ('{result_block_id}') for base block '{base_block_id}': "
-                        f"Notion API does not currently support reading AI blocks (as of 24/02/09) "
-                        f"(discussion: https://github.com/onyx-dot-app/onyx/issues/1053)"
+                        "Skipping 'ai_block' ('%s') for base block '%s': "
+                        "Notion API does not currently support reading AI blocks (as of 24/02/09) "
+                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1053)",
+                        result_block_id,
+                        base_block_id,
                     )
                     continue
 
                 if result_type == "unsupported":
                     logger.warning(
-                        f"Skipping unsupported block type '{result_type}' "
-                        f"('{result_block_id}') for base block '{base_block_id}': "
-                        f"(discussion: https://github.com/onyx-dot-app/onyx/issues/1230)"
+                        "Skipping unsupported block type '%s' "
+                        "('%s') for base block '%s': "
+                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1230)",
+                        result_type,
+                        result_block_id,
+                        base_block_id,
                     )
                     continue
 
                 if result_type == "external_object_instance_page":
                     logger.warning(
-                        f"Skipping 'external_object_instance_page' ('{result_block_id}') for base block '{base_block_id}': "
-                        f"Notion API does not currently support reading external blocks (as of 24/07/03) "
-                        f"(discussion: https://github.com/onyx-dot-app/onyx/issues/1761)"
+                        "Skipping 'external_object_instance_page' ('%s') for base block '%s': "
+                        "Notion API does not currently support reading external blocks (as of 24/07/03) "
+                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1761)",
+                        result_block_id,
+                        base_block_id,
                     )
                     continue
 
@@ -700,9 +724,9 @@ class NotionConnector(LoadConnector, PollConnector):
                         child_pages.append(result_block_id)
                         self._child_page_parent_map[result_block_id] = page_id
                     else:
-                        logger.debug(f"Entering sub-block: {result_block_id}")
+                        logger.debug("Entering sub-block: %s", result_block_id)
                         sub_output = self._read_blocks(result_block_id, page_id)
-                        logger.debug(f"Finished sub-block: {result_block_id}")
+                        logger.debug("Finished sub-block: %s", result_block_id)
                         result_blocks.extend(sub_output.blocks)
                         child_pages.extend(sub_output.child_page_ids)
                         hierarchy_nodes.extend(sub_output.hierarchy_nodes)
@@ -772,10 +796,10 @@ class NotionConnector(LoadConnector, PollConnector):
         all_child_page_ids: list[str] = []
         for page in pages:
             if page.id in self.indexed_pages:
-                logger.debug(f"Already indexed page with ID '{page.id}'. Skipping.")
+                logger.debug("Already indexed page with ID '%s'. Skipping.", page.id)
                 continue
 
-            logger.info(f"Reading page with ID '{page.id}', with url {page.url}")
+            logger.info("Reading page with ID '%s', with url %s", page.id, page.url)
             block_output = self._read_blocks(page.id)
             all_child_page_ids.extend(block_output.child_page_ids)
 
@@ -807,11 +831,12 @@ class NotionConnector(LoadConnector, PollConnector):
             if not block_output.blocks:
                 if not raw_page_title:
                     logger.warning(
-                        f"No blocks OR title found for page with ID '{page.id}'. Skipping."
+                        "No blocks OR title found for page with ID '%s'. Skipping.",
+                        page.id,
                     )
                     continue
 
-                logger.debug(f"No blocks found for page with ID '{page.id}'")
+                logger.debug("No blocks found for page with ID '%s'", page.id)
                 """
                 Something like:
 
@@ -872,7 +897,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def _search_notion(self, query_dict: dict[str, Any]) -> NotionSearchResponse:
         """Search for pages from a Notion database. Includes some small number of
         retries to handle misc, flakey failures."""
-        logger.debug(f"Searching for pages in Notion with query_dict: {query_dict}")
+        logger.debug("Searching for pages in Notion with query_dict: %s", query_dict)
         res = rl_requests.post(
             "https://api.notion.com/v1/search",
             headers=self.headers,
@@ -926,8 +951,10 @@ class NotionConnector(LoadConnector, PollConnector):
                     )
                 except requests.exceptions.RequestException as e:
                     logger.warning(
-                        f"Could not fetch database '{db_id}', "
-                        f"defaulting to workspace root. Error: {e}"
+                        "Could not fetch database '%s', "
+                        "defaulting to workspace root. Error: %s",
+                        db_id,
+                        e,
                     )
                     db_name = f"Database {db_id}"
                     parent_raw_id = self.workspace_id
@@ -988,7 +1015,8 @@ class NotionConnector(LoadConnector, PollConnector):
             yield [workspace_node]
 
         logger.info(
-            f"Recursively loading pages from Notion based on root page with ID: {self.root_page_id}"
+            "Recursively loading pages from Notion based on root page with ID: %s",
+            self.root_page_id,
         )
         pages = [self._fetch_page(page_id=self.root_page_id)]
         yield from batch_generator(self._read_pages(pages), self.batch_size)

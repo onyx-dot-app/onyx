@@ -148,7 +148,7 @@ def create_session(
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Session creation failed: {e}")
+        logger.error("Session creation failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
     finally:
         if lock.owned():
@@ -341,7 +341,7 @@ def delete_session(
     except Exception as e:
         # Sandbox termination failed - rollback to preserve session
         db_session.rollback()
-        logger.error(f"Failed to delete session {session_id}: {e}")
+        logger.error("Failed to delete session %s: %s", session_id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete session: {e}",
@@ -418,7 +418,8 @@ def restore_session(
 
             if not is_healthy:
                 logger.warning(
-                    f"Sandbox {sandbox.id} marked as RUNNING but pod is unhealthy/missing. Entering recovery mode."
+                    "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
+                    sandbox.id,
                 )
                 # Terminate to clean up any lingering K8s resources
                 sandbox_manager.terminate(sandbox.id)
@@ -487,7 +488,7 @@ def restore_session(
                         db_session.commit()
                     except Exception as e:
                         logger.error(
-                            f"Snapshot restore failed for session {session_id}: {e}"
+                            "Snapshot restore failed for session %s: %s", session_id, e
                         )
                         session.nextjs_port = None
                         db_session.commit()
@@ -504,11 +505,13 @@ def restore_session(
                     db_session.commit()
         else:
             logger.warning(
-                f"Sandbox {sandbox.id} status is {sandbox.status} after re-provision, expected RUNNING"
+                "Sandbox %s status is %s after re-provision, expected RUNNING",
+                sandbox.id,
+                sandbox.status,
             )
 
     except Exception as e:
-        logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
+        logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",

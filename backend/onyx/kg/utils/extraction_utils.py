@@ -297,7 +297,7 @@ def kg_implied_extraction(
                 if process_results is None:
                     continue
 
-                (implied_entity, implied_relationship, _, _) = process_results
+                implied_entity, implied_relationship, _, _ = process_results
                 implied_entities.add(implied_entity)
                 implied_relationships.add(implied_relationship)
             else:
@@ -446,7 +446,9 @@ def kg_classify_document(
                 classification_class=classification_class,
             )
     except Exception as e:
-        logger.error(f"Failed to classify document {document_entity}. Error: {str(e)}")
+        logger.error(
+            "Failed to classify document %s. Error: %s", document_entity, str(e)
+        )
     return None
 
 
@@ -523,7 +525,10 @@ def kg_deep_extract_chunks(
     except Exception as e:
         failed_chunks = [chunk.chunk_id for chunk in chunk_batch]
         logger.error(
-            f"Failed to process chunks {failed_chunks} from document {document_entity}. Error: {str(e)}"
+            "Failed to process chunks %s from document %s. Error: %s",
+            failed_chunks,
+            document_entity,
+            str(e),
         )
     return None
 

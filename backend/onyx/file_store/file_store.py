@@ -231,7 +231,7 @@ class S3BackedFileStore(FileStore):
                     self._s3_client = boto3.client(**client_kwargs)
 
             except Exception as e:
-                logger.error(f"Failed to initialize S3 client: {e}")
+                logger.error("Failed to initialize S3 client: %s", e)
                 raise RuntimeError(f"Failed to initialize S3 client: {e}")
 
         return self._s3_client
@@ -255,7 +255,7 @@ class S3BackedFileStore(FileStore):
 
         # Log if truncation occurred (when the key is exactly at the limit)
         if len(s3_key) == 1024:
-            logger.info(f"File name was too long and was truncated: {file_name}")
+            logger.info("File name was too long and was truncated: %s", file_name)
 
         return s3_key
 
@@ -267,12 +267,12 @@ class S3BackedFileStore(FileStore):
         # Check if bucket exists
         try:
             s3_client.head_bucket(Bucket=bucket_name)
-            logger.info(f"S3 bucket '{bucket_name}' already exists")
+            logger.info("S3 bucket '%s' already exists", bucket_name)
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             if error_code == "404":
                 # Bucket doesn't exist, create it
-                logger.info(f"Creating S3 bucket '{bucket_name}'")
+                logger.info("Creating S3 bucket '%s'", bucket_name)
 
                 # For AWS S3, we need to handle region-specific bucket creation
                 region = (
@@ -291,18 +291,18 @@ class S3BackedFileStore(FileStore):
                     # For us-east-1 or MinIO/other S3-compatible services
                     s3_client.create_bucket(Bucket=bucket_name)
 
-                logger.info(f"Successfully created S3 bucket '{bucket_name}'")
+                logger.info("Successfully created S3 bucket '%s'", bucket_name)
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden", bucket_name
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
                 )
             else:
                 # Some other error occurred
-                logger.error(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
                 raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
 
     def has_file(
@@ -405,7 +405,7 @@ class S3BackedFileStore(FileStore):
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
         except ClientError:
-            logger.error(f"Failed to read file {file_id} from S3")
+            logger.error("Failed to read file %s from S3", file_id)
             raise
 
         # FIX: Stream file content instead of loading entire file into memory
@@ -451,7 +451,7 @@ class S3BackedFileStore(FileStore):
             )
             return response.get("ContentLength")
         except Exception as e:
-            logger.warning(f"Error getting file size for {file_id}: {e}")
+            logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
 
     def delete_file(
@@ -473,8 +473,9 @@ class S3BackedFileStore(FileStore):
                     return
                 if not file_record.bucket_name:
                     logger.error(
-                        f"File record {file_id} with key {file_record.object_key} "
-                        "has no bucket name, cannot delete from filestore"
+                        "File record %s with key %s has no bucket name, cannot delete from filestore",
+                        file_id,
+                        file_record.object_key,
                     )
                     delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
@@ -491,8 +492,9 @@ class S3BackedFileStore(FileStore):
                     # since the end goal (object not existing) is achieved
                     if e.response.get("Error", {}).get("Code") == "NoSuchKey":
                         logger.warning(
-                            f"delete_file: File {file_id} not found in file store (key: {file_record.object_key}), "
-                            "cleaning up database record."
+                            "delete_file: File %s not found in file store (key: %s), cleaning up database record.",
+                            file_id,
+                            file_record.object_key,
                         )
                     else:
                         raise
@@ -564,7 +566,10 @@ class S3BackedFileStore(FileStore):
             except Exception as e:
                 db_session.rollback()
                 logger.exception(
-                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                    "Failed to change file ID from %s to %s: %s",
+                    old_file_id,
+                    new_file_id,
+                    e,
                 )
                 raise
 

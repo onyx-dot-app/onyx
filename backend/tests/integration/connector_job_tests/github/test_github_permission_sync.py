@@ -54,7 +54,7 @@ def test_github_private_repo_permission_sync(
         pytest.fail(f"Failed to change repository {repo_owner}/{repo_name} to private")
 
     # Add test-team to repository at the start
-    logger.info(f"Adding test-team to repository {repo_owner}/{repo_name}")
+    logger.info("Adding test-team to repository %s/%s", repo_owner, repo_name)
     team_added = github_manager.add_team_to_repository(
         repo_owner=repo_owner,
         repo_name=repo_name,
@@ -64,7 +64,7 @@ def test_github_private_repo_permission_sync(
 
     if not team_added:
         logger.warning(
-            f"Failed to add test-team to repository {repo_owner}/{repo_name}"
+            "Failed to add test-team to repository %s/%s", repo_owner, repo_name
         )
 
     try:
@@ -104,10 +104,10 @@ def test_github_private_repo_permission_sync(
             )
 
             logger.info(
-                f"test_user_1 has access to {len(accessible_docs_user1)} documents"
+                "test_user_1 has access to %s documents", len(accessible_docs_user1)
             )
             logger.info(
-                f"test_user_2 has access to {len(accessible_docs_user2)} documents"
+                "test_user_2 has access to %s documents", len(accessible_docs_user2)
             )
 
             # test_user_1 (part of test-team) should have access
@@ -125,14 +125,16 @@ def test_github_private_repo_permission_sync(
 
     finally:
         # Remove test-team from repository at the end
-        logger.info(f"Removing test-team from repository {repo_owner}/{repo_name}")
+        logger.info("Removing test-team from repository %s/%s", repo_owner, repo_name)
         team_removed = github_manager.remove_team_from_repository(
             repo_owner=repo_owner, repo_name=repo_name, team_slug="test-team"
         )
 
         if not team_removed:
             logger.warning(
-                f"Failed to remove test-team from repository {repo_owner}/{repo_name}"
+                "Failed to remove test-team from repository %s/%s",
+                repo_owner,
+                repo_name,
             )
 
 
@@ -167,7 +169,7 @@ def test_github_public_repo_permission_sync(
     repo_name = github_connector.connector_specific_config["repositories"]
 
     # Change repository to public
-    logger.info(f"Changing repository {repo_owner}/{repo_name} to public")
+    logger.info("Changing repository %s/%s to public", repo_owner, repo_name)
     success = github_manager.change_repository_visibility(
         repo_owner=repo_owner, repo_name=repo_name, visibility="public"
     )
@@ -179,7 +181,9 @@ def test_github_public_repo_permission_sync(
     current_visibility = github_manager.get_repository_visibility(
         repo_owner=repo_owner, repo_name=repo_name
     )
-    logger.info(f"Repository {repo_owner}/{repo_name} visibility: {current_visibility}")
+    logger.info(
+        "Repository %s/%s visibility: %s", repo_owner, repo_name, current_visibility
+    )
     assert (
         current_visibility == "public"
     ), f"Repository should be public, but is {current_visibility}"
@@ -219,8 +223,12 @@ def test_github_public_repo_permission_sync(
             db_session=db_session,
         )
 
-        logger.info(f"test_user_1 has access to {len(accessible_docs_user1)} documents")
-        logger.info(f"test_user_2 has access to {len(accessible_docs_user2)} documents")
+        logger.info(
+            "test_user_1 has access to %s documents", len(accessible_docs_user1)
+        )
+        logger.info(
+            "test_user_2 has access to %s documents", len(accessible_docs_user2)
+        )
 
         # Both users should have access to the public repository documents
         assert len(accessible_docs_user1) > 0, (
@@ -273,7 +281,7 @@ def test_github_internal_repo_permission_sync(
     repo_name = github_connector.connector_specific_config["repositories"]
 
     # Change repository to internal
-    logger.info(f"Changing repository {repo_owner}/{repo_name} to internal")
+    logger.info("Changing repository %s/%s to internal", repo_owner, repo_name)
     success = github_manager.change_repository_visibility(
         repo_owner=repo_owner, repo_name=repo_name, visibility="internal"
     )
@@ -285,7 +293,9 @@ def test_github_internal_repo_permission_sync(
     current_visibility = github_manager.get_repository_visibility(
         repo_owner=repo_owner, repo_name=repo_name
     )
-    logger.info(f"Repository {repo_owner}/{repo_name} visibility: {current_visibility}")
+    logger.info(
+        "Repository %s/%s visibility: %s", repo_owner, repo_name, current_visibility
+    )
     assert (
         current_visibility == "internal"
     ), f"Repository should be internal, but is {current_visibility}"
@@ -325,8 +335,12 @@ def test_github_internal_repo_permission_sync(
             db_session=db_session,
         )
 
-        logger.info(f"test_user_1 has access to {len(accessible_docs_user1)} documents")
-        logger.info(f"test_user_2 has access to {len(accessible_docs_user2)} documents")
+        logger.info(
+            "test_user_1 has access to %s documents", len(accessible_docs_user1)
+        )
+        logger.info(
+            "test_user_2 has access to %s documents", len(accessible_docs_user2)
+        )
 
         # For internal repositories:
         # - test_user_1 should have access (assuming they're part of the organization)

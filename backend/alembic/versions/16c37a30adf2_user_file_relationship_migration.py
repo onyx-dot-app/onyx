@@ -60,7 +60,7 @@ def upgrade() -> None:
             to_migrate = bind.execute(count_query).scalar_one()
 
             if to_migrate > 0:
-                logger.info(f"Creating {to_migrate} persona-file relationships...")
+                logger.info("Creating %s persona-file relationships...", to_migrate)
 
                 # Migrate in batches to avoid memory issues
                 batch_size = 10000
@@ -94,11 +94,11 @@ def upgrade() -> None:
                         break
 
                     logger.info(
-                        f"  Migrated {total_inserted}/{to_migrate} relationships..."
+                        "  Migrated %s/%s relationships...", total_inserted, to_migrate
                     )
 
                 logger.info(
-                    f"Created {total_inserted} persona__user_file relationships"
+                    "Created %s persona__user_file relationships", total_inserted
                 )
 
     # === Step 2: Add foreign key for chat_session.project_id ===
@@ -142,7 +142,7 @@ def upgrade() -> None:
         to_create = bind.execute(count_query).scalar_one()
 
         if to_create > 0:
-            logger.info(f"Creating {to_create} project-file relationships...")
+            logger.info("Creating %s project-file relationships...", to_create)
 
             # Insert in batches
             batch_size = 10000
@@ -175,9 +175,11 @@ def upgrade() -> None:
                 if inserted < batch_size:
                     break
 
-                logger.info(f"  Created {total_inserted}/{to_create} relationships...")
+                logger.info(
+                    "  Created %s/%s relationships...", total_inserted, to_create
+                )
 
-            logger.info(f"Created {total_inserted} project__user_file relationships")
+            logger.info("Created %s project__user_file relationships", total_inserted)
 
     # === Step 4: Create index on chat_session.project_id ===
     try:
@@ -229,7 +231,7 @@ def downgrade() -> None:
     # Clear project__user_file relationships (but keep the table for migration 1 to handle)
     if "project__user_file" in inspector.get_table_names():
         result = bind.execute(text("DELETE FROM project__user_file"))
-        logger.info(f"Cleared {result.rowcount} records from project__user_file")
+        logger.info("Cleared %s records from project__user_file", result.rowcount)
 
     # Remove migrated persona__user_file relationships
     # Only remove those that came from folder relationships
@@ -255,7 +257,7 @@ def downgrade() -> None:
                 )
             )
             logger.info(
-                f"Removed {result.rowcount} migrated persona__user_file relationships"
+                "Removed %s migrated persona__user_file relationships", result.rowcount
             )
 
     logger.info("Downgrade completed successfully")

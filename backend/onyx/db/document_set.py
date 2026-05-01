@@ -307,7 +307,7 @@ def insert_document_set(
         db_session.commit()
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Error creating document set: {e}")
+        logger.error("Error creating document set: %s", e)
         raise
 
     return new_document_set_row, ds_cc_pairs

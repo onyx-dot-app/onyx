@@ -162,7 +162,9 @@ def drop_multitenant_postgres(
     TIMEOUT = 40
     success = False
     for _ in range(NUM_TRIES):
-        logger.info(f"drop_multitenant_postgres_task starting... ({_ + 1}/{NUM_TRIES})")
+        logger.info(
+            "drop_multitenant_postgres_task starting... (%s/%s)", _ + 1, NUM_TRIES
+        )
         try:
             run_with_timeout_multiproc(
                 drop_multitenant_postgres_task,
@@ -175,11 +177,15 @@ def drop_multitenant_postgres(
             break
         except TimeoutError:
             logger.warning(
-                f"drop_multitenant_postgres_task timed out, retrying... ({_ + 1}/{NUM_TRIES})"
+                "drop_multitenant_postgres_task timed out, retrying... (%s/%s)",
+                _ + 1,
+                NUM_TRIES,
             )
         except RuntimeError:
             logger.warning(
-                f"drop_multitenant_postgres_task exceptioned, retrying... ({_ + 1}/{NUM_TRIES})"
+                "drop_multitenant_postgres_task exceptioned, retrying... (%s/%s)",
+                _ + 1,
+                NUM_TRIES,
             )
 
     if not success:
@@ -258,7 +264,7 @@ def reset_postgres(
     TIMEOUT = 40
     success = False
     for _ in range(NUM_TRIES):
-        logger.info(f"Downgrading Postgres... ({_ + 1}/{NUM_TRIES})")
+        logger.info("Downgrading Postgres... (%s/%s)", _ + 1, NUM_TRIES)
         try:
             run_with_timeout_multiproc(
                 downgrade_postgres,
@@ -274,11 +280,11 @@ def reset_postgres(
             break
         except TimeoutError:
             logger.warning(
-                f"Postgres downgrade timed out, retrying... ({_ + 1}/{NUM_TRIES})"
+                "Postgres downgrade timed out, retrying... (%s/%s)", _ + 1, NUM_TRIES
             )
         except RuntimeError:
             logger.warning(
-                f"Postgres downgrade exceptioned, retrying... ({_ + 1}/{NUM_TRIES})"
+                "Postgres downgrade exceptioned, retrying... (%s/%s)", _ + 1, NUM_TRIES
             )
 
     if not success:

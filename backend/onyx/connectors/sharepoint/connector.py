@@ -269,7 +269,10 @@ def sleep_and_retry(
             # 429 / 503 — rate limit or transient error.  Back off and retry.
             if status in (429, 503) and attempt < max_retries:
                 logger.warning(
-                    f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
+                    "Rate limit exceeded on %s, attempt %s/%s, sleeping and retrying",
+                    method_name,
+                    attempt + 1,
+                    max_retries + 1,
                 )
                 retry_after = (
                     e.response.headers.get(  # ty: ignore[unresolved-attribute]
@@ -282,7 +285,7 @@ def sleep_and_retry(
                     # Exponential backoff: 2^attempt * 5 seconds
                     sleep_time = min(30, (2**attempt) * 5)
 
-                logger.info(f"Sleeping for {sleep_time} seconds before retry")
+                logger.info("Sleeping for %s seconds before retry", sleep_time)
                 time.sleep(sleep_time)
                 continue
 
@@ -294,7 +297,7 @@ def sleep_and_retry(
             # caller intentionally handles.
             if e.response is not None:
                 logger.warning(
-                    f"SharePoint request failed for {method_name}: status={status}, "
+                    "SharePoint request failed for %s: status=%s, ", method_name, status
                 )
             raise e
 
@@ -338,7 +341,7 @@ def _log_and_raise_for_status(response: requests.Response) -> None:
     try:
         response.raise_for_status()
     except Exception:
-        logger.error(f"HTTP request failed: {response.text}")
+        logger.error("HTTP request failed: %s", response.text)
         raise
 
 
@@ -383,7 +386,7 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
             thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),
         )
     except Exception as e:
-        logger.error(f"Error loading certificate: {e}")
+        logger.error("Error loading certificate: %s", e)
         return None
 
 
@@ -483,7 +486,9 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
             content_len = int(cl_header)
             if content_len > cap:
                 logger.warning(
-                    f"Content-Length {content_len} exceeds cap {cap}; skipping download."
+                    "Content-Length %s exceeds cap %s; skipping download.",
+                    content_len,
+                    cap,
                 )
                 raise SizeCapExceeded("pre_download")
 
@@ -496,7 +501,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
             if buf.tell() > cap:
                 # Avoid keeping a large partial buffer; close and signal caller to skip.
                 logger.warning(
-                    f"Streaming download exceeded cap {cap} bytes; aborting early."
+                    "Streaming download exceeded cap %s bytes; aborting early.", cap
                 )
                 raise SizeCapExceeded("during_download")
 
@@ -552,7 +557,9 @@ def _convert_driveitem_to_document_with_permissions(
     mime_type = driveitem.mime_type
     if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
         logger.debug(
-            f"Skipping malformed or excluded mime type {mime_type} for {driveitem.name}"
+            "Skipping malformed or excluded mime type %s for %s",
+            mime_type,
+            driveitem.name,
         )
         return None
 
@@ -564,7 +571,10 @@ def _convert_driveitem_to_document_with_permissions(
 
     if file_size is not None and file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
         logger.warning(
-            f"Skipping '{driveitem.name}' over size threshold ({file_size} > {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes)."
+            "Skipping '%s' over size threshold (%s > %s bytes).",
+            driveitem.name,
+            file_size,
+            SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
         )
         return None
 
@@ -578,12 +588,16 @@ def _convert_driveitem_to_document_with_permissions(
                 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             )
         except SizeCapExceeded as e:
-            logger.warning(f"Skipping '{driveitem.name}' exceeded size cap: {str(e)}")
+            logger.warning(
+                "Skipping '%s' exceeded size cap: %s", driveitem.name, str(e)
+            )
             return None
         except requests.RequestException as e:
             status = e.response.status_code if e.response is not None else -1
             logger.warning(
-                f"Failed to download via downloadUrl for '{driveitem.name}' (status={status}); falling back to Graph API."
+                "Failed to download via downloadUrl for '%s' (status=%s); falling back to Graph API.",
+                driveitem.name,
+                status,
             )
 
     # Fallback: download via Graph API /content endpoint
@@ -598,12 +612,13 @@ def _convert_driveitem_to_document_with_permissions(
             )
         except SizeCapExceeded:
             logger.warning(
-                f"Skipping '{driveitem.name}' exceeded size cap during Graph API download."
+                "Skipping '%s' exceeded size cap during Graph API download.",
+                driveitem.name,
             )
             return None
         except Exception as e:
             logger.warning(
-                f"Failed to download via Graph API for '{driveitem.name}': {e}"
+                "Failed to download via Graph API for '%s': %s", driveitem.name, e
             )
             return _create_document_failure(
                 driveitem, f"Failed to download via graph api: {e}", e
@@ -616,7 +631,8 @@ def _convert_driveitem_to_document_with_permissions(
 
     if not content_bytes:
         logger.warning(
-            f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
+            "Zero-length content for '%s'. Skipping text/image extraction.",
+            driveitem.name,
         )
     elif file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
         image_section, _ = store_image_and_create_section(
@@ -649,7 +665,7 @@ def _convert_driveitem_to_document_with_permissions(
                 )
         except Exception as e:
             logger.warning(
-                f"Failed to extract tabular sections for '{driveitem.name}': {e}"
+                "Failed to extract tabular sections for '%s': %s", driveitem.name, e
             )
     else:
         extraction_result = extract_text_and_images(
@@ -665,7 +681,7 @@ def _convert_driveitem_to_document_with_permissions(
             )
 
     if include_permissions and ctx is not None:
-        logger.info(f"Getting external access for {driveitem.name}")
+        logger.info("Getting external access for %s", driveitem.name)
         sdk_item = driveitem.to_sdk_driveitem(graph_client)
         external_access = get_sharepoint_external_access(
             ctx=ctx,
@@ -961,10 +977,11 @@ class SharepointConnector(
         self.sharepoint_domain_suffix = resolved_env.sharepoint_domain_suffix
         if sharepoint_domain_suffix != resolved_env.sharepoint_domain_suffix:
             logger.warning(
-                f"Configured sharepoint_domain_suffix '{sharepoint_domain_suffix}' "
-                f"differs from the expected suffix '{resolved_env.sharepoint_domain_suffix}' "
-                f"for the {resolved_env.environment} environment. "
-                f"Using '{resolved_env.sharepoint_domain_suffix}'."
+                "Configured sharepoint_domain_suffix '%s' differs from the expected suffix '%s' for the %s environment. Using '%s'.",
+                sharepoint_domain_suffix,
+                resolved_env.sharepoint_domain_suffix,
+                resolved_env.environment,
+                resolved_env.sharepoint_domain_suffix,
             )
 
     def validate_connector_settings(self) -> None:
@@ -1017,7 +1034,7 @@ class SharepointConnector(
                 raise
             except Exception as e:
                 logger.warning(
-                    f"RoleAssignments permission probe failed (non-blocking): {e}"
+                    "RoleAssignments permission probe failed (non-blocking): %s", e
                 )
 
     def _extract_tenant_domain_from_sites(self) -> str | None:
@@ -1036,7 +1053,7 @@ class SharepointConnector(
             tenant = hostname.split(".")[0]
             if tenant:
                 return tenant
-        logger.warning(f"No tenant domain found from {len(self.sites)} sites")
+        logger.warning("No tenant domain found from %s sites", len(self.sites))
         return None
 
     def _resolve_tenant_domain_from_root_site(self) -> str:
@@ -1130,12 +1147,13 @@ class SharepointConnector(
         try:
             parsed = urlsplit(url)
         except ValueError:
-            logger.warning(f"Sharepoint URL '{url}' could not be parsed")
+            logger.warning("Sharepoint URL '%s' could not be parsed", url)
             return None, []
 
         if not parsed.scheme or not parsed.netloc:
             logger.warning(
-                f"Sharepoint URL '{url}' is not a valid absolute URL (missing scheme or host)"
+                "Sharepoint URL '%s' is not a valid absolute URL (missing scheme or host)",
+                url,
             )
             return None, []
 
@@ -1159,7 +1177,8 @@ class SharepointConnector(
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)"
+                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    url,
                 )
                 continue
 
@@ -1200,7 +1219,7 @@ class SharepointConnector(
         """
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
         drives = site.drives.get().execute_query()
-        logger.info(f"Found drives: {[d.name for d in drives]}")
+        logger.info("Found drives: %s", [d.name for d in drives])
 
         matched = [
             d
@@ -1212,12 +1231,12 @@ class SharepointConnector(
             )
         ]
         if not matched:
-            logger.warning(f"Drive '{drive_name}' not found")
+            logger.warning("Drive '%s' not found", drive_name)
             return None
 
         drive = matched[0]
         drive_web_url: str | None = drive.web_url
-        logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
+        logger.info("Found drive: %s (web_url: %s)", drive.name, drive_web_url)
         return cast(str, drive.id), drive_web_url
 
     def _get_drive_items_for_drive_id(
@@ -1263,7 +1282,9 @@ class SharepointConnector(
             ):
                 raise e
 
-            logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
+            logger.warning(
+                "Failed to process site: %s - %s", site_descriptor.url, err_str
+            )
 
     def _fetch_driveitems(
         self,
@@ -1279,7 +1300,7 @@ class SharepointConnector(
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
             drives = site.drives.get().execute_query()
-            logger.debug(f"Found drives: {[d.name for d in drives]}")
+            logger.debug("Found drives: %s", [d.name for d in drives])
 
             if site_descriptor.drive_name:
                 drives = [
@@ -1293,7 +1314,7 @@ class SharepointConnector(
                     )
                 ]
                 if not drives:
-                    logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
+                    logger.warning("Drive '%s' not found", site_descriptor.drive_name)
                     return
 
             for drive in drives:
@@ -1323,7 +1344,9 @@ class SharepointConnector(
                         yield item, drive_name or "", drive_web_url
 
                 except Exception as e:
-                    logger.warning(f"Failed to process drive '{drive.name}': {str(e)}")
+                    logger.warning(
+                        "Failed to process drive '%s': %s", drive.name, str(e)
+                    )
 
         except Exception as e:
             err_str = str(e)
@@ -1334,7 +1357,7 @@ class SharepointConnector(
             ):
                 raise e
 
-            logger.warning(f"Failed to process site: {err_str}")
+            logger.warning("Failed to process site: %s", err_str)
 
     def _handle_paginated_sites(
         self, sites: SitesWithRoot
@@ -1364,7 +1387,7 @@ class SharepointConnector(
         result = []
         for sd in site_descriptors:
             if _is_site_excluded(sd.url, self.excluded_sites):
-                logger.info(f"Excluding site by denylist: {sd.url}")
+                logger.info("Excluding site by denylist: %s", sd.url)
                 continue
             result.append(sd)
         return result
@@ -1416,7 +1439,7 @@ class SharepointConnector(
                 data = self._graph_api_get_json(page_url, params)
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
-                    logger.warning(f"Site page not found: {page_url}")
+                    logger.warning("Site page not found: %s", page_url)
                     break
                 if (
                     e.response is not None
@@ -1424,9 +1447,8 @@ class SharepointConnector(
                     and _is_graph_invalid_request(e.response)
                 ):
                     logger.warning(
-                        f"$expand=canvasLayout on the LIST endpoint returned 400 "
-                        f"for site {site_descriptor.url}. Falling back to "
-                        f"per-page expansion."
+                        "$expand=canvasLayout on the LIST endpoint returned 400 for site %s. Falling back to per-page expansion.",
+                        site_descriptor.url,
                     )
                     yield from self._fetch_site_pages_individually(
                         site_pages_base, start, end, skip_ids=yielded_ids
@@ -1447,7 +1469,7 @@ class SharepointConnector(
 
             page_url = data.get("@odata.nextLink")
 
-        logger.debug(f"Yielded {total_yielded} site pages for {site_descriptor.url}")
+        logger.debug("Yielded %s site pages for %s", total_yielded, site_descriptor.url)
 
     def _fetch_site_pages_individually(
         self,
@@ -1502,7 +1524,7 @@ class SharepointConnector(
             page_url = data.get("@odata.nextLink")
 
         logger.debug(
-            f"Yielded {total_yielded} site pages (per-page expansion fallback)"
+            "Yielded %s site pages (per-page expansion fallback)", total_yielded
         )
 
     def _try_expand_single_page(
@@ -1526,7 +1548,9 @@ class SharepointConnector(
             ):
                 page_name = fallback_page.get("name", page_id)
                 logger.warning(
-                    f"$expand=canvasLayout failed for page '{page_name}' ({page_id}). Indexing metadata only."
+                    "$expand=canvasLayout failed for page '%s' (%s). Indexing metadata only.",
+                    page_name,
+                    page_id,
                 )
                 return fallback_page
             raise
@@ -1574,7 +1598,11 @@ class SharepointConnector(
                         )
                         wait = min(retry_after, 60)
                         logger.warning(
-                            f"Graph API {response.status_code} on attempt {attempt + 1}, retrying in {wait}s: {url}"
+                            "Graph API %s on attempt %s, retrying in %ss: %s",
+                            response.status_code,
+                            attempt + 1,
+                            wait,
+                            url,
                         )
                         time.sleep(wait)
                         # Re-acquire token in case it expired during a long traversal
@@ -1587,7 +1615,10 @@ class SharepointConnector(
                 if attempt < GRAPH_API_MAX_RETRIES:
                     wait = min(2**attempt, 60)
                     logger.warning(
-                        f"Graph API connection error on attempt {attempt + 1}, retrying in {wait}s: {url}"
+                        "Graph API connection error on attempt %s, retrying in %ss: %s",
+                        attempt + 1,
+                        wait,
+                        url,
                     )
                     time.sleep(wait)
                     continue
@@ -1856,7 +1887,9 @@ class SharepointConnector(
                     end=end,
                 ):
                     if self._is_driveitem_excluded(driveitem):
-                        logger.debug(f"Excluding by path denylist: {driveitem.web_url}")
+                        logger.debug(
+                            "Excluding by path denylist: %s", driveitem.web_url
+                        )
                         continue
 
                     if drive_web_url:
@@ -1887,7 +1920,7 @@ class SharepointConnector(
                         )
 
                     try:
-                        logger.debug(f"Processing: {driveitem.web_url}")
+                        logger.debug("Processing: %s", driveitem.web_url)
                         if include_permissions:
                             ctx = self._create_rest_client_context(site_descriptor.url)
                             doc_batch.append(
@@ -1911,7 +1944,7 @@ class SharepointConnector(
                                 )
                             )
                     except Exception as e:
-                        logger.warning(f"Failed to process driveitem: {str(e)}")
+                        logger.warning("Failed to process driveitem: %s", str(e))
 
                     if len(doc_batch) >= SLIM_BATCH_SIZE:
                         yield doc_batch
@@ -1924,7 +1957,8 @@ class SharepointConnector(
                 )
                 for site_page in site_pages:
                     logger.debug(
-                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                        "Processing site page: %s",
+                        site_page.get("webUrl", site_page.get("name", "Unknown")),
                     )
                     try:
                         if include_permissions:
@@ -1951,8 +1985,9 @@ class SharepointConnector(
                             )
                     except Exception as e:
                         logger.warning(
-                            f"Failed to process site page "
-                            f"{site_page.get('webUrl', site_page.get('name', 'Unknown'))}: {e}"
+                            "Failed to process site page %s: %s",
+                            site_page.get("webUrl", site_page.get("name", "Unknown")),
+                            e,
                         )
                     if len(doc_batch) >= SLIM_BATCH_SIZE:
                         yield doc_batch
@@ -1991,7 +2026,7 @@ class SharepointConnector(
             if certificate_data is None:
                 raise RuntimeError("Failed to load certificate")
 
-            logger.info(f"Creating MSAL app with authority url {authority_url}")
+            logger.info("Creating MSAL app with authority url %s", authority_url)
             self.msal_app = msal.ConfidentialClientApplication(
                 authority=authority_url,
                 client_id=sp_client_id,
@@ -2042,7 +2077,7 @@ class SharepointConnector(
 
             return drive_names
         except Exception as e:
-            logger.warning(f"Failed to fetch drives for site '{site_url}': {e}")
+            logger.warning("Failed to fetch drives for site '%s': %s", site_url, e)
             return []
 
     def _build_folder_url(
@@ -2237,7 +2272,7 @@ class SharepointConnector(
                 return checkpoint
 
             logger.info(
-                f"Found {len(checkpoint.cached_site_descriptors)} sites to process"
+                "Found %s sites to process", len(checkpoint.cached_site_descriptors)
             )
             # Set first site and return to allow checkpoint persistence
             if checkpoint.cached_site_descriptors:
@@ -2245,7 +2280,7 @@ class SharepointConnector(
                     checkpoint.cached_site_descriptors.popleft()
                 )
                 logger.info(
-                    f"Starting with site: {checkpoint.current_site_descriptor.url}"
+                    "Starting with site: %s", checkpoint.current_site_descriptor.url
                 )
                 # Yield site hierarchy node for the first site
                 yield from self._yield_site_hierarchy_node(
@@ -2262,14 +2297,16 @@ class SharepointConnector(
                 return checkpoint
 
             logger.info(
-                f"Initializing drives for site: {checkpoint.current_site_descriptor.url}"
+                "Initializing drives for site: %s",
+                checkpoint.current_site_descriptor.url,
             )
 
             try:
                 # If the user explicitly specified drive(s) for this site, honour that
                 if checkpoint.current_site_descriptor.drive_name:
                     logger.info(
-                        f"Using explicitly specified drive: {checkpoint.current_site_descriptor.drive_name}"
+                        "Using explicitly specified drive: %s",
+                        checkpoint.current_site_descriptor.drive_name,
                     )
                     checkpoint.cached_drive_names = deque(
                         [checkpoint.current_site_descriptor.drive_name]
@@ -2282,16 +2319,21 @@ class SharepointConnector(
 
                 if not checkpoint.cached_drive_names:
                     logger.warning(
-                        f"No accessible drives found for site: {checkpoint.current_site_descriptor.url}"
+                        "No accessible drives found for site: %s",
+                        checkpoint.current_site_descriptor.url,
                     )
                 else:
                     logger.info(
-                        f"Found {len(checkpoint.cached_drive_names)} drives: {list(checkpoint.cached_drive_names)}"
+                        "Found %s drives: %s",
+                        len(checkpoint.cached_drive_names),
+                        list(checkpoint.cached_drive_names),
                     )
 
             except Exception as e:
                 logger.error(
-                    f"Failed to initialize drives for site: {checkpoint.current_site_descriptor.url}: {e}"
+                    "Failed to initialize drives for site: %s: %s",
+                    checkpoint.current_site_descriptor.url,
+                    e,
                 )
                 # Yield a ConnectorFailure for site-level access failures
                 start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
@@ -2334,9 +2376,11 @@ class SharepointConnector(
             site_descriptor = checkpoint.current_site_descriptor
 
             logger.info(
-                f"Processing drive '{checkpoint.current_drive_name}' in site: {site_descriptor.url}"
+                "Processing drive '%s' in site: %s",
+                checkpoint.current_drive_name,
+                site_descriptor.url,
             )
-            logger.debug(f"Time range: {start_dt} to {end_dt}")
+            logger.debug("Time range: %s to %s", start_dt, end_dt)
 
             current_drive_name = checkpoint.current_drive_name
             if current_drive_name is None:
@@ -2345,11 +2389,11 @@ class SharepointConnector(
 
             try:
                 logger.info(
-                    f"Fetching drive items for drive name: {current_drive_name}"
+                    "Fetching drive items for drive name: %s", current_drive_name
                 )
                 result = self._resolve_drive(site_descriptor, current_drive_name)
                 if result is None:
-                    logger.warning(f"Drive '{current_drive_name}' not found, skipping")
+                    logger.warning("Drive '%s' not found, skipping", current_drive_name)
                     self._clear_drive_checkpoint_state(checkpoint)
                     return checkpoint
 
@@ -2358,7 +2402,10 @@ class SharepointConnector(
                 checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:
                 logger.error(
-                    f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
+                    "Failed to retrieve items from drive '%s' in site: %s: %s",
+                    current_drive_name,
+                    site_descriptor.url,
+                    e,
                 )
                 yield _create_entity_failure(
                     f"{site_descriptor.url}|{current_drive_name}",
@@ -2419,7 +2466,9 @@ class SharepointConnector(
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to fetch delta page for drive '{current_drive_name}': {e}"
+                        "Failed to fetch delta page for drive '%s': %s",
+                        current_drive_name,
+                        e,
                     )
                     yield _create_entity_failure(
                         f"{site_descriptor.url}|{current_drive_name}",
@@ -2448,19 +2497,22 @@ class SharepointConnector(
                 item_count += 1
 
                 if self._is_driveitem_excluded(driveitem):
-                    logger.debug(f"Excluding by path denylist: {driveitem.web_url}")
+                    logger.debug("Excluding by path denylist: %s", driveitem.web_url)
                     continue
 
                 if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
                     logger.debug(
-                        f"Skipping duplicate document {driveitem.id} ({driveitem.name})"
+                        "Skipping duplicate document %s (%s)",
+                        driveitem.id,
+                        driveitem.name,
                     )
                     continue
 
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
-                        f"Skipping {driveitem.web_url} as it is not a supported file type"
+                        "Skipping %s as it is not a supported file type",
+                        driveitem.web_url,
                     )
                     continue
 
@@ -2521,19 +2573,22 @@ class SharepointConnector(
                             yield doc_or_failure
                         else:
                             logger.warning(
-                                f"Skipping {driveitem.web_url} as it is empty and not a PDF or image"
+                                "Skipping %s as it is empty and not a PDF or image",
+                                driveitem.web_url,
                             )
                     elif isinstance(doc_or_failure, ConnectorFailure):
                         yield doc_or_failure
                 except Exception as e:
                     logger.warning(
-                        f"Failed to process driveitem {driveitem.web_url}: {e}"
+                        "Failed to process driveitem %s: %s", driveitem.web_url, e
                     )
                     yield _create_document_failure(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
 
-            logger.info(f"Processed {item_count} items in drive '{current_drive_name}'")
+            logger.info(
+                "Processed %s items in drive '%s'", item_count, current_drive_name
+            )
 
             if has_more_delta_pages:
                 return checkpoint
@@ -2544,7 +2599,8 @@ class SharepointConnector(
         # If we have more drives in current site, continue with current site
         if checkpoint.cached_drive_names and len(checkpoint.cached_drive_names) > 0:
             logger.debug(
-                f"Continuing with {len(checkpoint.cached_drive_names)} remaining drives in current site"
+                "Continuing with %s remaining drives in current site",
+                len(checkpoint.cached_drive_names),
             )
             return checkpoint
 
@@ -2554,7 +2610,8 @@ class SharepointConnector(
             and checkpoint.current_site_descriptor is not None
         ):
             logger.info(
-                f"Processing site pages for site: {checkpoint.current_site_descriptor.url}"
+                "Processing site pages for site: %s",
+                checkpoint.current_site_descriptor.url,
             )
             checkpoint.process_site_pages = True
             return checkpoint
@@ -2573,7 +2630,8 @@ class SharepointConnector(
             )
             for site_page in site_pages:
                 logger.debug(
-                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                    "Processing site page: %s",
+                    site_page.get("webUrl", site_page.get("name", "Unknown")),
                 )
                 client_ctx: ClientContext | None = None
                 if include_permissions:
@@ -2591,7 +2649,7 @@ class SharepointConnector(
                     )
                 )
             logger.info(
-                f"Finished processing site pages for site: {site_descriptor.url}"
+                "Finished processing site pages for site: %s", site_descriptor.url
             )
 
         # If no more drives, move to next site if available
@@ -2610,10 +2668,13 @@ class SharepointConnector(
             checkpoint.cached_drive_names = None  # Reset for new site
             checkpoint.process_site_pages = False
             logger.info(
-                f"Finished site '{current_site}', moving to next site: {checkpoint.current_site_descriptor.url}"
+                "Finished site '%s', moving to next site: %s",
+                current_site,
+                checkpoint.current_site_descriptor.url,
             )
             logger.info(
-                f"Remaining sites to process: {len(checkpoint.cached_site_descriptors) + 1}"
+                "Remaining sites to process: %s",
+                len(checkpoint.cached_site_descriptors) + 1,
             )
             # Yield site hierarchy node for the new site
             yield from self._yield_site_hierarchy_node(
@@ -2628,7 +2689,7 @@ class SharepointConnector(
             else "unknown"
         )
         logger.info(
-            f"SharePoint processing complete. Finished last site: {current_site}"
+            "SharePoint processing complete. Finished last site: %s", current_site
         )
         checkpoint.has_more = False
         return checkpoint

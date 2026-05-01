@@ -79,8 +79,8 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
         logger.notice("Seeding Custom Tools")
         for tool in tools:
             try:
-                logger.debug(f"Attempting to seed tool: {tool.name}")
-                logger.debug(f"Reading definition from: {tool.definition_path}")
+                logger.debug("Attempting to seed tool: %s", tool.name)
+                logger.debug("Reading definition from: %s", tool.definition_path)
                 with open(tool.definition_path, "r") as file:
                     file_content = file.read()
                     if not file_content.strip():
@@ -96,19 +96,21 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
                     user_id=tool.user_id,
                 )
                 db_session.add(db_tool)
-                logger.debug(f"Successfully added tool: {tool.name}")
+                logger.debug("Successfully added tool: %s", tool.name)
             except FileNotFoundError:
                 logger.error(
-                    f"Definition file not found for tool {tool.name}: {tool.definition_path}"
+                    "Definition file not found for tool %s: %s",
+                    tool.name,
+                    tool.definition_path,
                 )
             except json.JSONDecodeError as e:
                 logger.error(
-                    f"Invalid JSON in definition file for tool {tool.name}: {str(e)}"
+                    "Invalid JSON in definition file for tool %s: %s", tool.name, str(e)
                 )
             except Exception as e:
-                logger.error(f"Failed to seed tool {tool.name}: {str(e)}")
+                logger.error("Failed to seed tool %s: %s", tool.name, str(e))
         db_session.commit()
-        logger.notice(f"Successfully seeded {len(tools)} Custom Tools")
+        logger.notice("Successfully seeded %s Custom Tools", len(tools))
 
 
 def _seed_llms(
@@ -189,7 +191,7 @@ def _seed_settings(settings: Settings) -> None:
         store_base_settings(settings)
         logger.notice("Successfully seeded Settings")
     except ValueError as e:
-        logger.error(f"Failed to seed Settings: {str(e)}")
+        logger.error("Failed to seed Settings: %s", str(e))
 
 
 def _seed_enterprise_settings(seed_config: SeedConfiguration) -> None:
@@ -243,10 +245,10 @@ def _seed_analytics_script(seed_config: SeedConfiguration) -> None:
             store_analytics_script(analytics_script)
         except FileNotFoundError:
             logger.error(
-                f"Analytics script file not found: {seed_config.analytics_script_path}"
+                "Analytics script file not found: %s", seed_config.analytics_script_path
             )
         except ValueError as e:
-            logger.error(f"Failed to seed analytics script: {str(e)}")
+            logger.error("Failed to seed analytics script: %s", str(e))
 
 
 def get_seed_config() -> SeedConfiguration | None:

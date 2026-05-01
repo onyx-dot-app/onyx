@@ -50,14 +50,16 @@ def perform_ttl_management_task(
                     )
             except Exception:
                 logger.exception(
-                    "Failed to delete chat session "
-                    f"user_id={user_id} session_id={session_id}, "
-                    "continuing with remaining sessions"
+                    "Failed to delete chat session user_id=%s session_id=%s, continuing with remaining sessions",
+                    user_id,
+                    session_id,
                 )
 
     except Exception:
         logger.exception(
-            f"delete_chat_session exceptioned. user_id={user_id} session_id={session_id}"
+            "delete_chat_session exceptioned. user_id=%s session_id=%s",
+            user_id,
+            session_id,
         )
         raise
 

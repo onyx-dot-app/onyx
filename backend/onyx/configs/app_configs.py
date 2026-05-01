@@ -219,7 +219,8 @@ if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
         ]
     except Exception:
         logger.exception(
-            f"Error configuring Google OAuth login scopes: {_GOOGLE_OAUTH_SCOPE_OVERRIDE}"
+            "Error configuring Google OAuth login scopes: %s",
+            _GOOGLE_OAUTH_SCOPE_OVERRIDE,
         )
 
 # OpenID Connect configuration URL for OIDC integrations

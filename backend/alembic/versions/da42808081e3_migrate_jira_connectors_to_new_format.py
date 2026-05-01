@@ -13,7 +13,6 @@ import json
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.utils import extract_jira_project
 
-
 # revision identifiers, used by Alembic.
 revision = "da42808081e3"
 down_revision = "f13db29f3101"

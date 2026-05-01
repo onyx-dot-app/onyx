@@ -45,7 +45,7 @@ def sharepoint_group_sync(
     if not site_descriptors:
         raise RuntimeError("No SharePoint sites found for group sync")
 
-    logger.info(f"Processing {len(site_descriptors)} sites for group sync")
+    logger.info("Processing %s sites for group sync", len(site_descriptors))
 
     enumerate_all = connector_config.get(
         "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
@@ -55,7 +55,7 @@ def sharepoint_group_sync(
     sp_tenant_domain = connector.sp_tenant_domain
     sp_domain_suffix = connector.sharepoint_domain_suffix
     for site_descriptor in site_descriptors:
-        logger.debug(f"Processing site: {site_descriptor.url}")
+        logger.debug("Processing site: %s", site_descriptor.url)
 
         ctx = ClientContext(site_descriptor.url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
@@ -72,6 +72,6 @@ def sharepoint_group_sync(
         # Yield each group
         for group in external_groups:
             logger.debug(
-                f"Found group: {group.id} with {len(group.user_emails)} members"
+                "Found group: %s with %s members", group.id, len(group.user_emails)
             )
             yield group

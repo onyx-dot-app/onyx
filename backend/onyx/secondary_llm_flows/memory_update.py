@@ -127,7 +127,7 @@ def process_memory_update(
             record_llm_response(span_generation, response)
             content = response.choice.message.content
     except Exception as e:
-        logger.warning(f"LLM invocation failed for memory update: {e}")
+        logger.warning("LLM invocation failed for memory update: %s", e)
         return (new_memory, None)
 
     # Handle empty response
@@ -142,7 +142,8 @@ def process_memory_update(
 
     if not parsed_response:
         logger.warning(
-            f"Failed to parse JSON from LLM response: {content[:200]}..., defaulting to add"
+            "Failed to parse JSON from LLM response: %s..., defaulting to add",
+            content[:200],
         )
         return (new_memory, None)
 
@@ -171,7 +172,7 @@ def process_memory_update(
         try:
             memory_id_int = int(memory_id)
         except (ValueError, TypeError):
-            logger.warning(f"Invalid memory_id format: {memory_id}")
+            logger.warning("Invalid memory_id format: %s", memory_id)
             return (memory_text, None)
 
         # Convert from 1-indexed (LLM response) to 0-indexed (internal)
@@ -180,13 +181,15 @@ def process_memory_update(
         # Validate index is in range
         if index_to_replace < 0 or index_to_replace >= len(existing_memories):
             logger.warning(
-                f"memory_id {memory_id_int} out of range (1-{len(existing_memories)}), defaulting to add"
+                "memory_id %s out of range (1-%s), defaulting to add",
+                memory_id_int,
+                len(existing_memories),
             )
             return (memory_text, None)
 
-        logger.debug(f"Memory update operation: update at index {index_to_replace}")
+        logger.debug("Memory update operation: update at index %s", index_to_replace)
         return (memory_text, index_to_replace)
 
     # Unknown operation, default to add
-    logger.warning(f"Unknown operation '{operation}', defaulting to add")
+    logger.warning("Unknown operation '%s', defaulting to add", operation)
     return (memory_text, None)

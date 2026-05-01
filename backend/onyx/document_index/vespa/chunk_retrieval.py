@@ -125,7 +125,8 @@ def _vespa_hit_to_inference_chunk(
     semantic_identifier = fields.get(SEMANTIC_IDENTIFIER, "")
     if not semantic_identifier:
         logger.error(
-            f"Chunk with blurb: {fields.get(BLURB, 'Unknown')[:50]}... has no Semantic Identifier"
+            "Chunk with blurb: %s... has no Semantic Identifier",
+            fields.get(BLURB, "Unknown")[:50],
         )
 
     source_links = fields.get(SOURCE_LINKS, {})
@@ -239,11 +240,16 @@ def get_chunks_via_visit_api(
         except httpx.HTTPError as e:
             error_base = "Failed to query Vespa"
             logger.error(
-                f"{error_base}:\n"
-                f"Request URL: {e.request.url}\n"
-                f"Request Headers: {e.request.headers}\n"
-                f"Request Payload: {params}\n"
-                f"Exception: {str(e)}"
+                "%s:\n"
+                "Request URL: %s\n"
+                "Request Headers: %s\n"
+                "Request Payload: %s\n"
+                "Exception: %s",
+                error_base,
+                e.request.url,
+                e.request.headers,
+                params,
+                str(e),
             )
             raise httpx.HTTPError(error_base) from e
 
@@ -266,9 +272,11 @@ def get_chunks_via_visit_api(
                     document_tenant_id = document["fields"].get(TENANT_ID)
                     if document_tenant_id != filters.tenant_id:
                         logger.error(
-                            f"Skipping document {document['document_id']} because "
-                            f"it does not belong to tenant {filters.tenant_id}. "
-                            "This should never happen."
+                            "Skipping document %s because "
+                            "it does not belong to tenant %s. "
+                            "This should never happen.",
+                            document["document_id"],
+                            filters.tenant_id,
                         )
                         continue
 
@@ -317,7 +325,9 @@ def get_all_chunks_paginated(
     ) -> tuple[list[dict], str | None]:
         if continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN:
             logger.debug(
-                f"Slice {slice_id} has finished visiting. Returning empty list and {FINISHED_VISITING_SLICE_CONTINUATION_TOKEN}."
+                "Slice %s has finished visiting. Returning empty list and %s.",
+                slice_id,
+                FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
             )
             return [], FINISHED_VISITING_SLICE_CONTINUATION_TOKEN
 
@@ -362,7 +372,10 @@ def get_all_chunks_paginated(
                 f"{continuation_token} in {time.monotonic() - start_time:.3f} seconds."
             )
             logger.exception(
-                f"Request URL: {e.request.url}\nRequest Headers: {e.request.headers}\nRequest Payload: {params}\n"
+                "Request URL: %s\nRequest Headers: %s\nRequest Payload: %s",
+                e.request.url,
+                e.request.headers,
+                params,
             )
             error_message = (
                 response.json().get("message") if response else "No response"
@@ -382,7 +395,10 @@ def get_all_chunks_paginated(
         chunks = [chunk["fields"] for chunk in response_data.get("documents", [])]
         if next_continuation_token == FINISHED_VISITING_SLICE_CONTINUATION_TOKEN:
             logger.debug(
-                f"Slice {slice_id} has finished visiting. Returning {len(chunks)} chunks and {next_continuation_token}."
+                "Slice %s has finished visiting. Returning %s chunks and %s.",
+                slice_id,
+                len(chunks),
+                next_continuation_token,
             )
         return chunks, next_continuation_token
 
@@ -423,8 +439,10 @@ def get_all_chunks_paginated(
             raise RuntimeError(f"Slice {i} is not in the continuation token map.")
         if parallel_result is None:
             logger.error(
-                f"Failed to get chunks for slice {i} of {total_slices}. "
-                "The continuation token for this slice will not be updated."
+                "Failed to get chunks for slice %s of %s. "
+                "The continuation token for this slice will not be updated.",
+                i,
+                total_slices,
             )
             continue
         chunks.extend(parallel_result[0])
@@ -522,14 +540,14 @@ def query_vespa(
         # Log each detail on its own line so log collectors capture them
         # as separate entries rather than truncating a single multiline msg
         logger.error(
-            f"Failed to query Vespa | "
-            f"status={status_code} | "
-            f"yql_length={yql_length} | "
-            f"exception={str(e)}"
+            "Failed to query Vespa | " "status=%s | " "yql_length=%s | " "exception=%s",
+            status_code,
+            yql_length,
+            str(e),
         )
         if response_text:
-            logger.error(f"Vespa error response: {response_text[:1000]}")
-        logger.error(f"Vespa request URL: {e.request.url}")
+            logger.error("Vespa error response: %s", response_text[:1000])
+        logger.error("Vespa request URL: %s", e.request.url)
 
         # Re-raise with diagnostics so callers see what actually went wrong
         raise httpx.HTTPError(
@@ -544,17 +562,19 @@ def query_vespa(
 
     if not hits:
         logger.warning(
-            f"No hits found for YQL Query: {query_params.get('yql', 'No YQL Query')}"
+            "No hits found for YQL Query: %s",
+            query_params.get("yql", "No YQL Query"),
         )
-        logger.debug(f"Vespa Response: {response.text}")
+        logger.debug("Vespa Response: %s", response.text)
 
     for hit in hits:
         if hit["fields"].get(CONTENT) is None:
             identifier = hit["fields"].get("documentid") or hit["id"]
             logger.error(
-                f"Vespa Index with Vespa ID {identifier} has no contents. "
-                f"This is invalid because the vector is not meaningful and keywordsearch cannot "
-                f"fetch this document"
+                "Vespa Index with Vespa ID %s has no contents. "
+                "This is invalid because the vector is not meaningful and keywordsearch cannot "
+                "fetch this document",
+                identifier,
             )
 
     filtered_hits = [hit for hit in hits if hit["fields"].get(CONTENT) is not None]
@@ -567,11 +587,13 @@ def query_vespa(
             set([chunk.document_id for chunk in inference_chunks])
         )
         logger.info(
-            f"Retrieved {num_retrieved_inference_chunks} inference chunks for {num_retrieved_document_ids} documents"
+            "Retrieved %s inference chunks for %s documents",
+            num_retrieved_inference_chunks,
+            num_retrieved_document_ids,
         )
     except Exception as e:
         # Debug logging only, should not fail the retrieval
-        logger.error(f"Error logging retrieval statistics: {e}")
+        logger.error("Error logging retrieval statistics: %s", e)
 
     # Good Debugging Spot
     return inference_chunks
@@ -657,7 +679,7 @@ def batch_search_api_retrieval(
         )
 
     if uncapped_requests:
-        logger.debug(f"Retrieving {len(uncapped_requests)} uncapped requests")
+        logger.debug("Retrieving %s uncapped requests", len(uncapped_requests))
         retrieved_chunks.extend(
             parallel_visit_api_retrieval(
                 index_name, uncapped_requests, filters, get_large_chunks

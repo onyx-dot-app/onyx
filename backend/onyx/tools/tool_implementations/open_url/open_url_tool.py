@@ -483,7 +483,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         if len(urls) > override_kwargs.max_urls:
             logger.warning(
-                f"OpenURL tool received {len(urls)} URLs, but the max is {override_kwargs.max_urls}."
+                "OpenURL tool received %s URLs, but the max is %s.",
+                len(urls),
+                override_kwargs.max_urls,
             )
             urls = urls[: override_kwargs.max_urls]
 
@@ -608,7 +610,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 if failure_descriptions
                 else "Failed to fetch content from the requested resources."
             )
-            logger.warning(f"OpenURL tool failed: {failure_msg}")
+            logger.warning("OpenURL tool failed: %s", failure_msg)
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
         for section in inference_sections:
@@ -723,7 +725,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
         except Exception as exc:
             logger.warning(
-                f"Indexed retrieval failed for document IDs {document_ids}: {exc}",
+                "Indexed retrieval failed for document IDs %s: %s",
+                document_ids,
+                exc,
                 exc_info=True,
             )
             return IndexedRetrievalResult(

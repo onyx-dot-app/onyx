@@ -159,12 +159,13 @@ def classify_section_relevance(
                 )
             else:
                 logger.warning(
-                    f"Could not parse situation number from LLM response: {llm_response}"
+                    "Could not parse situation number from LLM response: %s",
+                    llm_response,
                 )
                 classification = default_classification
 
     except Exception as e:
-        logger.error(f"Error calling LLM for context selection: {e}")
+        logger.error("Error calling LLM for context selection: %s", e)
         classification = default_classification
 
     # To save some effort down the line, if there is nothing surrounding, don't allow a classification of adjacent or whole doc
@@ -354,7 +355,7 @@ def select_sections_for_expansion(
 
         if not section_ids:
             logger.warning(
-                f"Could not parse section IDs from LLM response: {llm_response}"
+                "Could not parse section IDs from LLM response: %s", llm_response
             )
             return sections[:max_sections], None
 
@@ -369,13 +370,17 @@ def select_sections_for_expansion(
             try:
                 section_id_int = int(section_id_str)
             except ValueError:
-                logger.warning(f"Could not convert section ID to int: {section_id_str}")
+                logger.warning(
+                    "Could not convert section ID to int: %s", section_id_str
+                )
                 continue
 
             # Check if in valid range
             if section_id_int < 0 or section_id_int >= num_sections:
                 logger.warning(
-                    f"Section ID {section_id_int} is out of range [0, {num_sections - 1}], skipping"
+                    "Section ID %s is out of range [0, %s], skipping",
+                    section_id_int,
+                    num_sections - 1,
                 )
                 continue
 
@@ -407,9 +412,11 @@ def select_sections_for_expansion(
         ]
 
         logger.debug(
-            f"LLM selected {len(selected_sections)} valid sections from {len(sections)} total candidates. "
-            f"Selected document IDs: {selected_document_ids}. "
-            f"Document IDs with exclamation: {document_ids_with_exclamation if document_ids_with_exclamation else []}"
+            "LLM selected %s valid sections from %s total candidates. Selected document IDs: %s. Document IDs with exclamation: %s",
+            len(selected_sections),
+            len(sections),
+            selected_document_ids,
+            document_ids_with_exclamation if document_ids_with_exclamation else [],
         )
 
         # Return document_ids if any sections had exclamation marks, otherwise None
@@ -418,5 +425,5 @@ def select_sections_for_expansion(
         )
 
     except Exception as e:
-        logger.error(f"Error calling LLM for document selection: {e}")
+        logger.error("Error calling LLM for document selection: %s", e)
         return sections[:max_sections], None

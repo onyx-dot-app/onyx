@@ -255,7 +255,7 @@ def _scan_skills_directory(skills_path: Path) -> str:
                 description = extract_skill_description(skill_md)
                 skills_list.append(f"- **{skill_dir.name}**: {description}")
     except Exception as e:
-        logger.warning(f"Error scanning skills directory: {e}")
+        logger.warning("Error scanning skills directory: %s", e)
         return "Error loading skills."
 
     if not skills_list:
@@ -419,7 +419,7 @@ def build_knowledge_sources_section(files_path: Path) -> str:
 
             sections.append("\n".join(lines))
     except Exception as e:
-        logger.warning(f"Error building knowledge sources section: {e}")
+        logger.warning("Error building knowledge sources section: %s", e)
         return "Error scanning knowledge sources."
 
     if not sections:
@@ -460,7 +460,7 @@ def generate_agent_instructions(
         Generated AGENTS.md content with placeholders replaced
     """
     if not template_path.exists():
-        logger.warning(f"AGENTS.template.md not found at {template_path}")
+        logger.warning("AGENTS.template.md not found at %s", template_path)
         return "# Agent Instructions\n\nNo custom instructions provided."
 
     # Read template content

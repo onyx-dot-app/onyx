@@ -90,7 +90,7 @@ def store_image_and_create_section(
             file_id=file_id,
         )
     except Exception as e:
-        logger.error(f"Failed to store image: {e}")
+        logger.error("Failed to store image: %s", e)
         raise e
 
     # Create an ImageSection with empty text (will be filled by LLM later in the pipeline)

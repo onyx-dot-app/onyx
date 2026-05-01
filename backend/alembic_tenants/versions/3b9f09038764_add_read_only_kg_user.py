@@ -12,7 +12,6 @@ from alembic import op
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from onyx.configs.app_configs import DB_READONLY_USER
 
-
 # revision identifiers, used by Alembic.
 revision = "3b9f09038764"
 down_revision = "3b45e0018bf1"

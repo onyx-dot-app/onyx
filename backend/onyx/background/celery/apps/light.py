@@ -96,7 +96,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
     logger.info(
-        f"Concurrency: {sender.concurrency}"  # ty: ignore[unresolved-attribute]
+        "Concurrency: %s", sender.concurrency  # ty: ignore[unresolved-attribute]
     )
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)

@@ -114,13 +114,13 @@ class OnyxSalesforceSQLite:
             if SQLITE_DISK_IO_ERROR not in str(e):
                 raise
 
-            logger.warning(f"SQLite disk I/O error detected, attempting recovery: {e}")
+            logger.warning("SQLite disk I/O error detected, attempting recovery: %s", e)
             self._recover_from_corruption()
             self._apply_schema_impl()
 
     def _recover_from_corruption(self) -> None:
         """Recover from SQLite corruption by removing all database files and reconnecting."""
-        logger.info(f"Removing corrupted SQLite files: {self.filename}")
+        logger.info("Removing corrupted SQLite files: %s", self.filename)
 
         # Close existing connection
         self.close()
@@ -146,7 +146,7 @@ class OnyxSalesforceSQLite:
             if self._existing_db:
                 file_path = Path(self.filename)
                 file_size = file_path.stat().st_size
-                logger.info(f"init_db - found existing sqlite db: len={file_size}")
+                logger.info("init_db - found existing sqlite db: len=%s", file_size)
             else:
                 # NOTE(rkuo): why is this only if the db doesn't exist?
 
@@ -248,7 +248,10 @@ class OnyxSalesforceSQLite:
             )
 
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - create tables and indices: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - create tables and indices: elapsed=%s",
+                format(elapsed, ".2f"),
+            )
 
             # Analyze tables to help query planner
             # NOTE(rkuo): skip ANALYZE - it takes too long and we likely don't have
@@ -265,13 +268,17 @@ class OnyxSalesforceSQLite:
             start = time.monotonic()
             cursor.execute("SELECT COUNT(*) FROM user_email_map")
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - count user_email_map: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - count user_email_map: elapsed=%s", format(elapsed, ".2f")
+            )
 
             start = time.monotonic()
             if cursor.fetchone()[0] == 0:
                 OnyxSalesforceSQLite._update_user_email_map(cursor)
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - update_user_email_map: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - update_user_email_map: elapsed=%s", format(elapsed, ".2f")
+            )
 
     def get_user_id_by_email(self, email: str) -> str | None:
         """Get the Salesforce User ID for a given email address.
@@ -322,10 +329,11 @@ class OnyxSalesforceSQLite:
             else:
                 cache_bytes = abs(cache_pages * 1024)
             logger.info(
-                f"SQLite stats: sqlite_version={sqlite3.sqlite_version} "
-                f"cache_pages={cache_pages} "
-                f"page_size={page_size} "
-                f"cache_bytes={cache_bytes}"
+                "SQLite stats: sqlite_version=%s cache_pages=%s page_size=%s cache_bytes=%s",
+                sqlite3.sqlite_version,
+                cache_pages,
+                page_size,
+                cache_bytes,
             )
 
     # get_changed_parent_ids_by_type_2 replaces this
@@ -464,7 +472,11 @@ class OnyxSalesforceSQLite:
             ]
             for field_name, _ in parent_relationship_fields.items():
                 if field_name not in sf_object.data:
-                    logger.warning(f"{field_name=} not in data for {changed_type=}!")
+                    logger.warning(
+                        "field_name=%r not in data for changed_type=%r!",
+                        field_name,
+                        changed_type,
+                    )
                     continue
 
                 parent_id = cast(str, sf_object.data[field_name])
@@ -472,7 +484,8 @@ class OnyxSalesforceSQLite:
 
                 if parent_id_prefix not in prefix_to_type:
                     logger.warning(
-                        f"Could not lookup type for prefix: {parent_id_prefix=}"
+                        "Could not lookup type for prefix: parent_id_prefix=%r",
+                        parent_id_prefix,
                     )
                     continue
 
@@ -573,7 +586,10 @@ class OnyxSalesforceSQLite:
                 for row in reader:
                     if ID_FIELD not in row:
                         logger.warning(
-                            f"Row {row} does not have an {ID_FIELD} field in {csv_download_path}"
+                            "Row %s does not have an %s field in %s",
+                            row,
+                            ID_FIELD,
+                            csv_download_path,
                         )
                         continue
 
@@ -640,7 +656,7 @@ class OnyxSalesforceSQLite:
             )
             result = cursor.fetchone()
             if not result:
-                logger.warning(f"Object ID {object_id} not found")
+                logger.warning("Object ID %s not found", object_id)
                 return None
             return result[0]
 
@@ -673,7 +689,7 @@ class OnyxSalesforceSQLite:
                 )
             result = cursor.fetchall()
             if not result:
-                logger.warning(f"Object ID {object_id} not found")
+                logger.warning("Object ID %s not found", object_id)
                 return None
 
             data = json.loads(result[0][0])
@@ -772,7 +788,9 @@ class OnyxSalesforceSQLite:
 
         except Exception:
             logger.exception(
-                f"Error updating relationship tables: child_id={child_id} parent_ids={parent_ids}"
+                "Error updating relationship tables: child_id=%s parent_ids=%s",
+                child_id,
+                parent_ids,
             )
             raise
 
@@ -800,10 +818,10 @@ class OnyxSalesforceSQLite:
         of the user if possible."""
         object_dict: dict[str, Any] = sf_object.data
         if not (last_modified_by_id := object_dict.get("LastModifiedById")):
-            logger.warning(f"No LastModifiedById found for {sf_object.id}")
+            logger.warning("No LastModifiedById found for %s", sf_object.id)
             return None
         if not (last_modified_by := self.get_record(last_modified_by_id)):
-            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+            logger.warning("No LastModifiedBy found for %s", last_modified_by_id)
             return None
 
         try:

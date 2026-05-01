@@ -483,7 +483,8 @@ def extract_tool_calls_from_response_text(
         )
 
     logger.info(
-        f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
+        "Extracted %s tool call(s) from response text as fallback",
+        len(tool_calls),
     )
 
     return tool_calls
@@ -843,7 +844,9 @@ def translate_history_to_llm_format(
                             content_parts.append(image_part)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to process image file {img_file.file_id}: {e}. Skipping image."
+                                "Failed to process image file %s: %s. Skipping image.",
+                                img_file.file_id,
+                                e,
                             )
                 user_msg = UserMessage(
                     role="user",
@@ -876,7 +879,8 @@ def translate_history_to_llm_format(
 
         else:
             logger.warning(
-                f"Unknown message type {msg.message_type} in history. Skipping message."
+                "Unknown message type %s in history. Skipping message.",
+                msg.message_type,
             )
 
     # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
@@ -1010,7 +1014,8 @@ def run_llm_step_pkt_generator(
 
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(
-            f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
+            "Message history:\n%s",
+            _format_message_history_for_logging(llm_msg_history),
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
@@ -1181,7 +1186,9 @@ def run_llm_step_pkt_generator(
                 empty_chunk_count += 1
                 logger.warning(
                     "LLM packet is empty (no content, reasoning, or tool calls). "
-                    f"finish_reason={finish_reason}. Skipping: {packet}"
+                    "finish_reason=%s. Skipping: %s",
+                    finish_reason,
+                    packet,
                 )
                 continue
 
@@ -1315,25 +1322,32 @@ def run_llm_step_pkt_generator(
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
     if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
-        logger.debug(f"Accumulated answer: {accumulated_answer}")
+        logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
+        logger.debug("Accumulated answer: %s", accumulated_answer)
 
         if tool_calls:
             tool_calls_str = "\n".join(
                 f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
                 for tc in tool_calls
             )
-            logger.debug(f"Tool calls:\n{tool_calls_str}")
+            logger.debug("Tool calls:\n%s", tool_calls_str)
         else:
             logger.debug("Tool calls: []")
 
     if actionable_chunk_count == 0:
         logger.warning(
             "LLM stream completed with no actionable deltas. "
-            f"chunks={stream_chunk_count}, empty_chunks={empty_chunk_count}, "
-            f"finish_reasons={sorted(finish_reasons)}, "
-            f"provider={llm.config.model_provider}, model={llm.config.model_name}, "
-            f"tool_choice={tool_choice}, tools_sent={len(tool_definitions)}"
+            "chunks=%s, empty_chunks=%s, "
+            "finish_reasons=%s, "
+            "provider=%s, model=%s, "
+            "tool_choice=%s, tools_sent=%s",
+            stream_chunk_count,
+            empty_chunk_count,
+            sorted(finish_reasons),
+            llm.config.model_provider,
+            llm.config.model_name,
+            tool_choice,
+            len(tool_definitions),
         )
 
     return (

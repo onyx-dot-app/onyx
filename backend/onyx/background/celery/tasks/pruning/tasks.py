@@ -238,18 +238,18 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                         cc_pair_id=cc_pair_id,
                     )
                     if not cc_pair:
-                        logger.error(f"CC pair not found: {cc_pair_id}")
+                        logger.error("CC pair not found: %s", cc_pair_id)
                         continue
 
                     if not _is_pruning_due(cc_pair):
-                        logger.info(f"CC pair not due for pruning: {cc_pair_id}")
+                        logger.info("CC pair not due for pruning: %s", cc_pair_id)
                         continue
 
                     payload_id = try_creating_prune_generator_task(
                         self.app, cc_pair, db_session, r, tenant_id
                     )
                     if not payload_id:
-                        logger.info(f"Pruning not created: {cc_pair_id}")
+                        logger.info("Pruning not created: %s", cc_pair_id)
                         continue
 
                     prune_dispatched = True
@@ -328,7 +328,7 @@ def try_creating_prune_generator_task(
     is used to trigger prunes immediately, e.g. via the web ui.
     """
 
-    logger.info(f"try_creating_prune_generator_task: cc_pair={cc_pair.id}")
+    logger.info("try_creating_prune_generator_task: cc_pair=%s", cc_pair.id)
 
     redis_connector = RedisConnector(tenant_id, cc_pair.id)
 
@@ -336,7 +336,8 @@ def try_creating_prune_generator_task(
         count = redis_connector.prune.get_active_task_count()
         if count > 0:
             logger.info(
-                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} no simultaneous pruning allowed"
+                "try_creating_prune_generator_task: cc_pair=%s no simultaneous pruning allowed",
+                cc_pair.id,
             )
             return None
 
@@ -352,7 +353,8 @@ def try_creating_prune_generator_task(
     acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
     if not acquired:
         logger.info(
-            f"try_creating_prune_generator_task: cc_pair={cc_pair.id} lock not acquired"
+            "try_creating_prune_generator_task: cc_pair=%s lock not acquired",
+            cc_pair.id,
         )
         return None
 
@@ -360,28 +362,30 @@ def try_creating_prune_generator_task(
         # skip pruning if already pruning
         if redis_connector.prune.fenced:
             logger.info(
-                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} already pruning"
+                "try_creating_prune_generator_task: cc_pair=%s already pruning",
+                cc_pair.id,
             )
             return None
 
         # skip pruning if the cc_pair is deleting
         if redis_connector.delete.fenced:
             logger.info(
-                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} deleting"
+                "try_creating_prune_generator_task: cc_pair=%s deleting", cc_pair.id
             )
             return None
 
         # skip pruning if doc permissions sync is running
         if redis_connector.permissions.fenced:
             logger.info(
-                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} permissions sync running"
+                "try_creating_prune_generator_task: cc_pair=%s permissions sync running",
+                cc_pair.id,
             )
             return None
 
         db_session.refresh(cc_pair)
         if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
             logger.info(
-                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} deleting"
+                "try_creating_prune_generator_task: cc_pair=%s deleting", cc_pair.id
             )
             return None
 
@@ -507,7 +511,8 @@ def connector_pruning_generator_task(
 
         if payload.celery_task_id is None:
             logger.info(
-                f"connector_prune_generator_task - Waiting for fence: fence={redis_connector.prune.fence_key}"
+                "connector_prune_generator_task - Waiting for fence: fence=%s",
+                redis_connector.prune.fence_key,
             )
             time.sleep(1)
             continue
@@ -515,9 +520,9 @@ def connector_pruning_generator_task(
         payload_id = payload.id
 
         logger.info(
-            f"connector_prune_generator_task - Fence found, continuing...: "
-            f"fence={redis_connector.prune.fence_key} "
-            f"payload_id={payload.id}"
+            "connector_prune_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+            redis_connector.prune.fence_key,
+            payload.id,
         )
         break
 

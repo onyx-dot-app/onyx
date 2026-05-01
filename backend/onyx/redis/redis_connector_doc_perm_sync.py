@@ -216,10 +216,14 @@ class RedisConnectorPermissionSync:
                         else permissions.raw_node_id
                     )
                     task_logger.warning(
-                        f"Permissions length exceeded, skipping...: "
-                        f"{element_id} "
-                        f"{num_users=} {num_groups=} "
-                        f"{permissions.external_access.MAX_NUM_ENTRIES=}"
+                        "Permissions length exceeded, skipping...: "
+                        "%s "
+                        "num_users=%s num_groups=%s "
+                        "permissions.external_access.MAX_NUM_ENTRIES=%s",
+                        element_id,
+                        num_users,
+                        num_groups,
+                        permissions.external_access.MAX_NUM_ENTRIES,
                     )
                 continue
 
@@ -251,7 +255,7 @@ class RedisConnectorPermissionSync:
                         else permissions.raw_node_id
                     )
                     task_logger.exception(
-                        f"Failed to update permissions for element {element_id}"
+                        "Failed to update permissions for element %s", element_id
                     )
             finally:
                 cumulative_db_update_time += time.monotonic() - db_start

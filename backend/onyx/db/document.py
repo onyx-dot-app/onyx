@@ -1120,7 +1120,9 @@ def prepare_to_modify_documents(
                     break
         except OperationalError as e:
             logger.warning(
-                f"Failed to acquire locks for documents on attempt {i}, retrying. Error: {e}"
+                "Failed to acquire locks for documents on attempt %s, retrying. Error: %s",
+                i,
+                e,
             )
 
         time.sleep(retry_delay)

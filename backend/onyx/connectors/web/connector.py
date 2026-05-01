@@ -184,7 +184,7 @@ def check_internet_connection(url: str) -> None:
         # around this.
         if status_code == 403:
             logger.warning(
-                f"Received 403 Forbidden for {url}, will retry with browser automation"
+                "Received 403 Forbidden for %s, will retry with browser automation", url
             )
             return
 
@@ -438,10 +438,12 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
             try:
                 context.add_cookies([cookie])  # ty: ignore[invalid-argument-type]
             except Exception as e:
-                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+                logger.debug(
+                    "Failed to add cookie %s for %s: %s", cookie["name"], domain, e
+                )
     except Exception:
         logger.exception(
-            f"Unexpected error while handling cookies for Web Connector with URL {url}"
+            "Unexpected error while handling cookies for Web Connector with URL %s", url
         )
 
 
@@ -600,12 +602,15 @@ class WebConnector(LoadConnector, SlimConnector):
                 initial_url = final_url
                 if initial_url in session_ctx.visited_links:
                     logger.info(
-                        f"{index}: {initial_url} redirected to {final_url} - already indexed"
+                        "%s: %s redirected to %s - already indexed",
+                        index,
+                        initial_url,
+                        final_url,
                     )
                     page.close()
                     return result
 
-                logger.info(f"{index}: {initial_url} redirected to {final_url}")
+                logger.info("%s: %s redirected to %s", index, initial_url, final_url)
                 session_ctx.visited_links.add(initial_url)
 
             # If we got here, the request was successful
@@ -640,7 +645,10 @@ class WebConnector(LoadConnector, SlimConnector):
                         scroll_attempts += 1
                 except Exception as scroll_err:
                     logger.warning(
-                        f"{index}: auto-scroll skipped for {initial_url}: {scroll_err}"
+                        "%s: auto-scroll skipped for %s: %s",
+                        index,
+                        initial_url,
+                        scroll_err,
                     )
 
             content = page.content()
@@ -677,7 +685,7 @@ class WebConnector(LoadConnector, SlimConnector):
             the code below can extract text from within these iframes.
             """
             logger.debug(
-                f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+                "%s: Length of cleaned text %s", index, len(parsed_html.cleaned_text)
             )
             if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
                 iframe_count = page.frame_locator("iframe").locator("html").count()
@@ -698,7 +706,7 @@ class WebConnector(LoadConnector, SlimConnector):
             hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
             if hashed_text in session_ctx.content_hashes:
                 logger.info(
-                    f"{index}: Skipping duplicate title + content for {initial_url}"
+                    "%s: Skipping duplicate title + content for %s", index, initial_url
                 )
                 return result
 
@@ -755,7 +763,7 @@ class WebConnector(LoadConnector, SlimConnector):
 
             index = len(session_ctx.visited_links)
             logger.info(
-                f"{index}: {'Slim-visiting' if slim else 'Visiting'} {initial_url}"
+                "%s: %s %s", index, "Slim-visiting" if slim else "Visiting", initial_url
             )
 
             # Add retry mechanism with exponential backoff
@@ -766,7 +774,11 @@ class WebConnector(LoadConnector, SlimConnector):
                     # Add a random delay between retries (exponential backoff)
                     delay = min(2**retry_count + random.uniform(0, 1), 10)
                     logger.info(
-                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                        "Retry %s/%s for %s after %ss delay",
+                        retry_count,
+                        self.MAX_RETRIES,
+                        initial_url,
+                        format(delay, ".2f"),
                     )
                     time.sleep(delay)
 

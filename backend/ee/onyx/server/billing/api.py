@@ -89,11 +89,13 @@ def _is_billing_circuit_open() -> bool:
         redis_client = get_shared_redis_client()
         is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
         logger.debug(
-            f"Circuit breaker check: key={BILLING_CIRCUIT_BREAKER_KEY}, is_open={is_open}"
+            "Circuit breaker check: key=%s, is_open=%s",
+            BILLING_CIRCUIT_BREAKER_KEY,
+            is_open,
         )
         return is_open
     except Exception as e:
-        logger.error(f"Failed to check circuit breaker: {e}")
+        logger.error("Failed to check circuit breaker: %s", e)
         return False
 
 
@@ -111,11 +113,12 @@ def _open_billing_circuit() -> None:
         # Verify it was set
         exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
         logger.warning(
-            f"Billing circuit breaker opened (TTL={BILLING_CIRCUIT_BREAKER_TTL_SECONDS}s, "
-            f"verified={exists}). Stripe billing requests are disabled until manually reset."
+            "Billing circuit breaker opened (TTL=%ss, verified=%s). Stripe billing requests are disabled until manually reset.",
+            BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
+            exists,
         )
     except Exception as e:
-        logger.error(f"Failed to open circuit breaker: {e}")
+        logger.error("Failed to open circuit breaker: %s", e)
 
 
 def _close_billing_circuit() -> None:
@@ -129,7 +132,7 @@ def _close_billing_circuit() -> None:
             "Billing circuit breaker closed. Stripe billing requests re-enabled."
         )
     except Exception as e:
-        logger.error(f"Failed to close circuit breaker: {e}")
+        logger.error("Failed to close circuit breaker: %s", e)
 
 
 def _get_license_data(db_session: Session) -> str | None:

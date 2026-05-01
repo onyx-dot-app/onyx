@@ -165,7 +165,7 @@ def remove_old_tags() -> None:
                 )
             )
             n_deleted += result.rowcount
-        logger.info(f"Processed {len(batch)} documents and deleted {n_deleted} tags")
+        logger.info("Processed %s documents and deleted %s tags", len(batch), n_deleted)
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:

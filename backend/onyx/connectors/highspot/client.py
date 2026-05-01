@@ -141,7 +141,7 @@ class HighspotClient:
             request_headers.update(headers)
 
         try:
-            logger.debug(f"Making {method} request to {url}")
+            logger.debug("Making %s request to %s", method, url)
             response = self.session.request(
                 method=method,
                 url=url,
@@ -200,13 +200,15 @@ class HighspotClient:
             params = {"right": "view", "start": current_offset, "limit": PAGE_SIZE}
             response = self._make_request("GET", "spots", params=params)
             found_spots = response.get("collection", [])
-            logger.info(f"Received {len(found_spots)} spots at offset {current_offset}")
+            logger.info(
+                "Received %s spots at offset %s", len(found_spots), current_offset
+            )
             all_spots.extend(found_spots)
             if len(found_spots) < PAGE_SIZE:
                 has_more = False
             else:
                 current_offset += PAGE_SIZE
-        logger.info(f"Total spots retrieved: {len(all_spots)}")
+        logger.info("Total spots retrieved: %s", len(all_spots))
         return all_spots
 
     def get_spot(self, spot_id: str) -> Dict[str, Any]:

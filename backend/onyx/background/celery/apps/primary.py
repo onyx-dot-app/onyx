@@ -126,7 +126,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_document_index_or_shutdown()
 
-    logger.info(f"Running as the primary celery worker: pid={os.getpid()}")
+    logger.info("Running as the primary celery worker: pid=%s", os.getpid())
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
@@ -142,13 +142,13 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     connected_slaves: int = replication_info.get("connected_slaves", 0)
 
     logger.info(
-        f"Redis INFO REPLICATION: role={role} connected_slaves={connected_slaves}"
+        "Redis INFO REPLICATION: role=%s connected_slaves=%s", role, connected_slaves
     )
 
     memory_info: dict[str, Any] = cast(dict, r.info("memory"))
     maxmemory_policy: str = cast(str, memory_info.get("maxmemory_policy", ""))
 
-    logger.info(f"Redis INFO MEMORY: maxmemory_policy={maxmemory_policy}")
+    logger.info("Redis INFO MEMORY: maxmemory_policy=%s", maxmemory_policy)
 
     # For the moment, we're assuming that we are the only primary worker
     # that should be running.
@@ -238,7 +238,9 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
             except Exception:
                 # If we can't check the task status, be conservative and continue
                 logger.warning(
-                    f"Could not verify Celery task status on startup for attempt {attempt.id}, task_id={attempt.celery_task_id}"
+                    "Could not verify Celery task status on startup for attempt %s, task_id=%s",
+                    attempt.id,
+                    attempt.celery_task_id,
                 )
 
 

@@ -8,7 +8,6 @@ Create Date: 2025-02-26 13:07:56.217791
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "3bd4c84fe72f"
 down_revision = "8f43500ee275"

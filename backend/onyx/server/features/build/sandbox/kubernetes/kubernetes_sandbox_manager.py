@@ -359,7 +359,9 @@ class KubernetesSandboxManager(SandboxManager):
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
-            f"KubernetesSandboxManager initialized: namespace={self._namespace}, image={self._image}"
+            "KubernetesSandboxManager initialized: namespace=%s, image=%s",
+            self._namespace,
+            self._image,
         )
 
     def _get_pod_name(self, sandbox_id: str) -> str:
@@ -697,7 +699,7 @@ done
             # Service exists - check if it's being deleted
             if svc.metadata.deletion_timestamp:
                 logger.info(
-                    f"Service {service_name} is terminating, waiting for deletion"
+                    "Service %s is terminating, waiting for deletion", service_name
                 )
                 self._wait_for_resource_deletion("service", service_name)
                 # Now create a fresh service
@@ -706,14 +708,14 @@ done
                     namespace=self._namespace,
                     body=service,
                 )
-                logger.info(f"Recreated Service {service_name} after termination")
+                logger.info("Recreated Service %s after termination", service_name)
             else:
-                logger.debug(f"Service {service_name} already exists and is active")
+                logger.debug("Service %s already exists and is active", service_name)
 
         except ApiException as e:
             if e.status == 404:
                 # Service doesn't exist, create it
-                logger.info(f"Creating missing Service {service_name}")
+                logger.info("Creating missing Service %s", service_name)
                 service = self._create_sandbox_service(sandbox_id, tenant_id)
                 try:
                     self._core_api.create_namespaced_service(
@@ -724,7 +726,7 @@ done
                     if svc_e.status != 409:  # Ignore AlreadyExists
                         raise
                     logger.debug(
-                        f"Service {service_name} was created by another request"
+                        "Service %s was created by another request", service_name
                     )
             else:
                 raise
@@ -841,15 +843,15 @@ done
                     conditions = pod.status.conditions or []
                     for condition in conditions:
                         if condition.type == "Ready" and condition.status == "True":
-                            logger.info(f"Pod {pod_name} is ready")
+                            logger.info("Pod %s is ready", pod_name)
                             return True
 
-                logger.debug(f"Pod {pod_name} status: {phase}, waiting...")
+                logger.debug("Pod %s status: %s, waiting...", pod_name, phase)
 
             except ApiException as e:
                 if e.status == 404:
                     raise RuntimeError(f"Pod {pod_name} was deleted")
-                logger.warning(f"Error checking pod status: {e}")
+                logger.warning("Error checking pod status: %s", e)
 
             time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
 
@@ -865,7 +867,7 @@ done
         except ApiException:
             pass  # Pod might be deleted, ignore
 
-        logger.warning(f"Timeout waiting for pod {pod_name} to become ready")
+        logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
@@ -935,7 +937,10 @@ done
             RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting Kubernetes sandbox provisioning for sandbox {sandbox_id}, user {user_id}, tenant {tenant_id}"
+            "Starting Kubernetes sandbox provisioning for sandbox %s, user %s, tenant %s",
+            sandbox_id,
+            user_id,
+            tenant_id,
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -943,20 +948,20 @@ done
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
             logger.info(
-                f"Pod {pod_name} already exists and is healthy, reusing existing pod"
+                "Pod %s already exists and is healthy, reusing existing pod", pod_name
             )
             # Ensure service exists and is not terminating
             self._ensure_service_exists(sandbox_id, tenant_id)
 
             # Wait for pod to be ready if it's still pending
-            logger.info(f"Waiting for existing pod {pod_name} to become ready...")
+            logger.info("Waiting for existing pod %s to become ready...", pod_name)
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
             logger.info(
-                f"Reusing existing Kubernetes sandbox {sandbox_id}, pod: {pod_name}"
+                "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
             )
             return SandboxInfo(
                 sandbox_id=sandbox_id,
@@ -967,7 +972,7 @@ done
 
         try:
             # 1. Create Pod (user-level only, no session setup)
-            logger.debug(f"Creating Pod {pod_name}")
+            logger.debug("Creating Pod %s", pod_name)
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
                 user_id=str(user_id),
@@ -983,19 +988,21 @@ done
                     # Pod was created by another concurrent request
                     # Check if it's healthy and reuse it
                     logger.warning(
-                        f"Pod {pod_name} already exists (409 conflict, this shouldn't normally happen), "
-                        "checking if it's healthy..."
+                        "Pod %s already exists (409 conflict, this shouldn't normally happen), checking if it's healthy...",
+                        pod_name,
                     )
                     if self._pod_exists_and_healthy(pod_name):
                         logger.warning(
-                            f"During provisioning, discovered that pod {pod_name} already exists. Reusing"
+                            "During provisioning, discovered that pod %s already exists. Reusing",
+                            pod_name,
                         )
                         # Continue to ensure service exists and wait for ready
                     else:
                         # Pod exists but is not healthy - this shouldn't happen often
                         # but could occur if a previous provision failed mid-way
                         logger.warning(
-                            f"Pod {pod_name} exists but is not healthy, waiting for it to become ready or fail"
+                            "Pod %s exists but is not healthy, waiting for it to become ready or fail",
+                            pod_name,
                         )
                 else:
                     raise
@@ -1004,14 +1011,16 @@ done
             self._ensure_service_exists(sandbox_id, tenant_id)
 
             # 3. Wait for pod to be ready
-            logger.info(f"Waiting for pod {pod_name} to become ready...")
+            logger.info("Waiting for pod %s to become ready...", pod_name)
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
             logger.info(
-                f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name} (no sessions yet)"
+                "Provisioned Kubernetes sandbox %s, pod: %s (no sessions yet)",
+                sandbox_id,
+                pod_name,
             )
 
             return SandboxInfo(
@@ -1026,12 +1035,15 @@ done
             # Check if pod is healthy - if so, don't clean up (another request may own it)
             if self._pod_exists_and_healthy(pod_name):
                 logger.warning(
-                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}, "
-                    "but pod is healthy (likely owned by concurrent request), not cleaning up"
+                    "Kubernetes sandbox provisioning failed for sandbox %s: %s, but pod is healthy (likely owned by concurrent request), not cleaning up",
+                    sandbox_id,
+                    e,
                 )
             else:
                 logger.error(
-                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
+                    "Kubernetes sandbox provisioning failed for sandbox %s: %s",
+                    sandbox_id,
+                    e,
                     exc_info=True,
                 )
                 self._cleanup_kubernetes_resources(str(sandbox_id))
@@ -1075,20 +1087,27 @@ done
                     raise ValueError(f"Unknown resource type: {resource_type}")
 
                 # Resource still exists, wait and retry
-                logger.debug(f"Waiting for {resource_type} {name} to be deleted...")
+                logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
                 time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
 
             except ApiException as e:
                 if e.status == 404:
                     # Resource is gone
-                    logger.debug(f"{resource_type.capitalize()} {name} fully deleted")
+                    logger.debug(
+                        "%s %s fully deleted", resource_type.capitalize(), name
+                    )
                     return True
                 # Other error, log and continue waiting
-                logger.warning(f"Error checking {resource_type} {name} status: {e}")
+                logger.warning(
+                    "Error checking %s %s status: %s", resource_type, name, e
+                )
                 time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
 
         logger.warning(
-            f"Timeout waiting for {resource_type} {name} to be deleted after {timeout}s"
+            "Timeout waiting for %s %s to be deleted after %ss",
+            resource_type,
+            name,
+            timeout,
         )
         return False
 
@@ -1118,14 +1137,14 @@ done
                 name=service_name,
                 namespace=self._namespace,
             )
-            logger.debug(f"Deleted Service {service_name}")
+            logger.debug("Deleted Service %s", service_name)
             service_deleted = True
         except ApiException as e:
             if e.status == 404:
                 # Already deleted
                 service_deleted = True
             else:
-                logger.error(f"Error deleting Service {service_name}: {e}")
+                logger.error("Error deleting Service %s: %s", service_name, e)
                 raise
 
         pod_deleted = False
@@ -1134,14 +1153,14 @@ done
                 name=pod_name,
                 namespace=self._namespace,
             )
-            logger.debug(f"Deleted Pod {pod_name}")
+            logger.debug("Deleted Pod %s", pod_name)
             pod_deleted = True
         except ApiException as e:
             if e.status == 404:
                 # Already deleted
                 pod_deleted = True
             else:
-                logger.error(f"Error deleting Pod {pod_name}: {e}")
+                logger.error("Error deleting Pod %s: %s", pod_name, e)
                 raise
 
         # Wait for resources to be fully deleted to prevent 409 conflicts
@@ -1165,7 +1184,7 @@ done
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
-        logger.info(f"Terminated Kubernetes sandbox {sandbox_id}")
+        logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def setup_session_workspace(
         self,
@@ -1217,9 +1236,9 @@ done
         """
         if snapshot_path:
             logger.warning(
-                f"Snapshot restoration requested but not supported in Kubernetes mode. "
-                f"Snapshot path {snapshot_path} will be ignored. "
-                f"Session {session_id} will start with fresh outputs template."
+                "Snapshot restoration requested but not supported in Kubernetes mode. Snapshot path %s will be ignored. Session %s will start with fresh outputs template.",
+                snapshot_path,
+                session_id,
             )
 
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -1360,7 +1379,7 @@ echo "Session workspace setup complete"
 """
 
         logger.info(
-            f"Setting up session workspace {session_id} in sandbox {sandbox_id}"
+            "Setting up session workspace %s in sandbox %s", session_id, sandbox_id
         )
 
         try:
@@ -1377,14 +1396,17 @@ echo "Session workspace setup complete"
                 tty=False,
             )
 
-            logger.debug(f"Session setup output: {exec_response}")
+            logger.debug("Session setup output: %s", exec_response)
             logger.info(
-                f"Set up session workspace {session_id} in sandbox {sandbox_id}"
+                "Set up session workspace %s in sandbox %s", session_id, sandbox_id
             )
 
         except Exception as e:
             logger.error(
-                f"Failed to setup session workspace {session_id} in sandbox {sandbox_id}: {e}",
+                "Failed to setup session workspace %s in sandbox %s: %s",
+                session_id,
+                sandbox_id,
+                e,
                 exc_info=True,
             )
             raise RuntimeError(
@@ -1427,7 +1449,7 @@ echo "Session cleanup complete"
 """
 
         logger.info(
-            f"Cleaning up session workspace {session_id} in sandbox {sandbox_id}"
+            "Cleaning up session workspace %s in sandbox %s", session_id, sandbox_id
         )
 
         try:
@@ -1443,19 +1465,21 @@ echo "Session cleanup complete"
                 tty=False,
             )
 
-            logger.debug(f"Session cleanup output: {exec_response}")
+            logger.debug("Session cleanup output: %s", exec_response)
             logger.info(
-                f"Cleaned up session workspace {session_id} in sandbox {sandbox_id}"
+                "Cleaned up session workspace %s in sandbox %s", session_id, sandbox_id
             )
 
         except ApiException as e:
             if e.status == 404:
                 # Pod not found, nothing to clean up
-                logger.debug(f"Pod {pod_name} not found, skipping cleanup")
+                logger.debug("Pod %s not found, skipping cleanup", pod_name)
             else:
-                logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+                logger.warning(
+                    "Error cleaning up session workspace %s: %s", session_id, e
+                )
         except Exception as e:
-            logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+            logger.warning("Error cleaning up session workspace %s: %s", session_id, e)
 
     def create_snapshot(
         self,
@@ -1527,12 +1551,12 @@ echo "SNAPSHOT_CREATED"
                 tty=False,
             )
 
-            logger.debug(f"Snapshot exec output: {resp}")
+            logger.debug("Snapshot exec output: %s", resp)
 
             # Check if nothing was snapshotted
             if "EMPTY_SNAPSHOT" in resp:
                 logger.info(
-                    f"No outputs or attachments to snapshot for session {session_id}"
+                    "No outputs or attachments to snapshot for session %s", session_id
                 )
                 return None
 
@@ -1550,7 +1574,7 @@ echo "SNAPSHOT_CREATED"
         # Storage path must match the S3 upload path (without s3://bucket/ prefix)
         storage_path = f"{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
 
-        logger.info(f"Created snapshot for session {session_id}")
+        logger.info("Created snapshot for session %s", session_id)
 
         return SnapshotResult(
             storage_path=storage_path,
@@ -1598,13 +1622,17 @@ echo "SNAPSHOT_CREATED"
 
             result = "WORKSPACE_FOUND" in resp
             logger.info(
-                f"[WORKSPACE_CHECK] session={session_id}, path={session_path}, raw_resp={resp!r}, result={result}"
+                "[WORKSPACE_CHECK] session=%s, path=%s, raw_resp=%r, result=%s",
+                session_id,
+                session_path,
+                resp,
+                result,
             )
             return result
 
         except ApiException as e:
             logger.warning(
-                f"Failed to check session workspace exists for {session_id}: {e}"
+                "Failed to check session workspace exists for %s: %s", session_id, e
             )
             return False
 
@@ -1844,7 +1872,10 @@ echo "Session config regeneration complete"
         acp_client.start(cwd=session_path)
 
         logger.info(
-            f"[SANDBOX-ACP] Created ephemeral ACP client: sandbox={sandbox_id} pod={pod_name} api_pod={_API_SERVER_HOSTNAME}"
+            "[SANDBOX-ACP] Created ephemeral ACP client: sandbox=%s pod=%s api_pod=%s",
+            sandbox_id,
+            pod_name,
+            _API_SERVER_HOSTNAME,
         )
         return acp_client
 
@@ -1882,7 +1913,10 @@ echo "Session config regeneration complete"
             acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
             logger.info(
-                f"[SANDBOX-ACP] Sending message: session={session_id} acp_session={acp_session_id} api_pod={_API_SERVER_HOSTNAME}"
+                "[SANDBOX-ACP] Sending message: session=%s acp_session=%s api_pod=%s",
+                session_id,
+                acp_session_id,
+                _API_SERVER_HOSTNAME,
             )
 
             # Log the send_message call at sandbox manager level
@@ -1900,22 +1934,26 @@ echo "Session config regeneration complete"
                     yield event
 
                 logger.info(
-                    f"[SANDBOX-ACP] send_message completed: "
-                    f"session={session_id} events={events_count} "
-                    f"got_prompt_response={got_prompt_response}"
+                    "[SANDBOX-ACP] send_message completed: session=%s events=%s got_prompt_response=%s",
+                    session_id,
+                    events_count,
+                    got_prompt_response,
                 )
                 packet_logger.log_session_end(
                     session_id, success=True, events_count=events_count
                 )
             except GeneratorExit:
                 logger.warning(
-                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} events={events_count}, sending session/cancel"
+                    "[SANDBOX-ACP] GeneratorExit: session=%s events=%s, sending session/cancel",
+                    session_id,
+                    events_count,
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: {cancel_err}"
+                        "[SANDBOX-ACP] session/cancel failed on GeneratorExit: %s",
+                        cancel_err,
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1926,13 +1964,17 @@ echo "Session config regeneration complete"
                 raise
             except Exception as e:
                 logger.error(
-                    f"[SANDBOX-ACP] Exception: session={session_id} events={events_count} error={e}, sending session/cancel"
+                    "[SANDBOX-ACP] Exception: session=%s events=%s error=%s, sending session/cancel",
+                    session_id,
+                    events_count,
+                    e,
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on Exception: {cancel_err}"
+                        "[SANDBOX-ACP] session/cancel failed on Exception: %s",
+                        cancel_err,
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1943,7 +1985,10 @@ echo "Session config regeneration complete"
                 raise
             except BaseException as e:
                 logger.error(
-                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} error={e}"
+                    "[SANDBOX-ACP] %s: session=%s error=%s",
+                    type(e).__name__,
+                    session_id,
+                    e,
                 )
                 packet_logger.log_session_end(
                     session_id,
@@ -1959,7 +2004,9 @@ echo "Session config regeneration complete"
                 acp_client.stop()
             except Exception as e:
                 logger.warning(
-                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: session={session_id} error={e}"
+                    "[SANDBOX-ACP] Failed to stop ephemeral ACP client: session=%s error=%s",
+                    session_id,
+                    e,
                 )
 
     def list_directory(
@@ -1991,7 +2038,7 @@ echo "Session config regeneration complete"
         # Use shlex.quote to prevent command injection
         quoted_path = shlex.quote(target_path)
 
-        logger.info(f"Listing directory {target_path} in pod {pod_name}")
+        logger.info("Listing directory %s in pod %s", target_path, pod_name)
 
         # Use exec to list directory
         # -L follows symlinks (important for files/ -> /workspace/demo_data)
@@ -2032,10 +2079,10 @@ echo "Session config regeneration complete"
         entries = []
         lines = ls_output.strip().split("\n")
 
-        logger.debug(f"Parsing {len(lines)} lines of ls output for {base_path}")
+        logger.debug("Parsing %s lines of ls output for %s", len(lines), base_path)
 
         for line in lines:
-            logger.debug(f"Parsing line: {line}")
+            logger.debug("Parsing line: %s", line)
 
             # Skip header line and . / .. entries
             if line.startswith("total") or not line:
@@ -2151,7 +2198,7 @@ echo "Session config regeneration complete"
             try:
                 content = base64.b64decode(resp.strip())
             except binascii.Error as e:
-                logger.error(f"Failed to decode base64 content: {e}")
+                logger.error("Failed to decode base64 content: %s", e)
                 raise RuntimeError(f"Failed to decode file content: {e}") from e
 
             return content
@@ -2349,11 +2396,11 @@ fi
             stdout=True,
             tty=False,
         )
-        logger.debug(f"File sync response: {resp}")
+        logger.debug("File sync response: %s", resp)
 
         # Check if sync succeeded based on output markers
         if "SYNC_FAILED" in resp:
-            logger.warning(f"File sync failed for sandbox {sandbox_id}")
+            logger.warning("File sync failed for sandbox %s", sandbox_id)
             return False
         return True
 
@@ -2416,10 +2463,12 @@ fi
                 tty=False,
             )
             logger.debug(
-                f"Ensure AGENTS.md attachments section for session {session_id}: {resp.strip()}"
+                "Ensure AGENTS.md attachments section for session %s: %s",
+                session_id,
+                resp.strip(),
             )
         except ApiException as e:
-            logger.warning(f"Failed to ensure AGENTS.md attachments section: {e}")
+            logger.warning("Failed to ensure AGENTS.md attachments section: %s", e)
 
     def upload_file(
         self,
@@ -2532,7 +2581,7 @@ echo "$base"
             stderr_data += ws_client.read_stderr() or ""
 
             if stderr_data.strip():
-                logger.warning(f"Upload stderr: {stderr_data.strip()}")
+                logger.warning("Upload stderr: %s", stderr_data.strip())
 
             # Last line of output is the final filename
             final_filename = stdout_data.strip().split("\n")[-1]
@@ -2543,7 +2592,10 @@ echo "$base"
                 )
 
             logger.info(
-                f"Uploaded file to session {session_id}: attachments/{final_filename} ({len(content)} bytes)"
+                "Uploaded file to session %s: attachments/%s (%s bytes)",
+                session_id,
+                final_filename,
+                len(content),
             )
 
             # Ensure AGENTS.md has the attachments section
@@ -2616,10 +2668,10 @@ echo "$base"
 
             deleted = "DELETED" in resp
             if deleted:
-                logger.info(f"Deleted file from session {session_id}: {path}")
+                logger.info("Deleted file from session %s: %s", session_id, path)
             else:
                 logger.debug(
-                    f"File not found for deletion in session {session_id}: {path}"
+                    "File not found for deletion in session %s: %s", session_id, path
                 )
 
             return deleted
@@ -2684,11 +2736,11 @@ fi
                     total_size = int(parts[1])
                     return file_count, total_size
                 except ValueError:
-                    logger.warning(f"Failed to parse upload stats: {resp}")
+                    logger.warning("Failed to parse upload stats: %s", resp)
                     return 0, 0
 
             return 0, 0
 
         except ApiException as e:
-            logger.warning(f"Failed to get upload stats: {e}")
+            logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
