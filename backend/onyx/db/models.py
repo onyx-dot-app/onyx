@@ -2210,7 +2210,6 @@ class TargetedReindexJob(Base):
         Enum(IndexingStatus, native_enum=False),
         nullable=False,
         default=IndexingStatus.NOT_STARTED,
-        server_default="NOT_STARTED",
         index=True,
     )
     # Pre-allocated celery task UUID. Written before `apply_async` so the

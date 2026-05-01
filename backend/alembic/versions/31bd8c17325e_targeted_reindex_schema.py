@@ -48,7 +48,6 @@ def upgrade() -> None:
                 name="indexingstatus",
                 native_enum=False,
             ),
-            server_default="NOT_STARTED",
             nullable=False,
         ),
         sa.Column("celery_task_id", sa.Text(), nullable=True),
