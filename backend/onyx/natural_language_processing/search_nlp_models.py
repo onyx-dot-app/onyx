@@ -482,7 +482,7 @@ class CloudEmbedding:
         return [embedding["embedding"] for embedding in result["data"]]
 
     @retry(
-        retry=retry_if_exception_type((RuntimeError, httpx.HTTPError)),
+        retry=retry_if_exception_type(RuntimeError),
         stop=stop_after_attempt(_RETRY_TRIES),
         wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
         reraise=True,

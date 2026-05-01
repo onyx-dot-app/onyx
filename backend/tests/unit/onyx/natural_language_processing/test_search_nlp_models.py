@@ -1,5 +1,7 @@
 from collections.abc import AsyncGenerator
 from threading import Lock
+from typing import Any
+from typing import cast
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -7,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
+from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
@@ -111,10 +114,13 @@ async def test_cloud_embedding_retries_on_transient_failure() -> None:
             raise RuntimeError("simulated transient failure on attempt 1")
         return [[0.1, 0.2, 0.3] for _ in texts]
 
-    with patch.object(
-        CloudEmbedding,
-        CloudEmbedding._embed_openai.__name__,
-        new=flaky_embed_openai,
+    with (
+        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(
+            CloudEmbedding,
+            CloudEmbedding._embed_openai.__name__,
+            new=flaky_embed_openai,
+        ),
     ):
         async with CloudEmbedding("fake-key", EmbeddingProvider.OPENAI) as embedding:
             result = await embedding.embed(
@@ -162,10 +168,13 @@ async def test_cloud_embedding_retries_on_vertex_429() -> None:
             raise ClientError(429, {"message": vertex_429_message})
         return [[0.1, 0.2, 0.3] for _ in texts]
 
-    with patch.object(
-        CloudEmbedding,
-        CloudEmbedding._embed_vertex.__name__,
-        new=flaky_embed_vertex,
+    with (
+        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(
+            CloudEmbedding,
+            CloudEmbedding._embed_vertex.__name__,
+            new=flaky_embed_vertex,
+        ),
     ):
         async with CloudEmbedding(
             '{"project_id": "fake", "type": "service_account"}',
