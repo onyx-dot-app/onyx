@@ -1,25 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { Button } from "@opal/components";
-import { SvgAlertCircle, SvgAlertTriangle, SvgX } from "@opal/icons";
-import { Content } from "@opal/layouts";
+import { MessageCard } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   ExpiryWarningStage,
   LicenseStatus,
 } from "@/lib/billing/interfaces";
-import { cn } from "@opal/utils";
 
 const DISMISS_STORAGE_KEY = "license-expiry-banner-dismissed";
+
+type BannerVariant = "warning" | "error";
 
 interface BannerCopy {
   title: string;
   description: string;
-  className: string;
-  icon: typeof SvgAlertCircle;
+  variant: BannerVariant;
 }
 
 function buildCopy(
@@ -33,37 +32,35 @@ function buildCopy(
 
   if (stage === "t_30d") {
     return {
-      title: `Onyx license expires ${expiresDisplay}`,
+      title: `Your Onyx license expires on ${expiresDisplay}.`,
       description:
-        "Your license will expire in approximately 30 days. Contact your Onyx representative to renew.",
-      className: "bg-status-warning-01",
-      icon: SvgAlertCircle,
+        "Renewal is due in approximately 30 days. Contact your Onyx representative to renew.",
+      variant: "warning",
     };
   }
   if (stage === "t_14d") {
     return {
-      title: `Onyx license expires ${expiresDisplay}`,
+      title: `Your Onyx license expires on ${expiresDisplay}.`,
       description:
-        "Your license will expire in approximately 2 weeks. Renewal must be completed soon to avoid service interruption.",
-      className: "bg-status-warning-01",
-      icon: SvgAlertTriangle,
+        "Renewal is due in approximately 2 weeks. Complete renewal soon to avoid service interruption.",
+      variant: "warning",
     };
   }
   if (stage === "t_1d") {
     return {
-      title: `Onyx license expires tomorrow (${expiresDisplay})`,
+      title: `Your Onyx license expires tomorrow (${expiresDisplay}).`,
       description:
-        "Your license expires within 24 hours. Renew immediately to avoid service interruption.",
-      className: "bg-status-error-01",
-      icon: SvgAlertTriangle,
+        "Renewal is due within 24 hours. Renew now to avoid service interruption.",
+      variant: "error",
     };
   }
   if (stage === "grace") {
     return {
-      title: `Onyx license expired — ${graceDaysRemaining} grace day(s) remaining`,
-      description: `Your license expired on ${expiresDisplay}. Renew immediately to avoid service interruption.`,
-      className: "bg-status-error-01",
-      icon: SvgAlertTriangle,
+      title: `Your Onyx license expired on ${expiresDisplay}.`,
+      description: `${graceDaysRemaining} grace day${
+        graceDaysRemaining === 1 ? "" : "s"
+      } remaining before access is gated. Renew now.`,
+      variant: "error",
     };
   }
   return null;
@@ -73,7 +70,136 @@ function dismissKey(
   stage: ExpiryWarningStage,
   expiresAt: string | null
 ): string {
-  return `${DISMISS_STORAGE_KEY}:${stage}:${expiresAt ?? "unknown"}`;
+  const base = `${DISMISS_STORAGE_KEY}:${stage}:${expiresAt ?? "unknown"}`;
+  if (stage === "grace") {
+    const today = new Date().toISOString().slice(0, 10);
+    return `${base}:${today}`;
+  }
+  return base;
+}
+
+interface LicenseExpiryBannerViewProps {
+  stage: ExpiryWarningStage;
+  expiresAt: string | null;
+  graceDaysRemaining: number;
+  onDismiss?: () => void;
+}
+
+export function LicenseExpiryBannerView({
+  stage,
+  expiresAt,
+  graceDaysRemaining,
+  onDismiss,
+}: LicenseExpiryBannerViewProps) {
+  const copy = buildCopy(stage, expiresAt, graceDaysRemaining);
+  if (!copy) return null;
+
+  return (
+    <MessageCard
+      variant={copy.variant}
+      title={copy.title}
+      description={copy.description}
+      onClose={onDismiss}
+    />
+  );
+}
+
+const MOCK_STAGES: ReadonlySet<ExpiryWarningStage> =
+  new Set<ExpiryWarningStage>(["t_30d", "t_14d", "t_1d", "grace"]);
+
+function useMockLicenseStatus(): {
+  stage: ExpiryWarningStage;
+  expiresAt: string | null;
+  graceDays: number;
+  hasLicense: boolean;
+} | null {
+  const params = useSearchParams();
+  return useMemo(() => {
+    const raw = params?.get("mock_license_stage");
+    if (!raw || !MOCK_STAGES.has(raw as ExpiryWarningStage)) return null;
+    const stage = raw as ExpiryWarningStage;
+    const dayMs = 86400 * 1000;
+    const now = Date.now();
+    if (stage === "t_30d") {
+      return {
+        stage,
+        expiresAt: new Date(now + 25 * dayMs).toISOString(),
+        graceDays: 0,
+        hasLicense: true,
+      };
+    }
+    if (stage === "t_14d") {
+      return {
+        stage,
+        expiresAt: new Date(now + 10 * dayMs).toISOString(),
+        graceDays: 0,
+        hasLicense: true,
+      };
+    }
+    if (stage === "t_1d") {
+      return {
+        stage,
+        expiresAt: new Date(now + 1 * dayMs).toISOString(),
+        graceDays: 0,
+        hasLicense: true,
+      };
+    }
+    return {
+      stage,
+      expiresAt: new Date(now - 3 * dayMs).toISOString(),
+      graceDays: 11,
+      hasLicense: true,
+    };
+  }, [params]);
+}
+
+function useMainContainerOffset(): { left: number; width: number } {
+  const pathname = usePathname();
+  const [bounds, setBounds] = useState<{ left: number; width: number }>({
+    left: 0,
+    width: 0,
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let target: HTMLElement | null = null;
+    let frame = 0;
+
+    function update() {
+      const el = document.querySelector<HTMLElement>("[data-main-container]");
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setBounds({ left: rect.left, width: rect.width });
+        if (target !== el) {
+          ro.disconnect();
+          ro.observe(el);
+          target = el;
+        }
+      } else {
+        setBounds({ left: 0, width: window.innerWidth });
+        target = null;
+      }
+    }
+
+    const ro = new ResizeObserver(update);
+    const mo = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    });
+
+    update();
+    mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [pathname]);
+
+  return bounds;
 }
 
 export default function LicenseExpiryBanner() {
@@ -81,55 +207,45 @@ export default function LicenseExpiryBanner() {
     SWR_KEYS.license,
     errorHandlingFetcher
   );
+  const mock = useMockLicenseStatus();
   const [dismissed, setDismissed] = useState(false);
+  const { left, width } = useMainContainerOffset();
 
-  const stage = data?.expiry_warning_stage ?? "none";
-  const expiresAt = data?.expires_at ?? null;
-  const graceDays = data?.grace_days_remaining ?? 0;
+  const stage = mock?.stage ?? data?.expiry_warning_stage ?? "none";
+  const expiresAt = mock?.expiresAt ?? data?.expires_at ?? null;
+  const graceDays = mock?.graceDays ?? data?.grace_days_remaining ?? 0;
+  const hasLicense = mock?.hasLicense ?? data?.has_license ?? false;
   const key = dismissKey(stage, expiresAt);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setDismissed(window.sessionStorage.getItem(key) === "1");
+    setDismissed(window.localStorage.getItem(key) === "1");
   }, [key]);
 
-  if (!data?.has_license || stage === "none" || dismissed) {
+  if (!hasLicense || stage === "none" || dismissed) {
     return null;
   }
 
-  const copy = buildCopy(stage, expiresAt, graceDays);
-  if (!copy) return null;
-
   function handleDismiss() {
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(key, "1");
+      window.localStorage.setItem(key, "1");
     }
     setDismissed(true);
   }
 
   return (
     <div
-      className={cn(
-        "fixed top-0 left-0 z-[100] w-full p-3 flex items-start gap-2",
-        copy.className
-      )}
+      className="fixed top-3 z-[100] flex justify-center px-3 pointer-events-none"
+      style={{ left, width: width || undefined }}
     >
-      <div className="flex-1">
-        <Content
-          icon={copy.icon}
-          title={copy.title}
-          description={copy.description}
-          sizePreset="main-content"
-          variant="section"
+      <div className="w-full max-w-3xl pointer-events-auto">
+        <LicenseExpiryBannerView
+          stage={stage}
+          expiresAt={expiresAt}
+          graceDaysRemaining={graceDays}
+          onDismiss={handleDismiss}
         />
       </div>
-      <Button
-        variant="default"
-        prominence="tertiary"
-        size="sm"
-        icon={SvgX}
-        onClick={handleDismiss}
-      />
     </div>
   );
 }

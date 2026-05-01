@@ -42,6 +42,7 @@ def _get_admin_users(db_session: Session) -> list[User]:
                 User.role == UserRole.ADMIN,
             )
         )
+        .unique()
         .scalars()
         .all()
     )
@@ -142,7 +143,7 @@ def _create_stage_notifications(
             [
                 {
                     "user_id": admin_id,
-                    "notif_type": NotificationType.LICENSE_EXPIRY_WARNING.value,
+                    "notif_type": NotificationType.LICENSE_EXPIRY_WARNING.name,
                     "title": title,
                     "description": description,
                     "dismissed": False,
