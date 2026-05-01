@@ -11,6 +11,7 @@ from datetime import date
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import cast
 from sqlalchemy import select
@@ -126,16 +127,15 @@ def _build_additional_data(
 def _create_stage_notifications(
     *,
     db_session: Session,
-    admin_ids: list,
+    admin_ids: list[UUID],
     title: str,
     description: str,
     additional_data: dict[str, Any],
-) -> set:
+) -> set[UUID]:
     if not admin_ids:
         return set()
 
     now = datetime.now(timezone.utc)
-    normalized_data = additional_data if additional_data is not None else {}
 
     stmt = (
         insert(Notification)
@@ -149,7 +149,7 @@ def _create_stage_notifications(
                     "dismissed": False,
                     "last_shown": now,
                     "first_shown": now,
-                    "additional_data": normalized_data,
+                    "additional_data": additional_data,
                 }
                 for admin_id in admin_ids
             ]

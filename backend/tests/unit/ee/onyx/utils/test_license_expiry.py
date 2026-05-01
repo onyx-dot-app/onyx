@@ -30,8 +30,8 @@ NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
         (timedelta(hours=-1), ExpiryWarningStage.GRACE),
         (timedelta(days=-1), ExpiryWarningStage.GRACE),
         (timedelta(days=-13), ExpiryWarningStage.GRACE),
-        (timedelta(days=-14), ExpiryWarningStage.GRACE),
-        (timedelta(days=-14, seconds=-1), ExpiryWarningStage.NONE),
+        (timedelta(days=-14, seconds=1), ExpiryWarningStage.GRACE),
+        (timedelta(days=-14), ExpiryWarningStage.NONE),
         (timedelta(days=-30), ExpiryWarningStage.NONE),
     ],
 )

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { MessageCard } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -104,55 +104,6 @@ export function LicenseExpiryBannerView({
   );
 }
 
-const MOCK_STAGES: ReadonlySet<ExpiryWarningStage> =
-  new Set<ExpiryWarningStage>(["t_30d", "t_14d", "t_1d", "grace"]);
-
-function useMockLicenseStatus(): {
-  stage: ExpiryWarningStage;
-  expiresAt: string | null;
-  graceDays: number;
-  hasLicense: boolean;
-} | null {
-  const params = useSearchParams();
-  return useMemo(() => {
-    const raw = params?.get("mock_license_stage");
-    if (!raw || !MOCK_STAGES.has(raw as ExpiryWarningStage)) return null;
-    const stage = raw as ExpiryWarningStage;
-    const dayMs = 86400 * 1000;
-    const now = Date.now();
-    if (stage === "t_30d") {
-      return {
-        stage,
-        expiresAt: new Date(now + 25 * dayMs).toISOString(),
-        graceDays: 0,
-        hasLicense: true,
-      };
-    }
-    if (stage === "t_14d") {
-      return {
-        stage,
-        expiresAt: new Date(now + 10 * dayMs).toISOString(),
-        graceDays: 0,
-        hasLicense: true,
-      };
-    }
-    if (stage === "t_1d") {
-      return {
-        stage,
-        expiresAt: new Date(now + 1 * dayMs).toISOString(),
-        graceDays: 0,
-        hasLicense: true,
-      };
-    }
-    return {
-      stage,
-      expiresAt: new Date(now - 3 * dayMs).toISOString(),
-      graceDays: 11,
-      hasLicense: true,
-    };
-  }, [params]);
-}
-
 function useMainContainerOffset(): { left: number; width: number } {
   const pathname = usePathname();
   const [bounds, setBounds] = useState<{ left: number; width: number }>({
@@ -207,14 +158,13 @@ export default function LicenseExpiryBanner() {
     SWR_KEYS.license,
     errorHandlingFetcher
   );
-  const mock = useMockLicenseStatus();
   const [dismissed, setDismissed] = useState(false);
   const { left, width } = useMainContainerOffset();
 
-  const stage = mock?.stage ?? data?.expiry_warning_stage ?? "none";
-  const expiresAt = mock?.expiresAt ?? data?.expires_at ?? null;
-  const graceDays = mock?.graceDays ?? data?.grace_days_remaining ?? 0;
-  const hasLicense = mock?.hasLicense ?? data?.has_license ?? false;
+  const stage = data?.expiry_warning_stage ?? "none";
+  const expiresAt = data?.expires_at ?? null;
+  const graceDays = data?.grace_days_remaining ?? 0;
+  const hasLicense = data?.has_license ?? false;
   const key = dismissKey(stage, expiresAt);
 
   useEffect(() => {

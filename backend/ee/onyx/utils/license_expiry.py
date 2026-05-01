@@ -12,6 +12,7 @@ Stages:
 """
 
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from enum import Enum
 
@@ -44,14 +45,12 @@ def get_expiry_warning_stage(
         return ExpiryWarningStage.T_14D
     if days_remaining > 0:
         return ExpiryWarningStage.T_1D
-    if days_remaining >= -LICENSE_GRACE_PERIOD_DAYS:
+    if days_remaining > -LICENSE_GRACE_PERIOD_DAYS:
         return ExpiryWarningStage.GRACE
     return ExpiryWarningStage.NONE
 
 
 def get_grace_period_end(expires_at: datetime) -> datetime:
-    from datetime import timedelta
-
     return expires_at + timedelta(days=LICENSE_GRACE_PERIOD_DAYS)
 
 
