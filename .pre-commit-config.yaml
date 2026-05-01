@@ -4,12 +4,12 @@ default_install_hook_types:
   - post-merge
   - post-rewrite
 repos:
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c
-    rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
+  - repo: https://github.com/jmelahman/uv-pre-commit
+    rev: cde0de1dff6ec6355f627c6741ec460995d2485a
     hooks:
       - id: uv-sync
       - id: uv-lock
+      - id: uv-audit
       - id: uv-export
         name: uv-export default.txt
         args:
@@ -64,7 +64,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--active", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
