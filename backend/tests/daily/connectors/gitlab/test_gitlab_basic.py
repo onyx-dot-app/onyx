@@ -81,9 +81,10 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             assert section.text == "This MR implements the awesome feature"
             assert doc.primary_owners is not None
             assert len(doc.primary_owners) == 1
-            assert (
-                doc.primary_owners[0].display_name == "Test"
-            )  # Adjust if author changes
+            # GitLab masks `name` as "****" for blocked/bot users; the
+            # connector falls back to `username` in that case.
+            assert doc.primary_owners[0].display_name
+            assert doc.primary_owners[0].display_name != "****"
             assert doc.id == section.link
             validated_mr = True
         elif doc.id == target_issue_id and doc_type == "ISSUE":
@@ -95,9 +96,8 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             )
             assert doc.primary_owners is not None
             assert len(doc.primary_owners) == 1
-            assert (
-                doc.primary_owners[0].display_name == "Test"
-            )  # Adjust if author changes
+            assert doc.primary_owners[0].display_name
+            assert doc.primary_owners[0].display_name != "****"
             assert doc.id == section.link
             validated_issue = True
         elif (
