@@ -143,7 +143,7 @@ def _create_stage_notifications(
             [
                 {
                     "user_id": admin_id,
-                    "notif_type": NotificationType.LICENSE_EXPIRY_WARNING.name,
+                    "notif_type": NotificationType.LICENSE_EXPIRY_WARNING,
                     "title": title,
                     "description": description,
                     "dismissed": False,
