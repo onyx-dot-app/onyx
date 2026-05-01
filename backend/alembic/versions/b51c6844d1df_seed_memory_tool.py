@@ -37,25 +37,21 @@ def upgrade() -> None:
 
     if existing:
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE tool
                 SET name = :name,
                     display_name = :display_name,
                     description = :description
                 WHERE in_code_tool_id = :in_code_tool_id
-                """
-            ),
+                """),
             MEMORY_TOOL,
         )
     else:
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
                 VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
-                """
-            ),
+                """),
             MEMORY_TOOL,
         )
 

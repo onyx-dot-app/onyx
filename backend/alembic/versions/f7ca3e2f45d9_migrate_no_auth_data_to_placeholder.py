@@ -177,12 +177,10 @@ def upgrade() -> None:
 
     # Create the placeholder user
     connection.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
             VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
-            """
-        ),
+            """),
         {
             "id": NO_AUTH_PLACEHOLDER_USER_UUID,
             "email": NO_AUTH_PLACEHOLDER_USER_EMAIL,
@@ -212,13 +210,11 @@ def upgrade() -> None:
             elif table == "inputprompt":
                 condition += " AND is_public = FALSE"
             result = connection.execute(
-                sa.text(
-                    f"""
+                sa.text(f"""
                     UPDATE "{table}"
                     SET user_id = :user_id
                     WHERE {condition}
-                    """
-                ),
+                    """),
                 {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
             )
             if result.rowcount > 0:
@@ -261,13 +257,11 @@ def downgrade() -> None:
     for table in tables_to_update:
         try:
             connection.execute(
-                sa.text(
-                    f"""
+                sa.text(f"""
                     UPDATE "{table}"
                     SET user_id = NULL
                     WHERE user_id = :user_id
-                    """
-                ),
+                    """),
                 {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
             )
         except Exception:

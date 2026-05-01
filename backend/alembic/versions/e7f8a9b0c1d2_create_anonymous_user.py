@@ -40,9 +40,7 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
     # NULL user_id values as distinct. Before migrating them to the anonymous
     # user, collapse duplicates and remove rows that would conflict with an
     # already-existing anonymous notification.
-    result = connection.execute(
-        sa.text(
-            """
+    result = connection.execute(sa.text("""
             WITH ranked_null_notifications AS (
                 SELECT
                     id,
@@ -59,15 +57,12 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
                 FROM ranked_null_notifications
                 WHERE row_num > 1
             )
-            """
-        )
-    )
+            """))
     if result.rowcount > 0:
         print(f"Deleted {result.rowcount} duplicate NULL-owned notifications")
 
     result = connection.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM notification AS null_owned
             USING notification AS anonymous_owned
             WHERE null_owned.user_id IS NULL
@@ -75,8 +70,7 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
               AND null_owned.notif_type = anonymous_owned.notif_type
               AND COALESCE(null_owned.additional_data, '{}'::jsonb) =
                   COALESCE(anonymous_owned.additional_data, '{}'::jsonb)
-            """
-        ),
+            """),
         {"user_id": ANONYMOUS_USER_UUID},
     )
     if result.rowcount > 0:
@@ -94,13 +88,11 @@ def upgrade() -> None:
 
     # Create the anonymous user (using ON CONFLICT to be idempotent)
     connection.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
             VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
             ON CONFLICT (id) DO NOTHING
-            """
-        ),
+            """),
         {
             "id": ANONYMOUS_USER_UUID,
             "email": ANONYMOUS_USER_EMAIL,
@@ -136,13 +128,11 @@ def upgrade() -> None:
                 condition = "user_id IS NULL"
 
             result = connection.execute(
-                sa.text(
-                    f"""
+                sa.text(f"""
                     UPDATE "{table}"
                     SET user_id = :user_id
                     WHERE {condition}
-                    """
-                ),
+                    """),
                 {"user_id": ANONYMOUS_USER_UUID},
             )
             if result.rowcount > 0:
@@ -161,13 +151,11 @@ def downgrade() -> None:
     for table in TABLES_WITH_USER_ID:
         with connection.begin_nested():
             connection.execute(
-                sa.text(
-                    f"""
+                sa.text(f"""
                     UPDATE "{table}"
                     SET user_id = NULL
                     WHERE user_id = :user_id
-                    """
-                ),
+                    """),
                 {"user_id": ANONYMOUS_USER_UUID},
             )
 

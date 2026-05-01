@@ -222,6 +222,9 @@ include = ["backend"]
 exclude = ["backend/generated", "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx", "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv"]
 typeCheckingMode = "off"
 
+[tool.black]
+target-version = ["py311"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"

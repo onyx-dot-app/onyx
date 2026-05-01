@@ -35,13 +35,11 @@ def upgrade() -> None:
 
     # Attach to the default persona (id=0) if not already attached
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO persona__tool (persona_id, tool_id)
             VALUES (0, :tool_id)
             ON CONFLICT DO NOTHING
-            """
-        ),
+            """),
         {"tool_id": tool_id},
     )
 
@@ -58,11 +56,9 @@ def downgrade() -> None:
         return
 
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM persona__tool
             WHERE persona_id = 0 AND tool_id = :tool_id
-            """
-        ),
+            """),
         {"tool_id": result[0]},
     )

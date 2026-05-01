@@ -22,12 +22,10 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
             VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
-            """
-        ),
+            """),
         {
             "name": "PythonTool",
             # in the UI, call it `Code Interpreter` since this is a well known term for this tool
@@ -58,12 +56,10 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM tool
             WHERE in_code_tool_id = :in_code_tool_id
-            """
-        ),
+            """),
         {
             "in_code_tool_id": "PythonTool",
         },

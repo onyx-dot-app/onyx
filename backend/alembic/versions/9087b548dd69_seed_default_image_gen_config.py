@@ -37,15 +37,13 @@ def upgrade() -> None:
 
     # Find the first OpenAI LLM provider
     openai_provider = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT id, api_key
             FROM llm_provider
             WHERE provider = :provider
             ORDER BY id
             LIMIT 1
-            """
-        ),
+            """),
         {"provider": PROVIDER_NAME},
     ).fetchone()
 
@@ -57,8 +55,7 @@ def upgrade() -> None:
 
     # Create new LLM provider for image generation (clone only api_key)
     result = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO llm_provider (
                 name, provider, api_key, api_base, api_version,
                 deployment_name, default_model_name, is_public,
@@ -70,8 +67,7 @@ def upgrade() -> None:
                 NULL, NULL, :is_auto_mode
             )
             RETURNING id
-            """
-        ),
+            """),
         {
             "name": f"Image Gen - {IMAGE_PROVIDER_ID}",
             "provider": PROVIDER_NAME,
@@ -85,8 +81,7 @@ def upgrade() -> None:
 
     # Create model configuration
     result = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO model_configuration (
                 llm_provider_id, name, is_visible, max_input_tokens,
                 supports_image_input, display_name
@@ -96,8 +91,7 @@ def upgrade() -> None:
                 :supports_image_input, :display_name
             )
             RETURNING id
-            """
-        ),
+            """),
         {
             "llm_provider_id": new_provider_id,
             "name": MODEL_NAME,
@@ -111,16 +105,14 @@ def upgrade() -> None:
 
     # Create image generation config
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO image_generation_config (
                 image_provider_id, model_configuration_id, is_default
             )
             VALUES (
                 :image_provider_id, :model_configuration_id, :is_default
             )
-            """
-        ),
+            """),
         {
             "image_provider_id": IMAGE_PROVIDER_ID,
             "model_configuration_id": model_config_id,

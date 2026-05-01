@@ -37,13 +37,11 @@ You can use Markdown tables to format your responses for data, lists, and other 
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET system_prompt = :system_prompt
             WHERE id = :persona_id
-            """
-        ),
+            """),
         {"system_prompt": DEFAULT_SYSTEM_PROMPT, "persona_id": DEFAULT_PERSONA_ID},
     )
 

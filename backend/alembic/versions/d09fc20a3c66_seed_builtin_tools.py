@@ -86,16 +86,14 @@ def upgrade() -> None:
         ):
             # Rename the existing InternetSearchTool row in place and update fields
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE tool
                     SET name = :name,
                         display_name = :display_name,
                         description = :description,
                         in_code_tool_id = :in_code_tool_id
                     WHERE in_code_tool_id = 'InternetSearchTool'
-                    """
-                ),
+                    """),
                 tool,
             )
             # Keep the local view of existing ids in sync to avoid duplicate insert
@@ -106,26 +104,22 @@ def upgrade() -> None:
         if in_code_id in existing_tool_ids:
             # Update existing tool
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE tool
                     SET name = :name,
                         display_name = :display_name,
                         description = :description
                     WHERE in_code_tool_id = :in_code_tool_id
-                    """
-                ),
+                    """),
                 tool,
             )
         else:
             # Insert new tool
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     INSERT INTO tool (name, display_name, description, in_code_tool_id)
                     VALUES (:name, :display_name, :description, :in_code_tool_id)
-                    """
-                ),
+                    """),
                 tool,
             )
 

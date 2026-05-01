@@ -40,12 +40,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Warning: This will delete all index attempts that don't have search settings
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM index_attempt
         WHERE search_settings_id IS NULL
-    """
-    )
+    """)
 
     # Drop foreign key constraint
     op.drop_constraint(

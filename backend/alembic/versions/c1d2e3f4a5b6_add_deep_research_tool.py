@@ -27,12 +27,10 @@ DEEP_RESEARCH_TOOL = {
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
             VALUES (:name, :display_name, :description, :in_code_tool_id, false)
-            """
-        ),
+            """),
         DEEP_RESEARCH_TOOL,
     )
 
@@ -40,11 +38,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM tool
             WHERE in_code_tool_id = :in_code_tool_id
-            """
-        ),
+            """),
         {"in_code_tool_id": DEEP_RESEARCH_TOOL["in_code_tool_id"]},
     )

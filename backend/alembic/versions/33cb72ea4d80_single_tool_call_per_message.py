@@ -19,9 +19,7 @@ depends_on = None
 def upgrade() -> None:
     # Step 1: Delete extraneous ToolCall entries
     # Keep only the ToolCall with the smallest 'id' for each 'message_id'
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             DELETE FROM tool_call
             WHERE id NOT IN (
                 SELECT MIN(id)
@@ -29,9 +27,7 @@ def upgrade() -> None:
                 WHERE message_id IS NOT NULL
                 GROUP BY message_id
             );
-        """
-        )
-    )
+        """))
 
     # Step 2: Add a unique constraint on message_id
     op.create_unique_constraint(

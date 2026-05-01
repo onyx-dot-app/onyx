@@ -93,14 +93,10 @@ def upgrade() -> None:
     )
 
     # 4. Create unique index on constant to enforce singleton pattern.
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             CREATE UNIQUE INDEX idx_opensearch_tenant_migration_singleton
             ON opensearch_tenant_migration_record ((true))
-            """
-        )
-    )
+            """))
 
 
 def downgrade() -> None:

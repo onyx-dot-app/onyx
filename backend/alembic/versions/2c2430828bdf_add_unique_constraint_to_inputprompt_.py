@@ -27,13 +27,11 @@ def upgrade() -> None:
     # Create partial unique index for public prompts (where user_id IS NULL)
     # PostgreSQL unique constraints don't enforce uniqueness for NULL values,
     # so we need a partial index to ensure public prompt names are also unique
-    op.execute(
-        """
+    op.execute("""
         CREATE UNIQUE INDEX uq_inputprompt_prompt_public
         ON inputprompt (prompt)
         WHERE user_id IS NULL
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

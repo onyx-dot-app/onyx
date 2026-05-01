@@ -17,12 +17,10 @@ depends_on = None
 
 def upgrade() -> None:
     # 1) Convert all existing rows to lowercase
-    op.execute(
-        """
+    op.execute("""
         UPDATE user_tenant_mapping
         SET email = LOWER(email)
-        """
-    )
+        """)
     # 2) Add a check constraint so that emails cannot be written in uppercase
     op.create_check_constraint(
         "ensure_lowercase_email",

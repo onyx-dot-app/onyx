@@ -308,8 +308,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     )
 
     # Add a script to modify navigator properties to avoid detection
-    context.add_init_script(
-        """
+    context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', {
             get: () => undefined
         });
@@ -319,8 +318,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
         Object.defineProperty(navigator, 'languages', {
             get: () => ['en-US', 'en']
         });
-    """
-    )
+    """)
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID

@@ -38,12 +38,10 @@ def upgrade() -> None:
     )
 
     # Copy existing relationships to the new table
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO persona__persona_label (persona_id, persona_label_id)
         SELECT id, category_id FROM persona WHERE category_id IS NOT NULL
-    """
-    )
+    """)
 
     # Remove the old category_id column from persona table
     op.drop_column("persona", "category_id")
@@ -64,8 +62,7 @@ def downgrade() -> None:
     )
 
     # Copy the first label relationship back to the persona table
-    op.execute(
-        """
+    op.execute("""
         UPDATE persona
         SET category_id = (
             SELECT persona_label_id
@@ -73,8 +70,7 @@ def downgrade() -> None:
             WHERE persona__persona_label.persona_id = persona.id
             LIMIT 1
         )
-    """
-    )
+    """)
 
     # Drop the association table
     op.drop_table("persona__persona_label")

@@ -32,13 +32,9 @@ SKIP_CANON_DRIVE_IDS = os.environ.get("SKIP_CANON_DRIVE_IDS", "true").lower() ==
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
-    result = op.get_bind().execute(
-        sa.text(
-            """
+    result = op.get_bind().execute(sa.text("""
         SELECT * FROM search_settings WHERE status = 'PRESENT' ORDER BY id DESC LIMIT 1
-        """
-        )
-    )
+        """))
     search_settings_fetch = result.fetchall()
     search_settings = (
         SearchSettings(**search_settings_fetch[0]._asdict())
@@ -46,13 +42,9 @@ def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
         else None
     )
 
-    result2 = op.get_bind().execute(
-        sa.text(
-            """
+    result2 = op.get_bind().execute(sa.text("""
         SELECT * FROM search_settings WHERE status = 'FUTURE' ORDER BY id DESC LIMIT 1
-        """
-        )
-    )
+        """))
     search_settings_future_fetch = result2.fetchall()
     search_settings_future = (
         SearchSettings(**search_settings_future_fetch[0]._asdict())
@@ -92,9 +84,7 @@ def normalize_google_drive_url(url: str) -> str:
 def get_google_drive_documents_from_database() -> list[dict]:
     """Get all Google Drive documents from the database."""
     bind = op.get_bind()
-    result = bind.execute(
-        sa.text(
-            """
+    result = bind.execute(sa.text("""
             SELECT d.id
             FROM document d
             JOIN document_by_connector_credential_pair dcc ON d.id = dcc.id
@@ -102,9 +92,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
                 AND dcc.credential_id = cc.credential_id
             JOIN connector c ON cc.connector_id = c.id
             WHERE c.source = 'GOOGLE_DRIVE'
-        """
-        )
-    )
+        """))
 
     documents = []
     for row in result:
@@ -136,8 +124,7 @@ def update_document_id_in_database(
     # Use a conservative approach to handle columns that might not exist in all installations
     try:
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO document (id, from_ingestion_api, boost, hidden, semantic_id,
                                     link, doc_updated_at, primary_owners, secondary_owners,
                                     external_user_emails, external_user_group_ids, is_public,
@@ -148,8 +135,7 @@ def update_document_id_in_database(
                        chunk_count, last_modified, last_synced, kg_stage, kg_processing_time
                 FROM document
                 WHERE id = :old_id
-            """
-            ),
+            """),
             {"new_id": new_doc_id, "old_id": old_doc_id},
         )
         # print(f"Successfully updated database tables for document {old_doc_id} -> {new_doc_id}")
@@ -157,16 +143,14 @@ def update_document_id_in_database(
         # If the full INSERT fails, try a more basic version with only core columns
         logger.warning("Full INSERT failed, trying basic version: %s", e)
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO document (id, from_ingestion_api, boost, hidden, semantic_id,
                                     link, doc_updated_at, primary_owners, secondary_owners)
                 SELECT :new_id, from_ingestion_api, boost, hidden, semantic_id,
                        link, doc_updated_at, primary_owners, secondary_owners
                 FROM document
                 WHERE id = :old_id
-            """
-            ),
+            """),
             {"new_id": new_doc_id, "old_id": old_doc_id},
         )
 
@@ -258,13 +242,11 @@ def update_document_id_in_database(
         # print(f"Successfully updated chunk_stats table for document {old_doc_id} -> {new_doc_id}")
         # Update chunk_stats ID field which includes document_id
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE chunk_stats
                 SET id = REPLACE(id, :old_id, :new_id)
                 WHERE id LIKE :old_id_pattern
-            """
-            ),
+            """),
             {
                 "new_id": new_doc_id,
                 "old_id": old_doc_id,
@@ -404,27 +386,23 @@ def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
         # Delete from agent-related tables first (order matters due to foreign keys)
         # Delete from agent__sub_query__search_doc first since it references search_doc
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 DELETE FROM agent__sub_query__search_doc
                 WHERE search_doc_id IN (
                     SELECT id FROM search_doc WHERE document_id = :doc_id
                 )
-                """
-            ),
+                """),
             {"doc_id": current_doc_id},
         )
 
         # Delete from chat_message__search_doc
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 DELETE FROM chat_message__search_doc
                 WHERE search_doc_id IN (
                     SELECT id FROM search_doc WHERE document_id = :doc_id
                 )
-                """
-            ),
+                """),
             {"doc_id": current_doc_id},
         )
 

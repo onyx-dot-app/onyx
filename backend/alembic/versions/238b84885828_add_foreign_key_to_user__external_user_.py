@@ -17,12 +17,10 @@ depends_on = None
 
 def upgrade() -> None:
     # First, clean up any entries that don't have a valid cc_pair_id
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM user__external_user_group_id
         WHERE cc_pair_id NOT IN (SELECT id FROM connector_credential_pair)
-        """
-    )
+        """)
 
     # Add foreign key constraint with cascade delete
     op.create_foreign_key(

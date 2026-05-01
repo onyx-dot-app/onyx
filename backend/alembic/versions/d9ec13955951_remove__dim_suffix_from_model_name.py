@@ -16,13 +16,11 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE embedding_model
         SET model_name = regexp_replace(model_name, '__danswer_alt_index$', '')
         WHERE model_name LIKE '%__danswer_alt_index'
-    """
-    )
+    """)
 
 
 def downgrade() -> None:

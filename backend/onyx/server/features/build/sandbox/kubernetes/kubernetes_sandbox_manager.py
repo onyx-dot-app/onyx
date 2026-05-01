@@ -457,8 +457,7 @@ class KubernetesSandboxManager(SandboxManager):
             image="peakcom/s5cmd:v2.3.0",
             env=_get_local_aws_credential_env_vars(),
             command=["/bin/sh", "-c"],
-            args=[
-                f"""
+            args=[f"""
 # Handle signals for graceful container termination
 trap 'echo "Shutting down"; exit 0' TERM INT
 
@@ -490,8 +489,7 @@ while true; do
     sleep 30 &
     wait $!
 done
-"""
-            ],
+"""],
             volume_mounts=[
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
                 # Mount sessions directory so file-sync can create snapshots

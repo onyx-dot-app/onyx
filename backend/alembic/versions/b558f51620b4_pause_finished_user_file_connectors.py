@@ -18,14 +18,12 @@ depends_on = None
 def upgrade() -> None:
     # Set all user file connector credential pairs with ACTIVE status to PAUSED
     # This ensures user files don't continue to run indexing tasks after processing
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector_credential_pair
         SET status = 'PAUSED'
         WHERE is_user_file = true
         AND status = 'ACTIVE'
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

@@ -122,15 +122,11 @@ def upgrade() -> None:
     # Add partial unique index to ensure only one SOURCE-type node per source
     # This prevents duplicate source root nodes from being created
     # NOTE: node_type stores enum NAME ('SOURCE'), not value ('source')
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             CREATE UNIQUE INDEX uq_hierarchy_node_one_source_per_type
             ON hierarchy_node (source)
             WHERE node_type = 'SOURCE'
-            """
-        )
-    )
+            """))
 
     # 2. Create hierarchy_fetch_attempt table
     op.create_table(
@@ -190,13 +186,11 @@ def upgrade() -> None:
             source_value, source_value.replace("_", " ").title()
         )
         op.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO hierarchy_node (raw_node_id, display_name, source, node_type, parent_id, is_public)
                 VALUES (:raw_node_id, :display_name, :source, 'SOURCE', NULL, true)
                 ON CONFLICT (raw_node_id, source) DO NOTHING
-                """
-            ).bindparams(
+                """).bindparams(
                 raw_node_id=source_value,  # Use .value for raw_node_id (human-readable identifier)
                 display_name=display_name,
                 source=source_name,  # Use .name for source column (SQLAlchemy enum storage)
@@ -227,9 +221,7 @@ def upgrade() -> None:
     # For documents with multiple connectors, we pick one source deterministically (MIN connector_id)
     # NOTE: Both connector.source and hierarchy_node.source store enum NAMEs (e.g., 'GOOGLE_DRIVE')
     # because SQLAlchemy Enum(native_enum=False) uses the enum name for storage.
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             UPDATE document d
             SET parent_hierarchy_node_id = hn.id
             FROM (
@@ -243,9 +235,7 @@ def upgrade() -> None:
             ) doc_source
             JOIN hierarchy_node hn ON hn.source = doc_source.source AND hn.node_type = 'SOURCE'
             WHERE d.id = doc_source.doc_id
-            """
-        )
-    )
+            """))
 
     # Create the persona__hierarchy_node association table
     op.create_table(

@@ -67,16 +67,14 @@ def _force_drop_schema(engine: Engine, schema: str) -> None:
         try:
             with engine.connect() as conn:
                 conn.execute(
-                    text(
-                        """
+                    text("""
                         SELECT pg_terminate_backend(l.pid)
                         FROM pg_locks l
                         JOIN pg_class c ON c.oid = l.relation
                         JOIN pg_namespace n ON n.oid = c.relnamespace
                         WHERE n.nspname = :schema
                           AND l.pid != pg_backend_pid()
-                        """
-                    ),
+                        """),
                     {"schema": schema},
                 )
                 conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

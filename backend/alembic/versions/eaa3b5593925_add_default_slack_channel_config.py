@@ -46,8 +46,7 @@ def upgrade() -> None:
 
         if not existing_default:
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     INSERT INTO slack_channel_config (
                         slack_bot_id, persona_id, channel_config, enable_auto_filters, is_default
                     ) VALUES (
@@ -59,8 +58,7 @@ def upgrade() -> None:
                         '"respond_tag_only": true}',
                         FALSE, TRUE
                     )
-                """
-                ),
+                """),
                 {"bot_id": slack_bot_id},
             )
 

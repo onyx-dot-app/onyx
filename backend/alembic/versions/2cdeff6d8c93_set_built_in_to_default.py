@@ -19,13 +19,11 @@ def upgrade() -> None:
     # Prior to this migration / point in the codebase history,
     # built in personas were implicitly treated as default personas (with no option to change this)
     # This migration makes that explicit
-    op.execute(
-        """
+    op.execute("""
         UPDATE persona
         SET is_default_persona = TRUE
         WHERE builtin_persona = TRUE
-    """
-    )
+    """)
 
 
 def downgrade() -> None:

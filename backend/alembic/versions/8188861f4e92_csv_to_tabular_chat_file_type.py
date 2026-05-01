@@ -16,8 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET files = (
             SELECT jsonb_agg(
@@ -30,13 +29,11 @@ def upgrade() -> None:
             FROM jsonb_array_elements(files) AS elem
         )
         WHERE files::text LIKE '%"type": "csv"%'
-        """
-    )
+        """)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET files = (
             SELECT jsonb_agg(
@@ -49,5 +46,4 @@ def downgrade() -> None:
             FROM jsonb_array_elements(files) AS elem
         )
         WHERE files::text LIKE '%"type": "tabular"%'
-        """
-    )
+        """)

@@ -21,8 +21,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Fix: split the statements into multiple op.execute() calls
-    op.execute(
-        """
+    op.execute("""
         WITH personas_without_search AS (
             SELECT p.id
             FROM persona p
@@ -34,11 +33,9 @@ def downgrade() -> None:
         UPDATE slack_channel_config
         SET persona_id = NULL
         WHERE is_default = TRUE AND persona_id IN (SELECT id FROM personas_without_search)
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         WITH personas_without_search AS (
             SELECT p.id
             FROM persona p
@@ -49,5 +46,4 @@ def downgrade() -> None:
         )
         DELETE FROM slack_channel_config
         WHERE is_default = FALSE AND persona_id IN (SELECT id FROM personas_without_search)
-        """
-    )
+        """)
