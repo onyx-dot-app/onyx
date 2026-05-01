@@ -362,8 +362,6 @@ function ProviderGroup({
     ]
   );
 
-  console.log("pendingConnectModel", pendingConnectModel);
-
   return (
     <>
       {isCloud && (
