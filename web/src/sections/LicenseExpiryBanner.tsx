@@ -66,6 +66,13 @@ function buildCopy(
   return null;
 }
 
+function computeGraceDaysRemaining(gracePeriodEnd: string | null): number {
+  if (!gracePeriodEnd) return 0;
+  const msLeft = new Date(gracePeriodEnd).getTime() - Date.now();
+  if (msLeft <= 0) return 0;
+  return Math.max(1, Math.ceil(msLeft / 86400000));
+}
+
 function dismissKey(
   stage: ExpiryWarningStage,
   expiresAt: string | null
@@ -163,7 +170,7 @@ export default function LicenseExpiryBanner() {
 
   const stage = data?.expiry_warning_stage ?? "none";
   const expiresAt = data?.expires_at ?? null;
-  const graceDays = data?.grace_days_remaining ?? 0;
+  const graceDays = computeGraceDaysRemaining(data?.grace_period_end ?? null);
   const hasLicense = data?.has_license ?? false;
   const key = dismissKey(stage, expiresAt);
 

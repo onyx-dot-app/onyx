@@ -53,7 +53,6 @@ class LicenseMetadata(BaseModel):
     grace_period_end: datetime | None = None
     status: ApplicationStatus
     expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
-    grace_days_remaining: int = 0
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
 
@@ -70,7 +69,6 @@ class LicenseStatusResponse(BaseModel):
     grace_period_end: datetime | None = None
     status: ApplicationStatus | None = None
     expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
-    grace_days_remaining: int = 0
     source: LicenseSource | None = None
 
 

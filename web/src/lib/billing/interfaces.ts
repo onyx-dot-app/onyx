@@ -49,7 +49,6 @@ export interface LicenseStatus {
   grace_period_end: string | null;
   status: ApplicationStatus | null;
   expiry_warning_stage: ExpiryWarningStage;
-  grace_days_remaining: number;
   source: LicenseSource | null;
 }
 

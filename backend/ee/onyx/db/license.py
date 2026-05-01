@@ -208,7 +208,6 @@ def update_license_cache(
     """
     from ee.onyx.utils.license import get_license_status
     from ee.onyx.utils.license_expiry import get_expiry_warning_stage
-    from ee.onyx.utils.license_expiry import get_grace_days_remaining
     from ee.onyx.utils.license_expiry import get_grace_period_end
 
     tenant = tenant_id or get_current_tenant_id()
@@ -221,7 +220,6 @@ def update_license_cache(
     effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
     status = get_license_status(payload, effective_grace_end)
     warning_stage = get_expiry_warning_stage(payload.expires_at)
-    grace_days = get_grace_days_remaining(payload.expires_at)
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -234,7 +232,6 @@ def update_license_cache(
         grace_period_end=effective_grace_end,
         status=status,
         expiry_warning_stage=warning_stage,
-        grace_days_remaining=grace_days,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
     )
