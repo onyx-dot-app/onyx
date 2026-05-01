@@ -26,6 +26,13 @@ import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { Packet } from "./streamingModels";
 
+// Tracks the latest in-flight PUT that mutates the backend's
+// `latest_child_message_id` mainline pointer (set-message-as-latest,
+// set-preferred-response). The next send must wait for it so the backend's
+// mainline-walk lookup can find the supplied parent_message_id and avoid the
+// 500 "The new message sent is not on the latest mainline of messages".
+let pendingMainlineSync: Promise<unknown> | null = null;
+
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
   newAlternateModel: string
@@ -186,6 +193,12 @@ export async function* sendMessage({
 
   const body = JSON.stringify(payload);
 
+  // Wait for any in-flight mainline-pointer PUT to land so the backend's
+  // chat_history walk can locate parentMessageId.
+  if (pendingMainlineSync) {
+    await pendingMainlineSync.catch(() => undefined);
+  }
+
   const response = await fetch(`/api/chat/send-chat-message`, {
     method: "POST",
     headers: {
@@ -207,7 +220,7 @@ export async function setPreferredResponse(
   userMessageId: number,
   preferredResponseId: number
 ): Promise<Response> {
-  return fetch("/api/chat/set-preferred-response", {
+  const request = fetch("/api/chat/set-preferred-response", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -215,6 +228,8 @@ export async function setPreferredResponse(
       preferred_response_id: preferredResponseId,
     }),
   });
+  pendingMainlineSync = request;
+  return request;
 }
 
 export async function nameChatSession(chatSessionId: string) {
@@ -232,7 +247,7 @@ export async function nameChatSession(chatSessionId: string) {
 }
 
 export async function patchMessageToBeLatest(messageId: number) {
-  const response = await fetch("/api/chat/set-message-as-latest", {
+  const request = fetch("/api/chat/set-message-as-latest", {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -241,7 +256,8 @@ export async function patchMessageToBeLatest(messageId: number) {
       message_id: messageId,
     }),
   });
-  return response;
+  pendingMainlineSync = request;
+  return request;
 }
 
 export async function handleChatFeedback(
