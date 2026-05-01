@@ -30,7 +30,6 @@ import {
   SvgEmpty,
   SvgExternalLink,
   SvgFold,
-  SvgNoImage,
   SvgPlusCircle,
   SvgRevert,
   SvgServer,
@@ -70,7 +69,6 @@ import {
   cancelNewEmbedding,
   disconnectEmbeddingProvider,
   setNewSearchSettings,
-  updateInferenceSettings,
 } from "@/lib/indexing/svc";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
@@ -98,7 +96,6 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
-const SWITCHOVER_NONE = "none";
 const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
 
 /**
@@ -653,9 +650,9 @@ export default function IndexSettingsPage() {
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
-  const [switchoverType, setSwitchoverType] = useState<
-    SwitchoverType | typeof SWITCHOVER_NONE
-  >(SWITCHOVER_NONE);
+  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
+    SwitchoverType.REINDEX
+  );
 
   const allModels = useMemo(
     () => [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS],
@@ -914,41 +911,10 @@ export default function IndexSettingsPage() {
               }
               const providerName = resolveProviderName(values.model_name, null);
 
-              if (switchoverType === SWITCHOVER_NONE) {
-                if (!searchSettings) {
-                  toast.error("Could not load current search settings");
-                  return;
-                }
-                const response = await updateInferenceSettings({
-                  ...searchSettings,
-                  model_name: stagedModel.modelName,
-                  model_dim: stagedModel.modelDim ?? searchSettings.model_dim,
-                  normalize: stagedModel.normalize,
-                  query_prefix: stagedModel.queryPrefix ?? null,
-                  passage_prefix: stagedModel.passagePrefix ?? null,
-                  enable_contextual_rag: values.enable_contextual_rag,
-                  contextual_rag_llm_name: values.enable_contextual_rag
-                    ? values.contextual_rag_llm_name
-                    : null,
-                  contextual_rag_llm_provider: values.enable_contextual_rag
-                    ? values.contextual_rag_llm_provider
-                    : null,
-                });
-                if (!response.ok) {
-                  toast.error("Failed to apply settings");
-                  return;
-                }
-                toast.success("Settings applied");
-                resetForm({ values });
-                setSwitchoverType(SWITCHOVER_NONE);
-                await mutate(SWR_KEYS.currentSearchSettings);
-                return;
-              }
-
               const response = await setNewSearchSettings({
                 model: stagedModel,
                 providerName,
-                switchoverType: switchoverType as SwitchoverType,
+                switchoverType,
                 enableContextualRag: values.enable_contextual_rag,
                 contextualRagLlmName: values.enable_contextual_rag
                   ? values.contextual_rag_llm_name
@@ -965,7 +931,7 @@ export default function IndexSettingsPage() {
 
               toast.success("Re-indexing started");
               resetForm({ values });
-              setSwitchoverType(SWITCHOVER_NONE);
+              setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
                 mutate(SWR_KEYS.secondarySearchSettings),
@@ -977,11 +943,7 @@ export default function IndexSettingsPage() {
                 values.model_name !== initialFormValues.model_name &&
                 !!values.model_name;
               const stagedModelName = isModelStaged ? values.model_name : null;
-              const statusVariant = dirty
-                ? switchoverType === SWITCHOVER_NONE
-                  ? "info"
-                  : "warning"
-                : undefined;
+              const statusVariant = dirty ? "warning" : undefined;
 
               return (
                 <>
@@ -1042,15 +1004,9 @@ export default function IndexSettingsPage() {
                       <MessageCard
                         variant={statusVariant}
                         headerPadding="sm"
-                        title={
-                          statusVariant === "info"
-                            ? "Changes apply to newly indexed content only."
-                            : "Changes require a full re-index."
-                        }
+                        title="Changes require a full re-index."
                         description={markdown(
-                          statusVariant === "info"
-                            ? "Selected changes will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\nRe-indexing may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
-                            : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                          "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1059,24 +1015,11 @@ export default function IndexSettingsPage() {
                                 <InputSelect
                                   value={switchoverType}
                                   onValueChange={(v) =>
-                                    setSwitchoverType(
-                                      v as
-                                        | SwitchoverType
-                                        | typeof SWITCHOVER_NONE
-                                    )
+                                    setSwitchoverType(v as SwitchoverType)
                                   }
                                 >
                                   <InputSelect.Trigger placeholder="Select a switchover strategy" />
                                   <InputSelect.Content>
-                                    <InputSelect.Item
-                                      value={SWITCHOVER_NONE}
-                                      icon={SvgNoImage}
-                                      wrapDescription
-                                      description="Safe option. Only apply changes to newly indexed content."
-                                    >
-                                      Do Not Re-index
-                                    </InputSelect.Item>
-                                    <Divider title="Re-index Options" />
                                     <InputSelect.Item
                                       value={SwitchoverType.REINDEX}
                                       icon={SvgClock}
@@ -1109,15 +1052,13 @@ export default function IndexSettingsPage() {
                                   prominence="secondary"
                                   onClick={() => {
                                     resetForm();
-                                    setSwitchoverType(SWITCHOVER_NONE);
+                                    setSwitchoverType(SwitchoverType.REINDEX);
                                   }}
                                 >
                                   Revert
                                 </Button>
                                 <Button onClick={() => void submitForm()}>
-                                  {switchoverType === SWITCHOVER_NONE
-                                    ? "Apply without Re-index"
-                                    : "Apply & Re-index"}
+                                  Apply & Re-index
                                 </Button>
                               </div>
                             </div>
