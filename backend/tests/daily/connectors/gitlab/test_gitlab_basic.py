@@ -6,10 +6,15 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gitlab.connector import GitlabConnector
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.GITLAB_ACCESS_TOKEN)
 
 
 @pytest.fixture
-def gitlab_connector() -> GitlabConnector:
+def gitlab_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GitlabConnector:
     connector = GitlabConnector(
         project_owner="onyx2895818",
         project_name="onyx",
@@ -19,10 +24,7 @@ def gitlab_connector() -> GitlabConnector:
     )
     # Ensure GITLAB_ACCESS_TOKEN and optionally GITLAB_URL are set in the environment
     gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
-    gitlab_token = os.environ.get("GITLAB_ACCESS_TOKEN")
-
-    if not gitlab_token:
-        pytest.skip("GITLAB_ACCESS_TOKEN environment variable not set.")
+    gitlab_token = test_secrets[TestSecret.GITLAB_ACCESS_TOKEN]
 
     connector.load_credentials(
         {

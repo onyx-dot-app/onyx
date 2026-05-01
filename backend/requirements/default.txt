@@ -264,7 +264,7 @@ fsspec==2025.10.0
     #   huggingface-hub
 gitdb==4.0.12
     # via gitpython
-gitpython==3.1.45
+gitpython==3.1.47
     # via braintrust
 google-api-core==2.28.1
     # via
@@ -348,7 +348,7 @@ hpack==4.1.0
     # via h2
 html5lib==1.1
     # via unstructured
-htmldate==1.9.1
+htmldate==1.9.4
     # via trafilatura
 httpcore==1.0.9
     # via
@@ -459,13 +459,13 @@ langfuse==3.10.0
 langsmith==0.7.32
     # via langchain-core
 lazy-imports==1.0.1
-litellm==1.81.6
+litellm==1.83.0
     # via onyx
 locket==1.0.0
     # via
     #   distributed
     #   partd
-lxml==5.3.0
+lxml==6.1.0
     # via
     #   htmldate
     #   justext
@@ -743,7 +743,7 @@ pytest-base-url==2.1.0
     # via pytest-playwright
 pytest-mock==3.12.0
 pytest-playwright==0.7.2
-python-dateutil==2.8.2
+python-dateutil==2.9.0.post0
     # via
     #   aiobotocore
     #   asana
@@ -1113,7 +1113,7 @@ xlrd==2.0.2
     # via markitdown
 xlsxwriter==3.2.9
     # via python-pptx
-xmlsec==1.3.14
+xmlsec==1.3.17
     # via python3-saml
 xxhash==3.6.0
     # via langsmith

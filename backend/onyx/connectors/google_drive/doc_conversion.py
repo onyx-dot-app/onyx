@@ -39,12 +39,14 @@ from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_docx_file
 from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.file_processing.extract_file_text import read_pptx_file
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
+from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
@@ -215,14 +217,7 @@ CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
 GOOGLE_MIME_TYPES_TO_EXPORT = {
     GDriveMimeType.DOC.value: "text/plain",
     GDriveMimeType.SPREADSHEET.value: "text/csv",
-    GDriveMimeType.PPT.value: "text/plain",
-}
-
-# Define Google MIME types mapping
-GOOGLE_MIME_TYPES = {
-    GDriveMimeType.DOC.value: "text/plain",
-    GDriveMimeType.SPREADSHEET.value: "text/csv",
-    GDriveMimeType.PPT.value: "text/plain",
+    GDriveMimeType.PPT.value: PRESENTATION_MIME_TYPE,
 }
 
 
@@ -390,6 +385,20 @@ def _download_and_extract_sections_basic(
                 content_type=export_mime_type,
             )
 
+        if export_mime_type == PRESENTATION_MIME_TYPE:
+            pptx_sections: list[TextSection | ImageSection | TabularSection] = []
+            text, _ = read_pptx_file(
+                io.BytesIO(response),
+                file_name=file_name,
+                extract_images=allow_images,
+                image_callback=make_image_callback(
+                    pptx_sections, file_id, file_name, link
+                ),
+            )
+            if text:
+                pptx_sections.insert(0, TextSection(link=link, text=text))
+            return FileExtractionResult(sections=pptx_sections)
+
         text = response.decode("utf-8")
         return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
@@ -427,14 +436,19 @@ def _download_and_extract_sections_basic(
             response_call(), name=tabular_file_name, content_type=mime_type
         )
 
-    elif (
-        mime_type
-        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    ):
-        text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
-        return FileExtractionResult(
-            sections=[TextSection(link=link, text=text)] if text else []
+    elif mime_type == PRESENTATION_MIME_TYPE:
+        pptx_sections_native: list[TextSection | ImageSection | TabularSection] = []
+        text, _ = read_pptx_file(
+            io.BytesIO(response_call()),
+            file_name=file_name,
+            extract_images=allow_images,
+            image_callback=make_image_callback(
+                pptx_sections_native, file_id, file_name, link
+            ),
         )
+        if text:
+            pptx_sections_native.insert(0, TextSection(link=link, text=text))
+        return FileExtractionResult(sections=pptx_sections_native)
 
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))

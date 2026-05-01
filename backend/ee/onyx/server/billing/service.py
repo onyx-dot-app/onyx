@@ -18,7 +18,9 @@ from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
+from ee.onyx.server.billing.models import EndTrialResponse
 from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import StripePortalFlowType
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
@@ -179,6 +181,7 @@ async def create_customer_portal_session(
     license_data: str | None = None,
     return_url: str | None = None,
     tenant_id: str | None = None,
+    flow_type: StripePortalFlowType | None = None,
 ) -> CreateCustomerPortalSessionResponse:
     """Create a Stripe customer portal session.
 
@@ -186,6 +189,8 @@ async def create_customer_portal_session(
         license_data: License blob for authentication (self-hosted)
         return_url: URL to return to after portal session
         tenant_id: Tenant ID (cloud only)
+        flow_type: When "payment_method_update", deep-links the user to the
+            add-payment-method screen instead of the portal home.
 
     Returns:
         CreateCustomerPortalSessionResponse with portal URL
@@ -195,6 +200,8 @@ async def create_customer_portal_session(
         body["return_url"] = return_url
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
+    if flow_type:
+        body["flow_type"] = flow_type.value
 
     data = await _make_billing_request(
         method="POST",
@@ -271,4 +278,32 @@ async def update_seat_count(
         used_seats=data.get("used_seats", 0),
         message=data.get("message"),
         license=data.get("license"),
+    )
+
+
+async def end_trial(tenant_id: str | None) -> EndTrialResponse:
+    """End the trial for the current subscription immediately.
+
+    Calls the control plane, which sets `trial_end="now"` on the Stripe
+    subscription so the customer is charged right away. The Stripe webhook
+    transitions the local subscription trialing -> active.
+
+    Cloud-only: requires a tenant_id. Self-hosted callers should use the
+    standard checkout flow instead.
+    """
+    body: dict = {}
+    if tenant_id and MULTI_TENANT:
+        body["tenant_id"] = tenant_id
+
+    data = await _make_billing_request(
+        method="POST",
+        path="/end-trial",
+        license_data=None,
+        body=body,
+        error_message="Failed to end trial",
+    )
+    return EndTrialResponse(
+        success=data.get("success", False),
+        stripe_subscription_id=data.get("stripe_subscription_id", ""),
+        status=data.get("status", ""),
     )

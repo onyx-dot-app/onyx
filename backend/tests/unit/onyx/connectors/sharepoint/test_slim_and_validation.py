@@ -125,6 +125,65 @@ def test_all_site_pages_fail_does_not_crash(
 
 
 # ---------------------------------------------------------------------------
+# retrieve_all_slim_docs — pruning path skips permission fetching
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.SharepointConnector._create_rest_client_context"
+)
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_site_pages")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_driveitems")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector.fetch_sites")
+def test_retrieve_all_slim_docs_does_not_fetch_permissions(
+    mock_fetch_sites: MagicMock,
+    mock_fetch_driveitems: MagicMock,
+    mock_fetch_site_pages: MagicMock,
+    mock_create_ctx: MagicMock,
+) -> None:
+    """retrieve_all_slim_docs (pruning path) never calls _create_rest_client_context
+    and returns SlimDocuments with empty ExternalAccess."""
+    from onyx.connectors.models import ExternalAccess
+    from onyx.connectors.models import SlimDocument
+    from onyx.connectors.sharepoint.connector import DriveItemData
+
+    connector = _make_connector()
+    connector.include_site_documents = True
+    connector.include_site_pages = True
+
+    site = MagicMock()
+    site.url = SITE_URL
+    mock_fetch_sites.return_value = [site]
+
+    driveitem = MagicMock(spec=DriveItemData)
+    driveitem.id = "item-1"
+    driveitem.web_url = SITE_URL + "/doc.docx"
+    driveitem.parent_reference_path = None
+    mock_fetch_driveitems.return_value = [
+        (driveitem, "Documents", None),
+    ]
+
+    mock_fetch_site_pages.return_value = [
+        {"id": "page-1", "webUrl": SITE_URL + "/SitePages/Home.aspx"},
+    ]
+
+    results = [
+        doc
+        for batch in connector.retrieve_all_slim_docs()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    # Permissions were never fetched — no REST client context created.
+    mock_create_ctx.assert_not_called()
+
+    assert any(d.id == "item-1" for d in results)
+    assert any(d.id == "page-1" for d in results)
+    for doc in results:
+        assert doc.external_access == ExternalAccess.empty()
+
+
+# ---------------------------------------------------------------------------
 # validate_connector_settings — RoleAssignments permission probe
 # ---------------------------------------------------------------------------
 

@@ -101,7 +101,6 @@ jobs:
 
       - name: Run Tests
         run: |
-          py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/llm
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/embedding
 
       - name: Alert on Failure

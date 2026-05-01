@@ -12,6 +12,12 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.HIGHSPOT_KEY,
+    TestSecret.HIGHSPOT_SECRET,
+)
 
 
 def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
@@ -22,20 +28,18 @@ def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
 
 
 @pytest.fixture
-def highspot_connector() -> HighspotConnector:
+def highspot_connector(
+    test_secrets: dict[TestSecret, str],
+) -> HighspotConnector:
     """Create a Highspot connector with credentials from environment variables."""
-    # Check if required environment variables are set
-    if not os.environ.get("HIGHSPOT_KEY") or not os.environ.get("HIGHSPOT_SECRET"):
-        pytest.fail("HIGHSPOT_KEY or HIGHSPOT_SECRET environment variables not set")
-
     connector = HighspotConnector(
         spot_names=["Test content"],  # Use specific spot name instead of empty list
         batch_size=10,  # Smaller batch size for testing
     )
     connector.load_credentials(
         {
-            "highspot_key": os.environ["HIGHSPOT_KEY"],
-            "highspot_secret": os.environ["HIGHSPOT_SECRET"],
+            "highspot_key": test_secrets[TestSecret.HIGHSPOT_KEY],
+            "highspot_secret": test_secrets[TestSecret.HIGHSPOT_SECRET],
             "highspot_url": os.environ.get(
                 "HIGHSPOT_URL", "https://api-su2.highspot.com/v1.0/"
             ),

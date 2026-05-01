@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-2")
 
+# AWS BatchGetSecretValue accepts up to 20 secret IDs per request.
+_AWS_BATCH_GET_MAX_IDS = 20
+
 _DOTENV_PATH = os.path.join(
     os.path.dirname(__file__), os.pardir, os.pardir, os.pardir, ".vscode", ".env"
 )
@@ -85,48 +88,52 @@ def _get_aws_secrets(
 
     secret_ids = [f"{prefix}{name.value}" for name in keys]
 
-    try:
-        response = client.batch_get_secret_value(SecretIdList=secret_ids)
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        if error_code == "AccessDeniedException":
-            raise RuntimeError(
-                f"Access denied to secrets with prefix '{prefix}'. "
-                f"Please check your AWS credentials/permissions or run 'aws sso login'."
-            ) from e
-        elif error_code == "UnrecognizedClientException":
-            raise RuntimeError(
-                "AWS credentials not found or expired. "
-                "If using SSO, run 'aws sso login' to authenticate."
-            ) from e
-        else:
-            raise RuntimeError(
-                f"Failed to fetch secrets from AWS Secrets Manager: {e}"
-            ) from e
-
     secrets: dict[AnySecret, str] = {}
-    for secret in response.get("SecretValues", []):
-        secret_id = secret.get("Name", "")
-        secret_value = secret.get("SecretString")
+    for batch_start in range(0, len(secret_ids), _AWS_BATCH_GET_MAX_IDS):
+        batch = secret_ids[batch_start : batch_start + _AWS_BATCH_GET_MAX_IDS]
+        try:
+            response = client.batch_get_secret_value(SecretIdList=batch)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                raise RuntimeError(
+                    f"Access denied to secrets with prefix '{prefix}'. "
+                    f"Please check your AWS credentials/permissions or run 'aws sso login'."
+                ) from e
+            elif error_code == "UnrecognizedClientException":
+                raise RuntimeError(
+                    "AWS credentials not found or expired. "
+                    "If using SSO, run 'aws sso login' to authenticate."
+                ) from e
+            else:
+                raise RuntimeError(
+                    f"Failed to fetch secrets from AWS Secrets Manager: {e}"
+                ) from e
 
-        if secret_value:
-            key_name = (
-                secret_id[len(prefix) :] if secret_id.startswith(prefix) else secret_id
-            )
-            try:
-                secrets[enum_type(key_name)] = secret_value
-            except ValueError:
-                logger.warning(
-                    f"Secret '{key_name}' not in {enum_type.__name__}, skipping"
+        for secret in response.get("SecretValues", []):
+            secret_id = secret.get("Name", "")
+            secret_value = secret.get("SecretString")
+
+            if secret_value:
+                key_name = (
+                    secret_id[len(prefix) :]
+                    if secret_id.startswith(prefix)
+                    else secret_id
                 )
+                try:
+                    secrets[enum_type(key_name)] = secret_value
+                except ValueError:
+                    logger.warning(
+                        f"Secret '{key_name}' not in {enum_type.__name__}, skipping"
+                    )
 
-    for error in response.get("Errors", []):
-        secret_id = error.get("SecretId", "unknown")
-        error_code = error.get("ErrorCode", "unknown")
-        message = error.get("Message", "unknown error")
-        logger.warning(
-            f"Failed to fetch secret '{secret_id}': [{error_code}] {message}"
-        )
+        for error in response.get("Errors", []):
+            secret_id = error.get("SecretId", "unknown")
+            error_code = error.get("ErrorCode", "unknown")
+            message = error.get("Message", "unknown error")
+            logger.warning(
+                f"Failed to fetch secret '{secret_id}': [{error_code}] {message}"
+            )
 
     return secrets
 

@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator
@@ -37,6 +38,9 @@ from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
+from onyx.db.index_attempt_metrics import IndexAttemptStage
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics import time_stage_if_set
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -78,6 +82,9 @@ from onyx.natural_language_processing.utils import tokenizer_trim_middle
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
@@ -85,6 +92,19 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
+MAX_IMAGE_WORKERS = 16
+
+
+class _PendingImageSummarization(BaseModel):
+    """An image section awaiting LLM summarization."""
+
+    section: Section
+    image_data: bytes
+    context_name: str
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class DocumentBatchPrepareContext(BaseModel):
@@ -250,11 +270,18 @@ def embed_and_stream(
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
+    attempt_id: int | None = None,
 ) -> Generator[tuple[ChunkEmbeddingResult, ChunkBatchStore], None, None]:
     """Embed chunks to disk and yield a ``(result, store)`` pair.
 
     The store owns the temp directory — files are cleaned up when the context
     manager exits.
+
+    When ``attempt_id`` is provided, records the EMBEDDING stage timing for
+    just the actual embedding call (which finishes before ``yield``). Doing
+    this inside the context manager avoids the caller's ``with``-body work
+    (vector-db writes, post_index, etc.) being included in the embedding
+    measurement.
 
     Usage::
 
@@ -263,12 +290,17 @@ def embed_and_stream(
                 ...
     """
     with ChunkBatchStore() as store:
+        embed_start = time.monotonic()
         result = _embed_chunks_to_store(
             chunks=chunks,
             embedder=embedder,
             tenant_id=tenant_id,
             request_id=request_id,
             store=store,
+        )
+        embed_duration_ms = max(0, int((time.monotonic() - embed_start) * 1000))
+        safe_record_single_event_if_set(
+            IndexAttemptStage.EMBEDDING, attempt_id, embed_duration_ms
         )
         yield result, store
 
@@ -630,71 +662,81 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         ]
 
     indexed_documents: list[IndexingDocument] = []
+    # Sections that need LLM summarization, paired with their image data.
+    # Each Section is already placed in its document's processed_sections
+    # list — we just fill in .text after the parallel run.
+    pending: list[_PendingImageSummarization] = []
+    file_store = get_default_file_store()
 
     for document in documents:
         processed_sections: list[Section] = []
 
         for section in document.sections:
-            # For ImageSection, process and create base Section with both text and image_file_id
-            if isinstance(section, ImageSection):
-                # Default section with image path preserved - ensure text is always a string
-                processed_section = Section(
-                    type=section.type,
-                    link=section.link,
-                    image_file_id=section.image_file_id,
-                    text="",  # Initialize with empty string
-                )
-
-                # Try to get image summary
-                try:
-                    file_store = get_default_file_store()
-
-                    file_record = file_store.read_file_record(
-                        file_id=section.image_file_id
+            if not isinstance(section, ImageSection):
+                processed_sections.append(
+                    Section(
+                        type=section.type,
+                        text=section.text or "",
+                        link=section.link,
+                        image_file_id=None,
                     )
-                    if not file_record:
-                        logger.warning(
-                            f"Image file {section.image_file_id} not found in FileStore"
-                        )
-
-                        processed_section.text = "[Image could not be processed]"
-                    else:
-                        # Get the image data
-                        image_data_io = file_store.read_file(
-                            file_id=section.image_file_id
-                        )
-                        image_data = image_data_io.read()
-                        summary = summarize_image_with_error_handling(
-                            llm=llm,
-                            image_data=image_data,
-                            context_name=file_record.display_name or "Image",
-                        )
-
-                        if summary:
-                            processed_section.text = summary
-                        else:
-                            processed_section.text = "[Image could not be summarized]"
-                except Exception as e:
-                    logger.error(f"Error processing image section: {e}")
-                    processed_section.text = "[Error processing image]"
-
-                processed_sections.append(processed_section)
-
-            # For TextSection, create a base Section with text and link
-            else:
-                processed_section = Section(
-                    type=section.type,
-                    text=section.text or "",  # Ensure text is always a string, not None
-                    link=section.link,
-                    image_file_id=None,
                 )
-                processed_sections.append(processed_section)
+                continue
 
-        # Create IndexingDocument with original sections and processed_sections
-        indexed_document = IndexingDocument(
-            **document.model_dump(), processed_sections=processed_sections
+            processed_section = Section(
+                type=section.type,
+                link=section.link,
+                image_file_id=section.image_file_id,
+                text="",
+            )
+            processed_sections.append(processed_section)
+
+            try:
+                file_record = file_store.read_file_record(file_id=section.image_file_id)
+                if not file_record:
+                    logger.warning(
+                        f"Image file {section.image_file_id} not found in FileStore"
+                    )
+                    processed_section.text = "[Image could not be processed]"
+                    continue
+
+                image_data = file_store.read_file(file_id=section.image_file_id).read()
+                pending.append(
+                    _PendingImageSummarization(
+                        section=processed_section,
+                        image_data=image_data,
+                        context_name=file_record.display_name or "Image",
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error reading image section: {e}")
+                processed_section.text = "[Error processing image]"
+
+        indexed_documents.append(
+            IndexingDocument(
+                **document.model_dump(), processed_sections=processed_sections
+            )
         )
-        indexed_documents.append(indexed_document)
+
+    # Summarize all images in parallel
+    if pending:
+
+        def _summarize(image_data: bytes, context_name: str) -> str:
+            return (
+                summarize_image_with_error_handling(
+                    llm=llm, image_data=image_data, context_name=context_name
+                )
+                or "[Image could not be summarized]"
+            )
+
+        results = run_functions_tuples_in_parallel(
+            [(_summarize, (p.image_data, p.context_name)) for p in pending],
+            allow_failures=True,
+            max_workers=MAX_IMAGE_WORKERS,
+        )
+
+        for p, result in zip(pending, results):
+            p.section.text = result or "[Error processing image]"
 
     return indexed_documents
 
@@ -726,7 +768,13 @@ def add_document_summaries(
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     prompt_msg = UserMessage(content=summary_prompt)
 
-    response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+    with llm_generation_span(
+        llm=llm,
+        flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+        input_messages=[prompt_msg],
+    ) as span_generation:
+        response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+        record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
 
     for chunk in chunks_by_doc:
@@ -769,7 +817,13 @@ def add_chunk_summaries(
         fallback_prompt = UserMessage(
             content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
-        response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+        with llm_generation_span(
+            llm=llm,
+            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+            input_messages=[fallback_prompt],
+        ) as span_generation:
+            response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
 
     from onyx.llm.prompt_cache.processor import process_with_prompt_cache
@@ -788,7 +842,13 @@ def add_chunk_summaries(
                 continuation=True,  # Append chunk to the document context
             )
 
-            response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            with llm_generation_span(
+                llm=llm,
+                flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+                input_messages=[processed_prompt],
+            ) as span_generation:
+                response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+                record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)
 
         except LLMRateLimitError as e:
@@ -801,7 +861,8 @@ def add_chunk_summaries(
             chunk.chunk_context = ""
 
     run_functions_tuples_in_parallel(
-        [(assign_context, (chunk,)) for chunk in chunks_by_doc]
+        functions_with_args=[(assign_context, (chunk,)) for chunk in chunks_by_doc],
+        max_workers=MAX_CONTEXTUAL_RAG_WORKERS,
     )
 
 
@@ -1029,15 +1090,36 @@ def index_doc_batch(
         f"num_docs={len(document_batch)}"
     )
 
+    # Pull the attempt id off the adapter (when present) so per-stage metrics
+    # can be attributed to the right ``IndexAttempt``. The protocol does not
+    # mandate an ``index_attempt_metadata`` field, so non-attempt callers
+    # (ingestion API, user file processing) get None and the
+    # ``*_if_set`` helpers no-op.
+    _attempt_metadata = getattr(adapter, "index_attempt_metadata", None)
+    attempt_id: int | None = (
+        _attempt_metadata.attempt_id if _attempt_metadata is not None else None
+    )
+
     filtered_documents = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
-    context = adapter.prepare(filtered_documents, ignore_time_skip)
+    with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
+        context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
         return IndexingPipelineResult.empty(len(filtered_documents))
 
-    # Convert documents to IndexingDocument objects with processed section
-    # logger.debug("Processing image sections")
-    context.indexable_docs = process_image_sections(context.updatable_docs)
+    # Convert documents to IndexingDocument objects with processed section.
+    # Only record IMAGE_PROCESSING when there's actually image work to do --
+    # otherwise the average/stddev gets polluted with no-op zero events.
+    has_image_section = any(
+        section.type == SectionType.IMAGE
+        for document in context.updatable_docs
+        for section in document.sections
+    )
+    if has_image_section:
+        with time_stage_if_set(IndexAttemptStage.IMAGE_PROCESSING, attempt_id):
+            context.indexable_docs = process_image_sections(context.updatable_docs)
+    else:
+        context.indexable_docs = process_image_sections(context.updatable_docs)
 
     doc_descriptors = [
         {
@@ -1051,7 +1133,8 @@ def index_doc_batch(
     logger.debug("Starting chunking")
     # NOTE: no special handling for failures here, since the chunker is not
     # a common source of failure for the indexing pipeline
-    chunks: list[DocAwareChunk] = chunker.chunk(context.indexable_docs)
+    with time_stage_if_set(IndexAttemptStage.CHUNKING, attempt_id):
+        chunks: list[DocAwareChunk] = chunker.chunk(context.indexable_docs)
     llm_tokenizer: BaseTokenizer | None = None
 
     # contextual RAG
@@ -1064,15 +1147,21 @@ def index_doc_batch(
 
         # Because the chunker's tokens are different from the LLM's tokens,
         # We add a fudge factor to ensure we truncate prompts to the LLM's token limit
-        chunks = add_contextual_summaries(
-            chunks=chunks,
-            llm=llm,
-            tokenizer=llm_tokenizer,
-            chunk_token_limit=chunker.chunk_token_limit * 2,
-        )
+        with time_stage_if_set(IndexAttemptStage.CONTEXTUAL_RAG, attempt_id):
+            chunks = add_contextual_summaries(
+                chunks=chunks,
+                llm=llm,
+                tokenizer=llm_tokenizer,
+                chunk_token_limit=chunker.chunk_token_limit * 2,
+            )
 
     logger.debug("Starting embedding")
-    with embed_and_stream(chunks, embedder, tenant_id, request_id) as (
+    # ``embed_and_stream`` records EMBEDDING internally so the timer captures
+    # only the actual embedding work (which finishes before ``yield``), not
+    # the surrounding vector-db write loop in the ``with`` body.
+    with embed_and_stream(
+        chunks, embedder, tenant_id, request_id, attempt_id=attempt_id
+    ) as (
         embedding_result,
         chunk_store,
     ):
@@ -1120,18 +1209,28 @@ def index_doc_batch(
                 None
             )
 
+            # Sum vector-db write time across all configured indices and
+            # record once per batch. Most deployments have a single index
+            # (primary), but during a switchover both primary and secondary
+            # are written; we want a single combined number per batch rather
+            # than one event per index (avoids inflating event_count).
+            vector_db_write_ms = 0
             for document_index in document_indices:
 
                 def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
                     for chunk in chunk_store.stream():
                         yield enricher.enrich_chunk(chunk, 1.0)
 
+                vector_db_write_start = time.monotonic()
                 insertion_records, write_failures = (
                     write_chunks_to_vector_db_with_backoff(
                         document_index=document_index,
                         make_chunks=_enriched_stream,
                         index_batch_params=index_batch_params,
                     )
+                )
+                vector_db_write_ms += max(
+                    0, int((time.monotonic() - vector_db_write_start) * 1000)
                 )
 
                 _verify_indexing_completeness(
@@ -1148,12 +1247,17 @@ def index_doc_batch(
                 if primary_doc_idx_vector_db_write_failures is None:
                     primary_doc_idx_vector_db_write_failures = write_failures
 
-            adapter.post_index(
-                context=context,
-                updatable_chunk_data=updatable_chunk_data,
-                filtered_documents=filtered_documents,
-                enrichment=enricher,
+            safe_record_single_event_if_set(
+                IndexAttemptStage.VECTOR_DB_WRITE, attempt_id, vector_db_write_ms
             )
+
+            with time_stage_if_set(IndexAttemptStage.POST_INDEX_DB_UPDATE, attempt_id):
+                adapter.post_index(
+                    context=context,
+                    updatable_chunk_data=updatable_chunk_data,
+                    filtered_documents=filtered_documents,
+                    enrichment=enricher,
+                )
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None

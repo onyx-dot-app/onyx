@@ -60,6 +60,8 @@ from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.google_utils.resources import ImpersonationError
+from onyx.connectors.google_utils.resources import make_user_removal_checker
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
@@ -823,74 +825,29 @@ class GoogleDriveConnector(
 
         return get_available_drive_id
 
-    def _impersonate_user_for_retrieval(
+    def _make_fresh_emails_callback(
+        self, checkpoint: GoogleDriveCheckpoint
+    ) -> Callable[[], list[str]]:
+        def _callback() -> list[str]:
+            fresh_emails = self._get_all_user_emails()
+            checkpoint.user_emails = fresh_emails
+            return fresh_emails
+
+        return _callback
+
+    def _post_validation_retrieval(
         self,
+        curr_stage: StageCompletion,
+        drive_service: GoogleDriveService,
         user_email: str,
         field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         get_new_drive_id: Callable[[str], str | None],
         sorted_filtered_folder_ids: list[str],
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        resuming: bool,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> Iterator[RetrievedDriveFile]:
-        logger.info(f"Impersonating user {user_email}")
-        curr_stage = checkpoint.completion_map[user_email]
-        resuming = True
-        if curr_stage.stage == DriveRetrievalStage.START:
-            logger.info(f"Setting stage to {DriveRetrievalStage.MY_DRIVE_FILES.value}")
-            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
-            resuming = False
-        drive_service = get_drive_service(self.creds, user_email)
-
-        # validate that the user has access to the drive APIs by performing a simple
-        # request and checking for a 401
-        try:
-            logger.debug(f"Getting root folder id for user {user_email}")
-            # default is ~17mins of retries, don't do that here for cases so we don't
-            # waste 17mins everytime we run into a user without access to drive APIs
-            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
-        except HttpError as e:
-            if e.status_code == 401:
-                # fail gracefully, let the other impersonations continue
-                # one user without access shouldn't block the entire connector
-                logger.warning(
-                    f"User '{user_email}' does not have access to the drive APIs."
-                )
-                # mark this user as done so we don't try to retrieve anything for them
-                # again
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            raise
-        except RefreshError as e:
-            logger.warning(
-                f"User '{user_email}' token refresh failed, re-fetching user list "
-                f"to check if they were removed. Error: {e}"
-            )
-            try:
-                fresh_emails = self._get_all_user_emails()
-                checkpoint.user_emails = fresh_emails
-            except Exception as fetch_err:
-                logger.warning(
-                    f"Could not re-fetch user list to verify '{user_email}' removal "
-                    f"(error: {fetch_err}); surfacing original RefreshError as failure."
-                )
-                fresh_emails = [user_email]  # treat as if user still exists
-            if user_email not in fresh_emails:
-                # User was removed from the workspace — skip silently
-                logger.warning(
-                    f"User '{user_email}' confirmed removed from workspace, skipping."
-                )
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            # User still exists — this is a real token problem, surface as a failure
-            yield RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.DONE,
-                drive_file={},
-                user_email=user_email,
-                error=e,
-            )
-            curr_stage.stage = DriveRetrievalStage.DONE
-            return
         # if we are including my drives, try to get the current user's my
         # drive if any of the following are true:
         # - include_my_drives is true
@@ -956,17 +913,17 @@ class GoogleDriveConnector(
                 )
 
             # resume from a checkpoint
-            if resuming and (drive_id := curr_stage.current_folder_or_drive_id):
-                resume_start = curr_stage.completed_until
-                for file_or_token in _yield_from_drive(
-                    drive_id, resume_start  # ty: ignore[possibly-unresolved-reference]
-                ):
-                    if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
-                        return  # done with the max num pages, return checkpoint
-                    yield file_or_token
+            if resuming:
+                drive_id = curr_stage.current_folder_or_drive_id
+                if drive_id:
+                    resume_start = curr_stage.completed_until
+                    for file_or_token in _yield_from_drive(drive_id, resume_start):
+                        if isinstance(file_or_token, str):
+                            checkpoint.completion_map[user_email].next_page_token = (
+                                file_or_token
+                            )
+                            return  # done with the max num pages, return checkpoint
+                        yield file_or_token
 
             drive_id = get_new_drive_id(user_email)
             if drive_id:
@@ -1001,7 +958,7 @@ class GoogleDriveConnector(
             def _yield_from_folder_crawl(
                 folder_id: str, folder_start: SecondsSinceUnixEpoch | None
             ) -> Iterator[RetrievedDriveFile]:
-                for retrieved_file in crawl_folders_for_files(
+                yield from crawl_folders_for_files(
                     service=drive_service,
                     parent_id=folder_id,
                     field_type=field_type,
@@ -1010,8 +967,7 @@ class GoogleDriveConnector(
                     update_traversed_ids_func=self._update_traversed_parent_ids,
                     start=folder_start,
                     end=end,
-                ):
-                    yield retrieved_file
+                )
 
             # resume from a checkpoint
             last_processed_folder = None
@@ -1052,6 +1008,97 @@ class GoogleDriveConnector(
                 num_completed_folders += 1
 
         curr_stage.stage = DriveRetrievalStage.DONE
+
+    def _impersonate_user_for_retrieval(
+        self,
+        user_email: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        get_new_drive_id: Callable[[str], str | None],
+        sorted_filtered_folder_ids: list[str],
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> Iterator[RetrievedDriveFile]:
+        logger.info(f"Impersonating user {user_email}")
+        curr_stage = checkpoint.completion_map[user_email]
+        resuming = True
+        if curr_stage.stage == DriveRetrievalStage.START:
+            logger.info(f"Setting stage to {DriveRetrievalStage.MY_DRIVE_FILES.value}")
+            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
+            resuming = False
+        drive_service = get_drive_service(self.creds, user_email)
+        is_user_removed = make_user_removal_checker(
+            user_email, self._make_fresh_emails_callback(checkpoint)
+        )
+
+        # validate that the user has access to the drive APIs by performing a simple
+        # request and checking for a 401
+        try:
+            logger.debug(f"Getting root folder id for user {user_email}")
+            # default is ~17mins of retries, don't do that here for cases so we don't
+            # waste 17mins everytime we run into a user without access to drive APIs
+            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
+        except HttpError as e:
+            if e.status_code == 401:
+                # fail gracefully, let the other impersonations continue
+                # one user without access shouldn't block the entire connector
+                logger.warning(
+                    f"User '{user_email}' does not have access to the drive APIs."
+                )
+                # mark this user as done so we don't try to retrieve anything for them
+                # again
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            raise
+        except RefreshError as e:
+            if is_user_removed():
+                logger.warning(
+                    f"User '{user_email}' confirmed removed from workspace, skipping."
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            logger.warning(
+                f"User '{user_email}' impersonation failed at validation gate. Error: {e}"
+            )
+            curr_stage.stage = DriveRetrievalStage.DONE
+            yield RetrievedDriveFile(
+                completion_stage=DriveRetrievalStage.DONE,
+                drive_file={},
+                user_email=user_email,
+                error=ImpersonationError(user_email, e),
+            )
+            return
+
+        try:
+            yield from self._post_validation_retrieval(
+                curr_stage=curr_stage,
+                drive_service=drive_service,
+                user_email=user_email,
+                field_type=field_type,
+                checkpoint=checkpoint,
+                get_new_drive_id=get_new_drive_id,
+                sorted_filtered_folder_ids=sorted_filtered_folder_ids,
+                resuming=resuming,
+                start=start,
+                end=end,
+            )
+        except RefreshError as e:
+            if is_user_removed():
+                logger.warning(
+                    f"User '{user_email}' removed mid-run, skipping remaining files."
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+            else:
+                logger.warning(
+                    f"User '{user_email}' impersonation failed mid-run. Error: {e}"
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+                yield RetrievedDriveFile(
+                    completion_stage=DriveRetrievalStage.DONE,
+                    drive_file={},
+                    user_email=user_email,
+                    error=ImpersonationError(user_email, e),
+                )
 
     def _manage_service_account_retrieval(
         self,

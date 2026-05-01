@@ -153,7 +153,7 @@ export default function NonAdminStep() {
             </div>
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Hoverable.Item group="nonAdminName" variant="opacity-on-hover">
+              <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
                 <IconButton internal icon={SvgEdit} tooltip="Edit" />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />

@@ -1,4 +1,3 @@
-import os
 import time
 
 import pytest
@@ -7,6 +6,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.notion.connector import NotionConnector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.NOTION_INTEGRATION_TOKEN)
 
 
 def compare_hierarchy_nodes(
@@ -37,12 +39,16 @@ def compare_hierarchy_nodes(
 
 
 @pytest.fixture
-def notion_connector() -> NotionConnector:
+def notion_connector(
+    test_secrets: dict[TestSecret, str],
+) -> NotionConnector:
     """Create a NotionConnector with credentials from environment variables"""
     connector = NotionConnector()
     connector.load_credentials(
         {
-            "notion_integration_token": os.environ["NOTION_INTEGRATION_TOKEN"],
+            "notion_integration_token": test_secrets[
+                TestSecret.NOTION_INTEGRATION_TOKEN
+            ],
         }
     )
     return connector

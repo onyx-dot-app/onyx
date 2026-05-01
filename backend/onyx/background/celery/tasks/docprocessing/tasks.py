@@ -81,6 +81,9 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
+from onyx.db.index_attempt_metrics import IndexAttemptStage
+from onyx.db.index_attempt_metrics import safe_record_single_event
+from onyx.db.index_attempt_metrics import time_stage
 from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
@@ -435,9 +438,16 @@ def check_indexing_completion(
     # Update progress tracking and check for stalls
     with get_session_with_current_tenant() as db_session:
         stalled_timeout_hours = INDEXING_PROGRESS_TIMEOUT_HOURS
-        # Index attempts that are waiting between docfetching and
-        # docprocessing get a generous stalling timeout
-        if batches_total is not None and batches_processed == 0:
+        # Two phases get the generous stalling timeout, since neither produces
+        # forward motion in `batches_processed`:
+        #   1. Docfetching is still running (batches_total is None). A slow-but-
+        #      alive connector (large directory walks, paginated APIs, big
+        #      checkpoint resumption) can legitimately go hours before queueing
+        #      its first batch.
+        #   2. Docfetching has finished but no batches have been processed yet
+        #      (batches_total set, batches_processed == 0). This is the existing
+        #      "waiting between docfetching and docprocessing" case.
+        if batches_total is None or batches_processed == 0:
             stalled_timeout_hours = (
                 stalled_timeout_hours * DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER
             )
@@ -449,7 +459,8 @@ def check_indexing_completion(
             timeout_hours=stalled_timeout_hours,
         )
 
-        # Check for stalls (3-6 hour timeout). Only applies to in-progress attempts.
+        # Check for stalls. Only applies to in-progress attempts. The actual
+        # window is `stalled_timeout_hours / 2` to `stalled_timeout_hours`.
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt and timed_out:
             if attempt.status == IndexingStatus.IN_PROGRESS:
@@ -496,10 +507,12 @@ def check_indexing_completion(
                         )
             else:
                 logger.info(
-                    f"Indexing attempt {index_attempt_id} is {attempt.status}. 3-6 hours without heartbeat "
+                    f"Indexing attempt {index_attempt_id} is {attempt.status}. "
+                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without heartbeat "
                     "but task is in the queue. Likely underprovisioned docfetching worker."
                 )
-                # Update last progress time so we won't time out again for another 3 hours
+                # Update last progress time so we won't time out again for
+                # another `stalled_timeout_hours / 2` window.
                 IndexingCoordination.update_progress_tracking(
                     db_session,
                     index_attempt_id,
@@ -1426,18 +1439,26 @@ def docprocessing_task(
     cc_pair_id: int,
     tenant_id: str,
     batch_num: int,
+    enqueue_time_ms: int | None = None,
 ) -> None:
     """Process a batch of documents through the indexing pipeline.
 
     This task retrieves documents from storage and processes them through
     the indexing pipeline (embedding + vector store indexing).
+
+    ``enqueue_time_ms`` is the wall-clock millisecond timestamp at which
+    docfetching enqueued this task. Used to compute the QUEUE_WAIT stage
+    metric. Optional + defaults to None so in-flight tasks queued by an older
+    docfetching deployment continue to work across rolling deploys.
     """
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
     try:
         # Cannot use the TaskSingleton approach here because the worker is multithreaded
         token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
-        _docprocessing_task(index_attempt_id, cc_pair_id, tenant_id, batch_num)
+        _docprocessing_task(
+            index_attempt_id, cc_pair_id, tenant_id, batch_num, enqueue_time_ms
+        )
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
         INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
@@ -1468,11 +1489,28 @@ def _docprocessing_task(
     cc_pair_id: int,
     tenant_id: str,
     batch_num: int,
+    enqueue_time_ms: int | None = None,
 ) -> None:
     start_time = time.monotonic()
 
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    # Record queue wait latency before any other instrumented work. Tenant
+    # context must be set first so the metric write lands in the correct
+    # schema. If ``enqueue_time_ms`` is missing (older docfetching
+    # deployment during a rolling deploy), skip silently.
+    if enqueue_time_ms is not None:
+        queue_wait_ms = max(0, int(time.time() * 1000) - enqueue_time_ms)
+        safe_record_single_event(
+            IndexAttemptStage.QUEUE_WAIT, index_attempt_id, queue_wait_ms
+        )
+
+    # ``setup_start`` anchors DOCPROCESSING_SETUP. ``batch_load_ms`` is
+    # subtracted at the end of setup so DOCPROCESSING_SETUP only reflects
+    # genuine setup overhead (and not the document-load cost, which is
+    # captured separately as BATCH_LOAD).
+    setup_start = time.monotonic()
 
     # Check if chunk indexing usage limit has been exceeded before processing.
     # check_usage_and_raise raises OnyxError; hitting a trial/paid usage limit
@@ -1531,8 +1569,15 @@ def _docprocessing_task(
             },
         )
 
-        # Retrieve documents from storage
+        # Retrieve documents from storage. Time recorded as BATCH_LOAD; we
+        # also keep the millisecond delta so DOCPROCESSING_SETUP can subtract
+        # it to avoid double-counting.
+        batch_load_start = time.monotonic()
         documents = storage.get_batch(batch_num)
+        batch_load_ms = max(0, int((time.monotonic() - batch_load_start) * 1000))
+        safe_record_single_event(
+            IndexAttemptStage.BATCH_LOAD, index_attempt_id, batch_load_ms
+        )
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
@@ -1627,6 +1672,19 @@ def _docprocessing_task(
                 index_attempt_metadata=index_attempt_metadata,
             )
 
+            # Setup is complete. Record DOCPROCESSING_SETUP (everything from the
+            # top of the task minus BATCH_LOAD, which is tracked separately).
+            # BATCH_TOTAL starts immediately after; it spans run_indexing_pipeline
+            # plus all post-indexing bookkeeping in this try block.
+            setup_total_ms = max(0, int((time.monotonic() - setup_start) * 1000))
+            docprocessing_setup_ms = max(0, setup_total_ms - batch_load_ms)
+            safe_record_single_event(
+                IndexAttemptStage.DOCPROCESSING_SETUP,
+                index_attempt_id,
+                docprocessing_setup_ms,
+            )
+            batch_total_start = time.monotonic()
+
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
@@ -1659,13 +1717,14 @@ def _docprocessing_task(
         # Update batch completion and document counts atomically using database coordination
 
         with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
-            IndexingCoordination.update_batch_completion_and_docs(
-                db_session=db_session,
-                index_attempt_id=index_attempt_id,
-                total_docs_indexed=index_pipeline_result.total_docs,
-                new_docs_indexed=index_pipeline_result.new_docs,
-                total_chunks=index_pipeline_result.total_chunks,
-            )
+            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=index_pipeline_result.total_docs,
+                    new_docs_indexed=index_pipeline_result.new_docs,
+                    total_chunks=index_pipeline_result.total_chunks,
+                )
 
             _resolve_indexing_document_errors(
                 cc_pair_id,
@@ -1739,6 +1798,15 @@ def _docprocessing_task(
                 "batch_num": batch_num,
                 "chunks_processed": index_pipeline_result.total_chunks,
             },
+        )
+
+        # Record BATCH_TOTAL on the successful path. We deliberately do not
+        # record on the exception path -- a partially-completed batch's total
+        # would skew the average. BATCH_TOTAL spans run_indexing_pipeline and
+        # all post-indexing bookkeeping (coord update, telemetry, cleanup).
+        batch_total_ms = max(0, int((time.monotonic() - batch_total_start) * 1000))
+        safe_record_single_event(
+            IndexAttemptStage.BATCH_TOTAL, index_attempt_id, batch_total_ms
         )
 
         elapsed_time = time.monotonic() - start_time

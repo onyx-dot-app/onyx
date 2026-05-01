@@ -16,7 +16,7 @@ test.describe("Chatting with a custom persona", () => {
   test.describe.configure({ mode: "serial" });
 
   let agentId: number | null = null;
-  const agentName = `E2E Persona Chat ${Date.now()}`;
+  const agentName = `E2E Persona Chat`;
 
   test.beforeAll(async ({ browser }: { browser: Browser }) => {
     const context = await browser.newContext({

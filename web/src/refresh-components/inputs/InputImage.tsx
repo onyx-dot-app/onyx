@@ -225,7 +225,7 @@ export default function InputImage({
           {/* Edit overlay - shows on hover/focus when image is uploaded */}
           {showEditOverlay && isInteractive && hasImage && !isDragActive && (
             <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
-              <Hoverable.Item group="inputImage" variant="opacity-on-hover">
+              <Hoverable.Item group="inputImage" variant="appear-on-hover">
                 <div
                   className={cn(
                     "flex items-center justify-center",
@@ -260,7 +260,7 @@ export default function InputImage({
         {/* Remove button - top left corner (only when image is uploaded) */}
         {isInteractive && hasImage && onRemove && (
           <div className="absolute top-1 left-1">
-            <Hoverable.Item group="inputImage" variant="opacity-on-hover">
+            <Hoverable.Item group="inputImage" variant="appear-on-hover">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <IconButton
                 icon={SvgX}

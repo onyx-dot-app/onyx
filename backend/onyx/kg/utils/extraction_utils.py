@@ -35,6 +35,7 @@ from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -422,7 +423,9 @@ def kg_classify_document(
     try:
         prompt_msg = UserMessage(content=prompt)
         with llm_generation_span(
-            llm=llm, flow="kg_document_classification", input_messages=[prompt_msg]
+            llm=llm,
+            flow=LLMFlow.KG_DOCUMENT_CLASSIFICATION,
+            input_messages=[prompt_msg],
         ) as span_generation:
             response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, response)
@@ -493,7 +496,7 @@ def kg_deep_extract_chunks(
     try:
         prompt_msg = UserMessage(content=prompt)
         with llm_generation_span(
-            llm=llm, flow="kg_deep_extraction", input_messages=[prompt_msg]
+            llm=llm, flow=LLMFlow.KG_DEEP_EXTRACTION, input_messages=[prompt_msg]
         ) as span_generation:
             response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, response)

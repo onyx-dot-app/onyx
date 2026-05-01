@@ -10,31 +10,72 @@ from typing import cast
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import ToolCall
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 
 
-def build_llm_model_config(llm: LLM, flow: str | None = None) -> dict[str, str]:
+def build_llm_model_config(llm: LLM, flow: LLMFlow | None = None) -> dict[str, str]:
     model_config: dict[str, str] = {
         "base_url": str(llm.config.api_base or ""),
         "model_provider": llm.config.model_provider,
     }
     if flow:
-        model_config["flow"] = flow
+        model_config["flow"] = flow.value
     return model_config
 
 
 @contextmanager
 def llm_generation_span(
     llm: LLM,
-    flow: str | None,
+    flow: LLMFlow | None,
     input_messages: Sequence[Any] | Any | None = None,
     parent: Any | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
         model=llm.config.model_name,
         model_config=build_llm_model_config(llm, flow),
+        parent=parent,
+    ) as span:
+        if input_messages is not None:
+            if isinstance(input_messages, Sequence) and not isinstance(
+                input_messages, (str, bytes)
+            ):
+                normalized_messages = input_messages
+            else:
+                normalized_messages = [input_messages]
+            span.span_data.input = cast(
+                Sequence[Mapping[str, Any]], normalized_messages
+            )
+        yield span
+
+
+@contextmanager
+def traced_llm_call(
+    flow: LLMFlow,
+    model: str,
+    provider: str,
+    extra_config: Mapping[str, str] | None = None,
+    input_messages: Sequence[Any] | Any | None = None,
+    parent: Any | None = None,
+) -> Iterator[Span[GenerationSpanData]]:
+    """Open a generation span for call sites that don't go through ``LLM``.
+
+    Use this for image generation, voice (TTS/STT), embeddings/rerank crossing
+    the model_server boundary, and any direct provider-SDK call. For calls
+    that already go through an ``LLM`` subclass, use
+    :func:`llm_generation_span` instead — it pulls model and provider straight
+    off the ``LLM`` config.
+    """
+    # Build extra_config first, then overlay authoritative keys so callers
+    # cannot accidentally override ``flow`` / ``model_provider``.
+    model_config: dict[str, str] = dict(extra_config) if extra_config else {}
+    model_config["model_provider"] = provider
+    model_config["flow"] = flow.value
+    with generation_span(
+        model=model,
+        model_config=model_config,
         parent=parent,
     ) as span:
         if input_messages is not None:

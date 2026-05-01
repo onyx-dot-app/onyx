@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Generator
 from collections.abc import Iterator
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -224,3 +225,39 @@ class TestDocumentIndexNew:
             assert len(results) == 1
             assert results[0].document_id == doc_id
             assert results[0].already_existed is False
+
+    def test_mt_cloud_opensearch_index_verification_only_happens_once(
+        self,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that for multiple instantiations of OpenSearchDocumentIndex,
+        verify_and_create_index_if_necessary is only called once given the same
+        index name on multi-tenant cloud.
+        """
+        # Precondition.
+        with patch.object(
+            OpenSearchDocumentIndex, "verify_and_create_index_if_necessary"
+        ) as mock_verify_and_create_index_if_necessary:
+            assert mock_verify_and_create_index_if_necessary.call_count == 0
+
+            test_index_name = "test_index_name_for_mt_cloud_index_verification"
+            tenant_state = TenantState(tenant_id=TEST_TENANT_ID, multitenant=True)
+            _ = OpenSearchDocumentIndex(
+                tenant_state=tenant_state,
+                index_name=test_index_name,
+                embedding_dim=EMBEDDING_DIM,
+                embedding_precision=EmbeddingPrecision.FLOAT,
+            )
+            assert mock_verify_and_create_index_if_necessary.call_count == 1
+
+            # Under test.
+            _ = OpenSearchDocumentIndex(
+                tenant_state=tenant_state,
+                index_name=test_index_name,
+                embedding_dim=EMBEDDING_DIM,
+                embedding_precision=EmbeddingPrecision.FLOAT,
+            )
+
+            # Postcondition.
+            assert mock_verify_and_create_index_if_necessary.call_count == 1

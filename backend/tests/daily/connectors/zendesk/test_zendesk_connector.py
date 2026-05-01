@@ -1,5 +1,4 @@
 import json
-import os
 import time
 from pathlib import Path
 from typing import cast
@@ -11,6 +10,13 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.ZENDESK_SUBDOMAIN,
+    TestSecret.ZENDESK_EMAIL,
+    TestSecret.ZENDESK_TOKEN,
+)
 
 
 def load_test_data(file_name: str = "test_zendesk_data.json") -> dict[str, dict]:
@@ -20,24 +26,28 @@ def load_test_data(file_name: str = "test_zendesk_data.json") -> dict[str, dict]
 
 
 @pytest.fixture
-def zendesk_article_connector() -> ZendeskConnector:
+def zendesk_article_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="articles")
-    connector.load_credentials(get_credentials())
+    connector.load_credentials(get_credentials(test_secrets))
     return connector
 
 
 @pytest.fixture
-def zendesk_ticket_connector() -> ZendeskConnector:
+def zendesk_ticket_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="tickets")
-    connector.load_credentials(get_credentials())
+    connector.load_credentials(get_credentials(test_secrets))
     return connector
 
 
-def get_credentials() -> dict[str, str]:
+def get_credentials(test_secrets: dict[TestSecret, str]) -> dict[str, str]:
     return {
-        "zendesk_subdomain": os.environ["ZENDESK_SUBDOMAIN"],
-        "zendesk_email": os.environ["ZENDESK_EMAIL"],
-        "zendesk_token": os.environ["ZENDESK_TOKEN"],
+        "zendesk_subdomain": test_secrets[TestSecret.ZENDESK_SUBDOMAIN],
+        "zendesk_email": test_secrets[TestSecret.ZENDESK_EMAIL],
+        "zendesk_token": test_secrets[TestSecret.ZENDESK_TOKEN],
     }
 
 

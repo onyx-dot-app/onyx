@@ -95,7 +95,8 @@ def _get_all_backend_configs() -> List[BackendConfig]:
 
     if not configs:
         pytest.skip(
-            "No backend configurations available - set MinIO or AWS S3 credentials"
+            "No backend configurations available - set MinIO or AWS S3 credentials",
+            allow_module_level=True,
         )
 
     return configs
