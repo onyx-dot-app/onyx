@@ -2558,14 +2558,6 @@ class IndexAttemptError(Base):
         server_default=func.now(),
     )
 
-    # Connector-specific hints captured at error-creation time, used by the
-    # retry path. Sharepoint stores `{site_id, drive_id}` here; most others
-    # leave it null. All other retry-related state (count, timestamps, who
-    # resolved it) is derived via JOINs through `targeted_reindex_job_target`.
-    connector_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        PGJSONB, nullable=True
-    )
-
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 

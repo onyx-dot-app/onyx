@@ -1,5 +1,5 @@
 """targeted reindex schema: targeted_reindex_job, targeted_reindex_job_target,
-targeted_reindex_job_id on index_attempt, connector_metadata on index_attempt_errors
+targeted_reindex_job_id on index_attempt
 
 Revision ID: 31bd8c17325e
 Revises: 14162713706c
@@ -135,22 +135,8 @@ def upgrade() -> None:
         ["targeted_reindex_job_id"],
     )
 
-    # 4. Connector-specific hints on errors, captured at error-creation time
-    #    and consumed by the retry path. Other retry-related state is derived
-    #    via joins through targeted_reindex_job_target.
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "connector_metadata",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=True,
-        ),
-    )
-
 
 def downgrade() -> None:
-    op.drop_column("index_attempt_errors", "connector_metadata")
-
     op.drop_index(
         "ix_index_attempt_targeted_reindex_job_id",
         table_name="index_attempt",
