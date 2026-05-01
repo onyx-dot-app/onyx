@@ -229,9 +229,9 @@ def looks_like_cloudflare_challenge(html: str) -> bool:
     because CF didn't let us through". The latter must NOT be returned
     to the LLM as if it were the page.
     """
-    if not html:
-        return False
-    return any(marker in html for marker in _CLOUDFLARE_CHALLENGE_BODY_MARKERS)
+    return bool(html) and any(
+        marker in html for marker in _CLOUDFLARE_CHALLENGE_BODY_MARKERS
+    )
 
 
 def fetch_rendered_html(
