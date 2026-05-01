@@ -407,7 +407,7 @@ isodate==0.7.2
     #   zeep
 jaraco-classes==3.4.0
     # via keyring
-jaraco-context==6.0.2
+jaraco-context==6.1.2
     # via keyring
 jaraco-functools==4.4.0
     # via keyring
