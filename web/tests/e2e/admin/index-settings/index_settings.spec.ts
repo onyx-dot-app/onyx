@@ -89,11 +89,9 @@ test.describe("Index Settings Page @exclusive", () => {
     await navigateToIndexSettings(page);
     await expandModelPicker(page);
 
-    // Cloud Hosted and Self Hosted tabs
-    await expect(
-      page.getByRole("tab", { name: /cloud hosted/i })
-    ).toBeVisible();
-    await expect(page.getByRole("tab", { name: /self hosted/i })).toBeVisible();
+    // Cloud-based and Self-hosted tabs
+    await expect(page.getByRole("tab", { name: /cloud.based/i })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /self.hosted/i })).toBeVisible();
   });
 
   test("can connect and disconnect an embedding provider", async ({ page }) => {
@@ -182,8 +180,8 @@ test.describe("Index Settings Page @exclusive", () => {
     await navigateToIndexSettings(page);
     await expandModelPicker(page);
 
-    // Switch to Self Hosted tab where models are always available (no connect required)
-    await page.getByRole("tab", { name: /self hosted/i }).click();
+    // Switch to Self-hosted tab where models are always available (no connect required)
+    await page.getByRole("tab", { name: /self.hosted/i }).click();
 
     // Click the first available self-hosted model card
     const modelCard = page
