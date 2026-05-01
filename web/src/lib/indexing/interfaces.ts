@@ -152,6 +152,11 @@ export interface AdvancedSearchConfiguration {
 export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
+  model_name: string;
+  model_dim: number;
+  normalize: boolean;
+  query_prefix: string | null;
+  passage_prefix: string | null;
   provider_type: EmbeddingProviderName | null;
   switchover_type?: SwitchoverType;
 }

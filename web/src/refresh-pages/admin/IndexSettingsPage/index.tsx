@@ -919,16 +919,13 @@ export default function IndexSettingsPage() {
                   toast.error("Could not load current search settings");
                   return;
                 }
-                if (
-                  stagedModel.modelName !== currentEmbeddingModel?.model_name
-                ) {
-                  toast.error(
-                    "Changing the embedding model requires a re-index — pick a re-index strategy."
-                  );
-                  return;
-                }
                 const response = await updateInferenceSettings({
                   ...searchSettings,
+                  model_name: stagedModel.modelName,
+                  model_dim: stagedModel.modelDim ?? searchSettings.model_dim,
+                  normalize: stagedModel.normalize,
+                  query_prefix: stagedModel.queryPrefix ?? null,
+                  passage_prefix: stagedModel.passagePrefix ?? null,
                   enable_contextual_rag: values.enable_contextual_rag,
                   contextual_rag_llm_name: values.enable_contextual_rag
                     ? values.contextual_rag_llm_name
