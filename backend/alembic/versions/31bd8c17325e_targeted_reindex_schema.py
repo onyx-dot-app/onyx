@@ -1,5 +1,5 @@
 """targeted reindex schema: targeted_reindex_job, targeted_reindex_job_target,
-attempt_type discriminator on index_attempt, audit columns on index_attempt_errors
+targeted_reindex_job_id on index_attempt, connector_metadata on index_attempt_errors
 
 Revision ID: 31bd8c17325e
 Revises: 14162713706c
@@ -10,8 +10,6 @@ Create Date: 2026-04-30 15:35:00.000000
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
-from onyx.db.enums import IndexAttemptType
 
 
 # revision identifiers, used by Alembic.
@@ -87,7 +85,7 @@ def upgrade() -> None:
         ["status"],
     )
 
-    # 2. Target rows.
+    # 2. Per-doc target rows.
     op.create_table(
         "targeted_reindex_job_target",
         sa.Column(
@@ -121,22 +119,8 @@ def upgrade() -> None:
         ["cc_pair_id", "document_id"],
     )
 
-    # 3. Discriminator + retry job FK on index_attempt. Default FULL_RUN
-    #    so existing rows backfill safely.
-    op.add_column(
-        "index_attempt",
-        sa.Column(
-            "attempt_type",
-            sa.Enum(IndexAttemptType, native_enum=False),
-            server_default="FULL_RUN",
-            nullable=False,
-        ),
-    )
-    op.create_index(
-        "ix_index_attempt_attempt_type",
-        "index_attempt",
-        ["attempt_type"],
-    )
+    # 3. FK on index_attempt linking synthetic targeted-reindex attempts
+    #    back to their job. NULL on full-run attempts.
     op.add_column(
         "index_attempt",
         sa.Column(
@@ -152,69 +136,9 @@ def upgrade() -> None:
         ["targeted_reindex_job_id"],
     )
 
-    # 4. Audit columns on index_attempt_errors. All nullable or default-backed.
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "targeted_reindex_count",
-            sa.Integer(),
-            server_default="0",
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "last_targeted_reindex_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "last_targeted_reindex_job_id",
-            sa.Integer(),
-            sa.ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-    )
-    op.create_index(
-        "ix_index_attempt_errors_last_targeted_reindex_job_id",
-        "index_attempt_errors",
-        ["last_targeted_reindex_job_id"],
-    )
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "resolved_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "resolved_by_user_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("user.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-    )
-    op.create_index(
-        "ix_index_attempt_errors_resolved_by_user_id",
-        "index_attempt_errors",
-        ["resolved_by_user_id"],
-    )
-    op.add_column(
-        "index_attempt_errors",
-        sa.Column(
-            "targeted_reindex_history",
-            postgresql.JSONB(astext_type=sa.Text()),
-            server_default="[]",
-            nullable=False,
-        ),
-    )
+    # 4. Connector-specific hints on errors, captured at error-creation time
+    #    and consumed by the retry path. Other retry-related state is derived
+    #    via joins through targeted_reindex_job_target.
     op.add_column(
         "index_attempt_errors",
         sa.Column(
@@ -227,28 +151,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("index_attempt_errors", "connector_metadata")
-    op.drop_column("index_attempt_errors", "targeted_reindex_history")
-    op.drop_index(
-        "ix_index_attempt_errors_resolved_by_user_id",
-        table_name="index_attempt_errors",
-    )
-    op.drop_column("index_attempt_errors", "resolved_by_user_id")
-    op.drop_column("index_attempt_errors", "resolved_at")
-    op.drop_index(
-        "ix_index_attempt_errors_last_targeted_reindex_job_id",
-        table_name="index_attempt_errors",
-    )
-    op.drop_column("index_attempt_errors", "last_targeted_reindex_job_id")
-    op.drop_column("index_attempt_errors", "last_targeted_reindex_at")
-    op.drop_column("index_attempt_errors", "targeted_reindex_count")
 
     op.drop_index(
         "ix_index_attempt_targeted_reindex_job_id",
         table_name="index_attempt",
     )
     op.drop_column("index_attempt", "targeted_reindex_job_id")
-    op.drop_index("ix_index_attempt_attempt_type", table_name="index_attempt")
-    op.drop_column("index_attempt", "attempt_type")
 
     op.drop_index(
         "ix_targeted_reindex_job_target_cc_pair_doc",

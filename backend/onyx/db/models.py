@@ -68,7 +68,6 @@ from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
-from onyx.db.enums import IndexAttemptType
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -2249,11 +2248,6 @@ class TargetedReindexJob(Base):
         back_populates="targeted_reindex_job",
         primaryjoin="TargetedReindexJob.id == IndexAttempt.targeted_reindex_job_id",
     )
-    errors: Mapped[list["IndexAttemptError"]] = relationship(
-        "IndexAttemptError",
-        back_populates="last_targeted_reindex_job",
-        primaryjoin="TargetedReindexJob.id == IndexAttemptError.last_targeted_reindex_job_id",
-    )
 
 
 class TargetedReindexJobTarget(Base):
@@ -2319,19 +2313,10 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
-    # Discriminator separating real indexing runs from synthetic targeted
-    # reindex attempts. Existing rows backfill to FULL_RUN. Consumer query
-    # sites filter on this column so retry attempts don't bleed into
-    # freshness, scheduling, or swap-gating decisions.
-    attempt_type: Mapped[IndexAttemptType] = mapped_column(
-        Enum(IndexAttemptType, native_enum=False),
-        nullable=False,
-        default=IndexAttemptType.FULL_RUN,
-        server_default="FULL_RUN",
-        index=True,
-    )
-    # Set on synthetic targeted reindex attempts. Links back to the
-    # `targeted_reindex_job` row the FE polls for aggregate status.
+    # NULL on full-run attempts. Set on synthetic attempts spawned by a
+    # targeted reindex; links back to the `targeted_reindex_job` row.
+    # Consumer query sites that only care about full runs filter
+    # `WHERE targeted_reindex_job_id IS NULL`.
     targeted_reindex_job_id: Mapped[int | None] = mapped_column(
         ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"),
         nullable=True,
@@ -2574,41 +2559,10 @@ class IndexAttemptError(Base):
         server_default=func.now(),
     )
 
-    # Targeted reindex audit. These fill on failure-driven retries (where the
-    # target row has source_error_id pointing at this error). Arbitrary doc
-    # reindexes don't touch this table.
-    targeted_reindex_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    last_targeted_reindex_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_targeted_reindex_job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    last_targeted_reindex_job: Mapped["TargetedReindexJob | None"] = relationship(
-        "TargetedReindexJob",
-        back_populates="errors",
-        primaryjoin="IndexAttemptError.last_targeted_reindex_job_id == TargetedReindexJob.id",
-    )
-    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    # JSON array; each retry appends an entry. Bounded to last 20 entries
-    # at the application layer.
-    targeted_reindex_history: Mapped[list[dict[str, Any]]] = mapped_column(
-        PGJSONB, nullable=False, server_default="[]"
-    )
-    # Connector-specific hints needed to retry. Sharepoint stores
-    # {site_id, drive_id} here; most others leave it null.
+    # Connector-specific hints captured at error-creation time, used by the
+    # retry path. Sharepoint stores `{site_id, drive_id}` here; most others
+    # leave it null. All other retry-related state (count, timestamps, who
+    # resolved it) is derived via JOINs through `targeted_reindex_job_target`.
     connector_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         PGJSONB, nullable=True
     )
