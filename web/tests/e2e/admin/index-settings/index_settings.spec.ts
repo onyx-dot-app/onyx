@@ -57,15 +57,22 @@ async function expandModelPicker(page: Page): Promise<void> {
   await viewAllButton.click();
 }
 
+async function switchToCloudTab(page: Page): Promise<void> {
+  const cloudTab = page.getByRole("tab", { name: /cloud.based/i });
+  await expect(cloudTab).toBeVisible({ timeout: 10000 });
+  await cloudTab.click();
+}
+
 async function openConnectModal(
   page: Page,
   providerName: string
 ): Promise<void> {
-  const connectButton = page
-    .locator("[data-interactive-state]")
-    .filter({ hasText: providerName })
-    .getByRole("button", { name: /connect/i })
-    .first();
+  // "View All Models" defaults to Self-hosted when the current model has no
+  // cloud provider — switch to Cloud-based tab explicitly first.
+  await switchToCloudTab(page);
+
+  // Click the first Connect button visible — the dialog title confirms the provider
+  const connectButton = page.getByRole("button", { name: "Connect" }).first();
   await expect(connectButton).toBeVisible({ timeout: 10000 });
   await connectButton.click();
   await expect(
@@ -99,13 +106,16 @@ test.describe("Index Settings Page @exclusive", () => {
     await page.route(TEST_EMBEDDING_API, async (route) => {
       await route.fulfill({ status: 200, body: JSON.stringify({}) });
     });
-    // Mock the PUT so the provider is "saved" without hitting the backend
+    // Mock the provider list (GET) to return empty so all cards show "Connect",
+    // and mock PUT so the provider is "saved" without hitting the backend
     await page.route(EMBEDDING_PROVIDER_API, async (route) => {
       if (route.request().method() === "PUT") {
         await route.fulfill({
           status: 200,
-          body: JSON.stringify({ provider_type: "openai" }),
+          body: JSON.stringify({ provider_type: "cohere" }),
         });
+      } else if (route.request().method() === "GET") {
+        await route.fulfill({ status: 200, body: JSON.stringify([]) });
       } else {
         await route.continue();
       }
@@ -114,12 +124,12 @@ test.describe("Index Settings Page @exclusive", () => {
     await navigateToIndexSettings(page);
     await expandModelPicker(page);
 
-    // Open the OpenAI connect modal
-    await openConnectModal(page, "OpenAI");
-    const modal = page.getByRole("dialog", { name: /set up openai/i });
+    // Open the Cohere connect modal (first provider in the cloud list)
+    await openConnectModal(page, "Cohere");
+    const modal = page.getByRole("dialog", { name: /set up cohere/i });
 
     // Fill in a placeholder API key
-    await modal.getByLabel(/api key/i).fill("sk-placeholder-key");
+    await modal.getByLabel(/api key/i).fill("co-placeholder-key");
     const connectButton = modal.getByRole("button", { name: /connect/i });
     await expect(connectButton).toBeEnabled({ timeout: 5000 });
     await connectButton.click();
@@ -152,13 +162,14 @@ test.describe("Index Settings Page @exclusive", () => {
     try {
       await navigateToIndexSettings(page);
       await expandModelPicker(page);
+      // "View All Models" defaults to Self-hosted — switch to Cloud-based where
+      // the edit button appears for configured providers.
+      await switchToCloudTab(page);
 
       // Edit button should be visible for the connected provider
-      const editButton = page
-        .locator("[data-interactive-state]")
-        .filter({ hasText: "OpenAI" })
-        .getByRole("button", { name: /edit|manage/i })
-        .first();
+      const editButton = page.getByRole("button", {
+        name: /edit credentials/i,
+      });
       await expect(editButton).toBeVisible({ timeout: 10000 });
       await editButton.click();
 
@@ -183,17 +194,17 @@ test.describe("Index Settings Page @exclusive", () => {
     // Switch to Self-hosted tab where models are always available (no connect required)
     await page.getByRole("tab", { name: /self.hosted/i }).click();
 
-    // Click the first available self-hosted model card
-    const modelCard = page
-      .locator(
-        "[data-interactive-state='empty'], [data-interactive-state='filled']"
-      )
+    // Click "Select Model" on the first available self-hosted model
+    const selectButton = page
+      .getByRole("button", { name: "Select Model" })
       .first();
-    await expect(modelCard).toBeVisible({ timeout: 10000 });
-    await modelCard.click();
+    await expect(selectButton).toBeVisible({ timeout: 10000 });
+    await selectButton.click();
 
-    // The Apply button (or equivalent) should now be enabled in the banner
-    const applyButton = page.getByRole("button", { name: /apply/i });
+    // The Apply button should now be enabled in the banner
+    const applyButton = page.getByRole("button", {
+      name: /apply without re.?index|apply & re.?index/i,
+    });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
     await expect(applyButton).toBeEnabled();
   });

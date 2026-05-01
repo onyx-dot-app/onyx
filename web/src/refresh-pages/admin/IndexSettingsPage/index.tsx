@@ -467,6 +467,8 @@ function ProviderGroup({
                     icon={SvgSettings}
                     prominence="tertiary"
                     size="sm"
+                    aria-label="Edit credentials"
+                    tooltip="Edit credentials"
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
                   <Spacer horizontal rem={0.25} />
