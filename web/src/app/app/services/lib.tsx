@@ -196,7 +196,11 @@ export async function* sendMessage({
   // Wait for any in-flight mainline-pointer PUT to land so the backend's
   // chat_history walk can locate parentMessageId.
   if (pendingMainlineSync) {
-    await pendingMainlineSync.catch(() => undefined);
+    const promise = pendingMainlineSync;
+    await promise.catch(() => undefined);
+    if (pendingMainlineSync === promise) {
+      pendingMainlineSync = null;
+    }
   }
 
   const response = await fetch(`/api/chat/send-chat-message`, {
@@ -228,7 +232,10 @@ export async function setPreferredResponse(
       preferred_response_id: preferredResponseId,
     }),
   });
-  pendingMainlineSync = request;
+  pendingMainlineSync = (pendingMainlineSync ?? Promise.resolve()).then(
+    () => request,
+    () => request
+  );
   return request;
 }
 
@@ -256,7 +263,10 @@ export async function patchMessageToBeLatest(messageId: number) {
       message_id: messageId,
     }),
   });
-  pendingMainlineSync = request;
+  pendingMainlineSync = (pendingMainlineSync ?? Promise.resolve()).then(
+    () => request,
+    () => request
+  );
   return request;
 }
 
