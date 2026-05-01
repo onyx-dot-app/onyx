@@ -682,26 +682,8 @@ jobs:
       - name: Start Docker containers (lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d --wait
         id: start_docker
-
-      - name: Wait for API server to be ready
-        run: |
-          start_time=$(date +%s)
-          timeout=300
-          while true; do
-            elapsed=$(( $(date +%s) - start_time ))
-            if [ $elapsed -ge $timeout ]; then
-              echo "Timeout reached. API server did not become ready in $timeout seconds."
-              exit 1
-            fi
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            if [ "$response" = "200" ]; then
-              echo "API server is ready."
-              break
-            fi
-            sleep 5
-          done
 
       - name: Seed dev license
         run: |
