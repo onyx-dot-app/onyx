@@ -5,6 +5,9 @@ import { loginAs } from "@tests/e2e/utils/auth";
 const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
+const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
+const UPDATE_INFERENCE_API =
+  "**/api/search-settings/update-inference-settings**";
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -37,6 +40,20 @@ async function getCurrentSearchSettings(page: Page) {
   );
   expect(response.ok()).toBeTruthy();
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Helpers shared across both describe blocks
+// ---------------------------------------------------------------------------
+
+async function stageNonCurrentSelfHostedModel(page: Page): Promise<void> {
+  await expandModelPicker(page);
+  await page.getByRole("tab", { name: /self.hosted/i }).click();
+  const selectButton = page
+    .getByRole("button", { name: "Select Model" })
+    .first();
+  await expect(selectButton).toBeVisible({ timeout: 10000 });
+  await selectButton.click();
 }
 
 // ---------------------------------------------------------------------------
@@ -201,12 +218,14 @@ test.describe("Index Settings Page @exclusive", () => {
     await expect(selectButton).toBeVisible({ timeout: 10000 });
     await selectButton.click();
 
-    // The Apply button should now be enabled in the banner
-    const applyButton = page.getByRole("button", {
-      name: /apply without re.?index|apply & re.?index/i,
-    });
-    await expect(applyButton).toBeVisible({ timeout: 5000 });
-    await expect(applyButton).toBeEnabled();
+    // The Apply button should now be enabled in the banner.
+    // Default switchoverType is SWITCHOVER_NONE before our auto-advance fix runs,
+    // so we accept either label here since this test only cares that Apply appears.
+    const applyButton = page
+      .getByRole("button", { name: "Apply & Re-index" })
+      .or(page.getByRole("button", { name: "Apply without Re-index" }));
+    await expect(applyButton.first()).toBeVisible({ timeout: 5000 });
+    await expect(applyButton.first()).toBeEnabled();
   });
 
   test("current search settings are reflected on the page", async ({
@@ -221,5 +240,131 @@ test.describe("Index Settings Page @exclusive", () => {
         page.getByText(settings.model_name, { exact: false })
       ).toBeVisible({ timeout: 10000 });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Switchover strategy tests
+// ---------------------------------------------------------------------------
+
+test.describe("Index Settings — switchover strategies @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("staging a model auto-advances dropdown to REINDEX", async ({
+    page,
+  }) => {
+    await navigateToIndexSettings(page);
+    await stageNonCurrentSelfHostedModel(page);
+
+    // Auto-advance: button must read "Apply & Re-index", not "Apply without Re-index"
+    const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
+    await expect(applyButton).toBeVisible({ timeout: 5000 });
+    await expect(applyButton).toBeEnabled();
+
+    // Dropdown should show the REINDEX option as selected
+    await expect(page.getByRole("combobox").first()).toContainText(
+      /re-index all connectors/i
+    );
+  });
+
+  test("reverting a staged model resets the banner", async ({ page }) => {
+    await navigateToIndexSettings(page);
+    await stageNonCurrentSelfHostedModel(page);
+
+    await expect(
+      page.getByRole("button", { name: "Apply & Re-index" })
+    ).toBeVisible({ timeout: 5000 });
+
+    await page.getByRole("button", { name: "Revert" }).click();
+
+    // Banner actions should be gone once the form is clean
+    await expect(
+      page.getByRole("button", { name: "Apply & Re-index" })
+    ).not.toBeVisible({ timeout: 5000 });
+    await expect(
+      page.getByRole("button", { name: "Apply without Re-index" })
+    ).not.toBeVisible();
+  });
+
+  // Parameterised: each re-index strategy must appear in the request body
+  const strategies = [
+    { label: "Re-index All Connectors Then Switch", switchoverType: "reindex" },
+    {
+      label: "Re-index Active Connectors Then Switch",
+      switchoverType: "active_only",
+    },
+    { label: "Switch Before Re-index", switchoverType: "instant" },
+  ];
+
+  for (const { label, switchoverType } of strategies) {
+    test(`apply with "${label}" sends switchover_type="${switchoverType}"`, async ({
+      page,
+    }) => {
+      // Capture the request body before fulfilling so we can assert on it
+      const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+        void page.route(SET_NEW_SETTINGS_API, async (route) => {
+          resolve(
+            JSON.parse(route.request().postData() ?? "{}") as Record<
+              string,
+              unknown
+            >
+          );
+          await route.fulfill({ status: 200, body: JSON.stringify({}) });
+        });
+      });
+
+      await navigateToIndexSettings(page);
+      await stageNonCurrentSelfHostedModel(page);
+
+      // Open the strategy dropdown and pick the target option
+      await page.getByRole("combobox").first().click();
+      await page.getByRole("option", { name: label }).click();
+
+      await page.getByRole("button", { name: "Apply & Re-index" }).click();
+
+      const body = await bodyPromise;
+      expect(body.switchover_type).toBe(switchoverType);
+    });
+  }
+
+  test("apply without re-index calls update-inference-settings only", async ({
+    page,
+  }) => {
+    // Track which endpoints are called
+    let updateInferenceCalled = false;
+    let setNewSettingsCalled = false;
+
+    await page.route(UPDATE_INFERENCE_API, async (route) => {
+      updateInferenceCalled = true;
+      await route.fulfill({ status: 200, body: JSON.stringify({}) });
+    });
+    await page.route(SET_NEW_SETTINGS_API, async (route) => {
+      setNewSettingsCalled = true;
+      await route.fulfill({ status: 200, body: JSON.stringify({}) });
+    });
+
+    await navigateToIndexSettings(page);
+
+    // Toggle Contextual Retrieval — makes the form dirty without changing the model,
+    // so the switchover type stays SWITCHOVER_NONE.
+    const toggle = page.getByRole("switch", { name: /contextual retrieval/i });
+    await expect(toggle).toBeVisible({ timeout: 10000 });
+    await toggle.click();
+
+    const applyButton = page.getByRole("button", {
+      name: "Apply without Re-index",
+    });
+    await expect(applyButton).toBeVisible({ timeout: 5000 });
+    await expect(applyButton).toBeEnabled();
+    await applyButton.click();
+
+    // update-inference-settings, not set-new-search-settings
+    await expect
+      .poll(() => updateInferenceCalled, { timeout: 5000 })
+      .toBe(true);
+    expect(setNewSettingsCalled).toBe(false);
   });
 });

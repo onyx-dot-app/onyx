@@ -1003,6 +1003,9 @@ export default function IndexSettingsPage() {
                             customModel.modelName
                           );
                           void setFieldValue("custom_model", customModel);
+                          if (switchoverType === SWITCHOVER_NONE) {
+                            setSwitchoverType(SwitchoverType.REINDEX);
+                          }
                         }
                         customModelModal.toggle(false);
                       }}
@@ -1215,6 +1218,14 @@ export default function IndexSettingsPage() {
                                                   "custom_model",
                                                   null
                                                 );
+                                                if (
+                                                  switchoverType ===
+                                                  SWITCHOVER_NONE
+                                                ) {
+                                                  setSwitchoverType(
+                                                    SwitchoverType.REINDEX
+                                                  );
+                                                }
                                               }}
                                               onDeselectModel={() => {
                                                 void setFieldValue(
@@ -1224,6 +1235,9 @@ export default function IndexSettingsPage() {
                                                 void setFieldValue(
                                                   "custom_model",
                                                   null
+                                                );
+                                                setSwitchoverType(
+                                                  SWITCHOVER_NONE
                                                 );
                                               }}
                                             />
@@ -1268,6 +1282,14 @@ export default function IndexSettingsPage() {
                                                   "custom_model",
                                                   null
                                                 );
+                                                if (
+                                                  switchoverType ===
+                                                  SWITCHOVER_NONE
+                                                ) {
+                                                  setSwitchoverType(
+                                                    SwitchoverType.REINDEX
+                                                  );
+                                                }
                                               }}
                                               onDeselectModel={() => {
                                                 void setFieldValue(
@@ -1277,6 +1299,9 @@ export default function IndexSettingsPage() {
                                                 void setFieldValue(
                                                   "custom_model",
                                                   null
+                                                );
+                                                setSwitchoverType(
+                                                  SWITCHOVER_NONE
                                                 );
                                               }}
                                             />
