@@ -325,7 +325,7 @@ def sleep_and_retry(
             # into ClientRequestException with response=None (e.g.
             # ChunkedEncodingError).
             wrapped_transport_error = e.response is None and isinstance(
-                e.__cause__, TRANSIENT_TRANSPORT_EXCEPTIONS
+                e.__cause__ or e.__context__, TRANSIENT_TRANSPORT_EXCEPTIONS
             )
 
             is_retryable = status in RETRYABLE_HTTP_STATUSES or wrapped_transport_error
