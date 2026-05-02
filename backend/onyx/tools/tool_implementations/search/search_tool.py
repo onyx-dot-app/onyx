@@ -121,6 +121,7 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+SOURCE_FILTER_FIELD = "source_type"
 
 
 def deduplicate_queries(
@@ -519,6 +520,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                             "items": {"type": "string"},
                             "description": "List of search queries to execute, typically a single query.",
                         },
+                        SOURCE_FILTER_FIELD: {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Optional: restrict results to specific source types. "
+                                "Use when the user is clearly asking about a specific system "
+                                "(e.g. ['jira'] for Jira tickets/issues, ['confluence'] for "
+                                "Confluence pages/docs). Leave empty to search all sources."
+                            ),
+                        },
                     },
                     "required": [QUERIES_FIELD],
                 },
@@ -617,6 +628,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
             )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+
+        # If the LLM specified a source_type filter, merge it with existing filters
+        llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
+        if llm_source_types_raw:
+            from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
+
+            llm_source_types = strings_to_document_sources(
+                [s for s in llm_source_types_raw if isinstance(s, str)]
+            )
+            if llm_source_types:
+                existing = self.user_selected_filters or BaseFilters()
+                self.user_selected_filters = BaseFilters(
+                    source_type=llm_source_types,
+                    document_set=existing.document_set,
+                    time_cutoff=existing.time_cutoff,
+                    tags=existing.tags,
+                )
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
