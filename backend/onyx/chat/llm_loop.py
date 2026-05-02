@@ -24,6 +24,7 @@ from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -234,14 +235,15 @@ def _try_fallback_tool_extraction(
     return llm_step_result, True
 
 
-# Hardcoded oppinionated value, might breaks down to something like:
+# Default 6 covers the common search → open_url pattern:
 # Cycle 1: Calls web_search for something
 # Cycle 2: Calls open_url for some results
 # Cycle 3: Calls web_search for some other aspect of the question
 # Cycle 4: Calls open_url for some results
 # Cycle 5: Maybe call open_url for some additional results or because last set failed
 # Cycle 6: No more tools available, forced to answer
-MAX_LLM_CYCLES = 6
+# Override via the MAX_LLM_CYCLES env var when running with tool-heavy MCPs
+# that legitimately need more turns. Imported from chat_configs.
 
 
 def _build_context_file_citation_mapping(
