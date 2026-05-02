@@ -297,14 +297,23 @@ def sleep_and_retry(
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
             if attempt >= max_retries:
                 logger.warning(
-                    f"Transport error on {method_name} after "
-                    f"{max_retries + 1} attempts: {type(e).__name__}: {e}"
+                    "Transport error on %s after %s attempts: %s: %s",
+                    method_name,
+                    max_retries + 1,
+                    type(e).__name__,
+                    e,
                 )
                 raise
             sleep_time = _backoff_seconds(attempt, retry_after=None)
             logger.warning(
-                f"Transport error on {method_name}, attempt {attempt + 1}/{max_retries + 1}: "
-                f"{type(e).__name__}: {e}. Sleeping {sleep_time}s before retry."
+                "Transport error on %s, attempt %s/%s: %s: %s. "
+                "Sleeping %ss before retry.",
+                method_name,
+                attempt + 1,
+                max_retries + 1,
+                type(e).__name__,
+                e,
+                sleep_time,
             )
             time.sleep(sleep_time)
             continue
