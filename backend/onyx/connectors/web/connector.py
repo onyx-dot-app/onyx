@@ -239,10 +239,8 @@ def get_internal_links(
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
-    # requests should handle brotli compression automatically
-    # as long as the brotli package is available in the venv. Leaving this line here to avoid
-    # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
-    # import brotli
+    # Note: brotli compression is handled automatically by the requests library
+    # as long as the brotli package is installed in the venv.
     try:
         response = requests.get(
             sitemap_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
