@@ -126,7 +126,10 @@ def get_document_set_by_id_for_user(
     stmt = (
         select(DocumentSetDBModel)
         .distinct()
-        .options(selectinload(DocumentSetDBModel.federated_connectors))
+        .options(
+            selectinload(DocumentSetDBModel.connector_credential_pairs),
+            selectinload(DocumentSetDBModel.federated_connectors),
+        )
     )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
