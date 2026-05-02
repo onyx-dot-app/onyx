@@ -208,7 +208,6 @@ class DocumentSource(str, Enum):
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
-    REQUESTTRACKER = "requesttracker"
     GITHUB = "github"
     GITBOOK = "gitbook"
     GITLAB = "gitlab"
@@ -673,7 +672,6 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.WEB: "indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
     DocumentSource.GMAIL: "email messages",
-    DocumentSource.REQUESTTRACKER: "requesttracker",
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",

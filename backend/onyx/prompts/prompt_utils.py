@@ -165,7 +165,6 @@ def get_company_context() -> str | None:
 # If not on the list, uses the original but slightly cleaned up, see below
 CONNECTOR_NAME_MAP = {
     "web": "Website",
-    "requesttracker": "Request Tracker",
     "github": "GitHub",
     "file": "File Upload",
 }
