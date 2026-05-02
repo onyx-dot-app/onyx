@@ -554,6 +554,11 @@ def get_chat_messages_by_session(
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
 
+    stmt = stmt.options(
+        selectinload(ChatMessage.chat_message_feedbacks),
+        selectinload(ChatMessage.search_docs),
+    )
+
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.
     if prefetch_top_two_level_tool_calls:
