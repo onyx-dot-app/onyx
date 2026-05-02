@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import useSWR from "swr";
 import { MessageCard } from "@opal/components";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import type {
-  ExpiryWarningStage,
-  LicenseStatus,
-} from "@/lib/billing/interfaces";
+import type { ExpiryWarningStage } from "@/lib/billing/interfaces";
+import { useLicense } from "@/hooks/useLicense";
 
 const DISMISS_STORAGE_KEY = "license-expiry-banner-dismissed";
 
@@ -161,10 +156,7 @@ function useMainContainerOffset(): { left: number; width: number } {
 }
 
 export default function LicenseExpiryBanner() {
-  const { data } = useSWR<LicenseStatus>(
-    SWR_KEYS.license,
-    errorHandlingFetcher
-  );
+  const { data } = useLicense();
   const [dismissed, setDismissed] = useState(false);
   const { left, width } = useMainContainerOffset();
 
