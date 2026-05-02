@@ -426,7 +426,9 @@ def _probe_site_role_assignments_authorized(
         resp = requests.get(probe_url, headers=headers, timeout=10)
     except Exception as e:
         logger.warning(
-            f"RoleAssignments permission probe failed for {site_url} (non-blocking): {e}"
+            "RoleAssignments permission probe failed for %s (non-blocking): %s",
+            site_url,
+            e,
         )
         return True
     return resp.status_code not in (401, 403)
@@ -1122,7 +1124,9 @@ class SharepointConnector(
         except ConnectorValidationError:
             raise
         except Exception as e:
-            logger.warning(f"Group members permission probe failed (non-blocking): {e}")
+            logger.warning(
+                "Group members permission probe failed (non-blocking): %s", e
+            )
 
     def _extract_tenant_domain_from_sites(self) -> str | None:
         """Extract the tenant domain from configured site URLs.
