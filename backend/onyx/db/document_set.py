@@ -137,7 +137,14 @@ def get_document_set_by_id(
     db_session: Session,
     document_set_id: int,
 ) -> DocumentSetDBModel | None:
-    stmt = select(DocumentSetDBModel).distinct()
+    stmt = (
+        select(DocumentSetDBModel)
+        .distinct()
+        .options(
+            selectinload(DocumentSetDBModel.connector_credential_pairs),
+            selectinload(DocumentSetDBModel.federated_connectors),
+        )
+    )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     return db_session.scalar(stmt)
 
