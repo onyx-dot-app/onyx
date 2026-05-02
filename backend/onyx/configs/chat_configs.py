@@ -11,7 +11,7 @@ MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 # agent is forced to answer. Default 6 covers the common search → open_url
 # pattern documented at the call site; raise via env when integrating with
 # tool-heavy MCPs that legitimately need more turns.
-MAX_LLM_CYCLES = int(os.environ.get("MAX_LLM_CYCLES") or 6)
+MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 # Capped in Vespa at 0.5
