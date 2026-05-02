@@ -6,16 +6,19 @@ export function BasicClickable({
   fullWidth = false,
   inset,
   className,
+  "aria-label": ariaLabel,
 }: {
   children: string | JSX.Element;
   onClick?: () => void;
   inset?: boolean;
   fullWidth?: boolean;
   className?: string;
+  "aria-label"?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel}
       className={`
         border 
         border-border
@@ -44,14 +47,17 @@ export function EmphasizedClickable({
   onClick,
   fullWidth = false,
   size = "md",
+  "aria-label": ariaLabel,
 }: {
   children: string | JSX.Element;
   onClick?: () => void;
   fullWidth?: boolean;
   size?: "sm" | "md" | "lg";
+  "aria-label"?: string;
 }) {
   return (
     <button
+      aria-label={ariaLabel}
       className={`
         inline-flex 
         items-center 
