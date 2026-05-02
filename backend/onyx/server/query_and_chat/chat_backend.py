@@ -326,6 +326,7 @@ def get_chat_session(
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_top_two_level_tool_calls=True,
+        prefetch_message_details=True,
     )
 
     # Convert messages to ChatMessageDetail format
