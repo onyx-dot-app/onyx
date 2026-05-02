@@ -184,70 +184,164 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
 
 
 # ---------------------------------------------------------------------------
-# validate_connector_settings — RoleAssignments permission probe
+# probe_role_assignments_permission — perm-sync RoleAssignments REST probe
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("status_code", [401, 403])
 @patch("onyx.connectors.sharepoint.connector.requests.get")
-@patch("onyx.connectors.sharepoint.connector.validate_outbound_http_url")
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
-def test_validate_raises_on_401_or_403(
+def test_probe_role_assignments_raises_on_401_or_403(
     mock_acquire: MagicMock,
-    _mock_validate_url: MagicMock,
     mock_get: MagicMock,
     status_code: int,
 ) -> None:
-    """validate_connector_settings raises ConnectorValidationError when probe returns 401 or 403."""
+    """probe raises ConnectorValidationError naming the rejecting site."""
     mock_acquire.return_value = MagicMock(accessToken="tok")
     mock_get.return_value = MagicMock(status_code=status_code)
 
     connector = _make_connector()
 
-    with pytest.raises(ConnectorValidationError, match="Sites.FullControl.All"):
-        connector.validate_connector_settings()
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        connector.probe_role_assignments_permission()
+    assert "Sites.FullControl.All" in str(exc_info.value)
+    assert SITE_URL in str(exc_info.value)
 
 
 @patch("onyx.connectors.sharepoint.connector.requests.get")
-@patch("onyx.connectors.sharepoint.connector.validate_outbound_http_url")
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
-def test_validate_passes_on_200(
+def test_probe_role_assignments_passes_on_200(
     mock_acquire: MagicMock,
-    _mock_validate_url: MagicMock,
     mock_get: MagicMock,
 ) -> None:
-    """validate_connector_settings does not raise when probe returns 200."""
+    """A 200 response means the app has the required permission."""
     mock_acquire.return_value = MagicMock(accessToken="tok")
     mock_get.return_value = MagicMock(status_code=200)
 
     connector = _make_connector()
-    connector.validate_connector_settings()  # should not raise
+    connector.probe_role_assignments_permission()  # should not raise
 
 
 @patch("onyx.connectors.sharepoint.connector.requests.get")
-@patch("onyx.connectors.sharepoint.connector.validate_outbound_http_url")
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
-def test_validate_passes_on_network_error(
+def test_probe_role_assignments_skips_on_network_error(
     mock_acquire: MagicMock,
-    _mock_validate_url: MagicMock,
     mock_get: MagicMock,
 ) -> None:
-    """Network errors during the probe are non-blocking (logged as warning only)."""
+    """Per-site transport errors are non-blocking (treated as authorized)."""
     mock_acquire.return_value = MagicMock(accessToken="tok")
     mock_get.side_effect = Exception("timeout")
 
     connector = _make_connector()
-    connector.validate_connector_settings()  # should not raise
+    connector.probe_role_assignments_permission()  # should not raise
 
 
-@patch("onyx.connectors.sharepoint.connector.validate_outbound_http_url")
 @patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
-def test_validate_skips_probe_without_credentials(
+def test_probe_role_assignments_skips_without_credentials(
     mock_acquire: MagicMock,
-    _mock_validate_url: MagicMock,
 ) -> None:
-    """Probe is skipped when credentials have not been loaded."""
+    """Probe is a no-op when credentials have not been loaded."""
     connector = SharepointConnector(sites=[SITE_URL])
     # msal_app and sp_tenant_domain are None — probe must be skipped.
-    connector.validate_connector_settings()  # should not raise
+    connector.probe_role_assignments_permission()  # should not raise
     mock_acquire.assert_not_called()
+
+
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_aggregates_unauthorized_sites(
+    mock_acquire: MagicMock,
+    mock_get: MagicMock,
+) -> None:
+    """When some sites 401 and others 200, the error names every failing site."""
+    mock_acquire.return_value = MagicMock(accessToken="tok")
+
+    site_ok = "https://tenant.sharepoint.com/sites/Allowed"
+    site_bad_1 = "https://tenant.sharepoint.com/teams/Forbidden1"
+    site_bad_2 = "https://tenant.sharepoint.com/teams/Forbidden2"
+
+    def _fake_get(url: str, **_kwargs: object) -> MagicMock:
+        if site_bad_1 in url:
+            return MagicMock(status_code=401)
+        if site_bad_2 in url:
+            return MagicMock(status_code=403)
+        return MagicMock(status_code=200)
+
+    mock_get.side_effect = _fake_get
+
+    connector = _make_connector()
+    # _make_connector seeds a single site; override with a mixed list.
+    connector.sites = [site_ok, site_bad_1, site_bad_2]
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        connector.probe_role_assignments_permission()
+
+    message = str(exc_info.value)
+    assert site_bad_1 in message
+    assert site_bad_2 in message
+    assert site_ok not in message
+    # All three sites should have been probed (in parallel).
+    assert mock_get.call_count == 3
+
+
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch("onyx.connectors.sharepoint.connector.acquire_token_for_rest")
+def test_probe_role_assignments_caps_probed_sites(
+    mock_acquire: MagicMock,
+    mock_get: MagicMock,
+) -> None:
+    """Only the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES sites are probed."""
+    from onyx.connectors.sharepoint.connector import ROLE_ASSIGNMENTS_PROBE_MAX_SITES
+
+    mock_acquire.return_value = MagicMock(accessToken="tok")
+    mock_get.return_value = MagicMock(status_code=200)
+
+    connector = _make_connector()
+    connector.sites = [
+        f"https://tenant.sharepoint.com/sites/Site{i}"
+        for i in range(ROLE_ASSIGNMENTS_PROBE_MAX_SITES + 2)
+    ]
+
+    connector.probe_role_assignments_permission()
+    assert mock_get.call_count == ROLE_ASSIGNMENTS_PROBE_MAX_SITES
+
+
+# ---------------------------------------------------------------------------
+# probe_group_members_permission — perm-sync Graph group-members probe
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch(
+    "onyx.connectors.sharepoint.connector.SharepointConnector._get_graph_access_token"
+)
+def test_probe_group_members_raises_on_401_or_403(
+    mock_token: MagicMock,
+    mock_get: MagicMock,
+    status_code: int,
+) -> None:
+    """probe raises ConnectorValidationError naming GroupMember.Read.All when Graph rejects."""
+    mock_token.return_value = "tok"
+    mock_get.return_value = MagicMock(status_code=status_code)
+
+    connector = _make_connector()
+
+    with pytest.raises(ConnectorValidationError, match="GroupMember.Read.All"):
+        connector.probe_group_members_permission()
+
+
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+@patch(
+    "onyx.connectors.sharepoint.connector.SharepointConnector._get_graph_access_token"
+)
+def test_probe_group_members_passes_on_200(
+    mock_token: MagicMock,
+    mock_get: MagicMock,
+) -> None:
+    """A 200 response means the app has the required Graph permission."""
+    mock_token.return_value = "tok"
+    mock_get.return_value = MagicMock(status_code=200)
+
+    connector = _make_connector()
+    connector.probe_group_members_permission()  # should not raise
