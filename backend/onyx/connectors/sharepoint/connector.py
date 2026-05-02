@@ -81,6 +81,7 @@ from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
 
@@ -143,6 +144,12 @@ DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+# Cap how many configured sites the perm-sync RoleAssignments probe checks at
+# validation time. Each probe is one HTTP round-trip, so we trade exhaustive
+# coverage for keeping connector creation responsive on tenants with many
+# configured sites.
+ROLE_ASSIGNMENTS_PROBE_MAX_SITES = 5
 
 
 class DriveItemData(BaseModel):
@@ -254,38 +261,97 @@ def _site_page_in_time_window(
     )
 
 
+# Transport-level exceptions that indicate a transient network/server-side
+# problem rather than an HTTP error. These can occur both as bare exceptions
+# (older office365 SDK paths that don't wrap them) and as the underlying
+# cause of a ClientRequestException with no response (newer SDK wrapping in
+# `execute_query`'s `except requests.exceptions.RequestException`). Note
+# `ChunkedEncodingError` is a subclass of `requests.ConnectionError`, so
+# `ConnectionError` covers it.
+TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
+
+# HTTP statuses we treat as transient and worth retrying.
+RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
+
+
+def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
+    """Honor a numeric Retry-After header when the server provides one,
+    otherwise fall back to capped exponential backoff (5s, 10s, 20s, …,
+    max 30s). The HTTP-date form of Retry-After is rare from SharePoint /
+    Graph in practice and falls through to exponential backoff."""
+    if retry_after:
+        try:
+            return int(retry_after)
+        except ValueError:
+            pass
+    return min(30, (2**attempt) * 5)
+
+
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
     """
-    Execute a SharePoint query with retry logic for rate limiting.
+    Execute a SharePoint query with retry logic for rate limiting and
+    transient transport-level failures (e.g. ChunkedEncodingError when
+    the server or an upstream gateway closes the connection mid-response).
     """
     for attempt in range(max_retries + 1):
         try:
             return query_obj.execute_query()
+        except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
+            if attempt >= max_retries:
+                logger.warning(
+                    "Transport error on %s after %s attempts: %s: %s",
+                    method_name,
+                    max_retries + 1,
+                    type(e).__name__,
+                    e,
+                )
+                raise
+            sleep_time = _backoff_seconds(attempt, retry_after=None)
+            logger.warning(
+                "Transport error on %s, attempt %s/%s: %s: %s. "
+                "Sleeping %ss before retry.",
+                method_name,
+                attempt + 1,
+                max_retries + 1,
+                type(e).__name__,
+                e,
+                sleep_time,
+            )
+            time.sleep(sleep_time)
+            continue
         except ClientRequestException as e:
             status = e.response.status_code if e.response is not None else None
 
-            # 429 / 503 — rate limit or transient error.  Back off and retry.
-            if status in (429, 503) and attempt < max_retries:
+            # Retryable: rate limits (429), transient server errors (503),
+            # plus transport errors that some office365 SDK versions wrap
+            # into ClientRequestException with response=None (e.g.
+            # ChunkedEncodingError).
+            wrapped_transport_error = e.response is None and isinstance(
+                e.__cause__, TRANSIENT_TRANSPORT_EXCEPTIONS
+            )
+
+            is_retryable = status in RETRYABLE_HTTP_STATUSES or wrapped_transport_error
+            if is_retryable and attempt < max_retries:
+                retry_after = (
+                    e.response.headers.get("Retry-After")
+                    if e.response is not None
+                    else None
+                )
+                sleep_time = _backoff_seconds(attempt, retry_after)
                 logger.warning(
-                    "Rate limit exceeded on %s, attempt %s/%s, sleeping and retrying",
+                    "Retryable error on %s, attempt %s/%s: status=%s. "
+                    "Sleeping %ss before retry.",
                     method_name,
                     attempt + 1,
                     max_retries + 1,
+                    status,
+                    sleep_time,
                 )
-                retry_after = (
-                    e.response.headers.get(  # ty: ignore[unresolved-attribute]
-                        "Retry-After"
-                    )
-                )
-                if retry_after:
-                    sleep_time = int(retry_after)
-                else:
-                    # Exponential backoff: 2^attempt * 5 seconds
-                    sleep_time = min(30, (2**attempt) * 5)
-
-                logger.info("Sleeping for %s seconds before retry", sleep_time)
                 time.sleep(sleep_time)
                 continue
 
@@ -399,6 +465,32 @@ def acquire_token_for_rest(
         scopes=[f"https://{sp_tenant_domain}.{sharepoint_domain_suffix}/.default"]
     )
     return TokenResponse.from_json(token)
+
+
+def _probe_site_role_assignments_authorized(
+    site_url: str, headers: dict[str, str]
+) -> bool:
+    """Issue a single RoleAssignments REST probe against `site_url`.
+
+    Returns True if the SharePoint REST surface accepts the call (any non-401/403
+    status), False if SP rejected it as unauthorized. Transport-level errors are
+    swallowed and treated as authorized so a transient network blip doesn't fail
+    validation; the runtime perm-sync code will surface real failures.
+
+    Designed to be called via run_functions_tuples_in_parallel — keep it side-
+    effect free aside from logging.
+    """
+    probe_url = f"{site_url.rstrip('/')}/_api/web/roleassignments?$top=1"
+    try:
+        resp = requests.get(probe_url, headers=headers, timeout=10)
+    except Exception as e:
+        logger.warning(
+            "RoleAssignments permission probe failed for %s (non-blocking): %s",
+            site_url,
+            e,
+        )
+        return True
+    return resp.status_code not in (401, 403)
 
 
 def _create_document_failure(
@@ -1007,35 +1099,93 @@ class SharepointConnector(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
 
-        # Probe RoleAssignments permission — required for permission sync.
-        # Only runs when credentials have been loaded.
-        if self.msal_app and self.sp_tenant_domain and self.sites:
-            try:
-                token_response = acquire_token_for_rest(
-                    self.msal_app,
-                    self.sp_tenant_domain,
-                    self.sharepoint_domain_suffix,
+    def probe_role_assignments_permission(self) -> None:
+        """Verify the Azure AD app can read SharePoint RoleAssignments.
+
+        Required for permission sync (RoleAssignments enumeration uses the
+        SharePoint REST surface, which is granted separately from Graph and
+        can be granted unevenly across sites under the Sites.Selected model).
+        Probes up to the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES configured
+        sites in parallel and fails if any of them rejects the request, so
+        per-site permission gaps surface at validation time rather than
+        mid-index. Only runs when credentials have been loaded.
+        """
+        if not (self.msal_app and self.sp_tenant_domain and self.sites):
+            return
+        try:
+            token_response = acquire_token_for_rest(
+                self.msal_app,
+                self.sp_tenant_domain,
+                self.sharepoint_domain_suffix,
+            )
+        except Exception as e:
+            logger.warning(
+                "RoleAssignments permission probe failed (non-blocking): %s", e
+            )
+            return
+
+        sites_to_probe = self.sites[:ROLE_ASSIGNMENTS_PROBE_MAX_SITES]
+        headers = {"Authorization": f"Bearer {token_response.accessToken}"}
+        results = run_functions_tuples_in_parallel(
+            [
+                (_probe_site_role_assignments_authorized, (site_url, headers))
+                for site_url in sites_to_probe
+            ],
+            allow_failures=True,
+        )
+        unauthorized_sites: list[str] = [
+            site_url
+            for site_url, authorized in zip(sites_to_probe, results)
+            if authorized is False
+        ]
+
+        if not unauthorized_sites:
+            return
+
+        sites_summary = ", ".join(unauthorized_sites)
+        raise ConnectorValidationError(
+            "The Azure AD app registration is missing the required SharePoint permission "
+            "to read role assignments on the following site(s): "
+            f"{sites_summary}. Please grant 'Sites.FullControl.All' "
+            "(application permission) in the Azure portal and re-run admin consent. "
+            "If using the 'Sites.Selected' model, ensure the app has been explicitly "
+            "granted full-control on each affected site collection."
+        )
+
+    def probe_group_members_permission(self) -> None:
+        """Verify the Azure AD app can enumerate Azure AD group members via Graph.
+
+        Required for permission sync, which expands Azure AD groups attached to
+        SharePoint role assignments via `GET /v1.0/groups/{id}/members`. Tested
+        via `GET /v1.0/groups?$top=1`, which requires the same permission set
+        (GroupMember.Read.All / Group.Read.All / Directory.Read.All) so a 403
+        here reliably predicts a 403 on the members call. Only runs when
+        credentials have been loaded.
+        """
+        if not self.msal_app:
+            return
+        try:
+            access_token = self._get_graph_access_token()
+            probe_url = f"{self.graph_api_base}/groups"
+            resp = requests.get(
+                probe_url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"$top": "1", "$select": "id"},
+                timeout=10,
+            )
+            if resp.status_code in (401, 403):
+                raise ConnectorValidationError(
+                    "The Azure AD app registration is missing the required Microsoft Graph "
+                    "permission to enumerate Azure AD group members. Please grant "
+                    "'GroupMember.Read.All' (application permission) in the Azure portal "
+                    "and re-run admin consent."
                 )
-                probe_url = (
-                    f"{self.sites[0].rstrip('/')}/_api/web/roleassignments?$top=1"
-                )
-                resp = requests.get(
-                    probe_url,
-                    headers={"Authorization": f"Bearer {token_response.accessToken}"},
-                    timeout=10,
-                )
-                if resp.status_code in (401, 403):
-                    raise ConnectorValidationError(
-                        "The Azure AD app registration is missing the required SharePoint permission "
-                        "to read role assignments. Please grant 'Sites.FullControl.All' "
-                        "(application permission) in the Azure portal and re-run admin consent."
-                    )
-            except ConnectorValidationError:
-                raise
-            except Exception as e:
-                logger.warning(
-                    "RoleAssignments permission probe failed (non-blocking): %s", e
-                )
+        except ConnectorValidationError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Group members permission probe failed (non-blocking): %s", e
+            )
 
     def _extract_tenant_domain_from_sites(self) -> str | None:
         """Extract the tenant domain from configured site URLs.

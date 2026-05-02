@@ -30,6 +30,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.url_normalization import (
     _default_url_normalizer,
@@ -77,6 +78,46 @@ class IndexedDocumentRequest(BaseModel):
 class IndexedRetrievalResult(BaseModel):
     sections: list[InferenceSection]
     missing_document_ids: list[str]
+
+
+def _format_failed_url(failure: FailedFetch) -> str:
+    """Format one failed URL for the LLM-facing failure message.
+
+    With a reason: "https://x.com (blocked by a Cloudflare bot challenge ...)"
+    Without:        "https://x.com"
+    """
+    if failure.failure_reason:
+        return f"{failure.url} ({failure.failure_reason})"
+    return failure.url
+
+
+def _build_failure_message(
+    *,
+    missing_document_ids: list[str],
+    failed_web_fetches: list[FailedFetch],
+) -> str:
+    """Construct the human-/LLM-readable failure message.
+
+    Includes per-URL `failure_reason` strings so the LLM knows e.g. that a
+    URL is bot-protected and shouldn't be re-tried verbatim.
+    """
+    parts: list[str] = []
+    if missing_document_ids:
+        parts.append("documents " + ", ".join(sorted(set(missing_document_ids))))
+
+    cleaned_failures = [f for f in failed_web_fetches if f.url]
+    if cleaned_failures:
+        # Dedup by URL, prefer the first FailedFetch we see for each (which
+        # already has the most-informative reason from `_mark_failed`).
+        deduped: dict[str, FailedFetch] = {}
+        for f in cleaned_failures:
+            deduped.setdefault(f.url, f)
+        ordered = sorted(deduped.values(), key=lambda f: f.url)
+        parts.append("URLs " + ", ".join(_format_failed_url(f) for f in ordered))
+
+    if not parts:
+        return "Failed to fetch content from the requested resources."
+    return "Failed to fetch content from " + " and ".join(parts)
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:
@@ -560,7 +601,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             indexed_result = indexed_result or IndexedRetrievalResult(
                 sections=[], missing_document_ids=[]
             )
-            crawled_sections, failed_web_urls = crawled_result or ([], [])
+            crawled_sections, failed_web_fetches = crawled_result or ([], [])
 
             # If timeout occurred and we have no successful results from either path,
             # return a timeout-specific error message
@@ -576,9 +617,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
             # Last-resort: attempt link-based lookup for URLs that failed both
             # document-ID resolution and crawling.
-            failed_web_urls = self._fallback_link_lookup(
+            failed_web_fetches = self._fallback_link_lookup(
                 unresolved_urls=unresolved_urls,
-                failed_web_urls=failed_web_urls,
+                failed_web_fetches=failed_web_fetches,
                 db_session=db_session,
                 indexed_result=indexed_result,
                 url_to_doc_id=url_to_doc_id,
@@ -591,24 +632,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 crawled_sections,
                 url_to_doc_id,
                 urls,
-                failed_web_urls,
+                failed_web_fetches,
             )
 
         if not inference_sections:
-            failure_descriptions = []
-            if indexed_result.missing_document_ids:
-                failure_descriptions.append(
-                    "documents "
-                    + ", ".join(sorted(set(indexed_result.missing_document_ids)))
-                )
-            if failed_web_urls:
-                cleaned_failures = sorted({url for url in failed_web_urls if url})
-                if cleaned_failures:
-                    failure_descriptions.append("URLs " + ", ".join(cleaned_failures))
-            failure_msg = (
-                "Failed to fetch content from " + " and ".join(failure_descriptions)
-                if failure_descriptions
-                else "Failed to fetch content from the requested resources."
+            failure_msg = _build_failure_message(
+                missing_document_ids=indexed_result.missing_document_ids,
+                failed_web_fetches=failed_web_fetches,
             )
             logger.warning("OpenURL tool failed: %s", failure_msg)
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
@@ -650,38 +680,38 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     def _fallback_link_lookup(
         self,
         unresolved_urls: list[str],
-        failed_web_urls: list[str],
+        failed_web_fetches: list[FailedFetch],
         db_session: Session,
         indexed_result: IndexedRetrievalResult,
         url_to_doc_id: dict[str, str],
         filters: IndexFilters,
-    ) -> list[str]:
+    ) -> list[FailedFetch]:
         """Attempt link-based lookup for URLs that failed both document-ID resolution and crawling.
 
         Args:
             unresolved_urls: URLs that couldn't be resolved to document IDs
-            failed_web_urls: URLs that failed crawling
+            failed_web_fetches: URLs that failed crawling, with per-URL reasons
             db_session: Database session
             indexed_result: Result object to update with found sections
             url_to_doc_id: Mapping to update with resolved URLs
             filters: Pre-built index filters for document retrieval
 
         Returns:
-            Updated list of failed_web_urls (with resolved URLs removed)
+            Updated list of failed fetches (with resolved URLs removed)
         """
-        if not unresolved_urls or not failed_web_urls:
-            return failed_web_urls
+        if not unresolved_urls or not failed_web_fetches:
+            return failed_web_fetches
 
-        failed_set = {url for url in failed_web_urls if url}
+        failed_set = {f.url for f in failed_web_fetches if f.url}
         fallback_urls = sorted(set(unresolved_urls).intersection(failed_set))
 
         if not fallback_urls:
-            return failed_web_urls
+            return failed_web_fetches
 
         fallback_requests = _lookup_document_ids_by_link(fallback_urls, db_session)
 
         if not fallback_requests:
-            return failed_web_urls
+            return failed_web_fetches
 
         deduped_fallback_requests = _dedupe_document_requests(fallback_requests)
         fallback_result = self._retrieve_indexed_documents_with_filters(
@@ -700,7 +730,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
 
         resolved_links = {request.original_url for request in deduped_fallback_requests}
-        return [url for url in failed_web_urls if url not in resolved_links]
+        return [f for f in failed_web_fetches if f.url not in resolved_links]
 
     def _retrieve_indexed_documents_with_filters(
         self,
@@ -777,14 +807,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         crawled_sections: list[InferenceSection],
         url_to_doc_id: dict[str, str],
         all_urls: list[str],
-        failed_web_urls: list[str],  # noqa: ARG002
+        failed_web_fetches: list[FailedFetch],  # noqa: ARG002
     ) -> list[InferenceSection]:
         """Merge indexed and crawled results, preferring indexed when available.
 
         For each URL:
         - If indexed result exists and has content, use it (better/cleaner representation)
         - Otherwise, use crawled result if available
-        - If both fail, the URL will be in failed_web_urls for error reporting
+        - If both fail, the URL will be in failed_web_fetches for error reporting
         """
         # Map indexed sections by document_id
         indexed_by_doc_id: dict[str, InferenceSection] = {}
@@ -831,18 +861,29 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
     def _fetch_web_content(
         self, urls: list[str], url_snippet_map: dict[str, str]
-    ) -> tuple[list[InferenceSection], list[str]]:
+    ) -> tuple[list[InferenceSection], list[FailedFetch]]:
         if not urls:
             return [], []
 
         raw_web_contents = self._provider.contents(urls)
+        # Track per-URL failure reasons (preferred) but de-dupe by URL since the
+        # same URL can show up in both the "empty" and "scrape unsuccessful"
+        # branches below.
+        failed_by_url: dict[str, FailedFetch] = {}
+
+        def _mark_failed(url: str, reason: str | None) -> None:
+            existing = failed_by_url.get(url)
+            # Prefer a non-None reason if we have one, otherwise keep the
+            # earlier entry (which itself may already have a reason).
+            if existing is None or (reason and not existing.failure_reason):
+                failed_by_url[url] = FailedFetch(url=url, failure_reason=reason)
+
         # Treat "no title and no content" as a failure for that URL, but don't
         # include the empty entry in downstream prompting/sections.
-        failed_urls: list[str] = [
-            content.link
-            for content in raw_web_contents
-            if not content.title.strip() and not content.full_content.strip()
-        ]
+        for content in raw_web_contents:
+            if not content.title.strip() and not content.full_content.strip():
+                _mark_failed(content.link, content.failure_reason)
+
         web_contents = filter_web_contents_with_no_title_or_content(raw_web_contents)
         sections: list[InferenceSection] = []
 
@@ -867,9 +908,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     )
                 )
             else:
-                # TODO: Slight improvement - if failed URL reasons are passed back to the LLM
-                # for example, if it tries to crawl Reddit and fails, it should know (probably) that this error would
-                # happen again if it tried to crawl Reddit again.
-                failed_urls.append(content.link or "")
+                _mark_failed(content.link or "", content.failure_reason)
 
-        return sections, failed_urls
+        return sections, list(failed_by_url.values())
