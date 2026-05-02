@@ -1,5 +1,4 @@
-import { Button } from "@opal/components";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
