@@ -84,6 +84,7 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
+from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
@@ -426,6 +427,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         acl_filters: list[str] | None,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
+        effective_filters: BaseFilters | None = None,
     ) -> list[InferenceChunk]:
         """Run search pipeline for a single query using pre-fetched data.
 
@@ -449,7 +451,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters
+                    (effective_filters if effective_filters is not None else self.user_selected_filters)
                     if self.project_id_filter is None
                     else None
                 ),
@@ -629,22 +631,29 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
-        # If the LLM specified a source_type filter, merge it with existing filters
+        # Compute a call-local effective filter — never mutate self.user_selected_filters
+        # so that source_type chosen by the LLM doesn't leak into subsequent run() calls.
+        effective_filters = self.user_selected_filters
         llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
         if llm_source_types_raw:
-            from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
-
             llm_source_types = strings_to_document_sources(
                 [s for s in llm_source_types_raw if isinstance(s, str)]
             )
             if llm_source_types:
                 existing = self.user_selected_filters or BaseFilters()
-                self.user_selected_filters = BaseFilters(
-                    source_type=llm_source_types,
-                    document_set=existing.document_set,
-                    time_cutoff=existing.time_cutoff,
-                    tags=existing.tags,
-                )
+                # Intersect with any user-set source filter so the LLM can only
+                # narrow the user's selection, never expand it.
+                if existing.source_type:
+                    llm_source_types = [
+                        s for s in llm_source_types if s in existing.source_type
+                    ]
+                if llm_source_types:
+                    effective_filters = BaseFilters(
+                        source_type=llm_source_types,
+                        document_set=existing.document_set,
+                        time_cutoff=existing.time_cutoff,
+                        tags=existing.tags,
+                    )
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
@@ -771,6 +780,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
@@ -788,6 +798,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
