@@ -75,6 +75,65 @@ export interface PaginatedIndexAttempts {
   total_pages: number;
 }
 
+/**
+ * One row of the document-permission-sync attempt history. Mirrors
+ * `DocPermissionSyncAttemptSnapshot` in
+ * `backend/onyx/server/documents/models.py`.
+ *
+ * Note: timestamps are pre-serialized to ISO strings on the backend
+ * (matching `IndexAttemptSnapshot.time_started`/`time_updated`), so the
+ * frontend never has to handle `Date` objects directly here.
+ */
+export interface DocPermissionSyncAttemptSnapshot {
+  id: number;
+  status: PermissionSyncStatusEnum;
+  error_message: string | null;
+  total_docs_synced: number;
+  docs_with_permission_errors: number;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/**
+ * One row of the external-group-sync attempt history. Mirrors
+ * `ExternalGroupSyncAttemptSnapshot` in
+ * `backend/onyx/server/documents/models.py`. The progress fields differ
+ * from the doc-sync shape because group sync tracks user/group/membership
+ * counts rather than document-level counts.
+ */
+export interface ExternalGroupSyncAttemptSnapshot {
+  id: number;
+  status: PermissionSyncStatusEnum;
+  error_message: string | null;
+  total_users_processed: number;
+  total_groups_processed: number;
+  total_group_memberships_synced: number;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/**
+ * Response wrapper used by both per-cc-pair sync-attempt endpoints
+ * (`/permission-sync-attempts` and `/external-group-sync-attempts`).
+ * Mirrors `CCPairSyncAttemptsResponse` in
+ * `backend/onyx/server/documents/models.py`.
+ *
+ * `applicable === false` means the cc-pair's source does not run this
+ * kind of sync job at all (e.g. Salesforce has no doc sync; Slack has
+ * no group sync) and `items` will always be `[]`. The frontend MUST
+ * use this flag to render the explanatory "this connector does not use
+ * a separate ... syncing job" message rather than the generic empty
+ * state — the two cases are different and `items.length === 0` alone
+ * does NOT distinguish them.
+ */
+export interface CCPairSyncAttemptsResponse<T> {
+  applicable: boolean;
+  items: T[];
+  total_items: number;
+}
+
 export interface IndexAttemptError {
   id: number;
   connector_credential_pair_id: number;
