@@ -715,9 +715,9 @@ class TestGetLitellmAvailableModels:
 
             claude = next(r for r in results if r.model_name == "claude-3-5-sonnet")
             assert claude.provider_name == "anthropic"
-            # Demonstrates that model_name (friendly) and litellm_params_model
-            # (canonical) can differ — proxy routes on the friendly name while
-            # the canonical name is shown as display_name in the UI.
+            # Demonstrates that model_name (the name you call LiteLLM with) and
+            # litellm_params_model (the name LiteLLM uses when calling the provider)
+            # can differ.
             assert claude.litellm_params_model == "claude-3-5-sonnet-20241022"
 
     def test_provider_name_falls_back_to_model_info_litellm_provider(self) -> None:
