@@ -456,9 +456,22 @@ class LitellmModelDetails(BaseModel):
     model_info: dict[str, Any] | None = None
 
     def get_custom_llm_provider(self) -> str:
-        """Returns .litellm_params.custom_llm_provider"""
+        """Returns the LiteLLM provider for this model.
+
+        Preference order:
+        1. litellm_params.custom_llm_provider (explicit override)
+        2. model_info.litellm_provider (reported by LiteLLM, e.g. "auto_router")
+        3. "" (empty string fallback)
+        """
         if self.litellm_params:
-            return self.litellm_params.get("custom_llm_provider", "")
+            provider = self.litellm_params.get("custom_llm_provider", "")
+            if provider:
+                return provider
+
+        if self.model_info:
+            provider = self.model_info.get("litellm_provider", "")
+            if provider:
+                return provider
 
         return ""
 

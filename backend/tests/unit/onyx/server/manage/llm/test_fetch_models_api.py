@@ -720,6 +720,45 @@ class TestGetLitellmAvailableModels:
             # the canonical name is shown as display_name in the UI.
             assert claude.litellm_params_model == "claude-3-5-sonnet-20241022"
 
+    def test_provider_name_falls_back_to_model_info_litellm_provider(self) -> None:
+        """Test that provider_name falls back to model_info.litellm_provider when
+        litellm_params.custom_llm_provider is absent — e.g. auto_router entries."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+
+        mock_response_data = {
+            "data": [
+                {
+                    "model_name": "work-laptop-test",
+                    "litellm_params": {
+                        "model": "auto_router/complexity_router",
+                    },
+                    "model_info": {
+                        "litellm_provider": "auto_router",
+                        "max_input_tokens": 262144,
+                        "supports_vision": True,
+                        "supports_reasoning": True,
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_http_response = MagicMock()
+            mock_http_response.json.return_value = mock_response_data
+            mock_http_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_http_response
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000",
+                api_key="test-key",
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            router = next(r for r in results if r.model_name == "work-laptop-test")
+            assert router.provider_name == "auto_router"
+
     def test_capability_fields_populated_from_model_info(
         self, mock_litellm_response: dict
     ) -> None:
