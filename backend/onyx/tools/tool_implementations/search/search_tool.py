@@ -580,6 +580,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         effective_filters = self.user_selected_filters
         llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
         if llm_source_types_raw:
+            # Coerce shape: LLMs sometimes send a bare string ("jira") instead
+            # of an array (["jira"]). Without this, list-comprehension would
+            # iterate over individual characters and silently drop the filter.
+            if isinstance(llm_source_types_raw, str):
+                llm_source_types_raw = [llm_source_types_raw]
+            elif not isinstance(llm_source_types_raw, list):
+                raise ToolCallException(
+                    message=(
+                        f"Invalid '{SOURCE_FILTER_FIELD}' parameter type: "
+                        f"expected list of strings, got {type(llm_source_types_raw).__name__}"
+                    ),
+                    llm_facing_message=(
+                        f"The '{SOURCE_FILTER_FIELD}' parameter must be an array of "
+                        f"source-type strings (e.g. [\"jira\"]). You sent a "
+                        f"{type(llm_source_types_raw).__name__}."
+                    ),
+                )
             llm_source_types = strings_to_document_sources(
                 [s for s in llm_source_types_raw if isinstance(s, str)]
             )
