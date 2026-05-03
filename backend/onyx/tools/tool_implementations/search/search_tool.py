@@ -561,6 +561,44 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
 
+        # Validate `queries` early so we can fail fast before any DB work.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+
+        # Compute a call-local effective filter — never mutate self.user_selected_filters
+        # so that source_type chosen by the LLM doesn't leak into subsequent run() calls.
+        # Resolved here (before the DB session block) so the same effective source filter
+        # can be passed to both the federated retriever prefetch and the vector-DB search.
+        effective_filters = self.user_selected_filters
+        llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
+        if llm_source_types_raw:
+            llm_source_types = strings_to_document_sources(
+                [s for s in llm_source_types_raw if isinstance(s, str)]
+            )
+            if llm_source_types:
+                existing = self.user_selected_filters or BaseFilters()
+                # Intersect with any user-set source filter so the LLM can only
+                # narrow the user's selection, never expand it.
+                if existing.source_type:
+                    llm_source_types = [
+                        s for s in llm_source_types if s in existing.source_type
+                    ]
+                if llm_source_types:
+                    effective_filters = BaseFilters(
+                        source_type=llm_source_types,
+                        document_set=existing.document_set,
+                        time_cutoff=existing.time_cutoff,
+                        tags=existing.tags,
+                    )
+
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
@@ -586,14 +624,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
+            # Use effective_filters (which already merges user + LLM source_type)
+            # so the federated leg honours the LLM's source_type just like the
+            # vector-DB leg.
             if self.project_id_filter is not None:
                 # Project mode ignores user filters → no federated sources
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
-                    list(self.user_selected_filters.source_type)
-                    if self.user_selected_filters
-                    and self.user_selected_filters.source_type
+                    list(effective_filters.source_type)
+                    if effective_filters and effective_filters.source_type
                     else None
                 )
             federated_retrieval_infos = (
@@ -619,41 +659,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     {},
                 )
         # Session is closed here — all parallel work uses plain Python objects only
-
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
-        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
-        # Compute a call-local effective filter — never mutate self.user_selected_filters
-        # so that source_type chosen by the LLM doesn't leak into subsequent run() calls.
-        effective_filters = self.user_selected_filters
-        llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
-        if llm_source_types_raw:
-            llm_source_types = strings_to_document_sources(
-                [s for s in llm_source_types_raw if isinstance(s, str)]
-            )
-            if llm_source_types:
-                existing = self.user_selected_filters or BaseFilters()
-                # Intersect with any user-set source filter so the LLM can only
-                # narrow the user's selection, never expand it.
-                if existing.source_type:
-                    llm_source_types = [
-                        s for s in llm_source_types if s in existing.source_type
-                    ]
-                if llm_source_types:
-                    effective_filters = BaseFilters(
-                        source_type=llm_source_types,
-                        document_set=existing.document_set,
-                        time_cutoff=existing.time_cutoff,
-                        tags=existing.tags,
-                    )
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
