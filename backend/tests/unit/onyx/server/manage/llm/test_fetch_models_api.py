@@ -11,6 +11,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
@@ -621,6 +622,53 @@ class TestGetLMStudioAvailableModels:
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             with pytest.raises(OnyxError):
                 get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+    def test_syncs_supports_reasoning_to_db(self) -> None:
+        """Test that supports_reasoning=True from the API is persisted as a REASONING flow."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = []
+
+        response = {
+            "models": [
+                {
+                    "key": "lmstudio-community/DeepSeek-R1-8B",
+                    "type": "llm",
+                    "display_name": "DeepSeek R1 8B",
+                    "max_context_length": 65536,
+                    # Reasoning explicitly set in capabilities
+                    "capabilities": {"reasoning": True},
+                },
+            ]
+        }
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
+            patch(
+                "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(
+                api_base="http://localhost:1234",
+                provider_name="my-lm-studio",
+            )
+            get_lm_studio_available_models(request, MagicMock(), mock_session)
+
+        # Inspect execute calls for a REASONING flow insert.
+        inserted_flow_types = [
+            call.args[0].compile().params.get("llm_model_flow_type")
+            for call in mock_session.execute.call_args_list
+            if hasattr(call.args[0], "compile")
+        ]
+        assert LLMModelFlowType.REASONING in inserted_flow_types
 
 
 class TestGetLitellmAvailableModels:
