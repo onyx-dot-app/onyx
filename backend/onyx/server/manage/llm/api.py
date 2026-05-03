@@ -1466,6 +1466,7 @@ def get_lm_studio_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
                 )
                 for r in sorted_results
             ],
@@ -1694,6 +1695,7 @@ def get_bifrost_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
                 )
                 for r in sorted_results
             ],
@@ -1788,6 +1790,7 @@ def get_openai_compatible_server_available_models(
                     display_name=r.display_name,
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
                 )
                 for r in sorted_results
             ],

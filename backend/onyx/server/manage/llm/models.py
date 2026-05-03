@@ -440,6 +440,7 @@ class SyncModelEntry(BaseModel):
     display_name: str
     max_input_tokens: int | None = None
     supports_image_input: bool = False
+    supports_reasoning: bool = False
 
 
 class LitellmModelsRequest(BaseModel):
