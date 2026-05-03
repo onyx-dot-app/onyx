@@ -1439,6 +1439,10 @@ def get_litellm_available_models(
             "No models found from your Litellm endpoint",
         )
 
+    model_info_index = _index_litellm_model_info(
+        _get_litellm_model_info_response(api_key=api_key, api_base=request.api_base)
+    )
+
     results: list[LitellmFinalModelResponse] = []
     for model in models:
         try:
@@ -1447,6 +1451,10 @@ def get_litellm_available_models(
             # Skip embedding models
             if is_embedding_model(model_details.id):
                 continue
+
+            enriched = model_info_index.get(model_details.id)
+            if enriched is not None:
+                model_details.model_info = enriched
 
             results.append(
                 LitellmFinalModelResponse(
@@ -1500,6 +1508,88 @@ def _get_litellm_models_response(api_key: str | None, api_base: str) -> dict:
         source_name="LiteLLM proxy",
         api_key=api_key,
     )
+
+
+def _get_litellm_model_info_response(api_key: str | None, api_base: str) -> dict | None:
+    """Best-effort GET to LiteLLM proxy ``/v1/model/info``.
+
+    Soft-fails on 401/403/404 (a virtual key may lack access to the route, which
+    lives under LiteLLM's ``management_routes``) and on connection errors,
+    returning ``None`` so callers fall back to bare ``/v1/models`` data.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/v1/model/info"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://onyx.app",
+        "X-Title": "Onyx",
+    }
+    if not api_key:
+        headers.pop("Authorization")
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403, 404):
+            logger.warning(
+                "LiteLLM /v1/model/info returned %s; falling back to /v1/models "
+                "only. Grant the virtual key access to /v1/model/info to "
+                "populate max_input_tokens and supports_image_input.",
+                e.response.status_code,
+            )
+            return None
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch LiteLLM proxy model info: {e}",
+        )
+    except httpx.RequestError as e:
+        logger.warning(
+            "Could not reach LiteLLM /v1/model/info (%s); falling back to "
+            "/v1/models only.",
+            e,
+        )
+        return None
+    except ValueError as e:
+        logger.warning(
+            "Invalid JSON from LiteLLM /v1/model/info (%s); falling back to "
+            "/v1/models only.",
+            e,
+        )
+        return None
+
+
+def _index_litellm_model_info(
+    model_info_response: dict | None,
+) -> dict[str, dict[str, Any]]:
+    """Index a ``/v1/model/info`` payload by both ``model_name`` and
+    ``litellm_params.model`` so the join with ``/v1/models`` succeeds whichever
+    id LiteLLM exposes.
+    """
+    if not model_info_response:
+        return {}
+    data = model_info_response.get("data")
+    if not isinstance(data, list):
+        return {}
+
+    index: dict[str, dict[str, Any]] = {}
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        info = entry.get("model_info")
+        if not isinstance(info, dict):
+            continue
+        model_name = entry.get("model_name")
+        if isinstance(model_name, str) and model_name:
+            index[model_name] = info
+        litellm_params = entry.get("litellm_params")
+        if isinstance(litellm_params, dict):
+            underlying = litellm_params.get("model")
+            if isinstance(underlying, str) and underlying:
+                # Don't overwrite a model_name match with a less-specific key.
+                index.setdefault(underlying, info)
+    return index
 
 
 def _get_openai_compatible_models_response(

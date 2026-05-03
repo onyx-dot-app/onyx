@@ -446,15 +446,17 @@ class LitellmModelsRequest(BaseModel):
 
 
 class LitellmModelDetails(BaseModel):
-    """Response model for Litellm proxy /api/v1/models endpoint"""
+    """Per-model details parsed from the LiteLLM proxy ``/v1/models`` endpoint.
+
+    ``model_info`` is the exception: it is populated separately from
+    ``/v1/model/info`` by the endpoint handler, not from the ``/v1/models``
+    payload.
+    """
 
     id: str  # Model ID (e.g. "gpt-4o")
     object: str  # "model"
     created: int  # Unix timestamp in seconds
     owned_by: str  # Provider name (e.g. "openai")
-    # LiteLLM-specific enrichment: capability + context metadata the proxy
-    # publishes for each model. Onyx used to drop this and fall back to
-    # hardcoded defaults (#9959).
     model_info: dict[str, Any] | None = None
 
     def get_max_input_tokens(self) -> int | None:
