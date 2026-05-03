@@ -15,12 +15,14 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -310,6 +312,69 @@ def get_recent_external_group_sync_attempts_for_cc_pair(
     else:
         stmt = stmt.where(
             ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.is_(None)
+        )
+
+    return list(
+        db_session.execute(
+            stmt.order_by(ExternalGroupPermissionSyncAttempt.time_created.desc()).limit(
+                limit
+            )
+        ).scalars()
+    )
+
+
+def get_relevant_external_group_sync_attempts_for_cc_pair(
+    cc_pair_id: int,
+    limit: int,
+    db_session: Session,
+) -> list[ExternalGroupPermissionSyncAttempt]:
+    """Returns the group sync attempts a user looking at this cc-pair would
+    expect to see, most recent first.
+
+    For sources whose group sync runs at the source level rather than the
+    cc-pair level (Confluence, Jira — see
+    ``source_group_sync_is_cc_pair_agnostic``), a single sync run is intended
+    to cover every cc-pair sharing that source but is logged against
+    whichever cc-pair triggered it. Filtering strictly by ``cc_pair_id``
+    would hide attempts that are conceptually relevant — so we widen the
+    query to the source for those cases.
+
+    For all other sources, this is equivalent to filtering by ``cc_pair_id``.
+
+    Caveat: deployments with multiple independent instances of the same
+    source (e.g. two distinct Confluence sites) will get a merged view here.
+    Properly scoping per-instance is an existing architectural limitation.
+    """
+    cc_pair = db_session.execute(
+        select(ConnectorCredentialPair)
+        .join(ConnectorCredentialPair.connector)
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+    ).scalar_one_or_none()
+    if cc_pair is None:
+        return []
+
+    is_agnostic: bool = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_group_sync_is_cc_pair_agnostic",
+        noop_return_value=False,
+    )(cc_pair.connector.source)
+
+    stmt = select(ExternalGroupPermissionSyncAttempt)
+    if is_agnostic:
+        sibling_cc_pair_ids_stmt = (
+            select(ConnectorCredentialPair.id)
+            .join(ConnectorCredentialPair.connector)
+            .where(Connector.source == cc_pair.connector.source)
+        )
+        stmt = stmt.where(
+            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(
+                sibling_cc_pair_ids_stmt
+            )
+        )
+    else:
+        stmt = stmt.where(
+            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
+            == cc_pair_id
         )
 
     return list(

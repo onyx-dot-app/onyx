@@ -15,6 +15,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -53,6 +54,9 @@ from onyx.db.permission_sync_attempt import (
 from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
 )
+from onyx.db.permission_sync_attempt import (
+    get_relevant_external_group_sync_attempts_for_cc_pair,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -60,16 +64,18 @@ from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import CCPairFullInfo
+from onyx.server.documents.models import CCPairSyncAttemptsResponse
 from onyx.server.documents.models import CCPropertyUpdateRequest
 from onyx.server.documents.models import CCStatusUpdateRequest
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorCredentialPairMetadata
+from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
 from onyx.server.documents.models import DocumentSyncStatus
+from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.documents.models import PermissionSyncAttemptSnapshot
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -156,6 +162,46 @@ def get_index_attempt_stage_metrics(
     )
 
 
+# Cap on how many recent attempts the per-cc-pair sync-history endpoints
+# will scan when computing pagination. The frontend pages over this fixed
+# pool client-side; older attempts beyond the cap are not surfaced. Matches
+# the previous (pre-CCPairSyncAttemptsResponse) behavior.
+_SYNC_ATTEMPTS_HISTORY_LIMIT = 1000
+
+
+def _get_cc_pair_source_or_raise(
+    cc_pair_id: int,
+    user: User,
+    db_session: Session,
+) -> DocumentSource:
+    """Authorize ``user`` for ``cc_pair_id`` and return its source.
+
+    Raises ``OnyxError(NOT_FOUND)`` if the cc-pair doesn't exist or the user
+    can't see it. Co-located with the sync-history endpoints because both
+    routes need the same cc-pair lookup + auth + source resolution.
+    """
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+    return cc_pair.connector.source
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
 def get_cc_pair_permission_sync_attempts(
     cc_pair_id: int,
@@ -163,33 +209,93 @@ def get_cc_pair_permission_sync_attempts(
     page_size: int = Query(10, ge=1, le=1000),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> PaginatedReturn[PermissionSyncAttemptSnapshot]:
-    if user:
-        user_has_access = verify_user_has_access_to_cc_pair(
-            cc_pair_id, db_session, user, get_editable=False
-        )
-        if not user_has_access:
-            raise HTTPException(
-                status_code=400, detail="CC Pair not found for current user permissions"
-            )
+) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
+    """Recent doc-permission sync attempts for a cc-pair, paginated.
 
-    # Get all permission sync attempts for this cc pair
+    Returns ``applicable=False`` when the source does not run a separate
+    doc-permission sync job (e.g. Salesforce, where ACLs are pulled inline
+    during indexing). The frontend uses ``applicable`` to distinguish
+    "this kind of sync isn't applicable" from "no attempts yet".
+    """
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
+
+    source_requires_doc_sync = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_doc_sync",
+        noop_return_value=False,
+    )
+    if not source_requires_doc_sync(source):
+        return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
+            applicable=False,
+            items=[],
+            total_items=0,
+        )
+
     all_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
-        limit=1000,
+        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
         db_session=db_session,
     )
-
     start_idx = page_num * page_size
     end_idx = start_idx + page_size
-    paginated_attempts = all_attempts[start_idx:end_idx]
-    items = [
-        PermissionSyncAttemptSnapshot.from_permission_sync_attempt_db_model(attempt)
-        for attempt in paginated_attempts
-    ]
+    return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
+        applicable=True,
+        items=[
+            DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
+                attempt
+            )
+            for attempt in all_attempts[start_idx:end_idx]
+        ],
+        total_items=len(all_attempts),
+    )
 
-    return PaginatedReturn(
-        items=items,
+
+@router.get("/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts")
+def get_cc_pair_external_group_sync_attempts(
+    cc_pair_id: int,
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
+    """Recent external-group sync attempts a viewer of this cc-pair would
+    expect to see, paginated.
+
+    Returns ``applicable=False`` when the source does not run a separate
+    external-group sync job. For sources whose group sync is logically
+    source-wide (Confluence, Jira), attempts triggered against any sibling
+    cc-pair sharing the source are included — see
+    ``get_relevant_external_group_sync_attempts_for_cc_pair``.
+    """
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
+
+    source_requires_external_group_sync = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_external_group_sync",
+        noop_return_value=False,
+    )
+    if not source_requires_external_group_sync(source):
+        return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
+            applicable=False,
+            items=[],
+            total_items=0,
+        )
+
+    all_attempts = get_relevant_external_group_sync_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
+        db_session=db_session,
+    )
+    start_idx = page_num * page_size
+    end_idx = start_idx + page_size
+    return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
+        applicable=True,
+        items=[
+            ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
+                attempt
+            )
+            for attempt in all_attempts[start_idx:end_idx]
+        ],
         total_items=len(all_attempts),
     )
 
