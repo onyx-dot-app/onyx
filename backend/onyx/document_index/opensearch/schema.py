@@ -105,9 +105,11 @@ def get_opensearch_doc_chunk_id(
         )
     except DocumentIDTooLongError:
         # If the document ID is too long, use a hash instead.
-        # We use blake2b because it is faster and equally secure as SHA256, and
+        # We use blake2b because it is faster and equally secure as SHA-256, and
         # accepts digest_size which controls the number of bytes returned in the
-        # hash.
+        # hash. Edit: Actually modern CPUs have good hardware acceleration
+        # specifically for SHA-256 so really blake2b is not expected to be
+        # faster in some production settings.
         # digest_size is the size of the returned hash in bytes. Since we're
         # decoding the hash bytes as a hex string, the digest_size should be
         # half the max target size of the hash string.
