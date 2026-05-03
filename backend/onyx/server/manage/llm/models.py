@@ -449,17 +449,66 @@ class LitellmModelsRequest(BaseModel):
 
 
 class LitellmModelDetails(BaseModel):
-    """Response model for Litellm proxy /api/v1/models endpoint"""
+    """Response model for LiteLLM proxy /v1/model/info endpoint."""
 
-    id: str  # Model ID (e.g. "gpt-4o")
-    object: str  # "model"
-    created: int  # Unix timestamp in seconds
-    owned_by: str  # Provider name (e.g. "openai")
+    model_name: str
+    litellm_params: dict[str, Any] | None = None
+    model_info: dict[str, Any] | None = None
+
+    def get_custom_llm_provider(self) -> str:
+        """Returns .litellm_params.custom_llm_provider"""
+        if self.litellm_params:
+            return self.litellm_params.get("custom_llm_provider", "")
+
+        return ""
+
+    def get_litellm_params_model(self) -> str:
+        """Returns .litellm_params.model if available, otherwise falls back to
+        model_name."""
+        if self.litellm_params:
+            litellm_params_model = self.litellm_params.get("model")
+            if litellm_params_model:
+                return litellm_params_model
+
+        return self.model_name
+
+    def get_max_input_tokens(self) -> int | None:
+        if not self.model_info:
+            return None
+
+        # Prefer max_input_tokens, fall back to max_tokens.
+        for key in ("max_input_tokens", "max_tokens"):
+            value = self.model_info.get(key)
+
+            # bool is a subclass of int — exclude explicitly.
+            if isinstance(value, bool):
+                continue
+
+            if isinstance(value, int) and value > 0:
+                return value
+
+        return None
+
+    def supports_image_input(self) -> bool:
+        return self._supports_feature("supports_vision")
+
+    def supports_reasoning(self) -> bool:
+        return self._supports_feature("supports_reasoning")
+
+    def _supports_feature(self, feature_name: str) -> bool:
+        if not self.model_info:
+            return False
+
+        return bool(self.model_info.get(feature_name, False))
 
 
 class LitellmFinalModelResponse(BaseModel):
     provider_name: str  # Provider name (e.g. "openai")
-    model_name: str  # Model ID (e.g. "gpt-4o")
+    model_name: str  # Public Model Name
+    litellm_params_model: str  # LiteLLM Model Name
+    max_input_tokens: int | None = None
+    supports_image_input: bool = False
+    supports_reasoning: bool = False
 
 
 # Bifrost dynamic models fetch

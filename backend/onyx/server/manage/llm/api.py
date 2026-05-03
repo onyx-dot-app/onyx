@@ -1415,7 +1415,7 @@ def get_litellm_available_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
-    """Fetch available models from Litellm proxy /v1/models endpoint."""
+    """Fetch available models from LiteLLM proxy /v1/model/info endpoint."""
     api_key = _resolve_api_key(
         request.api_key, request.provider_name, request.api_base, db_session
     )
@@ -1436,14 +1436,20 @@ def get_litellm_available_models(
         try:
             model_details = LitellmModelDetails.model_validate(model)
 
+            litellm_params_model = model_details.get_litellm_params_model()
+
             # Skip embedding models
-            if is_embedding_model(model_details.id):
+            if is_embedding_model(litellm_params_model) or is_embedding_model(model_details.model_name):
                 continue
 
             results.append(
                 LitellmFinalModelResponse(
-                    provider_name=model_details.owned_by,
-                    model_name=model_details.id,
+                    provider_name=model_details.get_custom_llm_provider(),
+                    model_name=model_details.model_name,
+                    litellm_params_model=litellm_params_model,
+                    max_input_tokens=model_details.get_max_input_tokens(),
+                    supports_image_input=model_details.supports_image_input(),
+                    supports_reasoning=model_details.supports_reasoning(),
                 )
             )
         except Exception as e:
@@ -1469,6 +1475,8 @@ def get_litellm_available_models(
                 SyncModelEntry(
                     name=r.model_name,
                     display_name=r.model_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
                 )
                 for r in sorted_results
             ],
@@ -1479,9 +1487,9 @@ def get_litellm_available_models(
 
 
 def _get_litellm_models_response(api_key: str | None, api_base: str) -> dict:
-    """Perform GET to Litellm proxy /api/v1/models and return parsed JSON."""
+    """Perform GET to LiteLLM proxy /v1/model/info and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
-    url = f"{cleaned_api_base}/v1/models"
+    url = f"{cleaned_api_base}/v1/model/info"
 
     return _get_openai_compatible_models_response(
         url=url,
