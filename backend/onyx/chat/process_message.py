@@ -277,7 +277,8 @@ def _fetch_cached_image_captions(
         )
     except Exception:
         logger.warning(
-            f"Failed to fetch cached captions for user_file {user_file.id}",
+            "Failed to fetch cached captions for user_file %s",
+            user_file.id,
             exc_info=True,
         )
         return []
@@ -354,7 +355,7 @@ def _extract_text_from_in_memory_file(
 
         return "\n\n".join(parts).strip() or None
     except Exception:
-        logger.warning(f"Failed to extract text from file {f.file_id}", exc_info=True)
+        logger.warning("Failed to extract text from file %s", f.file_id, exc_info=True)
         return None
 
 
@@ -466,7 +467,8 @@ def extract_context_files(
             # Only the metadata is provided, with LLM using tools
             if not uf:
                 logger.error(
-                    f"File with id={f.file_id} in metadata-only path with no associated user file"
+                    "File with id=%s in metadata-only path with no associated user file",
+                    f.file_id,
                 )
                 continue
             tool_metadata.append(_build_tool_metadata(uf))
@@ -477,7 +479,7 @@ def extract_context_files(
             if not text_content:
                 continue
             if not uf:
-                logger.warning(f"No user file for file_id={f.file_id}")
+                logger.warning("No user file for file_id=%s", f.file_id)
                 continue
             file_texts.append(text_content)
             file_metadata.append(
@@ -980,7 +982,8 @@ def build_chat_turn(
 
     if all_injected_file_metadata:
         logger.debug(
-            f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+            "FileReader: file metadata for LLM: %s",
+            [(fid, m.filename) for fid, m in all_injected_file_metadata.items()],
         )
 
     if summary_message is not None:
@@ -1506,7 +1509,10 @@ def _stream_chat_turn(
     except EmptyLLMResponseError as e:
         stack_trace = traceback.format_exc()
         logger.warning(
-            f"LLM returned an empty response (provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+            "LLM returned an empty response (provider=%s, model=%s, tool_choice=%s)",
+            e.provider,
+            e.model,
+            e.tool_choice,
         )
         yield StreamingError(
             error=e.client_error_msg,
@@ -1522,7 +1528,7 @@ def _stream_chat_turn(
         db_session.rollback()
 
     except Exception as e:
-        logger.exception(f"Failed to process chat message due to {e}")
+        logger.exception("Failed to process chat message due to %s", e)
         stack_trace = traceback.format_exc()
 
         llm = setup.llms[0] if setup else None
@@ -1689,7 +1695,7 @@ def llm_loop_completion_handle(
         final_answer = answer_tokens
     else:
         # Stopped by user - append stop message
-        logger.debug(f"Chat session {chat_session_id} stopped by user")
+        logger.debug("Chat session %s stopped by user", chat_session_id)
         if answer_tokens:
             final_answer = (
                 answer_tokens + " ... \n\nGeneration was stopped by the user."

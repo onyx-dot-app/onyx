@@ -54,12 +54,12 @@ def get_embedding_model(
             )
             logger.info("RoPE pre-warm successful")
         except Exception as e:
-            logger.warning(f"RoPE pre-warm skipped/failed: {e}")
+            logger.warning("RoPE pre-warm skipped/failed: %s", e)
 
     global _GLOBAL_MODELS_DICT
 
     if model_name not in _GLOBAL_MODELS_DICT:
-        logger.notice(f"Loading {model_name}")
+        logger.notice("Loading %s", model_name)
         model = SentenceTransformer(
             model_name_or_path=model_name,
             trust_remote_code=True,
@@ -94,7 +94,7 @@ def _concurrent_embedding(
             # the model to fail to encode texts. It's pretty rare and we want to allow
             # concurrent embedding, hence we retry (the specific error is
             # "RuntimeError: Already borrowed" and occurs in the transformers library)
-            logger.warning(f"Error encoding texts, retrying: {e}")
+            logger.warning("Error encoding texts, retrying: %s", e)
             time.sleep(ENCODING_RETRY_DELAY)
     return model.encode(texts, normalize_embeddings=normalize_embeddings)
 
@@ -127,7 +127,10 @@ async def embed_text(
 
     if model_name is not None:
         logger.info(
-            f"Embedding {len(texts)} texts with {total_chars} total characters with local model: {model_name}"
+            "Embedding %s texts with %s total characters with local model: %s",
+            len(texts),
+            total_chars,
+            model_name,
         )
 
         prefixed_texts = [f"{prefix}{text}" for text in texts] if prefix else texts
@@ -149,16 +152,19 @@ async def embed_text(
 
         elapsed = time.monotonic() - start
         logger.info(
-            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
-            f"with local model {model_name} in {elapsed:.2f}"
+            "Successfully embedded %s texts with %s total characters with local model %s in %s",
+            len(texts),
+            total_chars,
+            model_name,
+            format(elapsed, ".2f"),
         )
         logger.info(
-            f"event=embedding_model "
-            f"texts={len(texts)} "
-            f"chars={total_chars} "
-            f"model={model_name} "
-            f"gpu={gpu_type} "
-            f"elapsed={elapsed:.2f}"
+            "event=embedding_model texts=%s chars=%s model=%s gpu=%s elapsed=%s",
+            len(texts),
+            total_chars,
+            model_name,
+            gpu_type,
+            format(elapsed, ".2f"),
         )
     else:
         logger.error("Model name not specified for embedding")
@@ -217,7 +223,9 @@ async def process_embed_request(
         )
     except Exception as e:
         logger.exception(
-            f"Error during embedding process: provider={embed_request.provider_type} model={embed_request.model_name}"
+            "Error during embedding process: provider=%s model=%s",
+            embed_request.provider_type,
+            embed_request.model_name,
         )
         raise HTTPException(
             status_code=500, detail=f"Error during embedding process: {e}"

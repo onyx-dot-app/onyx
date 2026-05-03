@@ -277,6 +277,9 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -296,6 +299,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
@@ -334,8 +342,6 @@ jobs:
           if [ "$EDITION" = "ee" ]; then
             cat <<EOF >> deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           EOF
           fi
@@ -452,6 +458,7 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
@@ -479,6 +486,9 @@ jobs:
 
   onyx-lite-tests:
     needs: [build-backend-image, build-integration-image]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       [
         runs-on,
@@ -495,6 +505,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Login to Docker Hub
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
@@ -508,7 +523,6 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -573,6 +587,7 @@ jobs:
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 

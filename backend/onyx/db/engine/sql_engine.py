@@ -108,7 +108,9 @@ if LOG_POSTGRES_LATENCY:
         total_time = time.time() - conn.info["query_start_time"]
         if total_time > 0.1:
             logger.debug(
-                f"Query Complete: {statement}\n\nTotal Time: {total_time:.4f} seconds"
+                "Query Complete: %s\n\nTotal Time: %s seconds",
+                statement,
+                format(total_time, ".4f"),
             )
 
 
@@ -128,17 +130,21 @@ if LOG_POSTGRES_CONN_COUNTS:
         pool_size = connection_proxy._pool.size()
         logger.debug(
             "Connection Checkout\n"
-            f"Active Connections: {active_connections};\n"
-            f"Idle: {idle_connections};\n"
-            f"Pool Size: {pool_size};\n"
-            f"Total connection checkouts: {checkout_count}"
+            "Active Connections: %s;\n"
+            "Idle: %s;\n"
+            "Pool Size: %s;\n"
+            "Total connection checkouts: %s",
+            active_connections,
+            idle_connections,
+            pool_size,
+            checkout_count,
         )
 
     @event.listens_for(Engine, "checkin")
     def log_checkin(dbapi_connection, connection_record):  # noqa: ARG001
         global checkin_count
         checkin_count += 1
-        logger.debug(f"Total connection checkins: {checkin_count}")
+        logger.debug("Total connection checkins: %s", checkin_count)
 
 
 class SqlEngine:
@@ -201,7 +207,7 @@ class SqlEngine:
                 # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
 
-            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            logger.info("Creating engine with kwargs: %s", final_engine_kwargs)
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
 
@@ -261,7 +267,7 @@ class SqlEngine:
                 # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
 
-            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            logger.info("Creating engine with kwargs: %s", final_engine_kwargs)
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
 

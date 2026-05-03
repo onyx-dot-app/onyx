@@ -71,28 +71,29 @@ def get_federated_retrieval_functions(
                     mapping.federated_connector.config or {}
                 )
                 logger.debug(
-                    f"Found Slack federated connector config: {slack_federated_connector_config}"
+                    "Found Slack federated connector config: %s",
+                    slack_federated_connector_config,
                 )
                 break
 
         if slack_federated_connector_config is None:
             logger.debug(
-                f"Skipping Slack federated search: document sets {document_set_names} "
-                "are not associated with any Slack federated connector"
+                "Skipping Slack federated search: document sets %s are not associated with any Slack federated connector",
+                document_set_names,
             )
             # Return empty list - no Slack federated search for this context
             return []
 
         try:
             slack_bots = fetch_slack_bots(db_session)
-            logger.debug(f"Found {len(slack_bots)} Slack bots")
+            logger.debug("Found %s Slack bots", len(slack_bots))
 
             # First try to find a bot with user token
             tenant_slack_bot = next(
                 (bot for bot in slack_bots if bot.enabled and bot.user_token), None
             )
             if tenant_slack_bot:
-                logger.debug(f"Selected bot with user_token: {tenant_slack_bot.name}")
+                logger.debug("Selected bot with user_token: %s", tenant_slack_bot.name)
             else:
                 # Fall back to any enabled bot without user token
                 tenant_slack_bot = next(
@@ -100,7 +101,8 @@ def get_federated_retrieval_functions(
                 )
                 if tenant_slack_bot:
                     logger.debug(
-                        f"Selected bot without user_token: {tenant_slack_bot.name} (limited functionality)"
+                        "Selected bot without user_token: %s (limited functionality)",
+                        tenant_slack_bot.name,
                     )
                 else:
                     logger.warning("No enabled Slack bots found")
@@ -121,7 +123,8 @@ def get_federated_retrieval_functions(
                 )
                 if not tenant_slack_bot.user_token:
                     logger.warning(
-                        f"Using bot_token for Slack search (limited functionality): {tenant_slack_bot.name}"
+                        "Using bot_token for Slack search (limited functionality): %s",
+                        tenant_slack_bot.name,
                     )
 
                 # For bot context, we don't need real OAuth credentials
@@ -147,7 +150,8 @@ def get_federated_retrieval_functions(
                 # Use connector config for channel filtering (guaranteed to exist at this point)
                 connector_entities = slack_federated_connector_config
                 logger.debug(
-                    f"Using Slack federated connector entities for bot context: {connector_entities}"
+                    "Using Slack federated connector entities for bot context: %s",
+                    connector_entities,
                 )
 
                 def create_slack_retrieval_function(
@@ -182,12 +186,13 @@ def get_federated_retrieval_functions(
                     )
                 )
                 logger.debug(
-                    f"Added Slack federated search for bot, returning {len(federated_retrieval_infos_slack)} retrieval functions"
+                    "Added Slack federated search for bot, returning %s retrieval functions",
+                    len(federated_retrieval_infos_slack),
                 )
                 return federated_retrieval_infos_slack
 
         except Exception as e:
-            logger.warning(f"Could not setup Slack bot federated search: {e}")
+            logger.warning("Could not setup Slack bot federated search: %s", e)
             # Fall through to regular federated connector logic
 
     if user_id is None:

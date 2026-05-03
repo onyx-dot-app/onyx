@@ -109,7 +109,7 @@ async def _fetch_filtered_channels(
             continue
         filtered_channels.append(channel)
 
-    logger.info(f"Found {len(filtered_channels)} channels for the authenticated user")
+    logger.info("Found %s channels for the authenticated user", len(filtered_channels))
     return filtered_channels
 
 

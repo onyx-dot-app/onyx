@@ -152,14 +152,16 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
                     while has_more:
                         logger.info(
-                            f"Retrieving items from spot {spot.name}, offset {offset}"
+                            "Retrieving items from spot %s, offset %s",
+                            spot.name,
+                            offset,
                         )
                         response = self.client.get_spot_items(
                             spot_id=spot.id, offset=offset, page_size=self.batch_size
                         )
                         items = response.get("collection", [])
                         logger.info(
-                            f"Received {len(items)} items from spot {spot.name}"
+                            "Received %s items from spot %s", len(items), spot.name
                         )
                         if not items:
                             has_more = False
@@ -175,7 +177,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                 item_details = self.client.get_item(item_id)
                                 if not item_details:
                                     logger.warning(
-                                        f"Item {item_id} details not found, skipping"
+                                        "Item %s details not found, skipping", item_id
                                     )
                                     continue
                                 # Apply time filter if specified
@@ -197,7 +199,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                         except (ValueError, TypeError):
                                             # Skip if date cannot be parsed
                                             logger.warning(
-                                                f"Invalid date format for item {item_id}: {updated_at}"
+                                                "Invalid date format for item %s: %s",
+                                                item_id,
+                                                updated_at,
                                             )
                                             continue
 
@@ -250,7 +254,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                     else item_id  # ty: ignore[possibly-unresolved-reference]
                                 )
                                 logger.error(
-                                    f"Error retrieving item {item_id}: {str(e)}"
+                                    "Error retrieving item %s: %s", item_id, str(e)
                                 )
                             except Exception as e:
                                 item_id = (
@@ -259,23 +263,23 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                     else item_id  # ty: ignore[possibly-unresolved-reference]
                                 )
                                 logger.error(
-                                    f"Unexpected error for item {item_id}: {str(e)}"
+                                    "Unexpected error for item %s: %s", item_id, str(e)
                                 )
 
                         has_more = len(items) >= self.batch_size
                         offset += self.batch_size
 
                 except (HighspotClientError, ValueError) as e:
-                    logger.error(f"Error processing spot {spot.name}: {str(e)}")
+                    logger.error("Error processing spot %s: %s", spot.name, str(e))
                     raise
                 except Exception as e:
                     logger.error(
-                        f"Unexpected error processing spot {spot.name}: {str(e)}"
+                        "Unexpected error processing spot %s: %s", spot.name, str(e)
                     )
                     raise
 
         except Exception as e:
-            logger.error(f"Error in Highspot connector: {str(e)}")
+            logger.error("Error in Highspot connector: %s", str(e))
             raise
 
         if doc_batch:
@@ -303,7 +307,10 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
         title, description = self._extract_title_and_description(item_details)
         default_content = f"{title}\n{description}"
         logger.info(
-            f"Processing item {item_id} with extension {file_extension} and file name {content_name}"
+            "Processing item %s with extension %s and file name %s",
+            item_id,
+            file_extension,
+            content_name,
         )
 
         try:
@@ -330,23 +337,25 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
             else:
                 logger.warning(
-                    f"Item {item_id} has unsupported format: {file_extension}"
+                    "Item %s has unsupported format: %s", item_id, file_extension
                 )
                 return default_content
 
         except HighspotClientError as e:
             error_context = f"item {item_id}" if item_id else "(item id not found)"
-            logger.warning(f"Could not retrieve content for {error_context}: {str(e)}")
+            logger.warning(
+                "Could not retrieve content for %s: %s", error_context, str(e)
+            )
             return default_content
         except ValueError as e:
             error_context = f"item {item_id}" if item_id else "(item id not found)"
-            logger.error(f"Value error for {error_context}: {str(e)}")
+            logger.error("Value error for %s: %s", error_context, str(e))
             return default_content
 
         except Exception as e:
             error_context = f"item {item_id}" if item_id else "(item id not found)"
             logger.error(
-                f"Unexpected error retrieving content for {error_context}: {str(e)}"
+                "Unexpected error retrieving content for %s: %s", error_context, str(e)
             )
             return default_content
 
@@ -395,7 +404,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
                     while has_more:
                         logger.info(
-                            f"Retrieving slim documents from spot {spot.name}, offset {offset}"
+                            "Retrieving slim documents from spot %s, offset %s",
+                            spot.name,
+                            offset,
                         )
                         response = self.client.get_spot_items(
                             spot_id=spot.id, offset=offset, page_size=self.batch_size
@@ -425,7 +436,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
                 except (HighspotClientError, ValueError):
                     logger.exception(
-                        f"Error retrieving slim documents from spot {spot.name}"
+                        "Error retrieving slim documents from spot %s", spot.name
                     )
                     raise
 
@@ -445,7 +456,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
         try:
             return self.client.health_check()
         except Exception as e:
-            logger.error(f"Failed to validate credentials: {str(e)}")
+            logger.error("Failed to validate credentials: %s", str(e))
             return False
 
 

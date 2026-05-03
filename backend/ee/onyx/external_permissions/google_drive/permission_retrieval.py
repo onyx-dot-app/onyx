@@ -55,7 +55,9 @@ def get_permissions_by_ids(
     if len(filtered_permissions) < len(permission_ids):
         missing_ids = permission_id_set - {p.id for p in filtered_permissions if p.id}
         logger.warning(
-            f"Could not find all requested permission IDs for document {doc_id}. Missing IDs: {missing_ids}"
+            "Could not find all requested permission IDs for document %s. Missing IDs: %s",
+            doc_id,
+            missing_ids,
         )
 
     return filtered_permissions

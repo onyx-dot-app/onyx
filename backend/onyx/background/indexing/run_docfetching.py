@@ -220,7 +220,7 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
     for doc in doc_batch:
         if sys.getsizeof(doc) > MAX_FILE_SIZE_BYTES:
             logger.warning(
-                f"doc {doc.id} too large, Document size: {sys.getsizeof(doc)}"
+                "doc %s too large, Document size: %s", doc.id, sys.getsizeof(doc)
             )
         cleaned_batch.append(sanitize_document_for_postgres(doc))
 
@@ -289,7 +289,9 @@ def _check_failure_threshold(
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
+            "Connector run failed with '%s' errors after '%s' batches.",
+            total_failures,
+            batch_num,
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
@@ -331,10 +333,11 @@ def run_docfetching_entrypoint(
         credential_id = attempt.connector_credential_pair.credential_id
 
     logger.info(
-        f"Docfetching starting{tenant_str}: "
-        f"connector='{connector_name}' "
-        f"config='{connector_config}' "
-        f"credentials='{credential_id}'"
+        "Docfetching starting%s: connector='%s' config='%s' credentials='%s'",
+        tenant_str,
+        connector_name,
+        connector_config,
+        credential_id,
     )
 
     raw_file_callback = build_raw_file_callback(
@@ -366,10 +369,11 @@ def run_docfetching_entrypoint(
     )
 
     logger.info(
-        f"Docfetching finished{tenant_str}: "
-        f"connector='{connector_name}' "
-        f"config='{connector_config}' "
-        f"credentials='{credential_id}'"
+        "Docfetching finished%s: connector='%s' config='%s' credentials='%s'",
+        tenant_str,
+        connector_name,
+        connector_config,
+        credential_id,
     )
 
     INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
@@ -393,11 +397,11 @@ def connector_document_extraction(
     start_time = time.monotonic()
 
     logger.info(
-        f"Document extraction starting: "
-        f"attempt={index_attempt_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id} "
-        f"tenant={tenant_id}"
+        "Document extraction starting: attempt=%s cc_pair=%s search_settings=%s tenant=%s",
+        index_attempt_id,
+        cc_pair_id,
+        search_settings_id,
+        tenant_id,
     )
 
     # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
@@ -427,9 +431,9 @@ def connector_document_extraction(
         # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
         if index_attempt.connector_credential_pair.indexing_trigger is not None:
             logger.info(
-                "Clearing indexing trigger: "
-                f"cc_pair={index_attempt.connector_credential_pair.id} "
-                f"trigger={index_attempt.connector_credential_pair.indexing_trigger}"
+                "Clearing indexing trigger: cc_pair=%s trigger=%s",
+                index_attempt.connector_credential_pair.id,
+                index_attempt.connector_credential_pair.indexing_trigger,
             )
             mark_ccpair_with_indexing_trigger(
                 index_attempt.connector_credential_pair.id, None, db_session
@@ -546,13 +550,15 @@ def connector_document_extraction(
                 most_recent_attempt and most_recent_attempt.status.is_successful()
             ):
                 logger.info(
-                    f"Cleaning up all old batches for index attempt {index_attempt_id} before starting new run"
+                    "Cleaning up all old batches for index attempt %s before starting new run",
+                    index_attempt_id,
                 )
                 batch_storage.cleanup_all_batches()
                 checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 logger.info(
-                    f"Getting latest valid checkpoint for index attempt {index_attempt_id}"
+                    "Getting latest valid checkpoint for index attempt %s",
+                    index_attempt_id,
                 )
                 checkpoint, resuming_from_checkpoint = get_latest_valid_checkpoint(
                     db_session=db_session,
@@ -586,7 +592,8 @@ def connector_document_extraction(
                     db_session.commit()
                 else:
                     logger.info(
-                        f"Cleaning up all batches for index attempt {index_attempt_id} before starting new run"
+                        "Cleaning up all batches for index attempt %s before starting new run",
+                        index_attempt_id,
                     )
                     # for non-checkpointed connectors, throw out batches from previous unsuccessful attempts
                     # because we'll be getting those documents again anyways.
@@ -615,7 +622,9 @@ def connector_document_extraction(
         # Main extraction loop
         while checkpoint.has_more:
             logger.info(
-                f"Running '{db_connector.source.value}' connector with checkpoint: {checkpoint}"
+                "Running '%s' connector with checkpoint: %s",
+                db_connector.source.value,
+                checkpoint,
             )
             for (
                 document_batch,
@@ -718,7 +727,9 @@ def connector_document_extraction(
                             )
 
                     logger.debug(
-                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes for attempt={index_attempt_id}"
+                        "Persisted and cached %s hierarchy nodes for attempt=%s",
+                        len(hierarchy_node_batch_cleaned),
+                        index_attempt_id,
                     )
 
                 # below is all document processing task, so if no batch we can just continue
@@ -762,12 +773,13 @@ def connector_document_extraction(
 
                     if doc_size > INDEXING_SIZE_WARNING_THRESHOLD:
                         logger.warning(
-                            f"Document size: doc='{doc.to_short_descriptor()}' "
-                            f"size={doc_size} "
-                            f"threshold={INDEXING_SIZE_WARNING_THRESHOLD}"
+                            "Document size: doc='%s' size=%s threshold=%s",
+                            doc.to_short_descriptor(),
+                            doc_size,
+                            INDEXING_SIZE_WARNING_THRESHOLD,
                         )
 
-                logger.debug(f"Indexing batch of documents: {batch_description}")
+                logger.debug("Indexing batch of documents: %s", batch_description)
                 memory_tracer.increment_and_maybe_trace()
 
                 if processing_mode == ProcessingMode.FILE_SYSTEM:
@@ -835,10 +847,10 @@ def connector_document_extraction(
                     total_doc_batches_queued += 1
 
                     logger.info(
-                        f"Wrote documents to file system: "
-                        f"batch_num={batch_num} "
-                        f"docs={len(written_paths)} "
-                        f"attempt={index_attempt_id}"
+                        "Wrote documents to file system: batch_num=%s docs=%s attempt=%s",
+                        batch_num,
+                        len(written_paths),
+                        index_attempt_id,
                     )
                 else:
                     # REGULAR mode (default): Full pipeline - store and queue docprocessing
@@ -873,10 +885,10 @@ def connector_document_extraction(
                     total_doc_batches_queued += 1
 
                     logger.info(
-                        f"Queued document processing batch: "
-                        f"batch_num={batch_num} "
-                        f"docs={len(doc_batch_cleaned)} "
-                        f"attempt={index_attempt_id}"
+                        "Queued document processing batch: batch_num=%s docs=%s attempt=%s",
+                        batch_num,
+                        len(doc_batch_cleaned),
+                        index_attempt_id,
                     )
 
             # Check checkpoint size periodically
@@ -898,10 +910,10 @@ def connector_document_extraction(
         elapsed_time = time.monotonic() - start_time
 
         logger.info(
-            f"Document extraction completed: "
-            f"attempt={index_attempt_id} "
-            f"batches_queued={total_doc_batches_queued} "
-            f"elapsed={elapsed_time:.2f}s"
+            "Document extraction completed: attempt=%s batches_queued=%s elapsed=%ss",
+            index_attempt_id,
+            total_doc_batches_queued,
+            format(elapsed_time, ".2f"),
         )
 
         # Set total batches in database to signal extraction completion.
@@ -929,12 +941,14 @@ def connector_document_extraction(
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
-                    f"Triggered sandbox file sync for user {creator_id} source={source_value} after indexing complete"
+                    "Triggered sandbox file sync for user %s source=%s after indexing complete",
+                    creator_id,
+                    source_value,
                 )
 
     except Exception as e:
         logger.exception(
-            f"Document extraction failed: attempt={index_attempt_id} error={str(e)}"
+            "Document extraction failed: attempt=%s error=%s", index_attempt_id, str(e)
         )
 
         # Do NOT clean up batches on failure; future runs will use those batches
@@ -946,7 +960,8 @@ def connector_document_extraction(
             # used in the future until the credentials are updated.
             with get_session_with_current_tenant() as db_session_temp:
                 logger.exception(
-                    f"Marking attempt {index_attempt_id} as canceled due to validation error."
+                    "Marking attempt %s as canceled due to validation error.",
+                    index_attempt_id,
                 )
                 mark_attempt_canceled(
                     index_attempt_id,
@@ -980,8 +995,9 @@ def connector_document_extraction(
 
                     if num_validation_errors >= VALIDATION_ERROR_THRESHOLD:
                         logger.warning(
-                            f"Connector {db_connector.id} has {num_validation_errors} consecutive validation"
-                            f" errors. Marking the CC Pair as invalid."
+                            "Connector %s has %s consecutive validation errors. Marking the CC Pair as invalid.",
+                            db_connector.id,
+                            num_validation_errors,
                         )
                         update_connector_credential_pair(
                             db_session=db_session_temp,
@@ -993,7 +1009,8 @@ def connector_document_extraction(
         elif isinstance(e, ConnectorStopSignal):
             with get_session_with_current_tenant() as db_session_temp:
                 logger.exception(
-                    f"Marking attempt {index_attempt_id} as canceled due to stop signal."
+                    "Marking attempt %s as canceled due to stop signal.",
+                    index_attempt_id,
                 )
                 mark_attempt_canceled(
                     index_attempt_id,
@@ -1010,7 +1027,8 @@ def connector_document_extraction(
                     IndexingStatus.FAILED,
                 ]:
                     logger.info(
-                        f"Attempt {index_attempt_id} is already failed/canceled, skipping marking as failed."
+                        "Attempt %s is already failed/canceled, skipping marking as failed.",
+                        index_attempt_id,
                     )
                     raise e
 
@@ -1042,12 +1060,14 @@ def reissue_old_batches(
     batch_storage.update_old_batches_to_new_index_attempt(old_batches)
     for batch_id in old_batches:
         logger.info(
-            f"Re-issuing docprocessing task for batch {batch_id} for index attempt {index_attempt_id}"
+            "Re-issuing docprocessing task for batch %s for index attempt %s",
+            batch_id,
+            index_attempt_id,
         )
         path_info = batch_storage.extract_path_info(batch_id)
         if path_info is None:
             logger.warning(
-                f"Could not extract path info from batch {batch_id}, skipping"
+                "Could not extract path info from batch %s, skipping", batch_id
             )
             continue
         if path_info.cc_pair_id != cc_pair_id:
@@ -1074,6 +1094,9 @@ def reissue_old_batches(
     # is still in the filestore waiting for processing or not.
     last_batch_num = len(old_batches) + recent_batches
     logger.info(
-        f"Starting from batch {last_batch_num} due to re-issued batches: {old_batches}, completed batches: {recent_batches}"
+        "Starting from batch %s due to re-issued batches: %s, completed batches: %s",
+        last_batch_num,
+        old_batches,
+        recent_batches,
     )
     return len(old_batches), recent_batches

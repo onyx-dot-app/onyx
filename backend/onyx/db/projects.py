@@ -143,7 +143,7 @@ def upload_files_to_user_files_with_indexing(
     tenant_id = get_current_tenant_id()
     for rejected_file in rejected_files:
         logger.warning(
-            f"File {rejected_file.filename} rejected for {rejected_file.reason}"
+            "File %s rejected for %s", rejected_file.filename, rejected_file.reason
         )
 
     if DISABLE_VECTOR_DB and background_tasks is not None:
@@ -151,7 +151,9 @@ def upload_files_to_user_files_with_indexing(
 
         background_tasks.add_task(drain_processing_loop, tenant_id)
         for user_file in indexable_files:
-            logger.info(f"Queued in-process processing for user_file_id={user_file.id}")
+            logger.info(
+                "Queued in-process processing for user_file_id=%s", user_file.id
+            )
     else:
         from onyx.background.celery.versioned_apps.client import app as client_app
 
@@ -164,7 +166,9 @@ def upload_files_to_user_files_with_indexing(
                 expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
             )
             logger.info(
-                f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
+                "Triggered indexing for user_file_id=%s with task_id=%s",
+                user_file.id,
+                task.id,
             )
 
     return CategorizedFilesResult(

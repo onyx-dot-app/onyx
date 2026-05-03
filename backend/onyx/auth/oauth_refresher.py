@@ -54,7 +54,7 @@ async def _test_expire_oauth_token(
 
         return True
     except Exception as e:
-        logger.exception(f"Error setting artificial expiration: {str(e)}")
+        logger.exception("Error setting artificial expiration: %s", str(e))
         return False
 
 
@@ -70,17 +70,19 @@ async def refresh_oauth_token(
     """
     if not oauth_account.refresh_token:
         logger.warning(
-            f"No refresh token available for {user.email}'s {oauth_account.oauth_name} account"
+            "No refresh token available for %s's %s account",
+            user.email,
+            oauth_account.oauth_name,
         )
         return False
 
     provider = oauth_account.oauth_name
     if provider not in REFRESH_ENDPOINTS:
-        logger.warning(f"Refresh endpoint not configured for provider: {provider}")
+        logger.warning("Refresh endpoint not configured for provider: %s", provider)
         return False
 
     try:
-        logger.info(f"Refreshing OAuth token for {user.email}'s {provider} account")
+        logger.info("Refreshing OAuth token for %s's %s account", user.email, provider)
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -96,7 +98,7 @@ async def refresh_oauth_token(
 
             if response.status_code != 200:
                 logger.error(
-                    f"Failed to refresh OAuth token: Status {response.status_code}"
+                    "Failed to refresh OAuth token: Status %s", response.status_code
                 )
                 return False
 
@@ -140,11 +142,11 @@ async def refresh_oauth_token(
                 updated_data,
             )
 
-            logger.info(f"Successfully refreshed OAuth token for {user.email}")
+            logger.info("Successfully refreshed OAuth token for %s", user.email)
             return True
 
     except Exception as e:
-        logger.exception(f"Error refreshing OAuth token: {str(e)}")
+        logger.exception("Error refreshing OAuth token: %s", str(e))
         return False
 
 
@@ -174,7 +176,9 @@ async def check_and_refresh_oauth_tokens(
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
-            logger.info(f"OAuth token for {user.email} is about to expire - refreshing")
+            logger.info(
+                "OAuth token for %s is about to expire - refreshing", user.email
+            )
             success = await refresh_oauth_token(
                 user, oauth_account, db_session, user_manager
             )

@@ -20,6 +20,7 @@ from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
 from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -199,7 +200,9 @@ def extract_date_range_from_query(
 
         # Call LLM with Braintrust tracing
         with llm_generation_span(
-            llm=llm, flow="slack_date_extraction", input_messages=[prompt_msg]
+            llm=llm,
+            flow=LLMFlow.SLACK_DATE_EXTRACTION,
+            input_messages=[prompt_msg],
         ) as span_generation:
             llm_response = llm.invoke(prompt_msg)
             record_llm_response(span_generation, llm_response)
@@ -211,37 +214,44 @@ def extract_date_range_from_query(
             data = json.loads(response_clean)
             if not isinstance(data, dict):
                 logger.debug(
-                    f"LLM date extraction returned non-dict response for query: "
-                    f"'{query}', using default: {default_search_days} days"
+                    "LLM date extraction returned non-dict response for query: '%s', using default: %s days",
+                    query,
+                    default_search_days,
                 )
                 return default_search_days
 
             days_back = data.get("days_back")
             if days_back is None:
                 logger.debug(
-                    f"LLM date extraction returned null for query: '{query}', using default: {default_search_days} days"
+                    "LLM date extraction returned null for query: '%s', using default: %s days",
+                    query,
+                    default_search_days,
                 )
                 return default_search_days
 
             if not isinstance(days_back, (int, float)):
                 logger.debug(
-                    f"LLM date extraction returned non-numeric days_back for "
-                    f"query: '{query}', using default: {default_search_days} days"
+                    "LLM date extraction returned non-numeric days_back for query: '%s', using default: %s days",
+                    query,
+                    default_search_days,
                 )
                 return default_search_days
 
         except json.JSONDecodeError:
             logger.debug(
-                f"Failed to parse LLM date extraction response for query: '{query}' "
-                f"(response: '{response_clean}'), "
-                f"using default: {default_search_days} days"
+                "Failed to parse LLM date extraction response for query: '%s' (response: '%s'), using default: %s days",
+                query,
+                response_clean,
+                default_search_days,
             )
             return default_search_days
 
         return min(int(days_back), default_search_days)
 
     except Exception as e:
-        logger.warning(f"Error extracting date range with LLM for query '{query}': {e}")
+        logger.warning(
+            "Error extracting date range with LLM for query '%s': %s", query, e
+        )
         return default_search_days
 
 
@@ -603,7 +613,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
     try:
         # Call LLM with Braintrust tracing
         with llm_generation_span(
-            llm=llm, flow="slack_query_expansion", input_messages=[prompt]
+            llm=llm, flow=LLMFlow.SLACK_QUERY_EXPANSION, input_messages=[prompt]
         ) as span_generation:
             llm_response = llm.invoke(prompt)
             record_llm_response(span_generation, llm_response)
@@ -622,7 +632,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
         # Log if we filtered out garbage
         if len(raw_queries) != len(rephrased_queries):
             filtered_out = set(raw_queries) - set(rephrased_queries)
-            logger.warning(f"Filtered out non-keyword LLM responses: {filtered_out}")
+            logger.warning("Filtered out non-keyword LLM responses: %s", filtered_out)
 
         # If no queries generated, use empty query
         if not rephrased_queries:
@@ -630,12 +640,14 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
             return [""]
 
         logger.debug(
-            f"Expanded query into {len(rephrased_queries)} queries: {rephrased_queries}"
+            "Expanded query into %s queries: %s",
+            len(rephrased_queries),
+            rephrased_queries,
         )
         return rephrased_queries[:MAX_SLACK_QUERY_EXPANSIONS]
 
     except Exception as e:
-        logger.error(f"Error expanding query: {e}")
+        logger.error("Error expanding query: %s", e)
         return [query_text]
 
 
@@ -678,7 +690,7 @@ def build_slack_queries(
             parsed_entities = SlackEntities(**entities)
             default_search_days = parsed_entities.default_search_days
         except ValidationError as e:
-            logger.warning(f"Invalid entities in build_slack_queries: {e}")
+            logger.warning("Invalid entities in build_slack_queries: %s", e)
 
     days_back = extract_date_range_from_query(
         query=query.query,
@@ -702,7 +714,7 @@ def build_slack_queries(
         url_fetches.append(
             DirectThreadFetch(channel_id=channel_id, thread_ts=thread_ts)
         )
-        logger.info(f"Detected Slack URL: channel={channel_id}, ts={thread_ts}")
+        logger.info("Detected Slack URL: channel=%s, ts=%s", channel_id, thread_ts)
 
     # ALWAYS extract channel references from the query (not just for recency queries)
     channel_references = extract_channel_references_from_query(query.query)
@@ -715,7 +727,7 @@ def build_slack_queries(
                 channel_references, entities, available_channels
             )
             logger.info(
-                f"Detected and validated channel references: {channel_references}"
+                "Detected and validated channel references: %s", channel_references
             )
 
             # If valid channels detected, use ONLY those channels with NO keywords
@@ -725,7 +737,7 @@ def build_slack_queries(
             ]
         except ValueError as e:
             # If validation fails, log the error and continue with normal flow
-            logger.warning(f"Channel reference validation failed: {e}")
+            logger.warning("Channel reference validation failed: %s", e)
             channel_references = set()
 
     # use llm to generate slack queries (use original query to use same keywords as the user)

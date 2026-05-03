@@ -219,7 +219,8 @@ if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
         ]
     except Exception:
         logger.exception(
-            f"Error configuring Google OAuth login scopes: {_GOOGLE_OAUTH_SCOPE_OVERRIDE}"
+            "Error configuring Google OAuth login scopes: %s",
+            _GOOGLE_OAUTH_SCOPE_OVERRIDE,
         )
 
 # OpenID Connect configuration URL for OIDC integrations
@@ -636,6 +637,14 @@ WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_S
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
+# When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,
+# fall back to a one-shot Playwright (Chromium) render to bypass JS-based
+# bot detection. Disable to skip the fallback (e.g. on hosts that don't have
+# the Chromium binary installed).
+OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
+    os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
     HtmlBasedConnectorTransformLinksStrategy.STRIP,
@@ -802,7 +811,7 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     == "true"
 )
 
-DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 25  # 25 days
+DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 20  # 20 days
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"

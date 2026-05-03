@@ -282,7 +282,7 @@ def test_image_generation(
     except Exception as e:
         # Log only exception type to avoid exposing sensitive data
         # (LiteLLM errors may contain URLs with API keys or auth tokens)
-        logger.warning(f"Image generation test failed: {type(e).__name__}")
+        logger.warning("Image generation test failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=400,
             detail=f"Image generation test failed: {type(e).__name__}",

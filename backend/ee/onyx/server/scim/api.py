@@ -569,7 +569,7 @@ def create_user(
         assign_user_to_default_groups__no_commit(db_session, user)
     except Exception:
         dal.rollback()
-        logger.exception(f"Failed to assign SCIM user {email} to default groups")
+        logger.exception("Failed to assign SCIM user %s to default groups", email)
         return _scim_error_response(
             500, f"Failed to assign user {email} to default group"
         )

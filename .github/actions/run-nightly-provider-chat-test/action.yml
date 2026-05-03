@@ -60,7 +60,6 @@ runs:
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
         ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-        LICENSE_ENFORCEMENT_ENABLED=false
         AUTH_TYPE=basic
         POSTGRES_POOL_PRE_PING=true
         POSTGRES_USE_NULL_POOL=true
@@ -84,6 +83,12 @@ runs:
           minio \
           api_server \
           inference_model_server
+
+    - name: Seed dev license
+      shell: bash
+      run: |
+        docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+          python -m scripts.seed_dev_license
 
     - name: Run nightly provider integration test
       uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3

@@ -190,8 +190,10 @@ class FirefliesConnector(PollConnector, LoadConnector):
                 if response.status_code < 500 or attempt == _FIREFLIES_MAX_RETRIES - 1:
                     break
                 logger.warning(
-                    f"Fireflies returned {response.status_code} on attempt "
-                    f"{attempt + 1}/{_FIREFLIES_MAX_RETRIES}, retrying"
+                    "Fireflies returned %s on attempt %s/%s, retrying",
+                    response.status_code,
+                    attempt + 1,
+                    _FIREFLIES_MAX_RETRIES,
                 )
                 time.sleep(_FIREFLIES_RETRY_BASE_DELAY_SECONDS * (2**attempt))
 

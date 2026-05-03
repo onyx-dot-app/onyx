@@ -15,7 +15,6 @@ from collections.abc import Sequence
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "b4b7e1028dfd"
 down_revision = "b7bcc991d722"

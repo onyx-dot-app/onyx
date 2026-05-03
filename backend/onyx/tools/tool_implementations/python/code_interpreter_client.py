@@ -138,7 +138,7 @@ class CodeInterpreterClient:
             response.raise_for_status()
             result = response.json().get("status") == "ok"
         except Exception as e:
-            logger.warning(f"Exception caught when checking health, e={e}")
+            logger.warning("Exception caught when checking health, e=%s", e)
             result = False
 
         _health_cache[self.base_url] = (time.monotonic(), result)
@@ -223,7 +223,7 @@ class CodeInterpreterClient:
                     if model_cls is not None:
                         yield model_cls(**json.loads(data))
                     else:
-                        logger.warning(f"Unknown SSE event type: {event_type}")
+                        logger.warning("Unknown SSE event type: %s", event_type)
                 event_type = None
                 data_lines = []
             elif line.startswith("event:"):
@@ -233,7 +233,9 @@ class CodeInterpreterClient:
 
         if event_type is not None or data_lines:
             logger.warning(
-                f"SSE stream ended with incomplete event: event_type={event_type}, data_lines={data_lines}"
+                "SSE stream ended with incomplete event: event_type=%s, data_lines=%s",
+                event_type,
+                data_lines,
             )
 
     def _batch_as_stream(

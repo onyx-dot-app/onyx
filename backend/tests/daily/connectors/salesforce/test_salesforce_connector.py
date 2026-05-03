@@ -13,6 +13,12 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.SF_PASSWORD,
+    TestSecret.SF_SECURITY_TOKEN,
+)
 
 
 def extract_key_value_pairs_to_set(
@@ -35,14 +41,16 @@ def _load_reference_data(
 
 
 @pytest.fixture
-def salesforce_connector() -> SalesforceConnector:
+def salesforce_connector(
+    test_secrets: dict[TestSecret, str],
+) -> SalesforceConnector:
     connector = SalesforceConnector(
         requested_objects=[ACCOUNT_OBJECT_TYPE, "Contact", "Opportunity"],
     )
 
     username = os.environ["SF_USERNAME"]
-    password = os.environ["SF_PASSWORD"]
-    security_token = os.environ["SF_SECURITY_TOKEN"]
+    password = test_secrets[TestSecret.SF_PASSWORD]
+    security_token = test_secrets[TestSecret.SF_SECURITY_TOKEN]
 
     connector.load_credentials(
         {

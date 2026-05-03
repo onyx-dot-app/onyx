@@ -87,7 +87,7 @@ def mark_tenant_active(tenant_id: str) -> None:
         # existing members, which is exactly the refresh semantics we want.
         _client().zadd(_SET_KEY, mapping={tenant_id: _now_ms()})
     except Exception:
-        logger.exception(f"mark_tenant_active failed: tenant_id={tenant_id}")
+        logger.exception("mark_tenant_active failed: tenant_id=%s", tenant_id)
 
 
 def maybe_mark_tenant_active(tenant_id: str, caller: str = "unknown") -> None:
@@ -109,7 +109,7 @@ def maybe_mark_tenant_active(tenant_id: str, caller: str = "unknown") -> None:
         mark_tenant_active(tenant_id)
         _marked_total.labels(caller=caller).inc()
     except Exception:
-        logger.exception(f"maybe_mark_tenant_active failed: tenant_id={tenant_id}")
+        logger.exception("maybe_mark_tenant_active failed: tenant_id=%s", tenant_id)
 
 
 def observe_active_set_size() -> int | None:

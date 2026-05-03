@@ -421,7 +421,7 @@ class LitellmLLM(LLM):
                 db_session.commit()
         except Exception as e:
             # Log but don't fail the LLM call if tracking fails
-            logger.warning(f"Failed to track LLM cost: {e}")
+            logger.warning("Failed to track LLM cost: %s", e)
 
     def _completion(
         self,

@@ -15,10 +15,15 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.CONFLUENCE_ACCESS_TOKEN)
 
 
 @pytest.fixture
-def confluence_connector() -> ConfluenceConnector:
+def confluence_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ConfluenceConnector:
     connector = ConfluenceConnector(
         wiki_base="https://danswerai.atlassian.net",
         is_cloud=True,
@@ -29,7 +34,7 @@ def confluence_connector() -> ConfluenceConnector:
         DocumentSource.CONFLUENCE,
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
+            "confluence_access_token": test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN],
         },
     )
     connector.set_credentials_provider(credentials_provider)
@@ -94,6 +99,7 @@ def test_confluence_connector_restriction_handling(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     mock_db_provider_class: MagicMock,
     enable_ee: None,  # noqa: ARG001
+    test_secrets: dict[TestSecret, str],
 ) -> None:
     # Test space key
     test_space_key = "DailyPermS"
@@ -102,7 +108,7 @@ def test_confluence_connector_restriction_handling(
     mock_provider_instance = MagicMock()
     mock_provider_instance.get_credentials.return_value = {
         "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-        "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
+        "confluence_access_token": test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN],
     }
     # this prevents redis calls inside of OnyxConfluence
     mock_provider_instance.is_dynamic.return_value = False

@@ -102,13 +102,16 @@ class SnapshotManager:
                 )
 
             logger.info(
-                f"Created snapshot {snapshot_id} for sandbox {sandbox_id}, size: {size_bytes} bytes"
+                "Created snapshot %s for sandbox %s, size: %s bytes",
+                snapshot_id,
+                sandbox_id,
+                size_bytes,
             )
 
             return snapshot_id, storage_path, size_bytes
 
         except Exception as e:
-            logger.error(f"Failed to create snapshot for sandbox {sandbox_id}: {e}")
+            logger.error("Failed to create snapshot for sandbox %s: %s", sandbox_id, e)
             raise RuntimeError(f"Failed to create snapshot: {e}") from e
         finally:
             # Cleanup temp file
@@ -117,7 +120,7 @@ class SnapshotManager:
                     Path(tmp_path).unlink(missing_ok=True)
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
+                        "Failed to cleanup temp file %s: %s", tmp_path, cleanup_error
                     )
 
     def restore_snapshot(
@@ -176,10 +179,10 @@ class SnapshotManager:
                             )
                     tar.extractall(target_path)
 
-            logger.info(f"Restored snapshot from {storage_path} to {target_path}")
+            logger.info("Restored snapshot from %s to %s", storage_path, target_path)
 
         except Exception as e:
-            logger.error(f"Failed to restore snapshot {storage_path}: {e}")
+            logger.error("Failed to restore snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
         finally:
             # Cleanup temp file
@@ -188,7 +191,7 @@ class SnapshotManager:
                     Path(tmp_path).unlink(missing_ok=True)
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
+                        "Failed to cleanup temp file %s: %s", tmp_path, cleanup_error
                     )
             # Close the file IO if it's still open
             try:
@@ -208,10 +211,10 @@ class SnapshotManager:
         """
         try:
             self._file_store.delete_file(storage_path)
-            logger.info(f"Deleted snapshot: {storage_path}")
+            logger.info("Deleted snapshot: %s", storage_path)
         except Exception as e:
             # Log but don't fail if snapshot doesn't exist
-            logger.warning(f"Failed to delete snapshot {storage_path}: {e}")
+            logger.warning("Failed to delete snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to delete snapshot: {e}") from e
 
     def get_snapshot_size(self, storage_path: str) -> int | None:

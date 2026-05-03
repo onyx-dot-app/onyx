@@ -126,7 +126,9 @@ export default function ModelListContent({
         onClick={() => onSelect(option)}
         rightChildren={
           selected ? (
-            <SvgCheck className="text-action-link-05" size={16} />
+            <div className="flex h-5 items-center">
+              <SvgCheck className="text-action-link-05" size={16} />
+            </div>
           ) : null
         }
         sizePreset="main-ui"

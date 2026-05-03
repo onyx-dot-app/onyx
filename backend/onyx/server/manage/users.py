@@ -508,7 +508,7 @@ def bulk_invite_users(
             )(new_invited_emails, tenant_id)
 
         except Exception as e:
-            logger.error(f"Failed to add users to tenant {tenant_id}: {str(e)}")
+            logger.error("Failed to add users to tenant %s: %s", tenant_id, str(e))
 
     initial_invited_users = get_invited_users()
 
@@ -548,7 +548,7 @@ def bulk_invite_users(
                 send_user_email_invite(email, current_user, AUTH_TYPE)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
-            logger.error(f"Error sending email invite to invited users: {e}")
+            logger.error("Error sending email invite to invited users: %s", e)
             email_invite_status = EmailInviteStatus.SEND_FAILED
 
     if MULTI_TENANT and not DEV_MODE:
@@ -559,7 +559,7 @@ def bulk_invite_users(
                 "onyx.server.tenants.billing", "register_tenant_users", None
             )(tenant_id, get_live_users_count(db_session))
         except Exception as e:
-            logger.error(f"Failed to register tenant users: {str(e)}")
+            logger.error("Failed to register tenant users: %s", str(e))
             logger.info(
                 "Reverting changes: removing users from tenant and resetting invited users"
             )
@@ -650,7 +650,7 @@ def deactivate_user_api(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_deactivate.is_active is False:
-        logger.warning("{} is already deactivated".format(user_to_deactivate.email))
+        logger.warning("%s is already deactivated", user_to_deactivate.email)
 
     deactivate_user(user_to_deactivate, db_session)
 
@@ -675,9 +675,7 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_delete.is_active is True:
-        logger.warning(
-            "{} must be deactivated before deleting".format(user_to_delete.email)
-        )
+        logger.warning("%s must be deactivated before deleting", user_to_delete.email)
         raise HTTPException(
             status_code=400, detail="User must be deactivated before deleting"
         )
@@ -691,7 +689,7 @@ async def delete_user(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
-        logger.info(f"Deleted user {user_to_delete.email}")
+        logger.info("Deleted user %s", user_to_delete.email)
 
         # Invalidate license cache so used_seats reflects the new count
         # Only for self-hosted (non-multi-tenant) deployments
@@ -702,7 +700,7 @@ async def delete_user(
 
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
+        logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
         raise HTTPException(status_code=500, detail="Error deleting user")
 
 
@@ -719,7 +717,7 @@ def activate_user_api(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_activate.is_active is True:
-        logger.warning("{} is already activated".format(user_to_activate.email))
+        logger.warning("%s is already activated", user_to_activate.email)
         return
 
     # Check seat availability before activating
@@ -816,7 +814,7 @@ def get_current_auth_token_creation_redis(
         return token_creation_time
 
     except Exception as e:
-        logger.error(f"Error retrieving token expiration from Redis: {e}")
+        logger.error("Error retrieving token expiration from Redis: %s", e)
         return None
 
 

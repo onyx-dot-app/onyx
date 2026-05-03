@@ -233,7 +233,9 @@ class FreshdeskConnector(PollConnector, LoadConnector):
 
             tickets = json.loads(response.content)
             logger.info(
-                f"Fetched {len(tickets)} tickets from Freshdesk API (Page {params['page']})"
+                "Fetched %s tickets from Freshdesk API (Page %s)",
+                len(tickets),
+                params["page"],
             )
 
             yield tickets

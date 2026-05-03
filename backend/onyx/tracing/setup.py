@@ -35,7 +35,7 @@ def setup_tracing() -> list[str]:
             _setup_braintrust()
             initialized_providers.append("braintrust")
         except Exception as e:
-            logger.error(f"Failed to initialize Braintrust tracing: {e}")
+            logger.error("Failed to initialize Braintrust tracing: %s", e)
     else:
         logger.info("Braintrust API key not provided, skipping Braintrust setup")
 
@@ -45,7 +45,7 @@ def setup_tracing() -> list[str]:
             _setup_langfuse()
             initialized_providers.append("langfuse")
         except Exception as e:
-            logger.error(f"Failed to initialize Langfuse tracing: {e}")
+            logger.error("Failed to initialize Langfuse tracing: %s", e)
     else:
         logger.info("Langfuse credentials not provided, skipping Langfuse setup")
 
@@ -53,7 +53,7 @@ def setup_tracing() -> list[str]:
 
     if initialized_providers:
         logger.notice(
-            f"Tracing initialized with providers: {', '.join(initialized_providers)}"
+            "Tracing initialized with providers: %s", ", ".join(initialized_providers)
         )
     else:
         logger.info("No tracing providers configured")

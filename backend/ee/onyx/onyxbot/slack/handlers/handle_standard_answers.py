@@ -232,7 +232,7 @@ def _handle_standard_answers(
 
             return True
         except Exception as e:
-            logger.exception(f"Unable to send standard answer message: {e}")
+            logger.exception("Unable to send standard answer message: %s", e)
             return False
     else:
         return False

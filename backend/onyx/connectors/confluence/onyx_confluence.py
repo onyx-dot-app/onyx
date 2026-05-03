@@ -339,9 +339,10 @@ class OnyxConfluence:
                     else:
                         if "WWW-Authenticate" in e.response.headers:
                             logger.warning(
-                                f"WWW-Authenticate: {e.response.headers['WWW-Authenticate']}"
+                                "WWW-Authenticate: %s",
+                                e.response.headers["WWW-Authenticate"],
                             )
-                            logger.warning(f"Full error: {e.response.text}")
+                            logger.warning("Full error: %s", e.response.text)
                         raise e
                 return
 
@@ -394,7 +395,8 @@ class OnyxConfluence:
             confluence = Confluence(url=url, oauth2=oauth2_dict, **kwargs)
         else:
             logger.info(
-                f"Connecting to Confluence with Personal Access Token as user: {credentials['confluence_username']}"
+                "Connecting to Confluence with Personal Access Token as user: %s",
+                credentials["confluence_username"],
             )
             if self._is_cloud:
                 confluence = Confluence(
@@ -461,7 +463,8 @@ class OnyxConfluence:
                 except HTTPError as e:
                     delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                     logger.warning(
-                        f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
+                        "HTTPError in confluence call. Retrying in %s seconds...",
+                        delay_until,
                     )
                     while time.monotonic() < delay_until:
                         # in the future, check a signal here to exit
@@ -533,7 +536,7 @@ class OnyxConfluence:
                     url_suffix, "start", str(initial_start + ind)
                 )
                 temp_url_suffix = update_param_in_path(temp_url_suffix, "limit", "1")
-                logger.info(f"Making recovery confluence call to {temp_url_suffix}")
+                logger.info("Making recovery confluence call to %s", temp_url_suffix)
                 raw_response = self.get(path=temp_url_suffix, advanced_mode=True)
                 raw_response.raise_for_status()
 
@@ -543,13 +546,15 @@ class OnyxConfluence:
                 if not latest_results:
                     # no more results, break out of the loop
                     logger.info(
-                        f"No results found for call '{temp_url_suffix}'Stopping pagination."
+                        "No results found for call '%s'Stopping pagination.",
+                        temp_url_suffix,
                     )
                     found_empty_page = True
                     break
             except Exception:
                 logger.exception(
-                    f"Error in confluence call to {temp_url_suffix}. Continuing."
+                    "Error in confluence call to %s. Continuing.",
+                    temp_url_suffix,
                 )
 
         if found_empty_page:
@@ -576,7 +581,7 @@ class OnyxConfluence:
         url_suffix = update_param_in_path(url_suffix, "limit", str(current_limit))
 
         while url_suffix:
-            logger.debug(f"Making confluence call to {url_suffix}")
+            logger.debug("Making confluence call to %s", url_suffix)
             try:
                 # Only pass params if they're not already in the URL to avoid duplicate
                 # params accumulating. Confluence's _links.next already includes these.
@@ -592,20 +597,22 @@ class OnyxConfluence:
                     params=params,
                 )
             except Exception as e:
-                logger.exception(f"Error in confluence call to {url_suffix}")
+                logger.exception("Error in confluence call to %s", url_suffix)
                 raise e
 
             try:
                 raw_response.raise_for_status()
             except Exception as e:
-                logger.warning(f"Error in confluence call to {url_suffix}")
+                logger.warning("Error in confluence call to %s", url_suffix)
 
                 # If the problematic expansion is in the url, replace it
                 # with the replacement expansion and try again
                 # If that fails, raise the error
                 if _PROBLEMATIC_EXPANSIONS in url_suffix:
                     logger.warning(
-                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS} and trying again."
+                        "Replacing %s with %s and trying again.",
+                        _PROBLEMATIC_EXPANSIONS,
+                        _REPLACEMENT_EXPANSIONS,
                     )
                     url_suffix = url_suffix.replace(
                         _PROBLEMATIC_EXPANSIONS,
@@ -622,9 +629,12 @@ class OnyxConfluence:
                             current_limit // 2, _MINIMUM_PAGINATION_LIMIT
                         )
                         logger.warning(
-                            f"Confluence returned {raw_response.status_code}. "
-                            f"Reducing limit from {old_limit} to {current_limit} "
-                            f"and retrying."
+                            "Confluence returned %s. "
+                            "Reducing limit from %s to %s "
+                            "and retrying.",
+                            raw_response.status_code,
+                            old_limit,
+                            current_limit,
                         )
                         url_suffix = update_param_in_path(
                             url_suffix, "limit", str(current_limit)
@@ -653,18 +663,26 @@ class OnyxConfluence:
                         continue
 
                     logger.exception(
-                        f"Error in confluence call to {url_suffix} "
-                        f"after reducing limit to {current_limit}.\n"
-                        f"Raw Response Text: {raw_response.text}\n"
-                        f"Error: {e}\n"
+                        "Error in confluence call to %s "
+                        "after reducing limit to %s.\n"
+                        "Raw Response Text: %s\n"
+                        "Error: %s\n",
+                        url_suffix,
+                        current_limit,
+                        raw_response.text,
+                        e,
                     )
                     raise
 
                 logger.exception(
-                    f"Error in confluence call to {url_suffix} \n"
-                    f"Raw Response Text: {raw_response.text} \n"
-                    f"Full Response: {raw_response.__dict__} \n"
-                    f"Error: {e} \n"
+                    "Error in confluence call to %s \n"
+                    "Raw Response Text: %s \n"
+                    "Full Response: %s \n"
+                    "Error: %s \n",
+                    url_suffix,
+                    raw_response.text,
+                    raw_response.__dict__,
+                    e,
                 )
                 raise
 
@@ -672,7 +690,8 @@ class OnyxConfluence:
                 next_response = raw_response.json()
             except Exception as e:
                 logger.exception(
-                    f"Failed to parse response as JSON. Response: {raw_response.__dict__}"
+                    "Failed to parse response as JSON. Response: %s",
+                    raw_response.__dict__,
                 )
                 raise e
 
@@ -734,7 +753,8 @@ class OnyxConfluence:
             # stop paginating.
             if url_suffix and not results:
                 logger.info(
-                    f"No results found for call '{old_url_suffix}' despite next link being present. Stopping pagination."
+                    "No results found for call '%s' despite next link being present. Stopping pagination.",
+                    old_url_suffix,
                 )
                 break
 
@@ -771,7 +791,7 @@ class OnyxConfluence:
                 cql_url, limit=limit, next_page_callback=next_page_callback
             )
         except Exception as e:
-            logger.exception(f"Error in paginated_page_retrieval: {e}")
+            logger.exception("Error in paginated_page_retrieval: %s", e)
             raise e
 
     def cql_paginate_all_expansions(
@@ -953,10 +973,12 @@ class OnyxConfluence:
                     response=e.response,
                 ) from e
             raise
-        logger.debug(f"jsonrpc response: {response}")
+        logger.debug("jsonrpc response: %s", response)
         if not response.get("result"):
             logger.warning(
-                f"No jsonrpc response for space permissions for space {space_key}\nResponse: {response}"
+                "No jsonrpc response for space permissions for space %s\nResponse: %s",
+                space_key,
+                response,
             )
 
         return response.get("result", [])
@@ -999,14 +1021,20 @@ def get_user_email_from_username__server(
         except HTTPError as e:
             status_code = e.response.status_code if e.response is not None else "N/A"
             logger.warning(
-                f"Failed to get confluence email for {user_name}: HTTP {status_code} - {e}"
+                "Failed to get confluence email for %s: HTTP %s - %s",
+                user_name,
+                status_code,
+                e,
             )
             # For now, we'll just return None and log a warning. This means
             # we will keep retrying to get the email every group sync.
             email = None
         except Exception as e:
             logger.warning(
-                f"Failed to get confluence email for {user_name}: {type(e).__name__} - {e}"
+                "Failed to get confluence email for %s: %s - %s",
+                user_name,
+                type(e).__name__,
+                e,
             )
             email = None
         _USER_EMAIL_CACHE[user_name] = email
@@ -1083,7 +1111,8 @@ def extract_text_from_confluence_html(
         )
         if not user_id:
             logger.warning(
-                f"ri:userkey not found in ri:user element. Found attrs: {user.attrs}"
+                "ri:userkey not found in ri:user element. Found attrs: %s",
+                user.attrs,
             )
             continue
         # Include @ sign for tagging, more clear for LLM
@@ -1097,7 +1126,8 @@ def extract_text_from_confluence_html(
         page_data = html_page_reference.find("ri:page")
         if not page_data:
             logger.warning(
-                f"Skipping retrieval of {html_page_reference} because because page data is missing"
+                "Skipping retrieval of %s because because page data is missing",
+                html_page_reference,
             )
             continue
 
@@ -1105,13 +1135,14 @@ def extract_text_from_confluence_html(
         if not page_title:
             # only fetch pages that have a title
             logger.warning(
-                f"Skipping retrieval of {html_page_reference} because it has no title"
+                "Skipping retrieval of %s because it has no title",
+                html_page_reference,
             )
             continue
 
         if page_title in fetched_titles:
             # prevent recursive fetching of pages
-            logger.debug(f"Skipping {page_title} because it has already been fetched")
+            logger.debug("Skipping %s because it has already been fetched", page_title)
             continue
 
         fetched_titles.add(page_title)
@@ -1131,7 +1162,9 @@ def extract_text_from_confluence_html(
                 break
         except Exception as e:
             logger.warning(
-                f"Error getting page contents for object {confluence_object}: {e}"
+                "Error getting page contents for object %s: %s",
+                confluence_object,
+                e,
             )
             continue
 
@@ -1153,7 +1186,7 @@ def extract_text_from_confluence_html(
             text_from_link = html_link_body.text
             html_link_body.replaceWith(f"(LINK TEXT: {text_from_link})")
         except Exception as e:
-            logger.warning(f"Error processing ac:link-body: {e}")
+            logger.warning("Error processing ac:link-body: %s", e)
 
     for html_attachment in soup.findAll("ri:attachment"):
         # This extracts the text from inline attachments in the page so they can be
@@ -1163,7 +1196,7 @@ def extract_text_from_confluence_html(
                 f"<attachment>{sanitize_attachment_title(html_attachment.attrs['ri:filename'])}</attachment>"
             )  # to be replaced later
         except Exception as e:
-            logger.warning(f"Error processing ac:attachment: {e}")
+            logger.warning("Error processing ac:attachment: %s", e)
 
     return format_document_soup(soup)
 

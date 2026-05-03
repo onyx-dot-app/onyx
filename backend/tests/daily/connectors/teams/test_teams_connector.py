@@ -1,4 +1,3 @@
-import os
 import time
 
 import pytest
@@ -8,6 +7,13 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
 from tests.daily.connectors.teams.models import TeamsThread
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.TEAMS_APPLICATION_ID,
+    TestSecret.TEAMS_DIRECTORY_ID,
+    TestSecret.TEAMS_SECRET,
+)
 
 TEAMS_THREAD = [
     # Posted in "Public Channel"
@@ -72,10 +78,12 @@ TEAMS_THREAD = [
 
 
 @pytest.fixture
-def teams_credentials() -> dict[str, str]:
-    app_id = os.environ["TEAMS_APPLICATION_ID"]
-    dir_id = os.environ["TEAMS_DIRECTORY_ID"]
-    secret = os.environ["TEAMS_SECRET"]
+def teams_credentials(
+    test_secrets: dict[TestSecret, str],
+) -> dict[str, str]:
+    app_id = test_secrets[TestSecret.TEAMS_APPLICATION_ID]
+    dir_id = test_secrets[TestSecret.TEAMS_DIRECTORY_ID]
+    secret = test_secrets[TestSecret.TEAMS_SECRET]
 
     return {
         "teams_client_id": app_id,

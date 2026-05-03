@@ -80,7 +80,7 @@ def _does_doc_chunk_exist(
         return False
 
     if doc_fetch_response.status_code != 200:
-        logger.debug(f"Failed to check for document with URL {doc_url}")
+        logger.debug("Failed to check for document with URL %s", doc_url)
         raise RuntimeError(
             f"Unexpected fetch document by ID value from Vespa: "
             f"error={doc_fetch_response.status_code} "
@@ -227,7 +227,7 @@ def _index_vespa_chunk(
         if chunk.tenant_id:
             vespa_document_fields[TENANT_ID] = chunk.tenant_id
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
-    logger.debug(f'Indexing to URL "{vespa_url}"')
+    logger.debug('Indexing to URL "%s"', vespa_url)
 
     # Retry logic with exponential backoff for rate limiting
     for attempt in range(INDEXING_MAX_RETRIES):
@@ -246,10 +246,12 @@ def _index_vespa_chunk(
                         INDEXING_BASE_DELAY * (2**attempt), INDEXING_MAX_DELAY
                     ) * random.uniform(0.5, 1.0)
                     logger.warning(
-                        f"Rate limited while indexing document '{document.id}' "
-                        f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}). "
-                        f"Vespa response: '{e.response.text}'. "
-                        f"Backing off for {delay:.2f} seconds."
+                        "Rate limited while indexing document '%s' (attempt %s/%s). Vespa response: '%s'. Backing off for %s seconds.",
+                        document.id,
+                        attempt + 1,
+                        INDEXING_MAX_RETRIES,
+                        e.response.text,
+                        format(delay, ".2f"),
                     )
                     time.sleep(delay)
                     continue
@@ -259,7 +261,9 @@ def _index_vespa_chunk(
                     ) from e
             elif e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
                 logger.error(
-                    f"Failed to index document: '{document.id}'. Got response: '{e.response.text}'"
+                    "Failed to index document: '%s'. Got response: '%s'",
+                    document.id,
+                    e.response.text,
                 )
                 logger.error(
                     "NOTE: HTTP Status 507 Insufficient Storage usually means "
@@ -277,21 +281,29 @@ def _index_vespa_chunk(
                 ):
                     # Non-retryable errors - fail immediately
                     logger.error(
-                        f"Non-retryable HTTP {e.response.status_code} error for document '{document.id}'"
+                        "Non-retryable HTTP %s error for document '%s'",
+                        e.response.status_code,
+                        document.id,
                     )
                     raise
                 # Retry other errors with shorter backoff
                 if attempt < INDEXING_MAX_RETRIES - 1:
                     delay = INDEXING_BASE_DELAY * (1.5**attempt)
                     logger.warning(
-                        f"HTTP error {e.response.status_code} while indexing document '{document.id}' "
-                        f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}). Retrying in {delay:.2f} seconds."
+                        "HTTP error %s while indexing document '%s' (attempt %s/%s). Retrying in %s seconds.",
+                        e.response.status_code,
+                        document.id,
+                        attempt + 1,
+                        INDEXING_MAX_RETRIES,
+                        format(delay, ".2f"),
                     )
                     time.sleep(delay)
                     continue
                 else:
                     logger.exception(
-                        f"Failed to index document: '{document.id}'. Got response: '{e.response.text}'"
+                        "Failed to index document: '%s'. Got response: '%s'",
+                        document.id,
+                        e.response.text,
                     )
                     raise
         except Exception as e:
@@ -299,14 +311,17 @@ def _index_vespa_chunk(
             if attempt < INDEXING_MAX_RETRIES - 1:
                 delay = INDEXING_BASE_DELAY * (1.5**attempt)
                 logger.warning(
-                    f"Error while indexing document '{document.id}' "
-                    f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}): {str(e)}. "
-                    f"Retrying in {delay:.2f} seconds."
+                    "Error while indexing document '%s' (attempt %s/%s): %s. Retrying in %s seconds.",
+                    document.id,
+                    attempt + 1,
+                    INDEXING_MAX_RETRIES,
+                    str(e),
+                    format(delay, ".2f"),
                 )
                 time.sleep(delay)
                 continue
             else:
-                logger.exception(f"Failed to index document: '{document.id}'")
+                logger.exception("Failed to index document: '%s'", document.id)
                 raise
 
 

@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm@sha256:9c6f90801e6b68e772b7c0ca74260cbf7af9f320acec894e26fccdaccfbe3b47
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -147,6 +147,7 @@ COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervis
 COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
 COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
+COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
 RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
 
 # Run Craft template setup at build time when ENABLE_CRAFT=true

@@ -92,7 +92,7 @@ def handle_send_search_message(
     Returns:
         StreamingResponse with SSE if stream=True, otherwise SearchFullResponse.
     """
-    logger.debug(f"Received search query: {request.search_query}")
+    logger.debug("Received search query: %s", request.search_query)
 
     if request.hybrid_alpha is None and ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH:
         request.hybrid_alpha = 0.0

@@ -8,6 +8,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
 
 PUBLIC_CHANNEL_NAME = "#daily-connector-test-channel"
 PRIVATE_CHANNEL_NAME = "#private-channel"
@@ -22,7 +23,10 @@ PRIVATE_CHANNEL_USERS = [
 # the "no start time" case while exercising the oldest= parameter.
 OLDEST_TS_2016 = datetime(2016, 1, 1, tzinfo=timezone.utc).timestamp()
 
-pytestmark = pytest.mark.usefixtures("enable_ee")
+pytestmark = [
+    pytest.mark.usefixtures("enable_ee"),
+    pytest.mark.secrets(TestSecret.SLACK_BOT_TOKEN),
+]
 
 
 @pytest.mark.parametrize(

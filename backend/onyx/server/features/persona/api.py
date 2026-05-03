@@ -574,14 +574,17 @@ def get_persona_avatar(
     file_record = get_filerecord_by_file_id_optional(file_id, db_session)
     if not file_record:
         logger.warning(
-            f"Persona {persona_id} references avatar file {file_id} with no "
-            f"matching FileRecord; rejecting."
+            "Persona %s references avatar file %s with no matching FileRecord; rejecting.",
+            persona_id,
+            file_id,
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
     if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
         logger.warning(
-            f"Persona {persona_id} avatar references file {file_id} with "
-            f"unexpected origin {file_record.file_origin}; rejecting."
+            "Persona %s avatar references file %s with unexpected origin %s; rejecting.",
+            persona_id,
+            file_id,
+            file_record.file_origin,
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 

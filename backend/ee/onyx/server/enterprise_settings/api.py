@@ -70,7 +70,7 @@ async def refresh_access_token(
     user_manager: UserManager = Depends(get_user_manager),
 ) -> None:
     try:
-        logger.debug(f"Received response from Meechum auth URL for user {user.id}")
+        logger.debug("Received response from Meechum auth URL for user %s", user.id)
 
         # Extract new tokens
         new_access_token = refresh_token.access_token
@@ -81,7 +81,7 @@ async def refresh_access_token(
         )
         expires_at_timestamp = int(new_expiry.timestamp())
 
-        logger.debug(f"Access token has been refreshed for user {user.id}")
+        logger.debug("Access token has been refreshed for user %s", user.id)
 
         await user_manager.oauth_callback(
             oauth_name="custom",
@@ -93,17 +93,19 @@ async def refresh_access_token(
             associate_by_email=True,
         )
 
-        logger.info(f"Successfully refreshed tokens for user {user.id}")
+        logger.info("Successfully refreshed tokens for user %s", user.id)
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
-            logger.warning(f"Full authentication required for user {user.id}")
+            logger.warning("Full authentication required for user %s", user.id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Full authentication required",
             )
         logger.error(
-            f"HTTP error occurred while refreshing token for user {user.id}: {str(e)}"
+            "HTTP error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -111,7 +113,9 @@ async def refresh_access_token(
         )
     except Exception as e:
         logger.error(
-            f"Unexpected error occurred while refreshing token for user {user.id}: {str(e)}"
+            "Unexpected error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

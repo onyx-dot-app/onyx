@@ -483,7 +483,10 @@ async def upload_files(
     _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
     logger.info(
-        f"Uploaded {len(uploaded_entries)} files ({total_size} bytes) for user {user.id}"
+        "Uploaded %s files (%s bytes) for user %s",
+        len(uploaded_entries),
+        total_size,
+        user.id,
     )
 
     return UploadResponse(
@@ -566,7 +569,9 @@ async def upload_zip(
 
                 # Validate individual file size
                 if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
-                    logger.warning(f"Skipping '{zip_info.filename}' - exceeds max size")
+                    logger.warning(
+                        "Skipping '%s' - exceeds max size", zip_info.filename
+                    )
                     continue
 
                 # Skip PDFs that would trip the per-file or per-batch image
@@ -684,7 +689,10 @@ async def upload_zip(
     _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
     logger.info(
-        f"Extracted {len(uploaded_entries)} files ({total_size} bytes) from zip for user {user.id}"
+        "Extracted %s files (%s bytes) from zip for user %s",
+        len(uploaded_entries),
+        total_size,
+        user.id,
     )
 
     return UploadResponse(
@@ -826,7 +834,7 @@ def delete_file(
                 else:
                     writer.delete_raw_file(file_path)
             except Exception as e:
-                logger.warning(f"Failed to delete file at path {file_path}: {e}")
+                logger.warning("Failed to delete file at path %s: %s", file_path, e)
         else:
             # Fallback for documents created before file_path was stored
             storage_key = doc_metadata.get("storage_key") or doc_metadata.get("s3_key")
@@ -840,11 +848,12 @@ def delete_file(
                         writer.delete_raw_file(storage_key)
                     else:
                         logger.warning(
-                            f"Cannot delete file in local mode without file_path: {document_id}"
+                            "Cannot delete file in local mode without file_path: %s",
+                            document_id,
                         )
                 except Exception as e:
                     logger.warning(
-                        f"Failed to delete storage object {storage_key}: {e}"
+                        "Failed to delete storage object %s: %s", storage_key, e
                     )
 
     # Delete from document table

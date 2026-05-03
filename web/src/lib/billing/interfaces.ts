@@ -93,8 +93,17 @@ export interface CreateCheckoutSessionResponse {
   stripe_checkout_url: string;
 }
 
+/**
+ * Stripe billing portal `flow_data.type` values supported by the API.
+ * Mirrors `shared.enums.StripePortalFlowType` on the control plane.
+ */
+export enum StripePortalFlowType {
+  PAYMENT_METHOD_UPDATE = "payment_method_update",
+}
+
 export interface CreateCustomerPortalSessionRequest {
   return_url?: string;
+  flow_type?: StripePortalFlowType;
 }
 
 export interface CreateCustomerPortalSessionResponse {
@@ -114,6 +123,23 @@ export interface SeatUpdateResponse {
   current_seats: number;
   used_seats: number;
   message: string | null;
+}
+
+// ----------------------------------------------------------------------------
+// Trial Management Types
+// ----------------------------------------------------------------------------
+
+export interface EndTrialResponse {
+  success: boolean;
+  stripe_subscription_id: string;
+  status: string;
+}
+
+export class PaymentMethodRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentMethodRequiredError";
+  }
 }
 
 // ----------------------------------------------------------------------------

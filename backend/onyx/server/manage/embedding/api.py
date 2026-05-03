@@ -59,7 +59,7 @@ def test_embedding_configuration(
 
     except Exception as e:
         error_msg = "An error occurred while testing your embedding model. Please check your configuration."
-        logger.error(f"{error_msg} Error message: {e}", exc_info=True)
+        logger.error("%s Error message: %s", error_msg, e, exc_info=True)
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 

@@ -5,6 +5,8 @@ import os
 from collections.abc import Callable
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -16,6 +18,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
+from tests.utils.secret_names import TestSecret
 
 _DRIVE_ID_MAPPING_PATH = os.path.join(
     os.path.dirname(__file__), "drive_id_mapping.json"
@@ -41,6 +44,7 @@ def _build_failures(web_view_links: list[str]) -> list[ConnectorFailure]:
     ]
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_single_file(
     mock_api_key: None,  # noqa: ARG001
@@ -74,6 +78,7 @@ def test_resolve_single_file(
     assert len(hierarchy_nodes) > 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_multiple_files(
     mock_api_key: None,  # noqa: ARG001
@@ -110,6 +115,7 @@ def test_resolve_multiple_files(
     assert len(hierarchy_nodes) > 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_hierarchy_nodes_are_valid(
     mock_api_key: None,  # noqa: ARG001
@@ -158,6 +164,7 @@ def test_resolve_hierarchy_nodes_are_valid(
         )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_with_invalid_link(
     mock_api_key: None,  # noqa: ARG001
@@ -190,6 +197,7 @@ def test_resolve_with_invalid_link(
     assert new_failures[0].failed_document.document_id == invalid_link
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_empty_errors(
     mock_api_key: None,  # noqa: ARG001
@@ -211,6 +219,7 @@ def test_resolve_empty_errors(
     assert len(results) == 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_entity_failures_are_skipped(
     mock_api_key: None,  # noqa: ARG001

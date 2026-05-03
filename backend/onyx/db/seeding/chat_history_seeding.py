@@ -32,16 +32,16 @@ def seed_chat_history(
     persona_id: optional persona/assistant to associate with sessions
     """
     with get_session_with_current_tenant() as db_session:
-        logger.info(f"Seeding {num_sessions} sessions.")
+        logger.info("Seeding %s sessions.", num_sessions)
         for y in range(0, num_sessions):
             create_chat_session(db_session, f"pytest_session_{y}", user_id, persona_id)
 
         # randomize all session times
-        logger.info(f"Seeding {num_messages} messages per session.")
+        logger.info("Seeding %s messages per session.", num_messages)
         rows = db_session.query(ChatSession).all()
         for x in range(0, len(rows)):
             if x % 1024 == 0:
-                logger.info(f"Seeded messages for {x} sessions so far.")
+                logger.info("Seeded messages for %s sessions so far.", x)
 
             row = rows[x]
             row.time_created = datetime.now(tz=timezone.utc) - timedelta(
@@ -89,4 +89,4 @@ def seed_chat_history(
 
         db_session.commit()
 
-        logger.info(f"Seeded messages for {len(rows)} sessions. Finished.")
+        logger.info("Seeded messages for %s sessions. Finished.", len(rows))
