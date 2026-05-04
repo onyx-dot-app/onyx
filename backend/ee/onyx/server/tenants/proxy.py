@@ -453,3 +453,46 @@ async def proxy_seat_update(
         message=result.get("message"),
         license=result.get("license"),
     )
+
+
+class SendLicenseExpiryEmailRequest(BaseModel):
+    stage: Literal["t_30d", "t_14d", "t_1d", "grace"]
+    expires_at: str
+    grace_days_remaining: int | None = None
+
+
+class SendLicenseExpiryEmailResponse(BaseModel):
+    sent: bool
+    detail: str | None = None
+
+
+@router.post("/send-license-expiry-email")
+async def proxy_send_license_expiry_email(
+    request_body: SendLicenseExpiryEmailRequest,
+    license_payload: LicensePayload = Depends(get_license_payload),
+) -> SendLicenseExpiryEmailResponse:
+    """Proxy a license-expiry email send to the control plane.
+
+    Self-hosted instances without local SMTP/SendGrid configured forward
+    here; the control plane resolves the registrant email from Stripe and
+    delivers via SendGrid.
+
+    Auth: Valid license required.
+    """
+    if not license_payload.tenant_id:
+        raise HTTPException(status_code=401, detail="License missing tenant_id")
+
+    result = await forward_to_control_plane(
+        "POST",
+        "/send-license-expiry-email",
+        body={
+            "tenant_id": license_payload.tenant_id,
+            "stage": request_body.stage,
+            "expires_at": request_body.expires_at,
+            "grace_days_remaining": request_body.grace_days_remaining,
+        },
+    )
+    return SendLicenseExpiryEmailResponse(
+        sent=bool(result.get("sent", False)),
+        detail=result.get("detail"),
+    )
