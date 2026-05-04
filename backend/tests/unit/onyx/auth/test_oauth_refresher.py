@@ -312,6 +312,89 @@ async def test_resolve_token_endpoint_unknown_provider(
 
 
 @pytest.mark.asyncio
+async def test_resolve_token_endpoint_openid_invalid_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-JSON discovery body degrades to None instead of crashing."""
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_LOCK", None)
+    monkeypatch.setattr(
+        oauth_refresher,
+        "OPENID_CONFIG_URL",
+        "https://idp.example.com/.well-known/openid-configuration",
+    )
+
+    discovery_response = MagicMock()
+    discovery_response.status_code = 200
+    discovery_response.raise_for_status.return_value = None
+    # Simulate an HTML error page or any non-JSON body.
+    discovery_response.json.side_effect = ValueError("not valid JSON")
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = discovery_response
+
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+        endpoint = await _resolve_token_endpoint("openid")
+
+    assert endpoint is None
+    # Cache stays empty so a subsequent call retries cleanly.
+    assert oauth_refresher._OIDC_TOKEN_ENDPOINT_CACHE == {}
+
+
+@pytest.mark.asyncio
+async def test_resolve_token_endpoint_openid_concurrent_fetches_coalesce(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent callers must trigger only one discovery request."""
+    import asyncio as _asyncio
+
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_LOCK", None)
+    monkeypatch.setattr(
+        oauth_refresher,
+        "OPENID_CONFIG_URL",
+        "https://idp.example.com/.well-known/openid-configuration",
+    )
+
+    fetch_started = _asyncio.Event()
+    release_fetch = _asyncio.Event()
+
+    async def slow_get(*_args: object, **_kwargs: object) -> MagicMock:
+        # Park the first caller inside the discovery fetch so subsequent
+        # callers must wait on the lock; the test fails (call_count > 1) if
+        # they slip past the lock and fire their own fetch.
+        fetch_started.set()
+        await release_fetch.wait()
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "token_endpoint": "https://idp.example.com/oauth2/v2.0/token",
+        }
+        return response
+
+    mock_client = AsyncMock()
+    mock_client.get.side_effect = slow_get
+
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+
+        first = _asyncio.create_task(_resolve_token_endpoint("openid"))
+        await fetch_started.wait()
+        # Second + third callers must block on the lock until `first` finishes.
+        second = _asyncio.create_task(_resolve_token_endpoint("openid"))
+        third = _asyncio.create_task(_resolve_token_endpoint("openid"))
+        # Yield control so the queued tasks reach the lock.
+        await _asyncio.sleep(0)
+        release_fetch.set()
+        results = await _asyncio.gather(first, second, third)
+
+    assert all(r == "https://idp.example.com/oauth2/v2.0/token" for r in results)
+    assert mock_client.get.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_refresh_oauth_token_openid_provider(
     mock_user: MagicMock,
     mock_oauth_account: MagicMock,

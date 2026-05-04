@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -30,32 +31,55 @@ REFRESH_ENDPOINTS: Dict[str, str] = {
 # .well-known/openid-configuration document is only retrieved once per process.
 _OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str] = {}
 
+# Lazily-initialized lock guarding concurrent first-time fetches of the OIDC
+# discovery document. Created on first use so it binds to the running event
+# loop rather than at import time.
+_OIDC_TOKEN_ENDPOINT_LOCK: Optional[asyncio.Lock] = None
+
+
+def _get_oidc_lock() -> asyncio.Lock:
+    """Return the module-level OIDC discovery lock, creating it on first call."""
+    global _OIDC_TOKEN_ENDPOINT_LOCK
+    if _OIDC_TOKEN_ENDPOINT_LOCK is None:
+        _OIDC_TOKEN_ENDPOINT_LOCK = asyncio.Lock()
+    return _OIDC_TOKEN_ENDPOINT_LOCK
+
 
 async def _get_oidc_token_endpoint() -> Optional[str]:
     """Resolve the OAuth2 token endpoint for the configured OIDC provider.
 
     Reads `token_endpoint` from the OPENID_CONFIG_URL discovery document so
     refresh works for any OIDC provider (Microsoft Entra, Okta, Keycloak,
-    Auth0, ...) without hardcoding provider-specific URLs.
+    Auth0, ...) without hardcoding provider-specific URLs. The lock + double
+    check ensures concurrent callers (e.g. multiple tokens expiring at once
+    after a server restart) coalesce into a single discovery request.
     """
     cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
     if cached:
         return cached
     if not OPENID_CONFIG_URL:
         return None
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(OPENID_CONFIG_URL, timeout=10.0)
-            response.raise_for_status()
-            config: Dict[str, Any] = response.json()
-    except httpx.HTTPError as e:
-        logger.warning("Failed to fetch OIDC discovery document: %s", e)
+    async with _get_oidc_lock():
+        # Re-check inside the lock — another coroutine may have populated
+        # the cache while we were waiting to acquire it.
+        cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+        if cached:
+            return cached
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(OPENID_CONFIG_URL, timeout=10.0)
+                response.raise_for_status()
+                config: Dict[str, Any] = response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError covers json.JSONDecodeError when the IdP returns a
+            # non-JSON body (e.g. an HTML error page from a misconfigured URL).
+            logger.warning("Failed to fetch OIDC discovery document: %s", e)
+            return None
+        token_endpoint = config.get("token_endpoint")
+        if isinstance(token_endpoint, str) and token_endpoint:
+            _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
+            return token_endpoint
         return None
-    token_endpoint = config.get("token_endpoint")
-    if isinstance(token_endpoint, str) and token_endpoint:
-        _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
-        return token_endpoint
-    return None
 
 
 async def _resolve_token_endpoint(provider: str) -> Optional[str]:
