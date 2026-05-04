@@ -333,15 +333,25 @@ export function useContentEditable({
       const { tile } = tilePopover;
 
       if (!newText.trim()) {
-        const cursorTarget = tile.nextSibling ?? tile.previousSibling;
+        const next = tile.nextSibling;
+        const prev = tile.previousSibling;
         tile.remove();
         selectedTileRef.current = null;
         syncFromDOM();
         resize();
         setTilePopover(null);
         ref.current?.focus();
-        if (cursorTarget) {
-          setCursorAfterNode(cursorTarget);
+        if (next) {
+          const sel = window.getSelection();
+          if (sel) {
+            const r = document.createRange();
+            r.setStartBefore(next);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+          }
+        } else if (prev) {
+          setCursorAfterNode(prev);
         }
         return;
       }
