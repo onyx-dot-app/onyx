@@ -9,7 +9,7 @@ import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
+import { SvgSparkle, SvgRefreshCw, SvgX, SvgAlertTriangle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -22,6 +22,8 @@ function getNotificationIcon(
   switch (notifType) {
     case NotificationType.REINDEX:
       return SvgRefreshCw;
+    case NotificationType.LICENSE_EXPIRY_WARNING:
+      return SvgAlertTriangle;
     default:
       return SvgSparkle;
   }

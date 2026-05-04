@@ -283,6 +283,7 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    LICENSE_EXPIRY_WARNING = "license_expiry_warning"
 
 
 class BlobType(str, Enum):
@@ -611,6 +612,9 @@ class OnyxCeleryTask:
 
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
+
+    # License expiry tiered warnings
+    CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
