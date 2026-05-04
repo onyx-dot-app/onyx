@@ -76,7 +76,7 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade \
+RUN uv pip install --system --no-cache-dir --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \

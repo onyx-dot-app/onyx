@@ -64,8 +64,10 @@ runs:
       env:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        # Build the uv pip install command with each requirement file as array elements
-        cmd=("uv" "pip" "install")
+        # --require-hashes refuses to install any artifact whose hash isn't
+        # listed in the requirements file, so installs can only land on the
+        # versions resolved into uv.lock.
+        cmd=("uv" "pip" "install" "--require-hashes")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then

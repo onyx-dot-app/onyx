@@ -12,11 +12,13 @@ COPY ./requirements/model_server.txt /tmp/requirements.txt
 
 # Install torch + CUDA/GPU deps in a dedicated layer: together they are ~3GB,
 # and isolating them avoids a single oversized layer that is unreliable to push.
-RUN grep -E '^(torch|nvidia-[a-z0-9-]+|triton)==' /tmp/requirements.txt \
-        | uv pip install --system --no-cache-dir -r /dev/stdin && \
+# awk extracts each matching package block in full — the package line plus its
+# `--hash=...` continuation lines — so --require-hashes can verify them.
+RUN awk '/^[[:alnum:]]/ { keep = ($0 ~ /^(torch|nvidia-[a-z0-9-]+|triton)==/) } keep' /tmp/requirements.txt \
+        | uv pip install --system --no-cache-dir --no-deps --require-hashes -r /dev/stdin && \
     rm -rf ~/.cache/uv
 
-RUN uv pip install --system --no-cache-dir \
+RUN uv pip install --system --no-cache-dir --require-hashes \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 

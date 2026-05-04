@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Integration test stuff
 COPY ./requirements/dev.txt /tmp/dev-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade -r /tmp/dev-requirements.txt && \
+RUN uv pip install --system --no-cache-dir --require-hashes -r /tmp/dev-requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
 COPY ./pytest.ini /app/pytest.ini
