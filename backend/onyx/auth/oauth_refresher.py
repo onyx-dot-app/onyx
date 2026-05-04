@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+import uuid
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -54,6 +55,34 @@ def _get_oidc_lock() -> asyncio.Lock:
     if _OIDC_TOKEN_ENDPOINT_LOCK is None:
         _OIDC_TOKEN_ENDPOINT_LOCK = asyncio.Lock()
     return _OIDC_TOKEN_ENDPOINT_LOCK
+
+
+# Per-user locks coalescing concurrent token-refresh attempts. Without this,
+# two requests for the same user near expiry could both POST a refresh, and
+# IdPs that rotate refresh tokens (e.g. Microsoft Entra) would invalidate one
+# of them with `400 invalid_grant`. The lock pairs with a re-read inside
+# `check_and_refresh_oauth_tokens` so the second coroutine skips the redundant
+# request entirely once the first has succeeded.
+_USER_REFRESH_LOCKS: Dict[uuid.UUID, asyncio.Lock] = {}
+_USER_REFRESH_LOCKS_GUARD: Optional[asyncio.Lock] = None
+
+
+def _get_user_refresh_locks_guard() -> asyncio.Lock:
+    """Lazy-init the meta-lock that protects the per-user lock dict itself."""
+    global _USER_REFRESH_LOCKS_GUARD
+    if _USER_REFRESH_LOCKS_GUARD is None:
+        _USER_REFRESH_LOCKS_GUARD = asyncio.Lock()
+    return _USER_REFRESH_LOCKS_GUARD
+
+
+async def _get_user_refresh_lock(user_id: uuid.UUID) -> asyncio.Lock:
+    """Get-or-create a per-user lock keyed by `user.id`."""
+    async with _get_user_refresh_locks_guard():
+        lock = _USER_REFRESH_LOCKS.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _USER_REFRESH_LOCKS[user_id] = lock
+        return lock
 
 
 def _cached_token_endpoint() -> Optional[str]:
@@ -273,17 +302,40 @@ async def check_and_refresh_oauth_tokens(
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
-            logger.info(
-                "OAuth token for %s is about to expire - refreshing", user.email
-            )
-            success = await refresh_oauth_token(
-                user, oauth_account, db_session, user_manager
-            )
+            # Coalesce concurrent refreshes for the same user. Re-read the
+            # account inside the lock so the second coroutine sees the
+            # refreshed `expires_at` (and `refresh_token` for IdPs that
+            # rotate) and skips the redundant POST.
+            user_lock = await _get_user_refresh_lock(user.id)
+            async with user_lock:
+                try:
+                    await db_session.refresh(oauth_account)
+                except Exception:
+                    # `db_session.refresh` can fail when oauth_account is
+                    # detached from this session (e.g. pre-loaded by the
+                    # caller). Fall through and attempt the refresh anyway —
+                    # at worst the second coroutine sees the same stale
+                    # state we'd see without the lock.
+                    pass
 
-            if not success:
-                logger.warning(
-                    "Failed to refresh OAuth token. User may need to re-authenticate."
+                if (
+                    oauth_account.expires_at
+                    and oauth_account.expires_at - now_timestamp >= buffer_seconds
+                ):
+                    # Another coroutine already refreshed this account.
+                    continue
+
+                logger.info(
+                    "OAuth token for %s is about to expire - refreshing", user.email
                 )
+                success = await refresh_oauth_token(
+                    user, oauth_account, db_session, user_manager
+                )
+
+                if not success:
+                    logger.warning(
+                        "Failed to refresh OAuth token. User may need to re-authenticate."
+                    )
 
 
 async def check_oauth_account_has_refresh_token(

@@ -1614,7 +1614,7 @@ async def _check_for_saml_and_jwt(
     return user
 
 
-async def _maybe_refresh_oidc_tokens(
+async def _maybe_refresh_oauth_tokens(
     user: User,
     async_db_session: AsyncSession,
     user_manager: BaseUserManager[User, uuid.UUID],
@@ -1660,7 +1660,7 @@ async def optional_user(
 ) -> User | None:
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
-        await _maybe_refresh_oidc_tokens(user, async_db_session, user_manager)
+        await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
         return user
 
     try:
@@ -1673,7 +1673,7 @@ async def optional_user(
         return None
 
     if user is not None:
-        await _maybe_refresh_oidc_tokens(user, async_db_session, user_manager)
+        await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
     return user
 
 

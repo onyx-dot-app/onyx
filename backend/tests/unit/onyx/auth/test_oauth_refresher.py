@@ -176,6 +176,72 @@ async def test_check_and_refresh_oauth_tokens(
 
 
 @pytest.mark.asyncio
+async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
+    mock_user_manager: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two concurrent refreshes for the same user trigger only one IdP POST.
+
+    Mirrors the post-refresh in-memory state by having the mocked
+    `refresh_oauth_token` update `account.expires_at` to a fresh value
+    (the way `update_oauth_account` would refresh the SQLAlchemy object on
+    success). The second coroutine must observe the fresh `expires_at`
+    inside the per-user lock and skip its redundant POST.
+    """
+    import asyncio as _asyncio
+
+    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS", {})
+    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS_GUARD", None)
+
+    now_timestamp = datetime.now(timezone.utc).timestamp()
+
+    account = MagicMock(spec=OAuthAccount)
+    account.oauth_name = "openid"
+    account.refresh_token = "rt"
+    account.expires_at = now_timestamp + 60  # within renewal buffer
+
+    user = MagicMock()
+    user.id = "concurrent-test-user"
+    user.email = "concurrent@example.com"
+    user.oauth_accounts = [account]
+
+    db_session = MagicMock()
+    db_session.refresh = AsyncMock()
+
+    refresh_started = _asyncio.Event()
+    release_refresh = _asyncio.Event()
+
+    async def slow_refresh(
+        _u: MagicMock, a: MagicMock, *_args: object, **_kwargs: object
+    ) -> bool:
+        # Park the first caller inside refresh_oauth_token so the second
+        # caller has a chance to reach the lock; the test fails
+        # (call_count > 1) if the lock doesn't coalesce them.
+        refresh_started.set()
+        await release_refresh.wait()
+        a.expires_at = now_timestamp + 3600  # simulate post-refresh state
+        return True
+
+    with patch(
+        "onyx.auth.oauth_refresher.refresh_oauth_token",
+        AsyncMock(side_effect=slow_refresh),
+    ) as mock_refresh:
+        first = _asyncio.create_task(
+            check_and_refresh_oauth_tokens(user, db_session, mock_user_manager)
+        )
+        await refresh_started.wait()
+        second = _asyncio.create_task(
+            check_and_refresh_oauth_tokens(user, db_session, mock_user_manager)
+        )
+        # Yield once so the second task reaches the lock acquisition.
+        await _asyncio.sleep(0)
+        release_refresh.set()
+        await _asyncio.gather(first, second)
+
+    assert mock_refresh.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_get_oauth_accounts_requiring_refresh_token(mock_user: MagicMock) -> None:
     """Test identifying OAuth accounts that need refresh tokens."""
     # Create accounts with and without refresh tokens

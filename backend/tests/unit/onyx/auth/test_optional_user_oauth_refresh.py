@@ -5,12 +5,12 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from onyx.auth.users import _maybe_refresh_oidc_tokens
+from onyx.auth.users import _maybe_refresh_oauth_tokens
 from onyx.db.models import User
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_oidc_tokens_invokes_check_and_refresh(
+async def test_maybe_refresh_oauth_tokens_invokes_check_and_refresh(
     mock_user: MagicMock,
     mock_user_manager: MagicMock,
     mock_db_session: AsyncSession,
@@ -25,7 +25,7 @@ async def test_maybe_refresh_oidc_tokens_invokes_check_and_refresh(
         "onyx.auth.oauth_refresher.check_and_refresh_oauth_tokens",
         AsyncMock(return_value=None),
     ) as mock_refresh:
-        await _maybe_refresh_oidc_tokens(mock_user, mock_db_session, mock_user_manager)
+        await _maybe_refresh_oauth_tokens(mock_user, mock_db_session, mock_user_manager)
 
     mock_refresh.assert_awaited_once()
     await_args = mock_refresh.await_args
@@ -36,7 +36,7 @@ async def test_maybe_refresh_oidc_tokens_invokes_check_and_refresh(
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_oidc_tokens_swallows_failures(
+async def test_maybe_refresh_oauth_tokens_swallows_failures(
     mock_user: MagicMock,
     mock_user_manager: MagicMock,
     mock_db_session: AsyncSession,
@@ -51,7 +51,7 @@ async def test_maybe_refresh_oidc_tokens_swallows_failures(
         "onyx.auth.oauth_refresher.check_and_refresh_oauth_tokens",
         AsyncMock(side_effect=RuntimeError("IdP unreachable")),
     ):
-        result = await _maybe_refresh_oidc_tokens(
+        result = await _maybe_refresh_oauth_tokens(
             mock_user, mock_db_session, mock_user_manager
         )
 
