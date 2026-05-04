@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* CreateButton */
+export {
+  default as CreateButton,
+  type CreateButtonProps,
+} from "@opal/components/buttons/create-button/components";
+
 /* SelectButton */
 export {
   SelectButton,

@@ -40,7 +40,7 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { CreateButton } from "@opal/components";
 
 import { Tooltip } from "@opal/components";
 import InputTextArea, {

@@ -29,7 +29,7 @@ import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import { TableHeader } from "@/components/ui/table";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { CreateButton } from "@opal/components";
 import { SvgEdit, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

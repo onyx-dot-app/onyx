@@ -7,7 +7,7 @@ import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { CreateButton } from "@opal/components";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.SLACK_BOTS;

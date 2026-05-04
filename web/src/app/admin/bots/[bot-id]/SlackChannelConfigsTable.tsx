@@ -17,7 +17,7 @@ import type { Route } from "next";
 import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { CreateButton } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;

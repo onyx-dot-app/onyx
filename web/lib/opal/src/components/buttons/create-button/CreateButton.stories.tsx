@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import CreateButton from "./CreateButton";
+import CreateButton from "./components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof CreateButton> = {
-  title: "refresh-components/buttons/CreateButton",
+  title: "opal/buttons/CreateButton",
   component: CreateButton,
   tags: ["autodocs"],
   decorators: [
