@@ -1,5 +1,6 @@
 @import "css/attachment-button.css";
 @import "css/button.css";
+@import "css/content-editable.css";
 @import "css/card.css";
 @import "css/code.css";
 @import "css/color-swatch.css";
@@ -482,18 +483,4 @@ textarea {
 
 .container {
   margin-bottom: 1rem;
-}
-
-/* contentEditable placeholder */
-[data-placeholder][data-empty] {
-  position: relative;
-}
-[data-placeholder][data-empty]::before {
-  content: attr(data-placeholder);
-  color: var(--text-03);
-  pointer-events: none;
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding: inherit;
 }
