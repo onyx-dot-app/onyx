@@ -1809,7 +1809,7 @@ class GoogleDriveConnector(
         )
 
     @override
-    def resolve_errors(
+    def reindex(
         self,
         errors: list[ConnectorFailure],
         include_permissions: bool = False,
@@ -1819,7 +1819,7 @@ class GoogleDriveConnector(
                 "Credentials missing, should not call this method before calling load_credentials"
             )
 
-        logger.info("Resolving %s errors", len(errors))
+        logger.info("Reindexing %s docs from errors", len(errors))
         doc_ids = [
             failure.failed_document.document_id
             for failure in errors

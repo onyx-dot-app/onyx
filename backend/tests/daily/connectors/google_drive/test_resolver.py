@@ -1,4 +1,4 @@
-"""Tests for GoogleDriveConnector.resolve_errors against real Google Drive."""
+"""Tests for GoogleDriveConnector.reindex against real Google Drive."""
 
 import json
 import os
@@ -64,7 +64,7 @@ def test_resolve_single_file(
     web_view_links = _load_web_view_links([0])
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -100,7 +100,7 @@ def test_resolve_multiple_files(
     web_view_links = _load_web_view_links(file_ids)
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -121,7 +121,7 @@ def test_resolve_hierarchy_nodes_are_valid(
     mock_api_key: None,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    """Verify that hierarchy nodes from resolve_errors match expected structure."""
+    """Verify that hierarchy nodes from reindex match expected structure."""
     connector = google_drive_service_acct_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
@@ -136,7 +136,7 @@ def test_resolve_hierarchy_nodes_are_valid(
     web_view_links = _load_web_view_links([25])
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     hierarchy_nodes = [r for r in results if isinstance(r, HierarchyNode)]
     node_ids = {node.raw_node_id for node in hierarchy_nodes}
@@ -185,7 +185,7 @@ def test_resolve_with_invalid_link(
     invalid_link = "https://drive.google.com/file/d/NONEXISTENT_FILE_ID_12345"
     failures = _build_failures(valid_links + [invalid_link])
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -214,7 +214,7 @@ def test_resolve_empty_errors(
         include_files_shared_with_me=False,
     )
 
-    results = list(connector.resolve_errors([]))
+    results = list(connector.reindex([]))
 
     assert len(results) == 0
 
@@ -225,7 +225,7 @@ def test_resolve_entity_failures_are_skipped(
     mock_api_key: None,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    """Entity failures (not document failures) should be skipped by resolve_errors."""
+    """Entity failures (not document failures) should be skipped by reindex."""
     from onyx.connectors.models import EntityFailure
 
     connector = google_drive_service_acct_connector_factory(
@@ -243,6 +243,6 @@ def test_resolve_entity_failures_are_skipped(
         failure_message="retrieval failure",
     )
 
-    results = list(connector.resolve_errors([entity_failure]))
+    results = list(connector.reindex([entity_failure]))
 
     assert len(results) == 0
