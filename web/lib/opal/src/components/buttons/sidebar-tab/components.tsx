@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { ButtonType, IconFunctionComponent } from "@opal/types";
+import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
@@ -42,6 +42,9 @@ interface SidebarTabProps {
 
   /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
+
+  /** Tooltip shown on hover. Takes precedence over the folded-name tooltip. */
+  tooltip?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +70,7 @@ function SidebarTab({
   type,
   icon,
   rightChildren,
+  tooltip,
   children,
 }: SidebarTabProps) {
   const Icon =
@@ -137,9 +141,10 @@ function SidebarTab({
   );
 
   if (typeof children !== "string") return content;
-  if (folded) {
+  const resolvedTooltip = tooltip ?? (folded ? children : undefined);
+  if (resolvedTooltip) {
     return (
-      <Tooltip tooltip={children} side="right">
+      <Tooltip tooltip={resolvedTooltip} side="right">
         {content}
       </Tooltip>
     );

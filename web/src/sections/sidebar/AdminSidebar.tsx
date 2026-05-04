@@ -26,6 +26,7 @@ import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { markdown } from "@opal/utils";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -292,7 +293,14 @@ function AdminSidebarInner() {
             disabled
           >
             {group.items.map(({ link, icon, name }) => (
-              <SidebarTab key={link} disabled icon={icon}>
+              <SidebarTab
+                key={link}
+                disabled
+                icon={icon}
+                tooltip={markdown(
+                  "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                )}
+              >
                 {name}
               </SidebarTab>
             ))}
