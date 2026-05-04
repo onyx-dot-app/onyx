@@ -140,8 +140,10 @@ interface ChatSessionStore {
   // Actions - Queued Messages
   enqueueMessage: (sessionId: string, message: string) => void;
   removeQueuedMessage: (sessionId: string, index: number) => void;
+  clearQueuedMessages: (sessionId: string) => void;
   enqueueCurrentMessage: (message: string) => void;
   removeCurrentQueuedMessage: (index: number) => void;
+  clearCurrentQueuedMessages: () => void;
 
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -539,6 +541,29 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     const { currentSessionId } = get();
     if (currentSessionId) {
       get().removeQueuedMessage(currentSessionId, index);
+    }
+  },
+
+  clearQueuedMessages: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session || session.queuedMessages.length === 0) {
+        return state;
+      }
+      const updatedSession = {
+        ...session,
+        queuedMessages: [],
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  clearCurrentQueuedMessages: () => {
+    const { currentSessionId } = get();
+    if (currentSessionId) {
+      get().clearQueuedMessages(currentSessionId);
     }
   },
 

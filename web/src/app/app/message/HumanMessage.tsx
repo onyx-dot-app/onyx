@@ -12,6 +12,7 @@ import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 interface MessageEditingProps {
   content: string;
@@ -132,6 +133,11 @@ const HumanMessage = React.memo(function HumanMessage({
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
+  const clearCurrentQueuedMessages = useChatSessionStore(
+    (state) => state.clearCurrentQueuedMessages
+  );
+  const abortSession = useChatSessionStore((state) => state.abortSession);
+
   // TODO (@raunakab):
   //
   // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
@@ -261,6 +267,15 @@ const HumanMessage = React.memo(function HumanMessage({
                 currentPage={currentMessageInd + 1}
                 totalPages={otherMessagesCanSwitchTo.length}
                 handlePrevious={() => {
+                  // Branch switch — silently abandon the current turn and
+                  // any queued follow-ups so they don't auto-flush after
+                  // chatState transitions back to "input". Abort the local
+                  // stream consumer so its in-flight upserts can't
+                  // overwrite the branch flip we're about to apply.
+                  clearCurrentQueuedMessages();
+                  const sessionId =
+                    useChatSessionStore.getState().currentSessionId;
+                  if (sessionId) abortSession(sessionId);
                   stopGenerating();
                   const prevMessage = getPreviousMessage();
                   if (prevMessage !== undefined) {
@@ -268,6 +283,10 @@ const HumanMessage = React.memo(function HumanMessage({
                   }
                 }}
                 handleNext={() => {
+                  clearCurrentQueuedMessages();
+                  const sessionId =
+                    useChatSessionStore.getState().currentSessionId;
+                  if (sessionId) abortSession(sessionId);
                   stopGenerating();
                   const nextMessage = getNextMessage();
                   if (nextMessage !== undefined) {

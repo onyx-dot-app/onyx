@@ -53,6 +53,15 @@ export interface ChatScrollContainerProps {
 
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
+
+  /**
+   * Set to false while sibling layout that affects this container's
+   * viewport height (e.g. the model selector waiting on
+   * `llmManager.isLoadingProviders`) hasn't settled yet. The initial
+   * scroll-to-bottom is deferred until this is true so we don't land
+   * against a partial layout that shifts moments later.
+   */
+  parentLayoutReady?: boolean;
 }
 
 // Build a CSS mask that fades content opacity at top/bottom edges
@@ -74,6 +83,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
+        parentLayoutReady = true,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -91,6 +101,12 @@ const ChatScrollContainer = React.memo(
       const [hasContentBelow, setHasContentBelow] = useState(false);
       const [isAtBottom, setIsAtBottom] = useState(true);
       const isAtBottomRef = useRef(true); // Ref for use in callbacks
+      // True iff the user has manually scrolled up since the last
+      // bottom-anchored scroll. Updated only by handleScroll's scrolled-up
+      // detection (no flaky layout math). Used by the anchor effect and
+      // DynamicBottomSpacer to avoid yanking the user back during streams /
+      // queued auto-flushes when they've intentionally moved away.
+      const userScrolledUpRef = useRef(false);
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
       const [isScrollReady, setIsScrollReady] = useState(false);
@@ -109,7 +125,7 @@ const ChatScrollContainer = React.memo(
       // Get current scroll state
       const getScrollState = useCallback((): ScrollState => {
         const container = scrollContainerRef.current;
-        if (!container || !endDivRef.current) {
+        if (!container) {
           return {
             isAtBottom: true,
             hasContentAbove: false,
@@ -117,10 +133,15 @@ const ChatScrollContainer = React.memo(
           };
         }
 
+        // Use the container's scrollHeight (same coordinate system as
+        // scrollTop / clientHeight) instead of `endDivRef.offsetTop`, which
+        // resolves against the nearest positioned ancestor and can land in
+        // a different coordinate system entirely — producing wrong
+        // contentBelowViewport values when sibling layout (e.g. the model
+        // selector loading after the initial scroll) shifts things around.
         // Exclude the dynamic spacer — it's cosmetic (push-up effect) and
         // shouldn't make the system think there's real content below the viewport.
-        const contentEnd =
-          endDivRef.current.offsetTop - spacerHeightRef.current;
+        const contentEnd = container.scrollHeight - spacerHeightRef.current;
         const viewportBottom = container.scrollTop + container.clientHeight;
         const contentBelowViewport = contentEnd - viewportBottom;
 
@@ -160,6 +181,8 @@ const ChatScrollContainer = React.memo(
           // Update tracking refs
           prevScrollTopRef.current = targetScrollTop;
           isAtBottomRef.current = true;
+          // Bottom-anchored scroll resets the "user scrolled up" intent
+          userScrolledUpRef.current = false;
 
           // For smooth scrolling, keep isAutoScrollingRef true longer
           if (behavior === "smooth") {
@@ -202,6 +225,7 @@ const ChatScrollContainer = React.memo(
         // Only update isAtBottomRef when user explicitly scrolls UP
         // This prevents content growth or programmatic scrolls from disabling auto-scroll
         if (scrolledUp) {
+          userScrolledUpRef.current = true;
           updateScrollState();
         } else {
           // Still update fade overlays, but preserve isAtBottomRef
@@ -282,6 +306,7 @@ const ChatScrollContainer = React.memo(
           setIsScrollReady(false);
           prevScrollTopRef.current = 0;
           isAtBottomRef.current = true;
+          userScrolledUpRef.current = false;
         }
 
         const shouldScroll =
@@ -290,6 +315,16 @@ const ChatScrollContainer = React.memo(
 
         if (!shouldScroll) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
+          return;
+        }
+
+        // Hold off the initial scroll until sibling layout that affects
+        // viewport height has finished loading. Otherwise we'd land
+        // against a partial layout (e.g. before ModelSelector appears)
+        // and end up above the true bottom once it shifts.
+        const isLoadingExistingContent =
+          isNewSession || scrolledForSessionRef.current === null;
+        if (isLoadingExistingContent && !parentLayoutReady) {
           return;
         }
 
@@ -305,8 +340,6 @@ const ChatScrollContainer = React.memo(
 
         // Determine scroll behavior
         // New session with existing content = instant, new anchor = smooth
-        const isLoadingExistingContent =
-          isNewSession || scrolledForSessionRef.current === null;
         const behavior: ScrollBehavior = isLoadingExistingContent
           ? "instant"
           : "smooth";
@@ -344,7 +377,13 @@ const ChatScrollContainer = React.memo(
         }, 0);
 
         return () => clearTimeout(timeoutId);
-      }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
+      }, [
+        sessionId,
+        anchorSelector,
+        anchorOffsetPx,
+        updateScrollState,
+        parentLayoutReady,
+      ]);
 
       // Build mask to fade content opacity at edges
       const contentMask = buildContentMask();
@@ -380,6 +419,8 @@ const ChatScrollContainer = React.memo(
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
                 spacerHeightRef={spacerHeightRef}
+                isAtBottomRef={isAtBottomRef}
+                userScrolledUpRef={userScrolledUpRef}
               >
                 {children}
               </ScrollContainerProvider>

@@ -34,8 +34,12 @@ const DynamicBottomSpacer = React.memo(
     const isStreaming = chatState === "streaming" || chatState === "loading";
 
     // Get scroll container refs from context (provided by ChatScrollContainer)
-    const { scrollContainerRef, contentWrapperRef, spacerHeightRef } =
-      useScrollContainer();
+    const {
+      scrollContainerRef,
+      contentWrapperRef,
+      spacerHeightRef,
+      userScrolledUpRef,
+    } = useScrollContainer();
 
     // Track state with refs to avoid re-renders
     const isActiveRef = useRef(false);
@@ -169,6 +173,13 @@ const DynamicBottomSpacer = React.memo(
 
       const scrollContainer = getScrollContainer();
       if (!scrollContainer) return;
+
+      // Don't yank the user back if they've manually scrolled up.
+      // userScrolledUpRef is only set by handleScroll's scrolled-up branch,
+      // so it's not subject to flaky layout math.
+      if (userScrolledUpRef.current) {
+        return;
+      }
 
       // Get measurements first (before modifying spacer)
       const viewportHeight = scrollContainer.clientHeight;
