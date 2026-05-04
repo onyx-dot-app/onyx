@@ -17,10 +17,9 @@ export interface UseContentEditableOptions {
 export interface UseContentEditableReturn {
   ref: React.RefObject<HTMLDivElement | null>;
   message: string;
-  isEmpty: boolean;
-  setContent: (text: string) => void;
-  clearContent: () => void;
-  handleInput: (event: React.FormEvent<HTMLDivElement>) => void;
+  setMessage: (text: string) => void;
+  clearMessage: () => void;
+  handleInput: (event: React.SyntheticEvent<HTMLDivElement>) => string;
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
@@ -37,8 +36,7 @@ export function useContentEditable({
   disabled = false,
 }: UseContentEditableOptions): UseContentEditableReturn {
   const ref = useRef<HTMLDivElement>(null);
-  const [message, setMessage] = useState(initialContent);
-  const isEmpty = !message;
+  const [message, setMessageState] = useState(initialContent);
   const isComposingRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const rafRef = useRef<number | null>(null);
@@ -82,17 +80,9 @@ export function useContentEditable({
     wrapper.style.height = `${clamped}px`;
   }, [wrapperRef, minHeight, maxHeight]);
 
-  const updateEmpty = useCallback((el: HTMLElement, text: string) => {
-    if (text) {
-      el.removeAttribute("data-empty");
-    } else {
-      el.setAttribute("data-empty", "");
-    }
-  }, []);
-
-  const syncFromDOM = useCallback(() => {
+  const syncFromDOM = useCallback((): string => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) return "";
 
     // Clean up stale <br> that browsers leave in empty contentEditable divs.
     // Only when not composing and when the only content is non-text nodes (e.g. <br>).
@@ -101,18 +91,19 @@ export function useContentEditable({
     }
 
     const text = getTextContent(el);
-    setMessage(text);
-    updateEmpty(el, text);
+    setMessageState(text);
     onContentChangeRef.current?.(text);
-  }, [updateEmpty]);
+    return text;
+  }, []);
 
   const handleInput = useCallback(
-    (_event: React.FormEvent<HTMLDivElement>) => {
-      if (isComposingRef.current) return;
-      syncFromDOM();
+    (_event: React.SyntheticEvent<HTMLDivElement>): string => {
+      if (isComposingRef.current) return message;
+      const text = syncFromDOM();
       resize();
+      return text;
     },
-    [syncFromDOM, resize]
+    [syncFromDOM, resize, message]
   );
 
   const handleCompositionStart = useCallback(() => {
@@ -128,13 +119,12 @@ export function useContentEditable({
     resize();
   }, [syncFromDOM, resize]);
 
-  const setContent = useCallback(
+  const setMessage = useCallback(
     (text: string) => {
       if (!ref.current) return;
 
       ref.current.textContent = text;
-      setMessage(text);
-      updateEmpty(ref.current, text);
+      setMessageState(text);
       resize();
       onContentChangeRef.current?.(text);
 
@@ -149,18 +139,17 @@ export function useContentEditable({
         }
       });
     },
-    [resize, updateEmpty]
+    [resize]
   );
 
-  const clearContent = useCallback(() => {
+  const clearMessage = useCallback(() => {
     if (!ref.current) return;
 
     ref.current.innerHTML = "";
-    setMessage("");
-    updateEmpty(ref.current, "");
+    setMessageState("");
     resize();
     onContentChangeRef.current?.("");
-  }, [resize, updateEmpty]);
+  }, [resize]);
 
   const insertTextAtCursor = useCallback(
     (text: string) => {
@@ -180,9 +169,8 @@ export function useContentEditable({
   return {
     ref,
     message,
-    isEmpty,
-    setContent,
-    clearContent,
+    setMessage,
+    clearMessage,
     handleInput,
     handleCompositionStart,
     handleCompositionEnd,

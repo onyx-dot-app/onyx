@@ -167,9 +167,8 @@ const InputBar = memo(
       const {
         ref: inputRef,
         message,
-        isEmpty,
-        setContent,
-        clearContent,
+        setMessage,
+        clearMessage,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -192,7 +191,7 @@ const InputBar = memo(
 
       useImperativeHandle(ref, () => ({
         reset: () => {
-          clearContent();
+          clearMessage();
           clearFiles();
         },
         focus: () => {
@@ -200,7 +199,7 @@ const InputBar = memo(
           setCursorToEnd();
         },
         setMessage: (msg: string) => {
-          setContent(msg);
+          setMessage(msg);
         },
       }));
 
@@ -242,7 +241,7 @@ const InputBar = memo(
 
         if (hasMessage) {
           onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-          clearContent();
+          clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
           clearFiles({ suppressRefetch: true });
@@ -257,7 +256,7 @@ const InputBar = memo(
         currentMessageFiles,
         clearFiles,
         demoDataEnabled,
-        clearContent,
+        clearMessage,
       ]);
 
       const handleKeyDown = useCallback(
@@ -349,7 +348,7 @@ const InputBar = memo(
                 aria-multiline={true}
                 aria-disabled={disabled}
                 data-placeholder={placeholder}
-                data-empty={isEmpty ? "" : undefined}
+                data-empty={!message ? "" : undefined}
               />
             </div>
 

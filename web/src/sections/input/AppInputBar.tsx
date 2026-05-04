@@ -21,7 +21,6 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { getTextContent } from "@/lib/contentEditable";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -147,9 +146,8 @@ const AppInputBar = React.memo(
     const {
       ref: inputRef,
       message,
-      isEmpty,
-      setContent,
-      clearContent,
+      setMessage,
+      clearMessage,
       handleInput,
       handleCompositionStart,
       handleCompositionEnd,
@@ -221,7 +219,7 @@ const AppInputBar = React.memo(
     React.useImperativeHandle(ref, () => ({
       reset: () => {
         if (!isAutoSending.current) {
-          clearContent();
+          clearMessage();
         }
       },
       focus: () => {
@@ -235,7 +233,7 @@ const AppInputBar = React.memo(
     // imperative ref.reset() method, not by passing initialMessage="".
     useEffect(() => {
       if (initialMessage) {
-        setContent(initialMessage);
+        setMessage(initialMessage);
       }
     }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
     const shouldShowRecordingWaveformBelow =
@@ -245,7 +243,7 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       if (isNewSession && !initialMessage) {
-        clearContent();
+        clearMessage();
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -402,7 +400,7 @@ const AppInputBar = React.memo(
 
     function updateInputPrompt(prompt: InputPrompt) {
       hidePrompts();
-      setContent(prompt.content);
+      setMessage(prompt.content);
     }
 
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
@@ -420,9 +418,8 @@ const AppInputBar = React.memo(
     }, [filteredPrompts]);
 
     const handleContentEditableInput = useCallback(
-      (event: React.FormEvent<HTMLDivElement>) => {
-        handleInput(event);
-        const text = getTextContent(event.currentTarget as HTMLElement);
+      (event: React.SyntheticEvent<HTMLDivElement>) => {
+        const text = handleInput(event);
         if (text.startsWith("/")) {
           setShowPrompts(true);
           setPromptFilterQuery(text.slice(1));
@@ -650,7 +647,7 @@ const AppInputBar = React.memo(
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton
-                onTranscription={(text) => setContent(text)}
+                onTranscription={(text) => setMessage(text)}
                 disabled={disabled || chatState === "streaming"}
                 autoSend={user?.preferences?.voice_auto_send ?? false}
                 autoListen={user?.preferences?.voice_auto_playback ?? false}
@@ -702,7 +699,7 @@ const AppInputBar = React.memo(
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < 5) {
                   enqueueCurrentMessage(message.trim());
-                  clearContent();
+                  clearMessage();
                 }
               } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -838,7 +835,7 @@ const AppInputBar = React.memo(
                                 ? "Search connected sources"
                                 : "How can I help you today?"
                       }
-                      data-empty={isEmpty ? "" : undefined}
+                      data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
                         // Queue navigation mode
                         if (highlightedQueueIndex !== null) {
@@ -847,7 +844,7 @@ const AppInputBar = React.memo(
                             const text =
                               queuedMessages[highlightedQueueIndex]!.text;
                             removeCurrentQueuedMessage(highlightedQueueIndex);
-                            setContent(text);
+                            setMessage(text);
                             setHighlightedQueueIndex(null);
                             return;
                           }
@@ -934,7 +931,7 @@ const AppInputBar = React.memo(
                             queuedMessages.length < 5
                           ) {
                             enqueueCurrentMessage(message.trim());
-                            clearContent();
+                            clearMessage();
                           }
                         }
                       }}
@@ -985,7 +982,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying}
                     icon={SvgX}
-                    onClick={() => clearContent()}
+                    onClick={() => clearMessage()}
                     prominence="tertiary"
                   />
                   <Button
