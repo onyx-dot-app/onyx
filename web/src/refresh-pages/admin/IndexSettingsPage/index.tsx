@@ -1081,16 +1081,18 @@ export default function IndexSettingsPage() {
                     />
 
                     {NEXT_PUBLIC_CLOUD_ENABLED ? (
-                      <Card border="solid" rounding="lg" padding="sm">
-                        <GeneralLayouts.Section padding={0.5}>
-                          <Content
-                            icon={SvgVector}
-                            title="Embedding model and settings are managed by Onyx Cloud."
-                            sizePreset="main-ui"
-                            variant="section"
-                          />
-                        </GeneralLayouts.Section>
-                      </Card>
+                      <Disabled disabled allowClick>
+                        <Card border="solid" rounding="lg" padding="sm">
+                          <GeneralLayouts.Section padding={0.5}>
+                            <Content
+                              icon={SvgVector}
+                              title="Embedding model and settings are managed by Onyx Cloud."
+                              sizePreset="main-ui"
+                              variant="section"
+                            />
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </Disabled>
                     ) : (
                       currentEmbeddingModel && (
                         <Disabled
@@ -1515,7 +1517,7 @@ export default function IndexSettingsPage() {
                       variant="section"
                     />
 
-                    <CloudDisabled
+                    <Disabled
                       disabled={!hasAnyVisionLlm}
                       tooltip={
                         !hasAnyVisionLlm
@@ -1604,7 +1606,7 @@ export default function IndexSettingsPage() {
                           </Disabled>
                         </GeneralLayouts.Section>
                       </Card>
-                    </CloudDisabled>
+                    </Disabled>
                   </GeneralLayouts.Section>
                 </>
               );
