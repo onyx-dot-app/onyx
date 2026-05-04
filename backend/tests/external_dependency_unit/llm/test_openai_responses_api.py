@@ -10,9 +10,15 @@ behavior of that bridge that cannot be reached with mocks:
 - Reasoning summary sections are separated by a blank line in the streamed
   `reasoning_content` (covered by `_patch_responses_reasoning_summary_newlines`
   in `monkey_patches.py`).
+- Non-streaming reasoning summary parts are joined with blank lines
+  (covered by `_patch_openai_responses_transform_response`).
+- No Pydantic serializer warnings escape during a Responses API stream
+  (covered by `_patch_responses_api_usage_format` and
+  `_patch_logging_assembled_streaming_response`).
 """
 
 import json
+import warnings
 
 import pytest
 
@@ -220,3 +226,81 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     assert (
         "\n\n" in full_reasoning
     ), f"Expected double-newline separator between summary sections: {full_reasoning!r}"
+
+
+@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
+def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """Non-streaming `reasoning_content` must contain a `\\n\\n` separator
+    between distinct reasoning summary sections.
+
+    Sister test to
+    `test_streaming_reasoning_summary_sections_are_separated_by_blank_line`.
+    LiteLLM's `LiteLLMResponsesTransformationHandler.transform_response`
+    joins multiple reasoning summary parts with a single space, which renders
+    as a wall of text. `_patch_openai_responses_transform_response` (in
+    `monkey_patches.py`) post-processes the result to join with `\\n\\n`. This
+    test guards that the patch fires on the non-stream path.
+    """
+    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+
+    prompt: list[ChatCompletionMessage] = [
+        UserMessage(
+            role="user",
+            content=(
+                "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
+                "First plan the itinerary, then verify each restaurant choice is safe, then check "
+                "the budget math."
+            ),
+        )
+    ]
+
+    response = llm.invoke(prompt=prompt)
+    reasoning = response.choice.message.reasoning_content or ""
+
+    assert (
+        "\n\n" in reasoning
+    ), f"Expected double-newline separator between summary sections: {reasoning!r}"
+
+
+@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
+def test_streaming_emits_no_pydantic_serializer_warnings(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """Streaming a Responses API call must not emit Pydantic serializer
+    warnings.
+
+    LiteLLM's logging path calls `model_dump()` on a
+    `ResponsesAPIResponse` whose `usage` field has been mutated to a chat-
+    completion-shaped dict, which triggers a `Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue` `UserWarning`. Two patches
+    cooperate to silence it: `_patch_responses_api_usage_format` ensures
+    `model_construct` rebuilds usage as a typed `ResponseAPIUsage`, and
+    `_patch_logging_assembled_streaming_response` deep-copies the response
+    before mutation so the original keeps its proper type. This test
+    captures the symptom rather than either patch's internals — if the
+    warning escapes, at least one patch is broken or upstream regressed.
+    """
+    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+
+    prompt: list[ChatCompletionMessage] = [
+        UserMessage(role="user", content="Reply with exactly the word: ok")
+    ]
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        for _ in llm.stream(prompt=prompt):
+            pass
+
+    serializer_warnings = [
+        w
+        for w in captured
+        if "Pydantic serializer warnings" in str(w.message)
+        or "PydanticSerializationUnexpectedValue" in str(w.message)
+    ]
+    assert not serializer_warnings, (
+        "Pydantic serializer warning(s) escaped during Responses API stream; "
+        "monkey patches for usage format / assembled streaming response are "
+        f"not silencing them: {[str(w.message) for w in serializer_warnings]!r}"
+    )
