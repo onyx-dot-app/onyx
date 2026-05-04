@@ -6,8 +6,6 @@ const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
-const UPDATE_INFERENCE_API =
-  "**/api/search-settings/update-inference-settings**";
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -330,17 +328,11 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     });
   }
 
-  test("apply without re-index calls update-inference-settings only", async ({
+  test("toggling contextual retrieval stages a change and enables Apply & Re-index", async ({
     page,
   }) => {
-    // Track which endpoints are called
-    let updateInferenceCalled = false;
     let setNewSettingsCalled = false;
 
-    await page.route(UPDATE_INFERENCE_API, async (route) => {
-      updateInferenceCalled = true;
-      await route.fulfill({ status: 200, body: JSON.stringify({}) });
-    });
     await page.route(SET_NEW_SETTINGS_API, async (route) => {
       setNewSettingsCalled = true;
       await route.fulfill({ status: 200, body: JSON.stringify({}) });
@@ -348,23 +340,16 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
 
     await navigateToIndexSettings(page);
 
-    // Toggle Contextual Retrieval — makes the form dirty without changing the model,
-    // so the switchover type stays SWITCHOVER_NONE.
     const toggle = page.getByRole("switch", { name: /contextual retrieval/i });
     await expect(toggle).toBeVisible({ timeout: 10000 });
     await toggle.click();
 
-    const applyButton = page.getByRole("button", {
-      name: "Apply without Re-index",
-    });
+    // Any settings change (including non-model changes) always requires a full re-index
+    const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
     await expect(applyButton).toBeEnabled();
     await applyButton.click();
 
-    // update-inference-settings, not set-new-search-settings
-    await expect
-      .poll(() => updateInferenceCalled, { timeout: 5000 })
-      .toBe(true);
-    expect(setNewSettingsCalled).toBe(false);
+    await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
   });
 });
