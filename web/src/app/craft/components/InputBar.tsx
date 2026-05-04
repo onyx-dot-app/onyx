@@ -229,7 +229,7 @@ const InputBar = memo(
           if (!text) return;
           insertTextAtCursor(text);
         },
-        [uploadFiles, insertTextAtCursor]
+        [disabled, uploadFiles, insertTextAtCursor]
       );
 
       const handleSubmit = useCallback(() => {
@@ -344,9 +344,10 @@ const InputBar = memo(
                   scrollbarColor: "var(--border-02) transparent",
                 }}
                 role="textbox"
-                aria-label={placeholder}
+                aria-label="Message input"
                 aria-multiline={true}
                 aria-disabled={disabled}
+                aria-placeholder={placeholder}
                 data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
               />

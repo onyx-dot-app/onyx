@@ -37,6 +37,7 @@ export function useContentEditable({
 }: UseContentEditableOptions): UseContentEditableReturn {
   const ref = useRef<HTMLDivElement>(null);
   const [message, setMessageState] = useState(initialContent);
+  const messageRef = useRef(initialContent);
   const isComposingRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const rafRef = useRef<number | null>(null);
@@ -91,6 +92,7 @@ export function useContentEditable({
     }
 
     const text = getTextContent(el);
+    messageRef.current = text;
     setMessageState(text);
     onContentChangeRef.current?.(text);
     return text;
@@ -98,12 +100,12 @@ export function useContentEditable({
 
   const handleInput = useCallback(
     (_event: React.SyntheticEvent<HTMLDivElement>): string => {
-      if (isComposingRef.current) return message;
+      if (isComposingRef.current) return messageRef.current;
       const text = syncFromDOM();
       resize();
       return text;
     },
-    [syncFromDOM, resize, message]
+    [syncFromDOM, resize]
   );
 
   const handleCompositionStart = useCallback(() => {
@@ -119,14 +121,22 @@ export function useContentEditable({
     resize();
   }, [syncFromDOM, resize]);
 
+  const disabledRef = useRef(disabled);
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
   const setMessage = useCallback(
     (text: string) => {
       if (!ref.current) return;
 
       ref.current.textContent = text;
+      messageRef.current = text;
       setMessageState(text);
       resize();
       onContentChangeRef.current?.(text);
+
+      if (disabledRef.current) return;
 
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
@@ -146,6 +156,7 @@ export function useContentEditable({
     if (!ref.current) return;
 
     ref.current.innerHTML = "";
+    messageRef.current = "";
     setMessageState("");
     resize();
     onContentChangeRef.current?.("");

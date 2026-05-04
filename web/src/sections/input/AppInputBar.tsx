@@ -824,6 +824,7 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
+                      aria-placeholder="How can I help you today?"
                       data-placeholder={
                         queuedMessages.length > 0 && !message
                           ? "Press up to edit queued messages"
