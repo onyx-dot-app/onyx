@@ -17,7 +17,9 @@ const INLINE_COMPONENTS = {
     <span className="block">{children}</span>
   ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
-    if (!href || !SAFE_PROTOCOL.test(href)) {
+    if (!href) return <>{children}</>;
+    const isRelative = href.startsWith("/") || href.startsWith("#");
+    if (!isRelative && !SAFE_PROTOCOL.test(href)) {
       return <>{children}</>;
     }
     const isHttp = /^https?:/i.test(href);
