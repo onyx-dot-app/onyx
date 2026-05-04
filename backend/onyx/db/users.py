@@ -570,15 +570,13 @@ def get_active_admin_users(db_session: Session) -> list[User]:
     `onyx/db/auth.py` so callers that email or surface UI to admins reuse
     the same filter set.
     """
-    from onyx.db.api_key import get_api_key_email_pattern
-
     email_col: KeyedColumnElement[Any] = User.__table__.c.email
     is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
 
     stmt = select(User).where(
         is_active_col.is_(True),
         User.role == UserRole.ADMIN,
-        expression.not_(email_col.endswith(get_api_key_email_pattern())),
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
         email_col != ANONYMOUS_USER_EMAIL,
         email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
     )
