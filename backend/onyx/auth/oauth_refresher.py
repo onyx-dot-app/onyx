@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
+from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
@@ -19,10 +20,57 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Standard OAuth refresh token endpoints
-REFRESH_ENDPOINTS = {
+# Standard OAuth refresh token endpoints, keyed by `oauth_account.oauth_name`.
+REFRESH_ENDPOINTS: Dict[str, str] = {
     "google": "https://oauth2.googleapis.com/token",
 }
+
+# Token endpoint resolved from the configured OIDC discovery document.
+# Populated lazily on first successful fetch and re-used thereafter, so the
+# .well-known/openid-configuration document is only retrieved once per process.
+_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str] = {}
+
+
+async def _get_oidc_token_endpoint() -> Optional[str]:
+    """Resolve the OAuth2 token endpoint for the configured OIDC provider.
+
+    Reads `token_endpoint` from the OPENID_CONFIG_URL discovery document so
+    refresh works for any OIDC provider (Microsoft Entra, Okta, Keycloak,
+    Auth0, ...) without hardcoding provider-specific URLs.
+    """
+    cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+    if cached:
+        return cached
+    if not OPENID_CONFIG_URL:
+        return None
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(OPENID_CONFIG_URL, timeout=10.0)
+            response.raise_for_status()
+            config: Dict[str, Any] = response.json()
+    except httpx.HTTPError as e:
+        logger.warning("Failed to fetch OIDC discovery document: %s", e)
+        return None
+    token_endpoint = config.get("token_endpoint")
+    if isinstance(token_endpoint, str) and token_endpoint:
+        _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
+        return token_endpoint
+    return None
+
+
+async def _resolve_token_endpoint(provider: str) -> Optional[str]:
+    """Return the OAuth2 token endpoint URL for a given provider.
+
+    Falls back to the OIDC discovery document when the provider is "openid"
+    (the default name used by httpx_oauth's generic OIDC client) so any
+    OIDC-compliant identity provider supports token refresh, not just Google.
+    """
+    static = REFRESH_ENDPOINTS.get(provider)
+    if static:
+        return static
+    if provider == "openid":
+        return await _get_oidc_token_endpoint()
+    return None
 
 
 # NOTE: Keeping this as a utility function for potential future debugging,
@@ -77,7 +125,8 @@ async def refresh_oauth_token(
         return False
 
     provider = oauth_account.oauth_name
-    if provider not in REFRESH_ENDPOINTS:
+    token_endpoint = await _resolve_token_endpoint(provider)
+    if not token_endpoint:
         logger.warning("Refresh endpoint not configured for provider: %s", provider)
         return False
 
@@ -86,7 +135,7 @@ async def refresh_oauth_token(
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                REFRESH_ENDPOINTS[provider],
+                token_endpoint,
                 data={
                     "client_id": OAUTH_CLIENT_ID,
                     "client_secret": OAUTH_CLIENT_SECRET,
