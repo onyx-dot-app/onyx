@@ -1,7 +1,7 @@
 """add paste_as_tile to user
 
 Revision ID: 74379b447d4c
-Revises: a7c3e2b1d4f8
+Revises: 31bd8c17325e
 Create Date: 2026-04-23 18:30:42.452355
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "74379b447d4c"
-down_revision = "a7c3e2b1d4f8"
+down_revision = "31bd8c17325e"
 branch_labels = None
 depends_on = None
 
