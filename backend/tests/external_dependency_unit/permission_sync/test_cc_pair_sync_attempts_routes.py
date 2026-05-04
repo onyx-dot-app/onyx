@@ -109,16 +109,6 @@ def _admin_user(db_session: Session) -> User:
 
 
 class TestGetRelevantExternalGroupSyncAttemptsForCcPair:
-    def test_returns_empty_when_cc_pair_does_not_exist(
-        self, db_session: Session
-    ) -> None:
-        result = get_relevant_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=999_999,
-            limit=10,
-            db_session=db_session,
-        )
-        assert result == []
-
     def test_filters_by_cc_pair_when_source_is_not_agnostic(
         self,
         db_session: Session,
@@ -135,6 +125,7 @@ class TestGetRelevantExternalGroupSyncAttemptsForCcPair:
 
         result = get_relevant_external_group_sync_attempts_for_cc_pair(
             cc_pair_id=cc_pair.id,
+            source=DocumentSource.GOOGLE_DRIVE,
             limit=50,
             db_session=db_session,
         )
@@ -163,6 +154,7 @@ class TestGetRelevantExternalGroupSyncAttemptsForCcPair:
 
         result = get_relevant_external_group_sync_attempts_for_cc_pair(
             cc_pair_id=cc_pair.id,
+            source=DocumentSource.CONFLUENCE,
             limit=100,
             db_session=db_session,
         )
@@ -183,6 +175,7 @@ class TestGetRelevantExternalGroupSyncAttemptsForCcPair:
 
         result = get_relevant_external_group_sync_attempts_for_cc_pair(
             cc_pair_id=cc_pair.id,
+            source=DocumentSource.GOOGLE_DRIVE,
             limit=3,
             db_session=db_session,
         )

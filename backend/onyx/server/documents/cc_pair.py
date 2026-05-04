@@ -283,6 +283,7 @@ def get_cc_pair_external_group_sync_attempts(
 
     all_attempts = get_relevant_external_group_sync_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
+        source=source,
         limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
         db_session=db_session,
     )
