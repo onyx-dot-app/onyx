@@ -20,7 +20,8 @@ const INLINE_COMPONENTS = {
   ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
-    const isRelative = href.startsWith("/") || href.startsWith("#");
+    const isRelative =
+      (href.startsWith("/") && !href.startsWith("//")) || href.startsWith("#");
     if (isRelative) {
       return (
         <Link href={href as Route} className="underline underline-offset-2">
@@ -29,12 +30,12 @@ const INLINE_COMPONENTS = {
       );
     }
     if (!SAFE_PROTOCOL.test(href)) return <>{children}</>;
+    const isHttp = /^https?:/i.test(href);
     return (
       <a
         href={href}
         className="underline underline-offset-2"
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(isHttp ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       >
         {children}
       </a>
