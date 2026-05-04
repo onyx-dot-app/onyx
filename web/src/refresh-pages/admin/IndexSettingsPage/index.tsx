@@ -1081,16 +1081,18 @@ export default function IndexSettingsPage() {
                     />
 
                     {NEXT_PUBLIC_CLOUD_ENABLED ? (
-                      <Card border="solid" rounding="lg" padding="sm">
-                        <GeneralLayouts.Section padding={0.5}>
-                          <Content
-                            icon={SvgVector}
-                            title="Embedding model and settings are managed by Onyx Cloud."
-                            sizePreset="main-ui"
-                            variant="section"
-                          />
-                        </GeneralLayouts.Section>
-                      </Card>
+                      <CloudDisabled>
+                        <Card border="solid" rounding="lg" padding="sm">
+                          <GeneralLayouts.Section padding={0.5}>
+                            <Content
+                              icon={SvgVector}
+                              title="Embedding model and settings are managed by Onyx Cloud."
+                              sizePreset="main-ui"
+                              variant="section"
+                            />
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </CloudDisabled>
                     ) : (
                       currentEmbeddingModel && (
                         <Disabled
