@@ -140,7 +140,16 @@ function SidebarTab({
     </div>
   );
 
-  if (typeof children !== "string") return content;
+  if (typeof children !== "string") {
+    if (tooltip) {
+      return (
+        <Tooltip tooltip={tooltip} side="right">
+          {content}
+        </Tooltip>
+      );
+    }
+    return content;
+  }
   const resolvedTooltip = tooltip ?? (folded ? children : undefined);
   if (resolvedTooltip) {
     return (

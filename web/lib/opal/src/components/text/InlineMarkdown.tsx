@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import Link from "next/link";
 import type { Route } from "next";
 
@@ -10,6 +10,14 @@ import type { RichStr } from "@opal/types";
 // ---------------------------------------------------------------------------
 // InlineMarkdown
 // ---------------------------------------------------------------------------
+
+const sanitizeSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: [...(defaultSchema.protocols?.href ?? []), "tel"],
+  },
+};
 
 const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
 
@@ -62,7 +70,7 @@ export default function InlineMarkdown({ content }: InlineMarkdownProps) {
       allowedElements={ALLOWED_ELEMENTS}
       unwrapDisallowed
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeSanitize]}
+      rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}
     >
       {normalized}
     </ReactMarkdown>
