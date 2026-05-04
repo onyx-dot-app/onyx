@@ -1,26 +1,16 @@
 "use client";
 
-import Button, { ButtonProps } from "@/refresh-components/buttons/Button";
-import type { WithoutStyles } from "@opal/types";
+import { Button, type ButtonProps } from "@opal/components";
 import { SvgPlusCircle } from "@opal/icons";
 
-export interface CreateButtonProps
-  extends Omit<WithoutStyles<ButtonProps>, "leftIcon" | "rightIcon"> {
-  rightIcon?: boolean;
-}
+export type CreateButtonProps = Omit<ButtonProps, "icon">;
 
 export default function CreateButton({
-  rightIcon,
   children,
   ...props
 }: CreateButtonProps) {
   return (
-    <Button
-      secondary
-      leftIcon={rightIcon ? undefined : SvgPlusCircle}
-      rightIcon={rightIcon ? SvgPlusCircle : undefined}
-      {...props}
-    >
+    <Button icon={SvgPlusCircle} prominence="secondary" {...props}>
       {children ?? "Create"}
     </Button>
   );

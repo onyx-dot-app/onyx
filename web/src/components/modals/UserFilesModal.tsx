@@ -194,8 +194,7 @@ export default function UserFilesModal({
               {handleUploadChange && (
                 <CreateButton
                   onClick={triggerUploadPicker}
-                  secondary={false}
-                  internal
+                  prominence="internal"
                 >
                   Add Files
                 </CreateButton>

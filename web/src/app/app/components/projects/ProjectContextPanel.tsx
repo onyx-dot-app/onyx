@@ -207,9 +207,10 @@ export default function ProjectContextPanel({
             </div>
             <FilePickerPopover
               trigger={(open) => (
-                // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
-                // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
-                <CreateButton secondary={undefined} tertiary transient={open}>
+                <CreateButton
+                  prominence="tertiary"
+                  interaction={open ? "active" : "rest"}
+                >
                   Add Files
                 </CreateButton>
               )}

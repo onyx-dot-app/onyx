@@ -52,7 +52,7 @@ export default function SlackChannelConfigsTable({
         >
           Edit Default Configuration
         </Button>
-        <CreateButton href={`/admin/bots/${slackBotId}/channels/new`} secondary>
+        <CreateButton href={`/admin/bots/${slackBotId}/channels/new`}>
           New Channel Configuration
         </CreateButton>
       </div>

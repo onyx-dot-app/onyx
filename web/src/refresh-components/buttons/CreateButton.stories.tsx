@@ -26,13 +26,6 @@ export const CustomLabel: Story = {
   },
 };
 
-export const RightIcon: Story = {
-  args: {
-    rightIcon: true,
-    children: "Add Item",
-  },
-};
-
 export const Disabled: Story = {
   args: {
     disabled: true,
@@ -44,7 +37,6 @@ export const AllVariants: Story = {
     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
       <CreateButton />
       <CreateButton>New Document</CreateButton>
-      <CreateButton rightIcon>Add Item</CreateButton>
       <CreateButton disabled />
     </div>
   ),

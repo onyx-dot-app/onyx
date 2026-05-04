@@ -1470,10 +1470,8 @@ function AccountsAccessSettings() {
                     )}
                     <CreateButton
                       onClick={() => setShowCreateModal(true)}
-                      secondary={false}
-                      internal
-                      transient={showCreateModal}
-                      rightIcon
+                      prominence="internal"
+                      interaction={showCreateModal ? "active" : "rest"}
                     >
                       New Access Token
                     </CreateButton>
