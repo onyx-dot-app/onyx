@@ -122,8 +122,7 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
     )
 
     # Hide common automation tells used by bot-detection scripts.
-    context.add_init_script(
-        """
+    context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', {
             get: () => undefined
         });
@@ -133,8 +132,7 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
         Object.defineProperty(navigator, 'languages', {
             get: () => ['en-US', 'en']
         });
-    """
-    )
+    """)
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
