@@ -35,7 +35,7 @@ REFRESH_ENDPOINTS: Dict[str, str] = {
 # re-fetched. The TTL guards against the IdP rotating its `token_endpoint`
 # without us noticing (rare for major IdPs but possible across tenant moves
 # or app-reg migrations).
-_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, Any] = {}
+_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str | float] = {}
 
 # Default 1 hour: matches Microsoft Entra's default access-token lifetime, so
 # at worst one refresh fails after an endpoint rotation before we self-heal.
