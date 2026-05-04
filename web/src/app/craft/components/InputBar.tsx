@@ -39,6 +39,7 @@ import {
   SvgAlertCircle,
 } from "@opal/icons";
 import { useContentEditable } from "@/hooks/useContentEditable";
+import { useUser } from "@/providers/UserProvider";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -164,6 +165,7 @@ const InputBar = memo(
     ) => {
       const router = useRouter();
       const demoDataEnabled = useDemoDataEnabled();
+      const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -185,7 +187,7 @@ const InputBar = memo(
         updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
-        pasteTilesEnabled: true,
+        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
