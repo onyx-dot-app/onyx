@@ -1,12 +1,16 @@
 from sqlalchemy import and_
+from sqlalchemy import cast
 from sqlalchemy import select
+from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
+from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord
+from onyx.db.models import IndexAttempt
 
 
 def get_query_history_export_files(
@@ -101,9 +105,23 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
     db_session: Session,
 ) -> list[str]:
     """Return `INDEXING_STAGING` file_ids for this cc_pair owned by any
-    attempt OTHER than `excluding_attempt_id`. Used for the start-of-run
-    orphan sweep — anything matching is by definition left over from a
-    previous attempt on the same cc_pair."""
+    TERMINAL attempt OTHER than `excluding_attempt_id`. Used for the
+    start-of-run orphan sweep.
+
+    Files belonging to a still-running attempt (e.g. a concurrent
+    targeted reindex on the same cc_pair) are kept — those binaries
+    are still being consumed and must not be wiped.
+    """
+    terminal_attempt_ids_subq = select(cast(IndexAttempt.id, String)).where(
+        IndexAttempt.status.in_(
+            [
+                IndexingStatus.SUCCESS,
+                IndexingStatus.COMPLETED_WITH_ERRORS,
+                IndexingStatus.CANCELED,
+                IndexingStatus.FAILED,
+            ]
+        )
+    )
     return list(
         db_session.scalars(
             select(FileRecord.file_id)
@@ -115,6 +133,11 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
             .where(
                 FileRecord.file_metadata["index_attempt_id"].as_string()
                 != str(excluding_attempt_id)
+            )
+            .where(
+                FileRecord.file_metadata["index_attempt_id"]
+                .as_string()
+                .in_(terminal_attempt_ids_subq)
             )
         ).all()
     )
