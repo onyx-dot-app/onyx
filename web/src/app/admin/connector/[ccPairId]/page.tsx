@@ -26,6 +26,8 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
+import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -726,18 +728,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
               </>
             )}
 
-            <Title size="md" className="mt-6 mb-2">
-              Indexing Attempts
-            </Title>
-            {indexAttempts && (
-              <IndexAttemptsTable
-                ccPair={ccPair}
-                indexAttempts={indexAttempts}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={goToPage}
-              />
-            )}
+            {indexAttempts &&
+              (ccPair.access_type === "sync" ? (
+                <Section height="auto" alignItems="stretch" className="mt-6">
+                  <SyncAttemptsTabs
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    indexCurrentPage={currentPage}
+                    indexTotalPages={totalPages}
+                    onIndexPageChange={goToPage}
+                  />
+                </Section>
+              ) : (
+                <>
+                  <Title size="md" className="mt-6 mb-2">
+                    Indexing Attempts
+                  </Title>
+                  <IndexAttemptsTable
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={goToPage}
+                  />
+                </>
+              ))}
           </div>
         )}
       </div>
