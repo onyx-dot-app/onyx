@@ -687,7 +687,7 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
     tenant_id = get_current_tenant_id()
 
     bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
-        tenant_id, client.web_client
+        tenant_id, client.slack_bot_id, client.web_client
     )
     logger.info(
         "prefilter_requests: bot_token_user_id=%r bot_token_bot_id=%r",
@@ -743,7 +743,9 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
         if (
             msg in _SLACK_GREETINGS_TO_IGNORE
-            or remove_onyx_bot_tag(tenant_id, msg, client=client.web_client)
+            or remove_onyx_bot_tag(
+                tenant_id, client.slack_bot_id, msg, client=client.web_client
+            )
             in _SLACK_GREETINGS_TO_IGNORE
         ):
             channel_specific_logger.error(
@@ -762,7 +764,7 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
             return False
 
         bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
-            tenant_id, client.web_client
+            tenant_id, client.slack_bot_id, client.web_client
         )
         if event_type == "message":
             is_onyx_bot_msg = False
@@ -922,7 +924,9 @@ def build_request_details(
         channel = cast(str, event["channel"])
 
         # Check for both app_mention events and messages containing bot tag
-        bot_token_user_id, _ = get_onyx_bot_auth_ids(tenant_id, client.web_client)
+        bot_token_user_id, _ = get_onyx_bot_auth_ids(
+            tenant_id, client.slack_bot_id, client.web_client
+        )
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
         sender_id = event.get("user") or None
@@ -931,7 +935,9 @@ def build_request_details(
         )
         email = expert_info.email if expert_info else None
 
-        msg = remove_onyx_bot_tag(tenant_id, msg, client=client.web_client)
+        msg = remove_onyx_bot_tag(
+            tenant_id, client.slack_bot_id, msg, client=client.web_client
+        )
 
         logger.info("Received Slack message: %s", msg)
 
@@ -967,6 +973,7 @@ def build_request_details(
         if thread_ts != message_ts and thread_ts is not None:
             thread_messages: list[ThreadMessage] = read_slack_thread(
                 tenant_id=tenant_id,
+                slack_bot_id=client.slack_bot_id,
                 channel=channel,
                 thread=thread_ts,
                 client=client.web_client,
