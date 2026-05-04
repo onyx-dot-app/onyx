@@ -142,4 +142,94 @@ def test_sweep_skips_files_owned_by_non_terminal_attempt(
             fs.delete_file(fid)
         except Exception:
             pass
+
+
+def test_sweep_skips_files_owned_by_not_started_attempt(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    initialize_file_store: None,  # noqa: ARG001
+) -> None:
+    """A `NOT_STARTED` attempt is also non-terminal — its staged files
+    must survive the sweep. This covers the case where a worker wrote
+    files but crashed before the attempt status moved out of NOT_STARTED."""
+    from onyx.db.search_settings import get_current_search_settings
+
+    settings = get_current_search_settings(db_session)
+
+    not_started = _make_attempt(
+        db_session, cc_pair.id, settings.id, IndexingStatus.NOT_STARTED
+    )
+    current = _make_attempt(
+        db_session, cc_pair.id, settings.id, IndexingStatus.IN_PROGRESS
+    )
+
+    file_for_not_started = _stage_file(
+        cc_pair.id, not_started.id, TEST_TENANT_ID, b"not started payload"
+    )
+    db_session.commit()
+
+    deleted_count = reap_prior_attempt_staged_files(
+        current_attempt_id=current.id,
+        cc_pair_id=cc_pair.id,
+        tenant_id=TEST_TENANT_ID,
+        db_session=db_session,
+    )
+
+    assert deleted_count == 0
+
+    from onyx.db.file_record import get_filerecord_by_file_id_optional
+
+    db_session.expire_all()
+
+    assert (
+        get_filerecord_by_file_id_optional(file_for_not_started, db_session) is not None
+    ), "NOT_STARTED attempt's staged file must NOT be reaped"
+
+    # Cleanup
+    from onyx.file_store.file_store import get_default_file_store
+
+    fs = get_default_file_store()
+    try:
+        fs.delete_file(file_for_not_started)
+    except Exception:
+        pass
+
+
+def test_sweep_reaps_orphan_with_no_owning_attempt(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    initialize_file_store: None,  # noqa: ARG001
+) -> None:
+    """Files tagged with an `index_attempt_id` that doesn't match any
+    real `IndexAttempt` row (deleted by retention, never recorded) are
+    still reapable — nothing is going to consume them."""
+    from onyx.db.search_settings import get_current_search_settings
+
+    settings = get_current_search_settings(db_session)
+    current = _make_attempt(
+        db_session, cc_pair.id, settings.id, IndexingStatus.IN_PROGRESS
+    )
+
+    # Use an attempt id that doesn't correspond to any IndexAttempt row.
+    orphan_attempt_id = 999_999_999
+    file_for_orphan = _stage_file(
+        cc_pair.id, orphan_attempt_id, TEST_TENANT_ID, b"orphan payload"
+    )
+    db_session.commit()
+
+    deleted_count = reap_prior_attempt_staged_files(
+        current_attempt_id=current.id,
+        cc_pair_id=cc_pair.id,
+        tenant_id=TEST_TENANT_ID,
+        db_session=db_session,
+    )
+
+    assert deleted_count == 1
+
+    from onyx.db.file_record import get_filerecord_by_file_id_optional
+
+    db_session.expire_all()
+    assert (
+        get_filerecord_by_file_id_optional(file_for_orphan, db_session) is None
+    ), "orphaned staged file (no owning attempt) should be reaped"
     db_session.commit()

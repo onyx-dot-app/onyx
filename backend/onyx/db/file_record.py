@@ -104,23 +104,22 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
     excluding_attempt_id: int,
     db_session: Session,
 ) -> list[str]:
-    """Return `INDEXING_STAGING` file_ids for this cc_pair owned by any
-    TERMINAL attempt OTHER than `excluding_attempt_id`. Used for the
-    start-of-run orphan sweep.
+    """Return `INDEXING_STAGING` file_ids for this cc_pair eligible for
+    the start-of-run orphan sweep — anything tagged with a different
+    `index_attempt_id` whose owning attempt is NOT still running.
 
-    Files belonging to a still-running attempt (e.g. a concurrent
-    targeted reindex on the same cc_pair) are kept — those binaries
-    are still being consumed and must not be wiped.
+    Files belonging to a non-terminal attempt (e.g. a concurrent
+    targeted reindex on the same cc_pair) are kept; their binaries are
+    still being consumed and must not be wiped. Files whose owning
+    attempt no longer exists in the DB at all (deleted by retention,
+    test fixtures with synthetic IDs, etc.) are still reaped, since
+    nothing is going to consume them.
     """
-    terminal_attempt_ids_subq = select(cast(IndexAttempt.id, String)).where(
+    non_terminal_cc_pair_attempt_ids_subq = select(cast(IndexAttempt.id, String)).where(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
         IndexAttempt.status.in_(
-            [
-                IndexingStatus.SUCCESS,
-                IndexingStatus.COMPLETED_WITH_ERRORS,
-                IndexingStatus.CANCELED,
-                IndexingStatus.FAILED,
-            ]
-        )
+            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+        ),
     )
     return list(
         db_session.scalars(
@@ -137,7 +136,7 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
             .where(
                 FileRecord.file_metadata["index_attempt_id"]
                 .as_string()
-                .in_(terminal_attempt_ids_subq)
+                .notin_(non_terminal_cc_pair_attempt_ids_subq)
             )
         ).all()
     )
