@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import {
   createTableColumns,
   MessageCard,
@@ -96,11 +95,6 @@ export function DocPermissionSyncAttemptsTable({
   totalPages,
   onPageChange,
 }: DocPermissionSyncAttemptsTableProps) {
-  // `COLUMNS` is module-scope so identity is stable across renders, but
-  // memoizing here keeps the contract obvious to future readers and
-  // matches the convention in `UsersTable`.
-  const columns = useMemo(() => COLUMNS, []);
-
   if (!attempts.length) {
     return (
       <MessageCard
@@ -115,7 +109,7 @@ export function DocPermissionSyncAttemptsTable({
     <Section gap={0.75} alignItems="stretch" height="auto">
       <Table
         data={attempts}
-        columns={columns}
+        columns={COLUMNS}
         getRowId={(row) => String(row.id)}
       />
       {totalPages > 1 && (

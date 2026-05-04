@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import {
   createTableColumns,
   MessageCard,
@@ -111,8 +110,6 @@ export function ExternalGroupSyncAttemptsTable({
   totalPages,
   onPageChange,
 }: ExternalGroupSyncAttemptsTableProps) {
-  const columns = useMemo(() => COLUMNS, []);
-
   if (!attempts.length) {
     return (
       <MessageCard
@@ -127,7 +124,7 @@ export function ExternalGroupSyncAttemptsTable({
     <Section gap={0.75} alignItems="stretch" height="auto">
       <Table
         data={attempts}
-        columns={columns}
+        columns={COLUMNS}
         getRowId={(row) => String(row.id)}
       />
       {totalPages > 1 && (

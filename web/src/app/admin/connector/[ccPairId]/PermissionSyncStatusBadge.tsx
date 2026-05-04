@@ -31,8 +31,9 @@ import { PermissionSyncStatusEnum } from "./types";
  *   - NOT_STARTED → gray Tag, "Scheduled"
  *   - null / unknown → gray Tag, "Not Started"
  *
- * Failed rows are wrapped in a Tooltip with `errorMsg` when one is
- * supplied — same affordance the legacy badge offered.
+ * Failed and completed-with-errors rows are wrapped in a Tooltip with
+ * `errorMsg` when one is supplied — same affordance the legacy badge
+ * offered.
  */
 
 interface BadgeConfig {
@@ -80,9 +81,15 @@ const FALLBACK_CONFIG: BadgeConfig = {
   label: "Not Started",
 };
 
+const STATUSES_WITH_ERROR_TOOLTIP: ReadonlySet<PermissionSyncStatusEnum> =
+  new Set([
+    PermissionSyncStatusEnum.FAILED,
+    PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS,
+  ]);
+
 interface PermissionSyncStatusBadgeProps {
   status: PermissionSyncStatusEnum | null;
-  /** Shown in a tooltip when status === FAILED. */
+  /** Shown in a tooltip when the status is FAILED or COMPLETED_WITH_ERRORS. */
   errorMsg?: string | null;
 }
 
@@ -95,7 +102,7 @@ export function PermissionSyncStatusBadge({
     <Tag color={config.color} icon={config.icon} title={config.label} />
   );
 
-  if (status === PermissionSyncStatusEnum.FAILED && errorMsg) {
+  if (status && STATUSES_WITH_ERROR_TOOLTIP.has(status) && errorMsg) {
     return (
       <Tooltip tooltip={errorMsg} side="bottom">
         <Section width="fit" height="auto" className="cursor-pointer">
