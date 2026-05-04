@@ -98,7 +98,7 @@ function buildItems(
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator && !enableCloud) {
+    if (!isCurator) {
       items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
