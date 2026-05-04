@@ -28,6 +28,7 @@ import {
   hasActiveSubscription,
 } from "@/lib/billing";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
@@ -187,20 +188,15 @@ function groupBySection(items: SidebarItemEntry[]) {
 }
 
 interface AdminSidebarProps {
-  enableCloudSS: boolean;
   folded: boolean;
   onFoldChange: Dispatch<SetStateAction<boolean>>;
 }
 
 interface AdminSidebarInnerProps {
-  enableCloudSS: boolean;
   onFoldChange: Dispatch<SetStateAction<boolean>>;
 }
 
-function AdminSidebarInner({
-  enableCloudSS,
-  onFoldChange,
-}: AdminSidebarInnerProps) {
+function AdminSidebarInner({ onFoldChange }: AdminSidebarInnerProps) {
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -234,7 +230,7 @@ function AdminSidebarInner({
 
   const allItems = buildItems(
     isCurator,
-    enableCloudSS,
+    NEXT_PUBLIC_CLOUD_ENABLED,
     enableEnterprise,
     settings,
     customAnalyticsEnabled,
@@ -340,16 +336,12 @@ function AdminSidebarInner({
 }
 
 export default function AdminSidebar({
-  enableCloudSS,
   folded,
   onFoldChange,
 }: AdminSidebarProps) {
   return (
     <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
-      <AdminSidebarInner
-        enableCloudSS={enableCloudSS}
-        onFoldChange={onFoldChange}
-      />
+      <AdminSidebarInner onFoldChange={onFoldChange} />
     </SidebarLayouts.Root>
   );
 }

@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAdminAuth } from "@/lib/auth/requireAuth";
-import { ClientLayout } from "./ClientLayout";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { AnnouncementBanner } from "../header/AnnouncementBanner";
+import ClientLayout from "@/layouts/admin/ClientLayout";
+import { AnnouncementBanner } from "@/components/header/AnnouncementBanner";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -19,7 +18,7 @@ export default async function Layout({ children }: LayoutProps) {
   }
 
   return (
-    <ClientLayout enableCloud={NEXT_PUBLIC_CLOUD_ENABLED}>
+    <ClientLayout>
       <AnnouncementBanner />
       {children}
     </ClientLayout>
