@@ -469,7 +469,7 @@ class SendLicenseExpiryEmailResponse(BaseModel):
 @router.post("/send-license-expiry-email")
 async def proxy_send_license_expiry_email(
     request_body: SendLicenseExpiryEmailRequest,
-    license_payload: LicensePayload = Depends(get_license_payload),
+    license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> SendLicenseExpiryEmailResponse:
     """Proxy a license-expiry email send to the control plane.
 
@@ -477,7 +477,9 @@ async def proxy_send_license_expiry_email(
     here; the control plane resolves the registrant email from Stripe and
     delivers via SendGrid.
 
-    Auth: Valid license required.
+    Auth: License signature required; expired licenses are accepted because
+    the most-critical fire — the GRACE stage — is precisely when the local
+    license has already expired.
     """
     if not license_payload.tenant_id:
         raise HTTPException(status_code=401, detail="License missing tenant_id")

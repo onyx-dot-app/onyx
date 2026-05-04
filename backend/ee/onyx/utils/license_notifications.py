@@ -129,11 +129,12 @@ def _send_via_control_plane(
             timeout=15,
         )
         response.raise_for_status()
-        sent = bool(response.json().get("sent", False))
+        data = response.json()
+        sent = bool(data.get("sent", False))
         if not sent:
             logger.warning(
                 "Control-plane license-expiry email reported not sent: %s",
-                response.json().get("detail"),
+                data.get("detail"),
             )
         return sent
     except requests.RequestException:
