@@ -770,6 +770,7 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserPasteAsTile,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
@@ -1015,6 +1016,29 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <Content
+          title="Input"
+          sizePreset="main-content"
+          variant="section"
+          width="full"
+        />
+        <Card>
+          <InputHorizontal
+            title="Collapse Large Pastes"
+            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            withLabel
+          >
+            <Switch
+              checked={user?.preferences?.paste_as_tile ?? false}
+              onCheckedChange={(checked) => {
+                updateUserPasteAsTile(checked);
+              }}
+            />
+          </InputHorizontal>
         </Card>
       </Section>
 
