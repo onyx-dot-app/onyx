@@ -1,15 +1,24 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from unittest.mock import patch
 
 import pytest
 
 from ee.onyx.utils.license_expiry import ExpiryWarningStage
 from ee.onyx.utils.license_expiry import get_expiry_warning_stage
 from ee.onyx.utils.license_expiry import get_grace_days_remaining
+from ee.onyx.utils.license_expiry import get_grace_period_end
 from ee.onyx.utils.license_expiry import LICENSE_GRACE_PERIOD_DAYS
 
 NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _patch_now() -> object:
+    p = patch("ee.onyx.utils.license_expiry.datetime")
+    mock = p.start()
+    mock.now.return_value = NOW
+    return p
 
 
 @pytest.mark.parametrize(
@@ -38,64 +47,65 @@ NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
 def test_get_expiry_warning_stage_boundaries(
     delta: timedelta, want: ExpiryWarningStage
 ) -> None:
-    assert get_expiry_warning_stage(NOW + delta, now=NOW) == want
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_expiry_warning_stage(NOW + delta) == want
 
 
 def test_grace_days_remaining_full_window() -> None:
     just_expired = NOW - timedelta(seconds=1)
-    assert get_grace_days_remaining(just_expired, now=NOW) == LICENSE_GRACE_PERIOD_DAYS
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_grace_days_remaining(just_expired) == LICENSE_GRACE_PERIOD_DAYS
 
 
 def test_grace_days_remaining_one_day_left() -> None:
     expires = NOW - timedelta(days=LICENSE_GRACE_PERIOD_DAYS - 1)
-    assert get_grace_days_remaining(expires, now=NOW) == 1
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_grace_days_remaining(expires) == 1
 
 
 def test_grace_days_remaining_exhausted() -> None:
     expires = NOW - timedelta(days=LICENSE_GRACE_PERIOD_DAYS)
-    assert get_grace_days_remaining(expires, now=NOW) == 0
+    with patch("ee.onyx.utils.license_expiry.datetime") as dt:
+        dt.now.return_value = NOW
+        assert get_grace_days_remaining(expires) == 0
 
 
 def test_get_grace_period_end_is_expires_plus_window() -> None:
-    from ee.onyx.utils.license_expiry import get_grace_period_end
-
     expires = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
     assert get_grace_period_end(expires) == expires + timedelta(
         days=LICENSE_GRACE_PERIOD_DAYS
     )
 
 
-def _status_with_default_grace(expires: datetime, now: datetime) -> str:
+def _status_with_default_grace(expires: datetime) -> str:
     """Reproduce the wiring in `update_license_cache`: derive the grace
     period end from `expires_at` and feed it to `get_license_status` so the
     middleware-facing status is consistent with the banner stage."""
     from unittest.mock import MagicMock
 
     from ee.onyx.utils.license import get_license_status
-    from ee.onyx.utils.license_expiry import get_grace_period_end
 
     payload = MagicMock()
     payload.expires_at = expires
     grace_end = get_grace_period_end(expires)
-    # Patch datetime.now inside get_license_status by passing a custom now is
-    # not supported; instead validate via boundary expiry values.
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "ee.onyx.utils.license.datetime"
-    ) as dt_mock:
-        dt_mock.now.return_value = now
+    with patch("ee.onyx.utils.license.datetime") as dt_mock:
+        dt_mock.now.return_value = NOW
         return get_license_status(payload, grace_end).value
 
 
 def test_default_grace_keeps_active_status_pre_expiry() -> None:
     expires = NOW + timedelta(days=10)
-    assert _status_with_default_grace(expires, now=NOW) == "active"
+    assert _status_with_default_grace(expires) == "active"
 
 
 def test_default_grace_returns_grace_period_within_window() -> None:
     expires = NOW - timedelta(days=5)
-    assert _status_with_default_grace(expires, now=NOW) == "grace_period"
+    assert _status_with_default_grace(expires) == "grace_period"
 
 
 def test_default_grace_gates_after_window_exhausted() -> None:
     expires = NOW - timedelta(days=LICENSE_GRACE_PERIOD_DAYS + 1)
-    assert _status_with_default_grace(expires, now=NOW) == "gated_access"
+    assert _status_with_default_grace(expires) == "gated_access"

@@ -561,3 +561,30 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def get_active_admin_users(db_session: Session) -> list[User]:
+    """Active human admins, excluding API-key dummy users and system placeholders.
+
+    Mirrors the filter set used by `_add_live_user_count_where_clause(only_admin_users=True)`
+    so callers that want to email or surface UI to admins can reuse it.
+    """
+    from onyx.db.api_key import get_api_key_email_pattern
+
+    return list(
+        db_session.execute(
+            select(User).where(
+                User.is_active,  # ty: ignore[invalid-argument-type]
+                User.role == UserRole.ADMIN,
+                ~User.email.endswith(  # ty: ignore[invalid-argument-type]
+                    get_api_key_email_pattern()
+                ),
+                User.email != ANONYMOUS_USER_EMAIL,  # ty: ignore[invalid-argument-type]
+                User.email
+                != NO_AUTH_PLACEHOLDER_USER_EMAIL,  # ty: ignore[invalid-argument-type]
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    )

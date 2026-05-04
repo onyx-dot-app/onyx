@@ -27,14 +27,8 @@ class ExpiryWarningStage(str, Enum):
     GRACE = "grace"
 
 
-def get_expiry_warning_stage(
-    expires_at: datetime,
-    now: datetime | None = None,
-) -> ExpiryWarningStage:
-    if now is None:
-        now = datetime.now(timezone.utc)
-
-    seconds_remaining = (expires_at - now).total_seconds()
+def get_expiry_warning_stage(expires_at: datetime) -> ExpiryWarningStage:
+    seconds_remaining = (expires_at - datetime.now(timezone.utc)).total_seconds()
     days_remaining = seconds_remaining / 86400.0
 
     if days_remaining > 30:
@@ -54,11 +48,9 @@ def get_grace_period_end(expires_at: datetime) -> datetime:
     return expires_at + timedelta(days=LICENSE_GRACE_PERIOD_DAYS)
 
 
-def get_grace_days_remaining(expires_at: datetime, now: datetime | None = None) -> int:
-    if now is None:
-        now = datetime.now(timezone.utc)
+def get_grace_days_remaining(expires_at: datetime) -> int:
     grace_end = get_grace_period_end(expires_at)
-    seconds_left = (grace_end - now).total_seconds()
+    seconds_left = (grace_end - datetime.now(timezone.utc)).total_seconds()
     if seconds_left <= 0:
         return 0
     return max(1, int(seconds_left // 86400) + (1 if seconds_left % 86400 > 0 else 0))
