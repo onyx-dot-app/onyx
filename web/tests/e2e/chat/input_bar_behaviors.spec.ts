@@ -748,16 +748,6 @@ test.describe("Paste Tiles", () => {
     await expect(msg).toContainText("console.log");
   });
 
-  test("tile has trailing space for cursor visibility", async ({ page }) => {
-    await pasteLargeText(page);
-    const hasSpace = await page.evaluate(() => {
-      const tile = document.querySelector("[data-rich-tile]")!;
-      const next = tile.nextSibling;
-      return next?.nodeType === Node.TEXT_NODE && next.textContent === " ";
-    });
-    expect(hasSpace).toBe(true);
-  });
-
   test("clicking tile opens editable popover", async ({ page }) => {
     await pasteLargeText(page);
     await page.locator(TILE_SELECTOR).click();

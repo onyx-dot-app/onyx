@@ -246,10 +246,7 @@ export function useContentEditable({
         meta: getPasteTileMeta(text),
       });
       insertNodeAtCursorUtil(ref.current, tile);
-
-      const space = document.createTextNode(" ");
-      tile.after(space);
-      setCursorAfterNode(space);
+      setCursorAfterNode(tile);
 
       syncFromDOM();
       resize();
@@ -391,10 +388,6 @@ export function useContentEditable({
           clearTileSelection();
           if (event.key === "ArrowRight") {
             setCursorAfterNode(selected);
-            const next = selected.nextSibling;
-            if (next?.nodeType === Node.TEXT_NODE && next.textContent === " ") {
-              setCursorAfterNode(next);
-            }
           } else {
             const s = window.getSelection();
             if (s) {
@@ -436,26 +429,6 @@ export function useContentEditable({
       }
 
       let tile = getAdjacentRichTile(range, direction);
-
-      // For arrow keys, skip whitespace-only text nodes (e.g. trailing space)
-      if (!tile && isNav) {
-        const { startContainer } = range;
-        if (
-          startContainer.nodeType === Node.TEXT_NODE &&
-          startContainer.textContent?.trim() === ""
-        ) {
-          const sibling =
-            direction === "before"
-              ? startContainer.previousSibling
-              : startContainer.nextSibling;
-          if (
-            sibling?.nodeType === Node.ELEMENT_NODE &&
-            (sibling as HTMLElement).hasAttribute("data-rich-tile")
-          ) {
-            tile = sibling as HTMLElement;
-          }
-        }
-      }
 
       if (!tile) return false;
 
