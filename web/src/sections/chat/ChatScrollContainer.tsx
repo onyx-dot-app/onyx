@@ -419,7 +419,6 @@ const ChatScrollContainer = React.memo(
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
                 spacerHeightRef={spacerHeightRef}
-                isAtBottomRef={isAtBottomRef}
                 userScrolledUpRef={userScrolledUpRef}
               >
                 {children}
