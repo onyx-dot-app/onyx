@@ -115,11 +115,10 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
     test fixtures with synthetic IDs, etc.) are still reaped, since
     nothing is going to consume them.
     """
+    non_terminal_statuses = [s for s in IndexingStatus if not s.is_terminal()]
     non_terminal_cc_pair_attempt_ids_subq = select(cast(IndexAttempt.id, String)).where(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
-        IndexAttempt.status.in_(
-            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-        ),
+        IndexAttempt.status.in_(non_terminal_statuses),
     )
     return list(
         db_session.scalars(
