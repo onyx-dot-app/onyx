@@ -827,6 +827,7 @@ export default function IndexSettingsPage() {
     cancelReindexModal.toggle(false);
     toast.success("Re-indexing canceled");
     await Promise.all([
+      mutate(SWR_KEYS.currentSearchSettings),
       mutate(SWR_KEYS.secondarySearchSettings),
       mutate(SWR_KEYS.indexingStatus),
     ]);
