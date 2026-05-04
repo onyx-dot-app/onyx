@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * Sidebar Layout Components
  *
@@ -151,12 +150,6 @@ export function useSidebarFolded(): boolean {
 
 interface SidebarRootProps {
   /**
-   * Whether the sidebar is currently folded (desktop) or off-screen (mobile).
-   */
-  folded: boolean;
-  /** Callback to update the fold state. Compatible with `useState` setters. */
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-  /**
    * Whether the sidebar supports folding on desktop.
    * When `false` (the default), the sidebar is always expanded on desktop and
    * the fold button is hidden. Mobile overlay behavior is always enabled
@@ -166,19 +159,12 @@ interface SidebarRootProps {
   children: React.ReactNode;
 }
 
-function SidebarRoot({
-  folded,
-  onFoldChange,
-  foldable = false,
-  children,
-}: SidebarRootProps) {
+function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   const { isMobile, isMediumScreen } = useScreenSize();
+  const { folded, setFolded } = useSidebarState();
 
-  const close = useCallback(() => onFoldChange(true), [onFoldChange]);
-  const toggle = useCallback(
-    () => onFoldChange((prev) => !prev),
-    [onFoldChange]
-  );
+  const close = useCallback(() => setFolded(true), [setFolded]);
+  const toggle = useCallback(() => setFolded((prev) => !prev), [setFolded]);
 
   // On mobile the sidebar content is always visually expanded — the overlay
   // transform handles visibility. On desktop, only foldable sidebars honour

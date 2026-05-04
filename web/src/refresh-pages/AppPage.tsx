@@ -402,16 +402,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
-  const { folded: sidebarFolded, setFolded: setSidebarFolded } =
-    useSidebarState();
+  const { folded: sidebarFolded, setFolded } = useSidebarState();
   const preMultiModelFoldedRef = useRef<boolean | null>(null);
 
   const foldSidebarForMultiModel = useCallback(() => {
     if (preMultiModelFoldedRef.current === null) {
       preMultiModelFoldedRef.current = sidebarFolded;
-      setSidebarFolded(true);
+      setFolded(true);
     }
-  }, [sidebarFolded, setSidebarFolded]);
+  }, [sidebarFolded, setFolded]);
 
   // Restore sidebar when user exits multi-model mode
   useEffect(() => {
@@ -419,7 +418,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       !multiModel.isMultiModelActive &&
       preMultiModelFoldedRef.current !== null
     ) {
-      setSidebarFolded(preMultiModelFoldedRef.current);
+      setFolded(preMultiModelFoldedRef.current);
       preMultiModelFoldedRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

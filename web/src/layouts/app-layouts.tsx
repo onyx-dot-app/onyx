@@ -45,7 +45,6 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { Interactive } from "@opal/core";
 import { Button, LineItemButton, OpenButton } from "@opal/components";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
