@@ -25,13 +25,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexModelStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.db.models import SearchSettings
 from onyx.db.models import TargetedReindexJob
 from onyx.db.models import TargetedReindexJobTarget
-from onyx.db.search_settings import get_current_search_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -114,17 +114,26 @@ def _group_targets_by_search_settings(
     """Map cc_pair_id → set of `search_settings_id` it should write to.
 
     A targeted reindex needs to write to whatever search settings the
-    cc_pair currently indexes against. In multi-search-settings setups
-    (e.g. during an embedding swap) this is more than one. Today the
-    cc_pair tracks a single `processing_mode`/source pairing, so we
-    just use the current PRESENT search settings for every cc_pair the
-    targets span.
+    cc_pair currently indexes against. During an embedding-model swap
+    that's both PRESENT and FUTURE — otherwise the FUTURE index lags
+    by the targeted-reindex delta until the next full crawl.
     """
     cc_pair_ids = {t.cc_pair_id for t in targets}
     if not cc_pair_ids:
         return {}
-    settings = get_current_search_settings(db_session)
-    return {cc_pair_id: {settings.id} for cc_pair_id in cc_pair_ids}
+    active_settings = (
+        db_session.execute(
+            select(SearchSettings).where(
+                SearchSettings.status.in_(
+                    [IndexModelStatus.PRESENT, IndexModelStatus.FUTURE]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    settings_ids = {s.id for s in active_settings}
+    return {cc_pair_id: settings_ids for cc_pair_id in cc_pair_ids}
 
 
 def create_targeted_reindex_job(
@@ -238,15 +247,4 @@ def count_targets_for_job(db_session: Session, job_id: int) -> int:
         db_session.query(TargetedReindexJobTarget)
         .filter(TargetedReindexJobTarget.targeted_reindex_job_id == job_id)
         .count()
-    )
-
-
-def _validate_search_settings_exists(
-    db_session: Session, search_settings_id: int
-) -> bool:
-    return (
-        db_session.execute(
-            select(SearchSettings.id).where(SearchSettings.id == search_settings_id)
-        ).first()
-        is not None
     )

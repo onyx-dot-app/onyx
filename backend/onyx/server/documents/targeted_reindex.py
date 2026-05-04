@@ -17,7 +17,6 @@ from typing import Any
 from celery import current_app as celery_app
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -34,6 +33,8 @@ from onyx.db.targeted_reindex import get_targeted_reindex_job
 from onyx.db.targeted_reindex import MAX_TARGETS_PER_REQUEST
 from onyx.db.targeted_reindex import resolve_error_ids_to_targets
 from onyx.db.targeted_reindex import TargetSpec
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -85,9 +86,9 @@ def submit_targeted_reindex(
     ]
 
     if not error_ids and not target_specs_in:
-        raise HTTPException(
-            status_code=400,
-            detail="Either error_ids or targets must be provided.",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Either error_ids or targets must be provided.",
         )
 
     skipped_from_errors = 0
@@ -98,21 +99,16 @@ def submit_targeted_reindex(
         target_specs_in.extend(derived)
 
     if not target_specs_in:
-        # Everything was already resolved or invalid.
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No actionable targets after resolving error_ids "
-                "(all were already resolved, entity-level, or invalid)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No actionable targets after resolving error_ids "
+            "(all were already resolved, entity-level, or invalid).",
         )
 
     if len(target_specs_in) > MAX_TARGETS_PER_REQUEST:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Too many targets: {len(target_specs_in)} > {MAX_TARGETS_PER_REQUEST}."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Too many targets: {len(target_specs_in)} > {MAX_TARGETS_PER_REQUEST}.",
         )
 
     try:
@@ -122,7 +118,7 @@ def submit_targeted_reindex(
             targets=target_specs_in,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     try:
         celery_app.send_task(
@@ -137,9 +133,9 @@ def submit_targeted_reindex(
             "Failed to enqueue targeted reindex task",
             extra={"job_id": result.targeted_reindex_job_id},
         )
-        raise HTTPException(
-            status_code=503,
-            detail="Failed to enqueue targeted reindex task.",
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Failed to enqueue targeted reindex task.",
         )
 
     return TargetedReindexResponse(
@@ -157,7 +153,7 @@ def get_targeted_reindex_status(
 ) -> TargetedReindexJobStatusResponse:
     job = get_targeted_reindex_job(db_session, job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found.")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Job not found.")
 
     return TargetedReindexJobStatusResponse(
         id=job.id,
