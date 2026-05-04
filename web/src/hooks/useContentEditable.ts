@@ -4,13 +4,15 @@ import {
   setCursorAfterNode,
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
+  getTextContent,
+} from "@/lib/contentEditable";
+import {
   createRichInputTileNode,
   getAdjacentRichTile,
-  getTextContent,
   shouldCreatePasteTile,
   getPasteTilePreview,
   getPasteTileMeta,
-} from "@/lib/contentEditable";
+} from "@/lib/richInputTile";
 
 export interface UseContentEditableOptions {
   initialContent?: string;

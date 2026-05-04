@@ -2,14 +2,14 @@
  * @jest-environment jsdom
  */
 
+import { getTextContent } from "@/lib/contentEditable";
 import {
   shouldCreatePasteTile,
   getPasteTilePreview,
   getPasteTileMeta,
-  getTextContent,
   PASTE_TILE_THRESHOLD_CHARS,
   PASTE_TILE_THRESHOLD_LINES,
-} from "@/lib/contentEditable";
+} from "@/lib/richInputTile";
 
 describe("shouldCreatePasteTile", () => {
   it("returns false for empty string", () => {
