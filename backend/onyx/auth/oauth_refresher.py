@@ -1,4 +1,7 @@
 import asyncio
+import os
+import time
+import uuid
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -27,9 +30,18 @@ REFRESH_ENDPOINTS: Dict[str, str] = {
 }
 
 # Token endpoint resolved from the configured OIDC discovery document.
-# Populated lazily on first successful fetch and re-used thereafter, so the
-# .well-known/openid-configuration document is only retrieved once per process.
-_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str] = {}
+# Populated lazily on first successful fetch and re-used until the entry's
+# `fetched_at` exceeds OIDC_DISCOVERY_CACHE_TTL_SECONDS, at which point it is
+# re-fetched. The TTL guards against the IdP rotating its `token_endpoint`
+# without us noticing (rare for major IdPs but possible across tenant moves
+# or app-reg migrations).
+_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str | float] = {}
+
+# Default 1 hour: matches Microsoft Entra's default access-token lifetime, so
+# at worst one refresh fails after an endpoint rotation before we self-heal.
+OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
+    os.environ.get("OIDC_DISCOVERY_CACHE_TTL_SECONDS") or 3600
+)
 
 # Lazily-initialized lock guarding concurrent first-time fetches of the OIDC
 # discovery document. Created on first use so it binds to the running event
@@ -45,6 +57,45 @@ def _get_oidc_lock() -> asyncio.Lock:
     return _OIDC_TOKEN_ENDPOINT_LOCK
 
 
+# Per-user locks coalescing concurrent token-refresh attempts. Without this,
+# two requests for the same user near expiry could both POST a refresh, and
+# IdPs that rotate refresh tokens (e.g. Microsoft Entra) would invalidate one
+# of them with `400 invalid_grant`. The lock pairs with a re-read inside
+# `check_and_refresh_oauth_tokens` so the second coroutine skips the redundant
+# request entirely once the first has succeeded.
+_USER_REFRESH_LOCKS: Dict[uuid.UUID, asyncio.Lock] = {}
+_USER_REFRESH_LOCKS_GUARD: Optional[asyncio.Lock] = None
+
+
+def _get_user_refresh_locks_guard() -> asyncio.Lock:
+    """Lazy-init the meta-lock that protects the per-user lock dict itself."""
+    global _USER_REFRESH_LOCKS_GUARD
+    if _USER_REFRESH_LOCKS_GUARD is None:
+        _USER_REFRESH_LOCKS_GUARD = asyncio.Lock()
+    return _USER_REFRESH_LOCKS_GUARD
+
+
+async def _get_user_refresh_lock(user_id: uuid.UUID) -> asyncio.Lock:
+    """Get-or-create a per-user lock keyed by `user.id`."""
+    async with _get_user_refresh_locks_guard():
+        lock = _USER_REFRESH_LOCKS.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _USER_REFRESH_LOCKS[user_id] = lock
+        return lock
+
+
+def _cached_token_endpoint() -> Optional[str]:
+    """Return the cached endpoint if still within its TTL, else None."""
+    cached_url = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+    fetched_at = _OIDC_TOKEN_ENDPOINT_CACHE.get("fetched_at")
+    if not isinstance(cached_url, str) or not isinstance(fetched_at, float):
+        return None
+    if (time.monotonic() - fetched_at) >= OIDC_DISCOVERY_CACHE_TTL_SECONDS:
+        return None
+    return cached_url
+
+
 async def _get_oidc_token_endpoint() -> Optional[str]:
     """Resolve the OAuth2 token endpoint for the configured OIDC provider.
 
@@ -52,9 +103,10 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
     refresh works for any OIDC provider (Microsoft Entra, Okta, Keycloak,
     Auth0, ...) without hardcoding provider-specific URLs. The lock + double
     check ensures concurrent callers (e.g. multiple tokens expiring at once
-    after a server restart) coalesce into a single discovery request.
+    after a server restart) coalesce into a single discovery request, and the
+    TTL ensures we re-fetch periodically in case the IdP rotates the endpoint.
     """
-    cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+    cached = _cached_token_endpoint()
     if cached:
         return cached
     if not OPENID_CONFIG_URL:
@@ -62,7 +114,7 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
     async with _get_oidc_lock():
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
-        cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+        cached = _cached_token_endpoint()
         if cached:
             return cached
         try:
@@ -78,6 +130,7 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
         token_endpoint = config.get("token_endpoint")
         if isinstance(token_endpoint, str) and token_endpoint:
             _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
+            _OIDC_TOKEN_ENDPOINT_CACHE["fetched_at"] = time.monotonic()
             return token_endpoint
         return None
 
@@ -247,15 +300,40 @@ async def check_and_refresh_oauth_tokens(
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
-            logger.info(f"OAuth token for {user.email} is about to expire - refreshing")
-            success = await refresh_oauth_token(
-                user, oauth_account, db_session, user_manager
-            )
+            # Coalesce concurrent refreshes for the same user. Re-read the
+            # account inside the lock so the second coroutine sees the
+            # refreshed `expires_at` (and `refresh_token` for IdPs that
+            # rotate) and skips the redundant POST.
+            user_lock = await _get_user_refresh_lock(user.id)
+            async with user_lock:
+                try:
+                    await db_session.refresh(oauth_account)
+                except Exception:
+                    # `db_session.refresh` can fail when oauth_account is
+                    # detached from this session (e.g. pre-loaded by the
+                    # caller). Fall through and attempt the refresh anyway —
+                    # at worst the second coroutine sees the same stale
+                    # state we'd see without the lock.
+                    pass
 
-            if not success:
-                logger.warning(
-                    "Failed to refresh OAuth token. User may need to re-authenticate."
+                if (
+                    oauth_account.expires_at
+                    and oauth_account.expires_at - now_timestamp >= buffer_seconds
+                ):
+                    # Another coroutine already refreshed this account.
+                    continue
+
+                logger.info(
+                    "OAuth token for %s is about to expire - refreshing", user.email
                 )
+                success = await refresh_oauth_token(
+                    user, oauth_account, db_session, user_manager
+                )
+
+                if not success:
+                    logger.warning(
+                        "Failed to refresh OAuth token. User may need to re-authenticate."
+                    )
 
 
 async def check_oauth_account_has_refresh_token(
