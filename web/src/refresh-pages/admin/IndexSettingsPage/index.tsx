@@ -895,7 +895,7 @@ export default function IndexSettingsPage() {
           <Formik<IndexSettingsFormValues>
             enableReinitialize
             initialValues={initialFormValues}
-            onSubmit={async (values, { resetForm }) => {
+            onSubmit={async (values) => {
               // Custom self-hosted models live outside the static registry,
               // so the form carries their spec (`modelDim`, `normalize`, etc.)
               // in `custom_model` for submission. The provider, however, is
@@ -929,7 +929,6 @@ export default function IndexSettingsPage() {
               }
 
               toast.success("Re-indexing started");
-              resetForm({ values });
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
