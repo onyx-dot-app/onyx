@@ -2,7 +2,7 @@
 
 import {
   createTableColumns,
-  MessageCard,
+  EmptyMessageCard,
   Pagination,
   Table,
   Text,
@@ -35,10 +35,26 @@ import type { ExternalGroupSyncAttemptSnapshot } from "./types";
 
 const tc = createTableColumns<ExternalGroupSyncAttemptSnapshot>();
 
+// Headers are intentionally short ("Users", not "Users Processed").
+// Opal's `TableHead` renders headers via `String(children)` (see
+// `web/lib/opal/src/components/table/TableHead.tsx:96`), which kills any
+// rich-content header (Tooltip + info icon, etc.) — so we lean on
+// concise, contextually-clear labels instead. The tab itself is named
+// "Group Membership", so "Users / Groups / Memberships" reads as
+// "users seen / groups processed / memberships written" without
+// further annotation.
+//
+// Weights are TanStack-relative; the per-column `minWidth =
+// header.length * 8 + 40` floor means short labels are also necessary
+// to actually achieve "skinnier" columns — e.g. "Users Processed"
+// pins minWidth to 160px no matter the weight.
+//
+// `Time Started` is bumped to 26 so `localizeAndPrettify` (e.g.
+// "5/3/2026, 12:00:00 PM") stays on a single line.
 const COLUMNS = [
   tc.column("time_started", {
     header: "Time Started",
-    weight: 20,
+    weight: 26,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -48,15 +64,15 @@ const COLUMNS = [
   }),
   tc.column("status", {
     header: "Status",
-    weight: 16,
+    weight: 14,
     enableSorting: false,
     cell: (value, row) => (
       <PermissionSyncStatusBadge status={value} errorMsg={row.error_message} />
     ),
   }),
   tc.column("total_users_processed", {
-    header: "Users Processed",
-    weight: 14,
+    header: "Users",
+    weight: 10,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -65,8 +81,8 @@ const COLUMNS = [
     ),
   }),
   tc.column("total_groups_processed", {
-    header: "Groups Processed",
-    weight: 14,
+    header: "Groups",
+    weight: 10,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -75,8 +91,8 @@ const COLUMNS = [
     ),
   }),
   tc.column("total_group_memberships_synced", {
-    header: "Memberships Synced",
-    weight: 14,
+    header: "Memberships",
+    weight: 12,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -86,7 +102,7 @@ const COLUMNS = [
   }),
   tc.column("error_message", {
     header: "Error Message",
-    weight: 22,
+    weight: 28,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="secondary-body" color="text-03" maxLines={2}>
@@ -112,9 +128,9 @@ export function ExternalGroupSyncAttemptsTable({
 }: ExternalGroupSyncAttemptsTableProps) {
   if (!attempts.length) {
     return (
-      <MessageCard
-        variant="info"
-        title="No group membership sync attempts scheduled yet"
+      <EmptyMessageCard
+        sizePreset="main-ui"
+        title="No group membership sync attempts yet"
         description="Group-membership sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds."
       />
     );

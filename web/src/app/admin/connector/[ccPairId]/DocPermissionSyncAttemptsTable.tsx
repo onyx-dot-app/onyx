@@ -2,7 +2,7 @@
 
 import {
   createTableColumns,
-  MessageCard,
+  EmptyMessageCard,
   Pagination,
   Table,
   Text,
@@ -30,10 +30,15 @@ import type { DocPermissionSyncAttemptSnapshot } from "./types";
 
 const tc = createTableColumns<DocPermissionSyncAttemptSnapshot>();
 
+// Weights are TanStack-relative; they sum to 100 here purely for
+// readability. `Time Started` is bumped to 28 so `localizeAndPrettify`
+// (e.g. "5/3/2026, 12:00:00 PM") stays on a single line at standard
+// 800px-wide admin layouts; the difference is taken from `Status` and
+// `Docs Synced`, which both render short content.
 const COLUMNS = [
   tc.column("time_started", {
     header: "Time Started",
-    weight: 22,
+    weight: 28,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -43,7 +48,7 @@ const COLUMNS = [
   }),
   tc.column("status", {
     header: "Status",
-    weight: 18,
+    weight: 14,
     enableSorting: false,
     cell: (value, row) => (
       <PermissionSyncStatusBadge status={value} errorMsg={row.error_message} />
@@ -51,7 +56,7 @@ const COLUMNS = [
   }),
   tc.column("total_docs_synced", {
     header: "Docs Synced",
-    weight: 14,
+    weight: 12,
     enableSorting: false,
     cell: (value) => (
       <Text as="span" font="main-ui-body" color="text-04">
@@ -97,9 +102,9 @@ export function DocPermissionSyncAttemptsTable({
 }: DocPermissionSyncAttemptsTableProps) {
   if (!attempts.length) {
     return (
-      <MessageCard
-        variant="info"
-        title="No document permission sync attempts scheduled yet"
+      <EmptyMessageCard
+        sizePreset="main-ui"
+        title="No document permission sync attempts yet"
         description="Document-permission sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds."
       />
     );

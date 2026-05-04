@@ -246,7 +246,7 @@ test.describe("Permission sync tabs", () => {
       page.getByRole("columnheader", { name: "Docs Synced" })
     ).toBeVisible();
     await expect(
-      page.getByText("No document permission sync attempts scheduled yet")
+      page.getByText("No document permission sync attempts yet")
     ).toHaveCount(0);
 
     await groupMembershipTab.click();

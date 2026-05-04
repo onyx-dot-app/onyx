@@ -228,6 +228,14 @@ function renderTabGate(
   return null;
 }
 
+/**
+ * Reserves roughly the height of a full populated `ITEMS_PER_PAGE`
+ * results page (8 rows + header + pagination footer ≈ 32rem at the
+ * default Opal `Table` `size="lg"`). Without this the loading state
+ * collapses the tab body, the page shrinks, the user's scroll position
+ * jumps up, and when data lands they have to scroll back down to see
+ * the table — which is exactly what the previous spinner was causing.
+ */
 function SyncAttemptsTabSpinner() {
   return (
     <Section
@@ -235,7 +243,7 @@ function SyncAttemptsTabSpinner() {
       justifyContent="center"
       alignItems="center"
       height="auto"
-      className="py-6"
+      className="min-h-[32rem]"
     >
       <SimpleLoader className="h-6 w-6" />
     </Section>
