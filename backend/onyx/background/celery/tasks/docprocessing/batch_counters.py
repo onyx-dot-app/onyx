@@ -1,6 +1,6 @@
 """Batch counter signal handlers for docprocessing tasks.
 
-Maintains two per-attempt Redis counters:
+Maintains two per-attempt Redis counters (id = IndexAttempt.id):
   docprocessing_pending_{id}   - batches dispatched but not yet picked up
   docprocessing_in_flight_{id} - batches picked up but not yet completed
 
@@ -12,11 +12,12 @@ from celery import Task
 from sqlalchemy import update
 
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import IndexAttempt
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -41,8 +42,13 @@ def on_docprocessing_task_prerun(
     # Emit a heartbeat before moving the counter to in_flight. This ensures
     # the monitor never sees in_flight > 0 with a stale heartbeat for a live
     # worker — picking up a batch is proof of life.
+    # Use get_session_with_tenant() with the explicit tenant_id from kwargs
+    # because task_prerun fires before TenantAwareTask.__call__ sets the
+    # tenant context var, so get_session_with_current_tenant() would use the
+    # wrong tenant.
+    resolved_tenant_id = tenant_id or POSTGRES_DEFAULT_SCHEMA
     try:
-        with get_session_with_current_tenant() as db_session:
+        with get_session_with_tenant(tenant_id=resolved_tenant_id) as db_session:
             db_session.execute(
                 update(IndexAttempt)
                 .where(IndexAttempt.id == index_attempt_id)
