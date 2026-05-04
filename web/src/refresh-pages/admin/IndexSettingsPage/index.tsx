@@ -1081,7 +1081,7 @@ export default function IndexSettingsPage() {
                     />
 
                     {NEXT_PUBLIC_CLOUD_ENABLED ? (
-                      <CloudDisabled>
+                      <Disabled disabled allowClick>
                         <Card border="solid" rounding="lg" padding="sm">
                           <GeneralLayouts.Section padding={0.5}>
                             <Content
@@ -1092,7 +1092,7 @@ export default function IndexSettingsPage() {
                             />
                           </GeneralLayouts.Section>
                         </Card>
-                      </CloudDisabled>
+                      </Disabled>
                     ) : (
                       currentEmbeddingModel && (
                         <Disabled
