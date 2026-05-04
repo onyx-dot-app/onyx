@@ -10,6 +10,7 @@ import {
   SvgRefreshCw,
   SvgX,
   SvgNotificationBubble,
+  SvgAlertTriangle,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button, Divider, LineItemButton } from "@opal/components";
@@ -25,6 +26,8 @@ function getNotificationIcon(
   switch (notifType) {
     case NotificationType.REINDEX:
       return SvgRefreshCw;
+    case NotificationType.LICENSE_EXPIRY_WARNING:
+      return SvgAlertTriangle;
     default:
       return SvgSparkle;
   }
