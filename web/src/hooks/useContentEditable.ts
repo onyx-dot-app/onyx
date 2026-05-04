@@ -96,6 +96,8 @@ export function useContentEditable({
 
   // Track text selection to highlight tiles within the selection range.
   useEffect(() => {
+    if (!pasteTilesEnabled) return;
+
     function handleSelectionChange() {
       const el = ref.current;
       if (!el || !el.contains(document.activeElement ?? null)) return;
@@ -120,7 +122,7 @@ export function useContentEditable({
     document.addEventListener("selectionchange", handleSelectionChange);
     return () =>
       document.removeEventListener("selectionchange", handleSelectionChange);
-  }, []);
+  }, [pasteTilesEnabled]);
 
   const clearTileSelection = useCallback(() => {
     if (selectedTileRef.current) {
