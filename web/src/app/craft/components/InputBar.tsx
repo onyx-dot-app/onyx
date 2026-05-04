@@ -296,145 +296,145 @@ const InputBar = memo(
 
       return (
         <>
-        <Disabled disabled={disabled}>
-          <div
-            ref={containerRef}
-            className={cn(
-              "w-full flex flex-col shadow-01 bg-background-neutral-00",
-              noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
-            )}
-          >
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={handleFileSelect}
-              accept="*/*"
-            />
-
-            {/* Attached Files */}
-            {currentMessageFiles.length > 0 && (
-              <div className="p-2 rounded-t-16 flex flex-wrap gap-1">
-                {currentMessageFiles.map((file) => (
-                  <BuildFileCard
-                    key={file.id}
-                    file={file}
-                    onRemove={removeFile}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Input area */}
-            <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
-              <div
-                ref={inputRef}
-                contentEditable={!disabled}
-                suppressContentEditableWarning
-                onPaste={handlePaste}
-                onInput={onInput}
-                onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
-                onKeyDown={handleKeyDown}
-                className={cn(
-                  "w-full",
-                  "h-full",
-                  "min-h-[44px]",
-                  "outline-none",
-                  "bg-transparent",
-                  "whitespace-pre-wrap",
-                  "break-words",
-                  "overscroll-contain",
-                  "overflow-y-auto",
-                  "px-3",
-                  "pb-2",
-                  "pt-3"
-                )}
-                tabIndex={disabled ? -1 : 0}
-                style={{
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "var(--border-02) transparent",
-                }}
-                role="textbox"
-                aria-label="Message input"
-                aria-multiline={true}
-                aria-disabled={disabled}
-                aria-placeholder={placeholder}
-                data-placeholder={placeholder}
-                data-empty={!message ? "" : undefined}
-                onCopy={handleCopy}
-                onCut={handleCut}
-                onMouseDown={handleTileMouseDown}
-                onClick={handleTileClick}
+          <Disabled disabled={disabled}>
+            <div
+              ref={containerRef}
+              className={cn(
+                "w-full flex flex-col shadow-01 bg-background-neutral-00",
+                noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
+              )}
+            >
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                onChange={handleFileSelect}
+                accept="*/*"
               />
-            </div>
 
-            {/* Bottom controls */}
-            <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
-              {/* Bottom left controls */}
-              <div className="flex flex-row items-center gap-1">
-                {/* (+) button for file upload */}
-                <Button
-                  disabled={disabled}
-                  icon={SvgPaperclip}
-                  tooltip="Attach Files"
-                  prominence="tertiary"
-                  onClick={() => fileInputRef.current?.click()}
+              {/* Attached Files */}
+              {currentMessageFiles.length > 0 && (
+                <div className="p-2 rounded-t-16 flex flex-wrap gap-1">
+                  {currentMessageFiles.map((file) => (
+                    <BuildFileCard
+                      key={file.id}
+                      file={file}
+                      onRemove={removeFile}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Input area */}
+              <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
+                <div
+                  ref={inputRef}
+                  contentEditable={!disabled}
+                  suppressContentEditableWarning
+                  onPaste={handlePaste}
+                  onInput={onInput}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  onKeyDown={handleKeyDown}
+                  className={cn(
+                    "w-full",
+                    "h-full",
+                    "min-h-[44px]",
+                    "outline-none",
+                    "bg-transparent",
+                    "whitespace-pre-wrap",
+                    "break-words",
+                    "overscroll-contain",
+                    "overflow-y-auto",
+                    "px-3",
+                    "pb-2",
+                    "pt-3"
+                  )}
+                  tabIndex={disabled ? -1 : 0}
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "var(--border-02) transparent",
+                  }}
+                  role="textbox"
+                  aria-label="Message input"
+                  aria-multiline={true}
+                  aria-disabled={disabled}
+                  aria-placeholder={placeholder}
+                  data-placeholder={placeholder}
+                  data-empty={!message ? "" : undefined}
+                  onCopy={handleCopy}
+                  onCut={handleCut}
+                  onMouseDown={handleTileMouseDown}
+                  onClick={handleTileClick}
                 />
-                {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-                {demoDataEnabled && isWelcomePage && (
-                  <Tooltip
-                    tooltip="Switch to your data in the Configure panel!"
-                    side="top"
-                  >
-                    <span>
-                      <SelectButton
-                        disabled={disabled}
-                        leftIcon={SvgOrganization}
-                        engaged={demoDataEnabled}
-                        action
-                        folded
-                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                        className="bg-action-link-01"
-                      >
-                        Demo Data Active
-                      </SelectButton>
-                    </span>
-                  </Tooltip>
-                )}
               </div>
 
-              {/* Bottom right controls */}
-              <div className="flex flex-row items-center gap-1">
-                {/* Submit button */}
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <IconButton
-                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
-                  onClick={handleSubmit}
-                  disabled={!canSubmit}
-                  tooltip={
-                    sandboxInitializing ? "Initializing sandbox..." : "Send"
-                  }
-                  iconClassName={
-                    sandboxInitializing ? "animate-spin" : undefined
-                  }
-                />
+              {/* Bottom controls */}
+              <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+                {/* Bottom left controls */}
+                <div className="flex flex-row items-center gap-1">
+                  {/* (+) button for file upload */}
+                  <Button
+                    disabled={disabled}
+                    icon={SvgPaperclip}
+                    tooltip="Attach Files"
+                    prominence="tertiary"
+                    onClick={() => fileInputRef.current?.click()}
+                  />
+                  {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
+                  {demoDataEnabled && isWelcomePage && (
+                    <Tooltip
+                      tooltip="Switch to your data in the Configure panel!"
+                      side="top"
+                    >
+                      <span>
+                        <SelectButton
+                          disabled={disabled}
+                          leftIcon={SvgOrganization}
+                          engaged={demoDataEnabled}
+                          action
+                          folded
+                          onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
+                          className="bg-action-link-01"
+                        >
+                          Demo Data Active
+                        </SelectButton>
+                      </span>
+                    </Tooltip>
+                  )}
+                </div>
+
+                {/* Bottom right controls */}
+                <div className="flex flex-row items-center gap-1">
+                  {/* Submit button */}
+                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                  <IconButton
+                    icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                    onClick={handleSubmit}
+                    disabled={!canSubmit}
+                    tooltip={
+                      sandboxInitializing ? "Initializing sandbox..." : "Send"
+                    }
+                    iconClassName={
+                      sandboxInitializing ? "animate-spin" : undefined
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </Disabled>
+          </Disabled>
 
-        {tilePopover && (
-          <PasteTilePopover
-            text={tilePopover.text}
-            rect={tilePopover.rect}
-            onDismiss={dismissTilePopover}
-            onTextChange={updateTileText}
-          />
-        )}
-      </>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
+        </>
       );
     }
   )

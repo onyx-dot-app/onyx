@@ -1043,7 +1043,7 @@ const AppInputBar = React.memo(
         {tilePopover && (
           <PasteTilePopover
             text={tilePopover.text}
-            rect={tilePopover.rect}
+            tileElement={tilePopover.tile}
             onDismiss={dismissTilePopover}
             onTextChange={updateTileText}
           />

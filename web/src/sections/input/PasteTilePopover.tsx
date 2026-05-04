@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface PasteTilePopoverProps {
   text: string;
-  rect: DOMRect;
+  tileElement: HTMLElement;
   onDismiss: () => void;
   onTextChange: (newText: string) => void;
 }
 
 function PasteTilePopover({
   text,
-  rect,
+  tileElement,
   onDismiss,
   onTextChange,
 }: PasteTilePopoverProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
+
+  const updateRect = useCallback(() => {
+    setRect(tileElement.getBoundingClientRect());
+  }, [tileElement]);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -24,11 +29,23 @@ function PasteTilePopover({
 
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") onDismiss();
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onDismiss();
+      }
     }
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onDismiss]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateRect);
+    document.addEventListener("scroll", updateRect, true);
+    return () => {
+      window.removeEventListener("resize", updateRect);
+      document.removeEventListener("scroll", updateRect, true);
+    };
+  }, [updateRect]);
 
   const POPOVER_MAX_H = 340;
   const POPOVER_MAX_W = 400;

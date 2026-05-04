@@ -5,7 +5,7 @@ import {
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
   createRichInputTileNode,
-  getAdjacentPasteTile,
+  getAdjacentRichTile,
   getTextContent,
   shouldCreatePasteTile,
   getPasteTilePreview,
@@ -40,7 +40,7 @@ export interface UseContentEditableReturn {
   handleTileMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => boolean;
-  tilePopover: { text: string; rect: DOMRect; tile: HTMLElement } | null;
+  tilePopover: { text: string; tile: HTMLElement } | null;
   dismissTilePopover: () => void;
   updateTileText: (newText: string) => void;
 }
@@ -64,7 +64,6 @@ export function useContentEditable({
   const selectedTileRef = useRef<HTMLElement | null>(null);
   const [tilePopover, setTilePopover] = useState<{
     text: string;
-    rect: DOMRect;
     tile: HTMLElement;
   } | null>(null);
 
@@ -100,7 +99,7 @@ export function useContentEditable({
       if (!el || !el.contains(document.activeElement ?? null)) return;
 
       const sel = window.getSelection();
-      const tiles = el.querySelectorAll("[data-paste-tile]");
+      const tiles = el.querySelectorAll("[data-rich-tile]");
       tiles.forEach((tile) => {
         const htmlTile = tile as HTMLElement;
         if (
@@ -240,7 +239,12 @@ export function useContentEditable({
   const insertTileAtCursor = useCallback(
     (text: string) => {
       if (!ref.current) return;
-      const tile = createRichInputTileNode(text);
+      const tile = createRichInputTileNode({
+        type: "paste",
+        text,
+        preview: getPasteTilePreview(text),
+        meta: getPasteTileMeta(text),
+      });
       insertNodeAtCursorUtil(ref.current, tile);
 
       const space = document.createTextNode(" ");
@@ -267,13 +271,14 @@ export function useContentEditable({
   const handleTileMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       clearTileSelection();
+      if (disabledRef.current) return;
 
       const target = event.target as HTMLElement;
-      const removeBtn = target.closest("[data-paste-tile-remove]");
+      const removeBtn = target.closest("[data-rich-tile-remove]");
       if (!removeBtn) return;
 
       event.preventDefault();
-      const tile = removeBtn.closest("[data-paste-tile]");
+      const tile = removeBtn.closest("[data-rich-tile]");
       if (tile) {
         tile.remove();
         setTilePopover(null);
@@ -286,14 +291,15 @@ export function useContentEditable({
 
   const handleTileClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      const target = event.target as HTMLElement;
-      if (target.closest("[data-paste-tile-remove]")) return;
+      if (disabledRef.current) return;
 
-      const tile = target.closest("[data-paste-tile]") as HTMLElement | null;
+      const target = event.target as HTMLElement;
+      if (target.closest("[data-rich-tile-remove]")) return;
+
+      const tile = target.closest("[data-rich-tile]") as HTMLElement | null;
       if (tile) {
         const text = tile.getAttribute("data-text") ?? "";
-        const rect = tile.getBoundingClientRect();
-        setTilePopover({ text, rect, tile });
+        setTilePopover({ text, tile });
       } else {
         setTilePopover(null);
         clearTileSelection();
@@ -324,6 +330,17 @@ export function useContentEditable({
       if (!tilePopover?.tile || !ref.current?.contains(tilePopover.tile))
         return;
       const { tile } = tilePopover;
+
+      if (!newText.trim()) {
+        tile.remove();
+        selectedTileRef.current = null;
+        syncFromDOM();
+        resize();
+        setTilePopover(null);
+        ref.current?.focus();
+        return;
+      }
+
       tile.setAttribute("data-text", newText);
       tile.title = newText.length > 200 ? newText.slice(0, 200) + "…" : newText;
 
@@ -338,7 +355,7 @@ export function useContentEditable({
 
       syncFromDOM();
     },
-    [tilePopover, syncFromDOM]
+    [tilePopover, syncFromDOM, resize]
   );
 
   const handleTileKeyDown = useCallback(
@@ -351,8 +368,7 @@ export function useContentEditable({
         event.preventDefault();
         const tile = selectedTileRef.current;
         const text = tile.getAttribute("data-text") ?? "";
-        const rect = tile.getBoundingClientRect();
-        setTilePopover({ text, rect, tile });
+        setTilePopover({ text, tile });
         return true;
       }
 
@@ -419,7 +435,7 @@ export function useContentEditable({
         direction = event.key === "ArrowLeft" ? "before" : "after";
       }
 
-      let tile = getAdjacentPasteTile(range, direction);
+      let tile = getAdjacentRichTile(range, direction);
 
       // For arrow keys, skip whitespace-only text nodes (e.g. trailing space)
       if (!tile && isNav) {
@@ -434,7 +450,7 @@ export function useContentEditable({
               : startContainer.nextSibling;
           if (
             sibling?.nodeType === Node.ELEMENT_NODE &&
-            (sibling as HTMLElement).hasAttribute("data-paste-tile")
+            (sibling as HTMLElement).hasAttribute("data-rich-tile")
           ) {
             tile = sibling as HTMLElement;
           }

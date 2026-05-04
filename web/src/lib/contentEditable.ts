@@ -102,7 +102,7 @@ export function getTextContent(element: HTMLElement): string {
       parts.push(node.textContent ?? "");
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
-      if (el.hasAttribute("data-paste-tile")) {
+      if (el.hasAttribute("data-rich-tile")) {
         parts.push(el.getAttribute("data-text") ?? "");
       } else if (el.tagName === "BR") {
         parts.push("\n");
@@ -178,13 +178,28 @@ function createSvgIcon(
   return svg;
 }
 
-export function createRichInputTileNode(text: string): HTMLSpanElement {
+export interface RichTileConfig {
+  type: string;
+  text: string;
+  preview: string;
+  meta: string;
+}
+
+export function createRichInputTileNode(
+  config: RichTileConfig
+): HTMLSpanElement {
   const tile = document.createElement("span");
   tile.contentEditable = "false";
-  tile.setAttribute("data-paste-tile", "");
-  tile.setAttribute("data-text", text);
+  tile.setAttribute("data-rich-tile", "");
+  tile.setAttribute("data-tile-type", config.type);
+  tile.setAttribute("data-text", config.text);
   tile.className = "rich-input-tile";
-  tile.title = text.length > 200 ? text.slice(0, 200) + "…" : text;
+  tile.title =
+    config.text.length > 200 ? config.text.slice(0, 200) + "…" : config.text;
+  tile.setAttribute(
+    "aria-label",
+    "Pasted text: " + config.preview + ", " + config.meta
+  );
 
   const icon = createSvgIcon(CLIPBOARD_PATH, "0 0 16 16", 14, 1.5);
   icon.classList.add("rich-input-tile-icon");
@@ -192,17 +207,17 @@ export function createRichInputTileNode(text: string): HTMLSpanElement {
 
   const previewSpan = document.createElement("span");
   previewSpan.className = "rich-input-tile-preview";
-  previewSpan.textContent = getPasteTilePreview(text);
+  previewSpan.textContent = config.preview;
   tile.appendChild(previewSpan);
 
   const metaSpan = document.createElement("span");
   metaSpan.className = "rich-input-tile-meta";
-  metaSpan.textContent = getPasteTileMeta(text);
+  metaSpan.textContent = config.meta;
   tile.appendChild(metaSpan);
 
   const removeBtn = document.createElement("span");
   removeBtn.className = "rich-input-tile-remove";
-  removeBtn.setAttribute("data-paste-tile-remove", "");
+  removeBtn.setAttribute("data-rich-tile-remove", "");
   removeBtn.setAttribute("role", "button");
   removeBtn.setAttribute("aria-label", "Remove pasted text");
   removeBtn.appendChild(createSvgIcon(X_PATH, "0 0 28 28", 10, 2.5));
@@ -211,7 +226,7 @@ export function createRichInputTileNode(text: string): HTMLSpanElement {
   return tile;
 }
 
-export function getAdjacentPasteTile(
+export function getAdjacentRichTile(
   range: Range,
   direction: "before" | "after"
 ): HTMLElement | null {
@@ -241,7 +256,7 @@ export function getAdjacentPasteTile(
 
   if (
     candidate?.nodeType === Node.ELEMENT_NODE &&
-    (candidate as HTMLElement).hasAttribute("data-paste-tile")
+    (candidate as HTMLElement).hasAttribute("data-rich-tile")
   ) {
     return candidate as HTMLElement;
   }

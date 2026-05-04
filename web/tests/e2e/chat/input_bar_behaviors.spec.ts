@@ -634,8 +634,8 @@ test.describe("Keyboard Edge Cases", () => {
   });
 });
 
-const TILE_SELECTOR = "[data-paste-tile]";
-const TILE_REMOVE_SELECTOR = "[data-paste-tile-remove]";
+const TILE_SELECTOR = "[data-rich-tile]";
+const TILE_REMOVE_SELECTOR = "[data-rich-tile-remove]";
 const TILE_POPOVER_SELECTOR = "[role='dialog'][aria-label='Edit pasted text']";
 
 const LARGE_TEXT = `function fibonacci(n) {
@@ -751,7 +751,7 @@ test.describe("Paste Tiles", () => {
   test("tile has trailing space for cursor visibility", async ({ page }) => {
     await pasteLargeText(page);
     const hasSpace = await page.evaluate(() => {
-      const tile = document.querySelector("[data-paste-tile]")!;
+      const tile = document.querySelector("[data-rich-tile]")!;
       const next = tile.nextSibling;
       return next?.nodeType === Node.TEXT_NODE && next.textContent === " ";
     });
@@ -798,7 +798,7 @@ test.describe("Paste Tiles", () => {
     const highlighted = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(highlighted).toBe(true);
@@ -818,7 +818,7 @@ test.describe("Paste Tiles", () => {
     const highlighted = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(highlighted).toBe(true);
@@ -848,7 +848,7 @@ test.describe("Paste Tiles", () => {
     const before = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(before).toBe(true);
@@ -856,7 +856,7 @@ test.describe("Paste Tiles", () => {
     const after = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(after).toBe(false);
@@ -875,7 +875,7 @@ test.describe("Paste Tiles", () => {
     const highlighted = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(highlighted).toBe(false);
@@ -887,11 +887,11 @@ test.describe("Paste Tiles", () => {
     await pasteLargeText(page);
     await page.keyboard.press("End");
     // First backspace highlights
-    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Backspace");
     const highlighted = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-selected")
     );
     expect(highlighted).toBe(true);
@@ -908,7 +908,7 @@ test.describe("Paste Tiles", () => {
     const inSelection = await page.evaluate(
       () =>
         document
-          .querySelector("[data-paste-tile]")
+          .querySelector("[data-rich-tile]")
           ?.classList.contains("rich-input-tile-in-selection")
     );
     expect(inSelection).toBe(true);
