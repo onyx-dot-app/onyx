@@ -67,16 +67,19 @@ def get_onyx_bot_auth_ids(
 
     cache_key = (tenant_id, slack_bot_id)
 
-    # Single critical section: concurrent first-time callers for the same
-    # (tenant_id, slack_bot_id) share a single auth_test() round-trip rather
-    # than racing to populate the cache.
     with slack_token_lock:
         user_id = slack_token_user_ids.get(cache_key)
         bot_id = slack_token_bot_ids.get(cache_key)
-        if user_id is None or bot_id is None:
-            response = web_client.auth_test()
-            user_id = response.get("user_id")
-            bot_id = response.get("bot_id")
+
+    if user_id is None or bot_id is None:
+        # Network I/O happens outside the lock so that an in-flight or slow
+        # auth_test() for one (tenant, bot) does not block cache reads for
+        # other keys. A rare duplicate auth_test() on cold-start for the
+        # same key returns identical values and is harmless.
+        response = web_client.auth_test()
+        user_id = response.get("user_id")
+        bot_id = response.get("bot_id")
+        with slack_token_lock:
             slack_token_user_ids[cache_key] = user_id
             slack_token_bot_ids[cache_key] = bot_id
 
