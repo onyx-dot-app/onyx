@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   setCursorToEnd as setCursorToEndUtil,
   insertTextAtCursor as insertTextAtCursorUtil,
@@ -11,6 +11,7 @@ export interface UseContentEditableOptions {
   minHeight?: number;
   maxHeight?: number;
   onContentChange?: (text: string) => void;
+  disabled?: boolean;
 }
 
 export interface UseContentEditableReturn {
@@ -33,10 +34,11 @@ export function useContentEditable({
   minHeight = 44,
   maxHeight = 200,
   onContentChange,
+  disabled = false,
 }: UseContentEditableOptions): UseContentEditableReturn {
   const ref = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState(initialContent);
-  const isEmpty = useMemo(() => !message, [message]);
+  const isEmpty = !message;
   const isComposingRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const rafRef = useRef<number | null>(null);
@@ -53,6 +55,11 @@ export function useContentEditable({
         parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     }
   }, [wrapperRef]);
+
+  useEffect(() => {
+    if (disabled) return;
+    ref.current?.focus();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {

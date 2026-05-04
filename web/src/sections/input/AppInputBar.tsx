@@ -160,10 +160,6 @@ const AppInputBar = React.memo(
       wrapperRef: inputWrapperRef,
     });
 
-    useEffect(() => {
-      inputRef.current?.focus();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -350,6 +346,7 @@ const AppInputBar = React.memo(
     }, [showFiles, currentMessageFiles]);
 
     function handlePaste(event: React.ClipboardEvent) {
+      if (disabled) return;
       const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
       if (pastedFiles.length > 0) {
         event.preventDefault();
@@ -829,6 +826,7 @@ const AppInputBar = React.memo(
                         scrollbarColor: "var(--border-02) transparent",
                       }}
                       aria-multiline={true}
+                      aria-disabled={disabled}
                       data-placeholder={
                         queuedMessages.length > 0 && !message
                           ? "Press up to edit queued messages"

@@ -3,7 +3,6 @@
 import {
   memo,
   forwardRef,
-  useEffect,
   useImperativeHandle,
   useCallback,
   useRef,
@@ -180,10 +179,6 @@ const InputBar = memo(
         wrapperRef: inputWrapperRef,
       });
 
-      useEffect(() => {
-        inputRef.current?.focus();
-      }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -222,6 +217,7 @@ const InputBar = memo(
 
       const handlePaste = useCallback(
         (event: ClipboardEvent) => {
+          if (disabled) return;
           const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
           if (pastedFiles.length > 0) {
             event.preventDefault();
@@ -351,6 +347,7 @@ const InputBar = memo(
                 role="textbox"
                 aria-label={placeholder}
                 aria-multiline={true}
+                aria-disabled={disabled}
                 data-placeholder={placeholder}
                 data-empty={isEmpty ? "" : undefined}
               />
