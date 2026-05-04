@@ -1614,13 +1614,53 @@ async def _check_for_saml_and_jwt(
     return user
 
 
+async def _maybe_refresh_oidc_tokens(
+    user: User,
+    async_db_session: AsyncSession,
+    user_manager: BaseUserManager[User, uuid.UUID],
+) -> None:
+    """Best-effort refresh of any near-expiry OAuth access tokens.
+
+    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through
+    forward `user.oauth_accounts[0].access_token` directly to the upstream
+    service. The web client's /auth/refresh ticker is gated off for
+    OIDC/SAML (see `web/src/hooks/useTokenRefresh.ts`), so without this hook
+    the stored access_token would rot at the IdP's lifetime (~1 h on
+    Microsoft Entra default) and downstream calls would 401 until the user
+    signs out and back in.
+
+    Refreshing here on every authenticated request is cheap — the underlying
+    `check_and_refresh_oauth_tokens` short-circuits when no account is
+    within the 5-minute renewal buffer. Failures log and return, so a
+    misconfigured IdP can never break authentication of an otherwise-valid
+    request.
+    """
+    # Local import mirrors the pattern at `get_refresh_router` to keep the
+    # auth module's load order resilient.
+    from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
+
+    try:
+        await check_and_refresh_oauth_tokens(
+            user=user,
+            db_session=async_db_session,
+            user_manager=cast(Any, user_manager),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to opportunistically refresh OAuth tokens for %s",
+            user.email,
+        )
+
+
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
+    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> User | None:
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
+        await _maybe_refresh_oidc_tokens(user, async_db_session, user_manager)
         return user
 
     try:
@@ -1632,6 +1672,8 @@ async def optional_user(
         logger.warning("Issue with validating authentication token")
         return None
 
+    if user is not None:
+        await _maybe_refresh_oidc_tokens(user, async_db_session, user_manager)
     return user
 
 
