@@ -25,7 +25,7 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Checkbox } from "@opal/components";
+import { Button, Checkbox } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
@@ -40,13 +40,12 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import { Tooltip } from "@opal/components";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
-import { SvgEye, SvgEyeClosed } from "@opal/icons";
+import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({
   children,
@@ -871,7 +870,9 @@ export function TextArrayField<T extends Yup.AnyObject>({
                 </div>
               ))}
 
-            <CreateButton
+            <Button
+              icon={SvgPlusCircle}
+              prominence="secondary"
               onClick={() => {
                 if (!disabled) {
                   arrayHelpers.push("");
@@ -881,7 +882,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               disabled={disabled}
             >
               Add New
-            </CreateButton>
+            </Button>
           </div>
         )}
       />

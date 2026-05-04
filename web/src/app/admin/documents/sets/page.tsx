@@ -2,7 +2,7 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo } from "@opal/icons";
+import { SvgInfo, SvgPlusCircle } from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -10,7 +10,7 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Divider, Text } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
@@ -35,7 +35,6 @@ import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
@@ -392,9 +391,13 @@ function Main() {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <CreateButton href="/admin/documents/sets/new">
+        <Button
+          icon={SvgPlusCircle}
+          prominence="secondary"
+          href="/admin/documents/sets/new"
+        >
           New Document Set
-        </CreateButton>
+        </Button>
       </div>
 
       {documentSets.length > 0 && (

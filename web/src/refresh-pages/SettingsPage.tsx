@@ -17,6 +17,7 @@ import {
   SvgKey,
   SvgLock,
   SvgMinusCircle,
+  SvgPlusCircle,
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
@@ -40,7 +41,6 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button, Divider } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -1468,15 +1468,14 @@ function AccountsAccessSettings() {
                         variant="internal"
                       />
                     )}
-                    <CreateButton
+                    <Button
+                      rightIcon={SvgPlusCircle}
+                      prominence="internal"
+                      interaction={showCreateModal ? "active" : "rest"}
                       onClick={() => setShowCreateModal(true)}
-                      secondary={false}
-                      internal
-                      transient={showCreateModal}
-                      rightIcon
                     >
                       New Access Token
-                    </CreateButton>
+                    </Button>
                   </Section>
 
                   <Section gap={0.25}>
