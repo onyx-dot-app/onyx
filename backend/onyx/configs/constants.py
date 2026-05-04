@@ -431,6 +431,9 @@ class OnyxCeleryQueues:
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
+    # Targeted reindex queue
+    TARGETED_REINDEX = "targeted_reindex"
+
     # Monitoring queue
     MONITORING = "monitoring"
 
@@ -572,6 +575,9 @@ class OnyxCeleryTask:
     PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
     CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
     DELETE_SINGLE_USER_FILE = "delete_single_user_file"
+
+    # Targeted reindex
+    TARGETED_REINDEX_TASK = "targeted_reindex_task"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"

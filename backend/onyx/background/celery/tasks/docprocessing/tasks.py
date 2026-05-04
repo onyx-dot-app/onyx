@@ -32,6 +32,9 @@ from onyx.background.celery.tasks.docfetching.task_creation_utils import (
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
+from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (  # noqa: F401  # registers @shared_task with celery
+    targeted_reindex_task,
+)
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
 from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.docprocessing.utils import should_index
