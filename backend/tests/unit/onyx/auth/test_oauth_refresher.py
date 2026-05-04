@@ -256,6 +256,9 @@ async def test_resolve_token_endpoint_openid_via_discovery(
 ) -> None:
     """For OIDC ("openid"), the token endpoint is read from the discovery doc."""
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
+    # Reset the lock so it gets created in the current test's event loop;
+    # without this, a prior test's lock could be bound to a different loop.
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_LOCK", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -288,6 +291,50 @@ async def test_resolve_token_endpoint_openid_via_discovery(
     endpoint_cached = await _resolve_token_endpoint("openid")
     assert endpoint_cached == "https://idp.example.com/oauth2/v2.0/token"
     mock_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resolve_token_endpoint_openid_cache_ttl_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An expired cache entry triggers a fresh discovery fetch."""
+    import time as _time
+
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_LOCK", None)
+    monkeypatch.setattr(
+        oauth_refresher,
+        "OPENID_CONFIG_URL",
+        "https://idp.example.com/.well-known/openid-configuration",
+    )
+    monkeypatch.setattr(oauth_refresher, "OIDC_DISCOVERY_CACHE_TTL_SECONDS", 1)
+    # Pre-populate the cache with an entry that's already past TTL.
+    expired_fetched_at = _time.monotonic() - 60.0
+    monkeypatch.setattr(
+        oauth_refresher,
+        "_OIDC_TOKEN_ENDPOINT_CACHE",
+        {
+            "url": "https://idp.example.com/old-token-endpoint",
+            "fetched_at": expired_fetched_at,
+        },
+    )
+
+    discovery_response = MagicMock()
+    discovery_response.status_code = 200
+    discovery_response.raise_for_status.return_value = None
+    discovery_response.json.return_value = {
+        "token_endpoint": "https://idp.example.com/new-token-endpoint",
+    }
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = discovery_response
+
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+        endpoint = await _resolve_token_endpoint("openid")
+
+    # Must NOT return the stale cached URL; a fresh fetch is required.
+    assert endpoint == "https://idp.example.com/new-token-endpoint"
+    mock_client.get.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -403,12 +450,18 @@ async def test_refresh_oauth_token_openid_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OIDC ("openid") accounts refresh via the discovery-resolved endpoint."""
+    import time as _time
+
     # Pre-populate the cache so the refresh test does not depend on the
-    # discovery-doc fetch path (covered separately above).
+    # discovery-doc fetch path (covered separately above). Include a fresh
+    # `fetched_at` so the entry is well within the TTL window.
     monkeypatch.setattr(
         oauth_refresher,
         "_OIDC_TOKEN_ENDPOINT_CACHE",
-        {"url": "https://idp.example.com/oauth2/v2.0/token"},
+        {
+            "url": "https://idp.example.com/oauth2/v2.0/token",
+            "fetched_at": _time.monotonic(),
+        },
     )
 
     mock_oauth_account.oauth_name = "openid"

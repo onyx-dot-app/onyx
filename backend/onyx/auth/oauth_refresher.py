@@ -1,4 +1,6 @@
 import asyncio
+import os
+import time
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -27,9 +29,18 @@ REFRESH_ENDPOINTS: Dict[str, str] = {
 }
 
 # Token endpoint resolved from the configured OIDC discovery document.
-# Populated lazily on first successful fetch and re-used thereafter, so the
-# .well-known/openid-configuration document is only retrieved once per process.
-_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str] = {}
+# Populated lazily on first successful fetch and re-used until the entry's
+# `fetched_at` exceeds OIDC_DISCOVERY_CACHE_TTL_SECONDS, at which point it is
+# re-fetched. The TTL guards against the IdP rotating its `token_endpoint`
+# without us noticing (rare for major IdPs but possible across tenant moves
+# or app-reg migrations).
+_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, Any] = {}
+
+# Default 1 hour: matches Microsoft Entra's default access-token lifetime, so
+# at worst one refresh fails after an endpoint rotation before we self-heal.
+OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
+    os.environ.get("OIDC_DISCOVERY_CACHE_TTL_SECONDS") or 3600
+)
 
 # Lazily-initialized lock guarding concurrent first-time fetches of the OIDC
 # discovery document. Created on first use so it binds to the running event
@@ -45,6 +56,17 @@ def _get_oidc_lock() -> asyncio.Lock:
     return _OIDC_TOKEN_ENDPOINT_LOCK
 
 
+def _cached_token_endpoint() -> Optional[str]:
+    """Return the cached endpoint if still within its TTL, else None."""
+    cached_url = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+    fetched_at = _OIDC_TOKEN_ENDPOINT_CACHE.get("fetched_at")
+    if not isinstance(cached_url, str) or not isinstance(fetched_at, float):
+        return None
+    if (time.monotonic() - fetched_at) >= OIDC_DISCOVERY_CACHE_TTL_SECONDS:
+        return None
+    return cached_url
+
+
 async def _get_oidc_token_endpoint() -> Optional[str]:
     """Resolve the OAuth2 token endpoint for the configured OIDC provider.
 
@@ -52,9 +74,10 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
     refresh works for any OIDC provider (Microsoft Entra, Okta, Keycloak,
     Auth0, ...) without hardcoding provider-specific URLs. The lock + double
     check ensures concurrent callers (e.g. multiple tokens expiring at once
-    after a server restart) coalesce into a single discovery request.
+    after a server restart) coalesce into a single discovery request, and the
+    TTL ensures we re-fetch periodically in case the IdP rotates the endpoint.
     """
-    cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+    cached = _cached_token_endpoint()
     if cached:
         return cached
     if not OPENID_CONFIG_URL:
@@ -62,7 +85,7 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
     async with _get_oidc_lock():
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
-        cached = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
+        cached = _cached_token_endpoint()
         if cached:
             return cached
         try:
@@ -78,6 +101,7 @@ async def _get_oidc_token_endpoint() -> Optional[str]:
         token_endpoint = config.get("token_endpoint")
         if isinstance(token_endpoint, str) and token_endpoint:
             _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
+            _OIDC_TOKEN_ENDPOINT_CACHE["fetched_at"] = time.monotonic()
             return token_endpoint
         return None
 
