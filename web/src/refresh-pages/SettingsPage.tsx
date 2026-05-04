@@ -1468,14 +1468,16 @@ function AccountsAccessSettings() {
                         variant="internal"
                       />
                     )}
-                    <Button
-                      rightIcon={SvgPlusCircle}
-                      prominence="internal"
-                      interaction={showCreateModal ? "active" : "rest"}
-                      onClick={() => setShowCreateModal(true)}
-                    >
-                      New Access Token
-                    </Button>
+                    <div className="shrink-0">
+                      <Button
+                        rightIcon={SvgPlusCircle}
+                        prominence="internal"
+                        interaction={showCreateModal ? "active" : "rest"}
+                        onClick={() => setShowCreateModal(true)}
+                      >
+                        New Access Token
+                      </Button>
+                    </div>
                   </Section>
 
                   <Section gap={0.25}>
