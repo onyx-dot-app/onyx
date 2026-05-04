@@ -376,10 +376,14 @@ export function useContentEditable({
         return true;
       }
 
-      // Unrelated keys clear selection
+      // Unrelated keys deselect tile and place cursor after it
       if (!isNav && !isDelete) {
+        if (selectedTileRef.current) {
+          const tile = selectedTileRef.current;
+          clearTileSelection();
+          setCursorAfterNode(tile);
+        }
         setTilePopover(null);
-        clearTileSelection();
         return false;
       }
 
