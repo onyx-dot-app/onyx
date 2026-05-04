@@ -49,8 +49,6 @@ def get_grace_period_end(expires_at: datetime) -> datetime:
 
 
 def get_grace_days_remaining(expires_at: datetime) -> int:
-    grace_end = get_grace_period_end(expires_at)
-    seconds_left = (grace_end - datetime.now(timezone.utc)).total_seconds()
-    if seconds_left <= 0:
-        return 0
-    return max(1, int(seconds_left // 86400) + (1 if seconds_left % 86400 > 0 else 0))
+    grace_end_date = get_grace_period_end(expires_at).date()
+    today = datetime.now(timezone.utc).date()
+    return max(0, (grace_end_date - today).days)
