@@ -566,25 +566,20 @@ def batch_get_user_groups(
 def get_active_admin_users(db_session: Session) -> list[User]:
     """Active human admins, excluding API-key dummy users and system placeholders.
 
-    Mirrors the filter set used by `_add_live_user_count_where_clause(only_admin_users=True)`
-    so callers that want to email or surface UI to admins can reuse it.
+    Mirrors `_add_live_user_count_where_clause(only_admin_users=True)` in
+    `onyx/db/auth.py` so callers that email or surface UI to admins reuse
+    the same filter set.
     """
     from onyx.db.api_key import get_api_key_email_pattern
 
-    return list(
-        db_session.execute(
-            select(User).where(
-                User.is_active,  # ty: ignore[invalid-argument-type]
-                User.role == UserRole.ADMIN,
-                ~User.email.endswith(  # ty: ignore[invalid-argument-type]
-                    get_api_key_email_pattern()
-                ),
-                User.email != ANONYMOUS_USER_EMAIL,  # ty: ignore[invalid-argument-type]
-                User.email
-                != NO_AUTH_PLACEHOLDER_USER_EMAIL,  # ty: ignore[invalid-argument-type]
-            )
-        )
-        .unique()
-        .scalars()
-        .all()
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+
+    stmt = select(User).where(
+        is_active_col.is_(True),
+        User.role == UserRole.ADMIN,
+        expression.not_(email_col.endswith(get_api_key_email_pattern())),
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
     )
+    return list(db_session.execute(stmt).unique().scalars().all())
