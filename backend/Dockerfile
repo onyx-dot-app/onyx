@@ -76,6 +76,7 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
+# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
 RUN uv pip install --system --no-cache-dir --no-deps --upgrade \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \

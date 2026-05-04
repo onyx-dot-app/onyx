@@ -65,6 +65,7 @@ runs:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
         # Build the uv pip install command with each requirement file as array elements
+        # TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
         cmd=("uv" "pip" "install" "--no-deps")
         while IFS= read -r req; do
           # Skip empty lines
