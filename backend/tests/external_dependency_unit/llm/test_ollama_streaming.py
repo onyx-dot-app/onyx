@@ -148,7 +148,12 @@ def test_streaming_tool_call_finish_reason_is_tool_calls(
         if chunk.choice.finish_reason:
             finish_reasons.append(chunk.choice.finish_reason)
 
-    assert saw_tool_call, "Model did not emit a tool call; cannot test finish_reason"
+    # A reasoning model can legitimately decide to answer directly instead of
+    # invoking the tool. Skip rather than fail in that case — the assertion we
+    # care about (finish_reason override) only applies once a tool call is
+    # actually emitted.
+    if not saw_tool_call:
+        pytest.skip("Model declined to issue a tool call on this run")
     assert finish_reasons, "Stream produced no terminal chunk with finish_reason"
     assert finish_reasons[-1] == "tool_calls", (
         f"Expected terminal finish_reason='tool_calls' when model issues a "

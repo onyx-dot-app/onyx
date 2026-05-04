@@ -191,7 +191,7 @@ def _patch_ollama_chunk_parser() -> None:
                 # Mirror upstream's fix for BerriAI/litellm#18922: when tool
                 # calls are present, override done_reason to "tool_calls" so
                 # downstream consumers branch correctly.
-                if tool_calls is not None:
+                if tool_calls:
                     finish_reason = "tool_calls"
                 choices = [
                     StreamingChoices(
