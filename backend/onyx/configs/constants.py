@@ -431,9 +431,6 @@ class OnyxCeleryQueues:
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
-    # Targeted reindex queue
-    TARGETED_REINDEX = "targeted_reindex"
-
     # Monitoring queue
     MONITORING = "monitoring"
 

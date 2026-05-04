@@ -121,10 +121,15 @@ def submit_targeted_reindex(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     try:
+        # Route to the existing PRIMARY queue. The design has the trigger
+        # task running on the primary worker that already owns the
+        # indexing scheduler. Per-cc-pair fan-out (connector fetch +
+        # docprocessing) hands off to the existing docfetching/
+        # docprocessing queues from inside the task body.
         celery_app.send_task(
             OnyxCeleryTask.TARGETED_REINDEX_TASK,
             kwargs={"targeted_reindex_job_id": result.targeted_reindex_job_id},
-            queue=OnyxCeleryQueues.TARGETED_REINDEX,
+            queue=OnyxCeleryQueues.PRIMARY,
             priority=OnyxCeleryPriority.HIGHEST,
             task_id=result.celery_task_id,
         )
