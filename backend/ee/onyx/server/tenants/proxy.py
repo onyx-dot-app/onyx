@@ -33,6 +33,8 @@ from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
+from ee.onyx.server.tenants.models import SendLicenseExpiryEmailRequest
+from ee.onyx.server.tenants.models import SendLicenseExpiryEmailResponse
 from ee.onyx.utils.license import is_license_valid
 from ee.onyx.utils.license import verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
@@ -453,17 +455,6 @@ async def proxy_seat_update(
         message=result.get("message"),
         license=result.get("license"),
     )
-
-
-class SendLicenseExpiryEmailRequest(BaseModel):
-    stage: Literal["t_30d", "t_14d", "t_1d", "grace"]
-    expires_at: str
-    grace_days_remaining: int | None = None
-
-
-class SendLicenseExpiryEmailResponse(BaseModel):
-    sent: bool
-    detail: str | None = None
 
 
 @router.post("/send-license-expiry-email")

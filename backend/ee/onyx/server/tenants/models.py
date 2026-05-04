@@ -115,3 +115,14 @@ class ApproveUserRequest(BaseModel):
 
 class StripePublishableKeyResponse(BaseModel):
     publishable_key: str
+
+
+class SendLicenseExpiryEmailRequest(BaseModel):
+    stage: Literal["t_30d", "t_14d", "t_1d", "grace"]
+    expires_at: str
+    grace_days_remaining: int | None = None
+
+
+class SendLicenseExpiryEmailResponse(BaseModel):
+    sent: bool
+    detail: str | None = None
