@@ -9,8 +9,11 @@ from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
 """
 
 from celery import Task
+from sqlalchemy import update
 
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import IndexAttempt
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -34,6 +37,24 @@ def on_docprocessing_task_prerun(
     tenant_id = kwargs.get("tenant_id")
     if index_attempt_id is None:
         return
+
+    # Emit a heartbeat before moving the counter to in_flight. This ensures
+    # the monitor never sees in_flight > 0 with a stale heartbeat for a live
+    # worker — picking up a batch is proof of life.
+    try:
+        with get_session_with_current_tenant() as db_session:
+            db_session.execute(
+                update(IndexAttempt)
+                .where(IndexAttempt.id == index_attempt_id)
+                .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
+            )
+            db_session.commit()
+    except Exception:
+        logger.debug(
+            "Failed to emit heartbeat on prerun for attempt %s",
+            index_attempt_id,
+            exc_info=True,
+        )
 
     try:
         r = get_redis_client(tenant_id=tenant_id)
