@@ -65,7 +65,7 @@ runs:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
         # Build the uv pip install command with each requirement file as array elements
-        cmd=("uv" "pip" "install")
+        cmd=("uv" "pip" "install" "--no-deps")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then

@@ -13,10 +13,10 @@ COPY ./requirements/model_server.txt /tmp/requirements.txt
 # Install torch + CUDA/GPU deps in a dedicated layer: together they are ~3GB,
 # and isolating them avoids a single oversized layer that is unreliable to push.
 RUN grep -E '^(torch|nvidia-[a-z0-9-]+|triton)==' /tmp/requirements.txt \
-        | uv pip install --system --no-cache-dir -r /dev/stdin && \
+        | uv pip install --system --no-cache-dir --no-deps -r /dev/stdin && \
     rm -rf ~/.cache/uv
 
-RUN uv pip install --system --no-cache-dir \
+RUN uv pip install --system --no-cache-dir --no-deps \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
