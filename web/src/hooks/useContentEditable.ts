@@ -333,12 +333,16 @@ export function useContentEditable({
       const { tile } = tilePopover;
 
       if (!newText.trim()) {
+        const cursorTarget = tile.nextSibling ?? tile.previousSibling;
         tile.remove();
         selectedTileRef.current = null;
         syncFromDOM();
         resize();
         setTilePopover(null);
         ref.current?.focus();
+        if (cursorTarget) {
+          setCursorAfterNode(cursorTarget);
+        }
         return;
       }
 
