@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Link from "next/link";
+import type { Route } from "next";
 
 import type { RichStr } from "@opal/types";
 
@@ -19,15 +21,20 @@ const INLINE_COMPONENTS = {
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
     const isRelative = href.startsWith("/") || href.startsWith("#");
-    if (!isRelative && !SAFE_PROTOCOL.test(href)) {
-      return <>{children}</>;
+    if (isRelative) {
+      return (
+        <Link href={href as Route} className="underline underline-offset-2">
+          {children}
+        </Link>
+      );
     }
-    const isHttp = /^https?:/i.test(href);
+    if (!SAFE_PROTOCOL.test(href)) return <>{children}</>;
     return (
       <a
         href={href}
         className="underline underline-offset-2"
-        {...(isHttp ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        target="_blank"
+        rel="noopener noreferrer"
       >
         {children}
       </a>
