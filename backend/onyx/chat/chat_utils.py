@@ -163,6 +163,7 @@ def create_chat_history_chain(
     chat_session_id: UUID,
     db_session: Session,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
     # Optional id at which we finish processing
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
@@ -175,6 +176,7 @@ def create_chat_history_chain(
         db_session=db_session,
         skip_permission_check=True,
         prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
     )
 
     if not all_chat_messages:

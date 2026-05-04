@@ -33,7 +33,6 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useAgents, useCurrentAgent, usePinnedAgents } from "@/hooks/useAgents";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
@@ -745,10 +744,8 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
 });
 
 export default function AppSidebar() {
-  const { folded, setFolded } = useSidebarState();
-
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={setFolded} foldable>
+    <SidebarLayouts.Root foldable>
       <MemoizedAppSidebarInner />
     </SidebarLayouts.Root>
   );

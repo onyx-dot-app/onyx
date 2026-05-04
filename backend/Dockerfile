@@ -77,7 +77,7 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 # TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
-RUN uv pip install --system --no-cache-dir --no-deps --upgrade \
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \

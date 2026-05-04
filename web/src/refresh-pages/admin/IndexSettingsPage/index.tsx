@@ -827,6 +827,7 @@ export default function IndexSettingsPage() {
     cancelReindexModal.toggle(false);
     toast.success("Re-indexing canceled");
     await Promise.all([
+      mutate(SWR_KEYS.currentSearchSettings),
       mutate(SWR_KEYS.secondarySearchSettings),
       mutate(SWR_KEYS.indexingStatus),
     ]);
@@ -894,7 +895,7 @@ export default function IndexSettingsPage() {
           <Formik<IndexSettingsFormValues>
             enableReinitialize
             initialValues={initialFormValues}
-            onSubmit={async (values, { resetForm }) => {
+            onSubmit={async (values) => {
               // Custom self-hosted models live outside the static registry,
               // so the form carries their spec (`modelDim`, `normalize`, etc.)
               // in `custom_model` for submission. The provider, however, is
@@ -928,7 +929,6 @@ export default function IndexSettingsPage() {
               }
 
               toast.success("Re-indexing started");
-              resetForm({ values });
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
@@ -1081,16 +1081,18 @@ export default function IndexSettingsPage() {
                     />
 
                     {NEXT_PUBLIC_CLOUD_ENABLED ? (
-                      <Card border="solid" rounding="lg" padding="sm">
-                        <GeneralLayouts.Section padding={0.5}>
-                          <Content
-                            icon={SvgVector}
-                            title="Embedding model and settings are managed by Onyx Cloud."
-                            sizePreset="main-ui"
-                            variant="section"
-                          />
-                        </GeneralLayouts.Section>
-                      </Card>
+                      <CloudDisabled>
+                        <Card border="solid" rounding="lg" padding="sm">
+                          <GeneralLayouts.Section padding={0.5}>
+                            <Content
+                              icon={SvgVector}
+                              title="Embedding model and settings are managed by Onyx Cloud."
+                              sizePreset="main-ui"
+                              variant="section"
+                            />
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </CloudDisabled>
                     ) : (
                       currentEmbeddingModel && (
                         <Disabled
@@ -1515,7 +1517,7 @@ export default function IndexSettingsPage() {
                       variant="section"
                     />
 
-                    <CloudDisabled
+                    <Disabled
                       disabled={!hasAnyVisionLlm}
                       tooltip={
                         !hasAnyVisionLlm
@@ -1604,7 +1606,7 @@ export default function IndexSettingsPage() {
                           </Disabled>
                         </GeneralLayouts.Section>
                       </Card>
-                    </CloudDisabled>
+                    </Disabled>
                   </GeneralLayouts.Section>
                 </>
               );

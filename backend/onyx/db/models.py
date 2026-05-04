@@ -379,6 +379,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
 
+    # Input preferences
+    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
     voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -541,6 +541,7 @@ def get_chat_messages_by_session(
     db_session: Session,
     skip_permission_check: bool = False,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -553,6 +554,12 @@ def get_chat_messages_by_session(
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+
+    if prefetch_message_details:
+        stmt = stmt.options(
+            selectinload(ChatMessage.chat_message_feedbacks),
+            selectinload(ChatMessage.search_docs),
+        )
 
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.

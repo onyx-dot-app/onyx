@@ -15,8 +15,7 @@ export interface ClientLayoutProps {
 }
 
 export default function ClientLayout({ children }: ClientLayoutProps) {
-  const { folded: sidebarFolded, setFolded: setSidebarFolded } =
-    useSidebarState();
+  const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
   const settings = useSettingsContext();
@@ -47,10 +46,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
         <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{children}</div>
       ) : (
         <>
-          <AdminSidebar
-            folded={sidebarFolded}
-            onFoldChange={setSidebarFolded}
-          />
+          <AdminSidebar />
           <div
             data-main-container
             className="flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto"
@@ -60,7 +56,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
                 <Button
                   prominence="internal"
                   icon={SvgSidebar}
-                  onClick={() => setSidebarFolded(false)}
+                  onClick={() => setFolded(false)}
                 />
               </div>
             )}

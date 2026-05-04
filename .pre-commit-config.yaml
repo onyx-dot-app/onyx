@@ -16,7 +16,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "backend",
             "-o",
@@ -29,7 +28,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "dev",
             "-o",
@@ -42,7 +40,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "ee",
             "-o",
@@ -55,7 +52,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "model_server",
             "-o",

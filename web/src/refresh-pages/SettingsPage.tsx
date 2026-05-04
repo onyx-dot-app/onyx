@@ -770,6 +770,7 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserPasteAsTile,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
@@ -887,6 +888,19 @@ function ChatPreferencesSettings() {
             <Switch
               checked={smoothStreamingEnabled}
               onCheckedChange={setSmoothStreamingEnabled}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Collapse Large Pastes"
+            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            withLabel
+          >
+            <Switch
+              checked={user?.preferences?.paste_as_tile ?? false}
+              onCheckedChange={(checked) => {
+                updateUserPasteAsTile(checked);
+              }}
             />
           </InputHorizontal>
 

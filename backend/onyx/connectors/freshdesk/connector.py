@@ -77,6 +77,20 @@ def _rate_limited_freshdesk_get(
     return rl_requests.get(url, auth=auth, params=params)
 
 
+def _parse_freshdesk_datetime(raw: str | None) -> datetime | None:
+    """Freshdesk timestamps are ISO-8601 with a trailing 'Z'.
+
+    The API documents that fields like ``due_by``/``fr_due_by`` may be returned
+    as ``null`` — see https://developers.freshdesk.com/api/. This is also
+    significantly more frequent on accounts created after 25 Aug 2025, where
+    the new SLA engine recalculates ``due_by`` for a few seconds after every
+    ticket update.
+    """
+    if not raw:
+        return None
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
 def _create_metadata_from_ticket(ticket: dict) -> dict:
     metadata: dict[str, str | list[str]] = {}
     # Combine all emails into a list so there are no repeated emails
@@ -127,8 +141,9 @@ def _create_metadata_from_ticket(ticket: dict) -> dict:
             status_number, "Unknown Status"
         )
 
-    due_by = datetime.fromisoformat(ticket["due_by"].replace("Z", "+00:00"))
-    metadata["overdue"] = str(datetime.now(timezone.utc) > due_by)
+    due_by = _parse_freshdesk_datetime(ticket.get("due_by"))
+    if due_by is not None:
+        metadata["overdue"] = str(datetime.now(timezone.utc) > due_by)
 
     return metadata
 
@@ -152,9 +167,7 @@ def _create_doc_from_ticket(ticket: dict, domain: str) -> Document:
         source=DocumentSource.FRESHDESK,
         semantic_identifier=ticket["subject"],
         metadata=metadata,
-        doc_updated_at=datetime.fromisoformat(
-            ticket["updated_at"].replace("Z", "+00:00")
-        ),
+        doc_updated_at=_parse_freshdesk_datetime(ticket.get("updated_at")),
     )
 
 

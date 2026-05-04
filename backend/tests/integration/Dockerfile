@@ -8,7 +8,7 @@ WORKDIR /app
 # Integration test stuff
 COPY ./requirements/dev.txt /tmp/dev-requirements.txt
 # TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
-RUN uv pip install --system --no-cache-dir --no-deps --upgrade -r /tmp/dev-requirements.txt && \
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes -r /tmp/dev-requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
 COPY ./pytest.ini /app/pytest.ini

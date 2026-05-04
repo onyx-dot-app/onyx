@@ -563,3 +563,23 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def get_active_admin_users(db_session: Session) -> list[User]:
+    """Active human admins, excluding API-key dummy users and system placeholders.
+
+    Mirrors `_add_live_user_count_where_clause(only_admin_users=True)` in
+    `onyx/db/auth.py` so callers that email or surface UI to admins reuse
+    the same filter set.
+    """
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+
+    stmt = select(User).where(
+        is_active_col.is_(True),
+        User.role == UserRole.ADMIN,
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    )
+    return list(db_session.execute(stmt).unique().scalars().all())

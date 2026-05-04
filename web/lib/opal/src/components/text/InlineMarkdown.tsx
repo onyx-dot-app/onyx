@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import Link from "next/link";
+import type { Route } from "next";
 
 import type { RichStr } from "@opal/types";
 
@@ -8,7 +11,13 @@ import type { RichStr } from "@opal/types";
 // InlineMarkdown
 // ---------------------------------------------------------------------------
 
-const SAFE_PROTOCOL = /^https?:|^mailto:|^tel:/i;
+const sanitizeSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: [...(defaultSchema.protocols?.href ?? []), "tel"],
+  },
+};
 
 const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
 
@@ -17,8 +26,15 @@ const INLINE_COMPONENTS = {
     <span className="block">{children}</span>
   ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
-    if (!href || !SAFE_PROTOCOL.test(href)) {
-      return <>{children}</>;
+    if (!href) return <>{children}</>;
+    // rehype-sanitize has already stripped unsafe hrefs — routing decision only.
+    const isRelative = href.startsWith("/") || href.startsWith("#");
+    if (isRelative) {
+      return (
+        <Link href={href as Route} className="underline underline-offset-2">
+          {children}
+        </Link>
+      );
     }
     const isHttp = /^https?:/i.test(href);
     return (
@@ -54,6 +70,7 @@ export default function InlineMarkdown({ content }: InlineMarkdownProps) {
       allowedElements={ALLOWED_ELEMENTS}
       unwrapDisallowed
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}
     >
       {normalized}
     </ReactMarkdown>

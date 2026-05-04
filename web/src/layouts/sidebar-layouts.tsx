@@ -9,14 +9,13 @@
  * @example
  * ```tsx
  * import * as SidebarLayouts from "@/layouts/sidebar-layouts";
- * import { useSidebarState, useSidebarFolded } from "@/layouts/sidebar-layouts";
+ * import { useSidebarFolded } from "@/layouts/sidebar-layouts";
  *
  * function MySidebar() {
- *   const { folded, setFolded } = useSidebarState();
  *   const contentFolded = useSidebarFolded();
  *
  *   return (
- *     <SidebarLayouts.Root folded={folded} onFoldChange={setFolded} foldable>
+ *     <SidebarLayouts.Root foldable>
  *       <SidebarLayouts.Header>
  *         <NewSessionButton folded={contentFolded} />
  *       </SidebarLayouts.Header>
@@ -35,7 +34,6 @@
 import {
   createContext,
   useContext,
-  useCallback,
   useState,
   useEffect,
   type Dispatch,
@@ -151,12 +149,6 @@ export function useSidebarFolded(): boolean {
 
 interface SidebarRootProps {
   /**
-   * Whether the sidebar is currently folded (desktop) or off-screen (mobile).
-   */
-  folded: boolean;
-  /** Callback to update the fold state. Compatible with `useState` setters. */
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-  /**
    * Whether the sidebar supports folding on desktop.
    * When `false` (the default), the sidebar is always expanded on desktop and
    * the fold button is hidden. Mobile overlay behavior is always enabled
@@ -166,19 +158,16 @@ interface SidebarRootProps {
   children: React.ReactNode;
 }
 
-function SidebarRoot({
-  folded,
-  onFoldChange,
-  foldable = false,
-  children,
-}: SidebarRootProps) {
+function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   const { isMobile, isMediumScreen } = useScreenSize();
+  const { folded, setFolded } = useSidebarState();
 
-  const close = useCallback(() => onFoldChange(true), [onFoldChange]);
-  const toggle = useCallback(
-    () => onFoldChange((prev) => !prev),
-    [onFoldChange]
-  );
+  function closeSidebar() {
+    setFolded(true);
+  }
+  function toggleSidebar() {
+    setFolded((prev) => !prev);
+  }
 
   // On mobile the sidebar content is always visually expanded — the overlay
   // transform handles visibility. On desktop, only foldable sidebars honour
@@ -198,7 +187,7 @@ function SidebarRoot({
             folded ? "-translate-x-full" : "translate-x-0"
           )}
         >
-          <SidebarWrapper folded={false} onFoldClick={close}>
+          <SidebarWrapper folded={false} onFoldClick={closeSidebar}>
             {inner}
           </SidebarWrapper>
         </div>
@@ -211,7 +200,7 @@ function SidebarRoot({
               ? "opacity-0 pointer-events-none"
               : "opacity-100 pointer-events-auto"
           )}
-          onClick={close}
+          onClick={closeSidebar}
         />
       </SidebarFoldedContext.Provider>
     );
@@ -227,7 +216,7 @@ function SidebarRoot({
 
         {/* Sidebar — fixed so it overlays content when expanded */}
         <div className="fixed inset-y-0 left-0 z-50">
-          <SidebarWrapper folded={folded} onFoldClick={toggle}>
+          <SidebarWrapper folded={folded} onFoldClick={toggleSidebar}>
             {inner}
           </SidebarWrapper>
         </div>
@@ -240,7 +229,7 @@ function SidebarRoot({
               ? "opacity-0 pointer-events-none"
               : "opacity-100 pointer-events-auto"
           )}
-          onClick={close}
+          onClick={closeSidebar}
         />
       </SidebarFoldedContext.Provider>
     );
@@ -250,7 +239,7 @@ function SidebarRoot({
     <SidebarFoldedContext.Provider value={contentFolded}>
       <SidebarWrapper
         folded={foldable ? folded : undefined}
-        onFoldClick={foldable ? toggle : undefined}
+        onFoldClick={foldable ? toggleSidebar : undefined}
       >
         {inner}
       </SidebarWrapper>

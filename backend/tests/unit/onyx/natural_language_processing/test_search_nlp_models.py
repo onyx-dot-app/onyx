@@ -1,5 +1,7 @@
 from collections.abc import AsyncGenerator
 from threading import Lock
+from typing import Any
+from typing import cast
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -7,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
+from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
@@ -88,6 +91,105 @@ async def test_rate_limit_handling() -> None:
                 model_name="fake-model",
                 text_type=EmbedTextType.QUERY,
             )
+
+
+@pytest.mark.asyncio
+async def test_cloud_embedding_retries_on_transient_failure() -> None:
+    """
+    The @retry decorator on CloudEmbedding.embed should re-invoke the provider
+    after a transient failure. We simulate a failure on the first attempt and
+    a success on the second, and assert embed() returns the successful result.
+    """
+    call_count = 0
+
+    async def flaky_embed_openai(
+        self: CloudEmbedding,  # noqa: ARG001
+        texts: list[str],
+        model: str | None,  # noqa: ARG001
+        reduced_dimension: int | None,  # noqa: ARG001
+    ) -> list[list[float]]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("simulated transient failure on attempt 1")
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    with (
+        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(
+            CloudEmbedding,
+            CloudEmbedding._embed_openai.__name__,
+            new=flaky_embed_openai,
+        ),
+    ):
+        async with CloudEmbedding("fake-key", EmbeddingProvider.OPENAI) as embedding:
+            result = await embedding.embed(
+                texts=["test"],
+                text_type=EmbedTextType.PASSAGE,
+            )
+
+    assert call_count == 2, (
+        f"expected @retry to re-invoke the provider after a transient failure, "
+        f"but the provider was called {call_count} time(s)"
+    )
+    assert result == [[0.1, 0.2, 0.3]]
+
+
+@pytest.mark.asyncio
+async def test_cloud_embedding_retries_on_vertex_429() -> None:
+    """
+    Reproduces the exact Vertex 429 RESOURCE_EXHAUSTED error path (a
+    google.genai.errors.ClientError that is neither httpx.HTTPStatusError nor
+    openai.AuthenticationError) and asserts embed() retries after such a
+    failure. This is the production failure mode driving these retries.
+    """
+    from google.genai.errors import ClientError
+
+    vertex_429_message = (
+        "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, "
+        "'message': 'Resource exhausted. Please try again later. Please refer "
+        "to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 "
+        "for more details.', 'status': 'RESOURCE_EXHAUSTED'}}"
+    )
+
+    call_count = 0
+
+    async def flaky_embed_vertex(
+        self: CloudEmbedding,  # noqa: ARG001
+        texts: list[str],
+        model: str | None,  # noqa: ARG001
+        embedding_type: str,  # noqa: ARG001
+        reduced_dimension: int | None,  # noqa: ARG001
+    ) -> list[list[float]]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # google.genai.errors.ClientError requires (code, response_json, response)
+            raise ClientError(429, {"message": vertex_429_message})
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    with (
+        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(
+            CloudEmbedding,
+            CloudEmbedding._embed_vertex.__name__,
+            new=flaky_embed_vertex,
+        ),
+    ):
+        async with CloudEmbedding(
+            '{"project_id": "fake", "type": "service_account"}',
+            EmbeddingProvider.GOOGLE,
+        ) as embedding:
+            result = await embedding.embed(
+                texts=["test"],
+                text_type=EmbedTextType.PASSAGE,
+            )
+
+    assert call_count == 2, (
+        f"expected @retry to re-invoke after a Vertex 429, "
+        f"but the provider was called {call_count} time(s)"
+    )
+    assert result == [[0.1, 0.2, 0.3]]
 
 
 # ------------------------------------------------------------------------------

@@ -70,6 +70,7 @@ from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_paste_as_tile
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
@@ -971,6 +972,15 @@ def update_user_shortcut_enabled_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
+
+
+@router.patch("/paste-as-tile")
+def update_user_paste_as_tile_api(
+    paste_as_tile: bool,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
 
 
 @router.patch("/auto-scroll")

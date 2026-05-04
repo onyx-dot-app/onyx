@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -32,6 +25,8 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { markdown } from "@opal/utils";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -104,7 +99,7 @@ function buildItems(
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator && !enableCloud) {
+    if (!isCurator) {
       items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
@@ -187,16 +182,8 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
-interface AdminSidebarProps {
-  folded: boolean;
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-interface AdminSidebarInnerProps {
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-function AdminSidebarInner({ onFoldChange }: AdminSidebarInnerProps) {
+function AdminSidebarInner() {
+  const { setFolded } = useSidebarState();
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -255,7 +242,7 @@ function AdminSidebarInner({ onFoldChange }: AdminSidebarInnerProps) {
             icon={SvgSearch}
             folded
             onClick={() => {
-              onFoldChange(false);
+              setFolded(false);
               setFocusSearch(true);
             }}
           >
@@ -306,7 +293,14 @@ function AdminSidebarInner({ onFoldChange }: AdminSidebarInnerProps) {
             disabled
           >
             {group.items.map(({ link, icon, name }) => (
-              <SidebarTab key={link} disabled icon={icon}>
+              <SidebarTab
+                key={link}
+                disabled
+                icon={icon}
+                tooltip={markdown(
+                  "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                )}
+              >
                 {name}
               </SidebarTab>
             ))}
@@ -335,13 +329,10 @@ function AdminSidebarInner({ onFoldChange }: AdminSidebarInnerProps) {
   );
 }
 
-export default function AdminSidebar({
-  folded,
-  onFoldChange,
-}: AdminSidebarProps) {
+export default function AdminSidebar() {
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
-      <AdminSidebarInner onFoldChange={onFoldChange} />
+    <SidebarLayouts.Root>
+      <AdminSidebarInner />
     </SidebarLayouts.Root>
   );
 }

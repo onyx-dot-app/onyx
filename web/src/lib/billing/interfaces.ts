@@ -21,6 +21,8 @@ export type ApplicationStatus =
   | "expired"
   | "seat_limit_exceeded";
 
+export type ExpiryWarningStage = "none" | "t_30d" | "t_14d" | "t_1d" | "grace";
+
 /**
  * Billing status from Stripe subscription.
  */
@@ -46,6 +48,7 @@ export interface LicenseStatus {
   expires_at: string | null;
   grace_period_end: string | null;
   status: ApplicationStatus | null;
+  expiry_warning_stage: ExpiryWarningStage;
   source: LicenseSource | null;
 }
 

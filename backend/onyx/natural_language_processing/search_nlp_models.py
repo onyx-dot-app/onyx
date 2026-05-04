@@ -22,7 +22,12 @@ from httpx import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
-from retry import retry
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
+from tenacity import wait_fixed
+from tenacity import wait_random
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -72,9 +77,12 @@ from shared_configs.utils import batch_list
 
 logger = setup_logger()
 
-# If we are not only indexing, dont want retry very long
-_RETRY_DELAY = 10 if INDEXING_ONLY else 0.1
-_RETRY_TRIES = 10 if INDEXING_ONLY else 2
+# If we are not only indexing, dont want retry very long.
+# Indexing path: wait_exponential(multiplier=1, max=60) gives waits of
+# 1, 2, 4, 8, 16, 32, 60s before the cap repeats. With 8 attempts (7 waits)
+# we hit the 60s cap exactly once, totaling ~123s before giving up.
+_RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
+_RETRY_TRIES = 8 if INDEXING_ONLY else 2
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
@@ -481,7 +489,12 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
-    @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
+    @retry(
+        retry=retry_if_exception_type(RuntimeError),
+        stop=stop_after_attempt(_RETRY_TRIES),
+        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
+        reraise=True,
+    )
     async def embed(
         self,
         *,
@@ -821,13 +834,19 @@ class EmbeddingModel:
         # retries + handling for rate limiting
         if embed_request.text_type == EmbedTextType.PASSAGE:
             final_make_request_func = retry(
-                tries=3,
-                delay=5,
-                exceptions=(RequestException, ValueError, JSONDecodeError),
+                retry=retry_if_exception_type(
+                    (RequestException, ValueError, JSONDecodeError)
+                ),
+                stop=stop_after_attempt(3),
+                wait=wait_fixed(5),
+                reraise=True,
             )(final_make_request_func)
             # use 10 second delay as per Azure suggestion
             final_make_request_func = retry(
-                tries=10, delay=10, exceptions=ModelServerRateLimitError
+                retry=retry_if_exception_type(ModelServerRateLimitError),
+                stop=stop_after_attempt(10),
+                wait=wait_fixed(10),
+                reraise=True,
             )(final_make_request_func)
 
         response: Response | None = None
