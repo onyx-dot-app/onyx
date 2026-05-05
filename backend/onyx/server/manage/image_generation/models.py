@@ -117,7 +117,7 @@ class ImageGenerationConfigView(BaseModel):
             model_configuration_id=config.model_configuration_id,
             model_name=config.model_configuration.name,
             llm_provider_id=config.model_configuration.llm_provider_id,
-            llm_provider_name=config.model_configuration.llm_provider.name,
+            llm_provider_name=config.model_configuration.llm_provider.name or "",
             is_default=config.is_default,
         )
 

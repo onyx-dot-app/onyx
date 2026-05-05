@@ -529,7 +529,8 @@ class TestDefaultProviderEndpoint:
             provider_names_to_restore: list[str] = []
 
             for provider in existing_providers:
-                provider_names_to_restore.append(provider.name)
+                if provider.name is not None:
+                    provider_names_to_restore.append(provider.name)
 
             # Remove all providers temporarily
             for provider in existing_providers:

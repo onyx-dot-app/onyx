@@ -1050,7 +1050,15 @@ def upsert_persona(
         # `default` and `built-in` properties can only be set when creating a persona.
         existing_persona.name = name
         existing_persona.description = description
-        existing_persona.llm_provider_override_id = llm_provider_override_id
+        # Only overwrite the FK when the request explicitly provides a new value
+        # (either the new integer FK or the legacy string field). If both are absent
+        # the caller is a legacy client that doesn't know about the new field, so we
+        # preserve the existing FK to avoid silently dropping the persona's override.
+        if (
+            llm_provider_override_id is not None
+            or llm_model_provider_override is not None
+        ):
+            existing_persona.llm_provider_override_id = llm_provider_override_id
         existing_persona.llm_model_provider_override = llm_model_provider_override
         existing_persona.llm_model_version_override = llm_model_version_override
         existing_persona.starter_messages = starter_messages

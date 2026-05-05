@@ -55,5 +55,8 @@ def downgrade() -> None:
         "fk_persona_llm_provider_override", "persona", type_="foreignkey"
     )
     op.drop_column("persona", "llm_provider_override_id")
+    # Backfill any null names with the provider type before re-adding the NOT NULL
+    # and UNIQUE constraints. Providers created after the upgrade may have null names.
+    op.execute("UPDATE llm_provider SET name = provider WHERE name IS NULL")
     op.create_unique_constraint("llm_provider_name_key", "llm_provider", ["name"])
     op.alter_column("llm_provider", "name", nullable=False)

@@ -71,7 +71,7 @@ def _create_persona(
     db_session: Session,
     *,
     name: str,
-    provider_name: str,
+    provider_name: str | None,
 ) -> Persona:
     persona = Persona(
         name=name,
