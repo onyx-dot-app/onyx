@@ -132,10 +132,10 @@ def _extract_primary_owner(
 ) -> BasicExpertInfo | None:
     object_dict = sf_object.data
     if not (last_modified_by_id := object_dict.get("LastModifiedById")):
-        logger.warning(f"No LastModifiedById found for {sf_object.id}")
+        logger.warning("No LastModifiedById found for %s", sf_object.id)
         return None
     if not (last_modified_by := sf_db.get_record(last_modified_by_id)):
-        logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+        logger.warning("No LastModifiedBy found for %s", last_modified_by_id)
         return None
 
     user_data = last_modified_by.data
@@ -153,7 +153,7 @@ def _extract_primary_owner(
         and expert_info.email is None
         and expert_info.display_name is None
     ):
-        logger.warning(f"No identifying information found for user {user_data}")
+        logger.warning("No identifying information found for user %s", user_data)
         return None
 
     return expert_info

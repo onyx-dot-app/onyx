@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   Variants,
   wrapperClasses,
@@ -167,13 +166,12 @@ export default function InputNumber({
 
       <div className="flex flex-row items-center gap-1">
         {showReset && (
-          <Disabled disabled={!canReset || isDisabled}>
-            <Button
-              icon={SvgRevert}
-              onClick={handleReset}
-              prominence="tertiary"
-            />
-          </Disabled>
+          <Button
+            disabled={!canReset || isDisabled}
+            icon={SvgRevert}
+            onClick={handleReset}
+            prominence="tertiary"
+          />
         )}
         <div className="flex flex-col">
           <button

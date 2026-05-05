@@ -1,13 +1,11 @@
 "use client";
 
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, Divider } from "@opal/components";
 import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
 import { SvgRefreshCw } from "@opal/icons";
 // Hook to handle re-indexing functionality
 export function useReIndexModal(
@@ -116,11 +114,11 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
             This will pull in and index all documents that have changed and/or
             have been added since the last successful indexing run.
           </Text>
-          <Disabled disabled={isProcessing}>
-            <Button onClick={() => handleRunIndex(false)}>Run Update</Button>
-          </Disabled>
+          <Button disabled={isProcessing} onClick={() => handleRunIndex(false)}>
+            Run Update
+          </Button>
 
-          <Separator />
+          <Divider />
 
           <Text as="p">
             This will cause a complete re-indexing of all documents from the
@@ -131,11 +129,9 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
             in the source, this may take a long time.
           </Text>
 
-          <Disabled disabled={isProcessing}>
-            <Button onClick={() => handleRunIndex(true)}>
-              Run Complete Re-Indexing
-            </Button>
-          </Disabled>
+          <Button disabled={isProcessing} onClick={() => handleRunIndex(true)}>
+            Run Complete Re-Indexing
+          </Button>
         </Modal.Body>
       </Modal.Content>
     </Modal>

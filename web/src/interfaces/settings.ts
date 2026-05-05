@@ -1,3 +1,5 @@
+import type { Notification } from "@/lib/notifications/interfaces";
+
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
   GATED_ACCESS = "gated_access",
@@ -27,6 +29,7 @@ export interface Settings {
   query_history_type: QueryHistoryType;
 
   deep_research_enabled?: boolean;
+  multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
 
   // Image processing settings
@@ -73,33 +76,9 @@ export interface Settings {
   max_allowed_upload_size_mb?: number;
 
   // Factory defaults for the restore button.
+  default_pruning_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
-}
-
-export enum NotificationType {
-  PERSONA_SHARED = "persona_shared",
-  REINDEX = "reindex",
-  TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
-  ASSISTANT_FILES_READY = "assistant_files_ready",
-  RELEASE_NOTES = "release_notes",
-  FEATURE_ANNOUNCEMENT = "feature_announcement",
-}
-
-export interface Notification {
-  id: number;
-  notif_type: string;
-  title: string;
-  description: string | null;
-  dismissed: boolean;
-  first_shown: string;
-  last_shown: string;
-  additional_data?: {
-    persona_id?: number;
-    link?: string;
-    version?: string; // For release notes notifications
-    [key: string]: any;
-  };
 }
 
 export interface NavigationItem {

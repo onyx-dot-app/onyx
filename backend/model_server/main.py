@@ -27,6 +27,7 @@ from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import SENTRY_DSN
+from shared_configs.configs import SENTRY_TRACES_SAMPLE_RATE
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -69,7 +70,7 @@ def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     gpu_type = get_gpu_type()
-    logger.notice(f"Torch GPU Detection: gpu_type={gpu_type}")
+    logger.notice("Torch GPU Detection: gpu_type=%s", gpu_type)
 
     app.state.gpu_type = gpu_type
 
@@ -81,12 +82,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             logger.notice("Moved contents of temp_huggingface to huggingface cache.")
     except Exception as e:
         logger.warning(
-            f"Error moving contents of temp_huggingface to huggingface cache: {e}. "
-            "This is not a critical error and the model server will continue to run."
+            "Error moving contents of temp_huggingface to huggingface cache: %s. This is not a critical error and the model server will continue to run.",
+            e,
         )
 
     torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
-    logger.notice(f"Torch Threads: {torch.get_num_threads()}")
+    logger.notice("Torch Threads: %s", torch.get_num_threads())
 
     yield
 
@@ -96,10 +97,14 @@ def get_model_app() -> FastAPI:
         title="Onyx Model Server", version=__version__, lifespan=lifespan
     )
     if SENTRY_DSN:
+        from onyx.configs.sentry import _add_instance_tags
+
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            traces_sample_rate=0.1,
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+            release=__version__,
+            before_send=_add_instance_tags,
         )
         logger.info("Sentry initialized")
     else:
@@ -126,7 +131,9 @@ app = get_model_app()
 
 if __name__ == "__main__":
     logger.notice(
-        f"Starting Onyx Model Server on http://{MODEL_SERVER_ALLOWED_HOST}:{str(MODEL_SERVER_PORT)}/"
+        "Starting Onyx Model Server on http://%s:%s/",
+        MODEL_SERVER_ALLOWED_HOST,
+        str(MODEL_SERVER_PORT),
     )
-    logger.notice(f"Model Server Version: {__version__}")
+    logger.notice("Model Server Version: %s", __version__)
     uvicorn.run(app, host=MODEL_SERVER_ALLOWED_HOST, port=MODEL_SERVER_PORT)

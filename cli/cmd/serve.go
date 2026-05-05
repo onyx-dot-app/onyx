@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/wish/ratelimiter"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
@@ -295,15 +296,15 @@ provided via the ONYX_API_KEY environment variable to skip the prompt:
 The server URL is taken from the server operator's config. The server
 auto-generates an Ed25519 host key on first run if the key file does not
 already exist. The host key path can also be set via the ONYX_SSH_HOST_KEY
-environment variable (the --host-key flag takes precedence).
-
-Example:
-  onyx-cli serve --port 2222
-  ssh localhost -p 2222`,
+environment variable (the --host-key flag takes precedence).`,
+		Example: `  onyx-cli serve --port 2222
+  ssh localhost -p 2222
+  onyx-cli serve --host 0.0.0.0 --port 2222
+  onyx-cli serve --idle-timeout 30m --max-session-timeout 2h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {
-				return fmt.Errorf("server URL is not configured; run 'onyx-cli configure' first")
+				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli configure")
 			}
 			if !cmd.Flags().Changed("host-key") {
 				if v := os.Getenv(config.EnvSSHHostKey); v != "" {

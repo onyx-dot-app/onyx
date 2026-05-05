@@ -3,7 +3,7 @@ import "@opal/core/interactive/stateful/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
-import { useDisabled } from "@opal/core/disabled/components";
+import { guardPortalClick } from "@opal/core/interactive/utils";
 import type { ButtonType, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -15,6 +15,7 @@ type InteractiveStatefulVariant =
   | "select-heavy"
   | "select-card"
   | "select-tinted"
+  | "select-input"
   | "select-filter"
   | "sidebar-heavy"
   | "sidebar-light";
@@ -35,6 +36,7 @@ interface InteractiveStatefulProps
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
    * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
    * - `"select-tinted"` — like select-heavy but with a tinted rest background
+   * - `"select-input"` — rests at neutral-00 (matches input bar), hover/open shows neutral-03 + border-01
    * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
    * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
@@ -86,6 +88,11 @@ interface InteractiveStatefulProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
+
+  /**
+   * Applies variant-specific disabled colors and suppresses clicks.
+   */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,8 +106,7 @@ interface InteractiveStatefulProps
  * (empty/filled/selected). Applies variant/state color styling via CSS
  * data-attributes and merges onto a single child element via Radix `Slot`.
  *
- * Disabled state is consumed from the nearest `<Disabled>` ancestor via
- * context — there is no `disabled` prop on this component.
+ * Disabled state is controlled via the `disabled` prop.
  */
 function InteractiveStateful({
   ref,
@@ -111,9 +117,10 @@ function InteractiveStateful({
   type,
   href,
   target,
+  disabled,
   ...props
 }: InteractiveStatefulProps) {
-  const { isDisabled, allowClick } = useDisabled();
+  const isDisabled = !!disabled;
 
   // onClick/href are always passed directly — Stateful is the outermost Slot,
   // so Radix Slot-injected handlers don't bypass this guard.
@@ -149,11 +156,11 @@ function InteractiveStateful({
       {...linkAttrs}
       {...slotProps}
       onClick={
-        isDisabled && !allowClick
+        isDisabled
           ? href
             ? (e: React.MouseEvent) => e.preventDefault()
             : undefined
-          : onClick
+          : guardPortalClick(onClick)
       }
     />
   );

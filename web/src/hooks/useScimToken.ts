@@ -2,12 +2,11 @@ import useSWR from "swr";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
-
-const TOKEN_URL = "/api/admin/enterprise-settings/scim/token";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useScimToken() {
   const { data, error, isLoading, mutate } = useSWR<ScimTokenResponse>(
-    TOKEN_URL,
+    SWR_KEYS.scimToken,
     errorHandlingFetcher,
     { shouldRetryOnError: false }
   );

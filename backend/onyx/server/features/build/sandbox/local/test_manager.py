@@ -38,7 +38,6 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-
 TEST_TENANT_ID = "public"
 TEST_USER_EMAIL = "test_sandbox_user@example.com"
 
@@ -96,7 +95,9 @@ def test_user(
     from sqlalchemy import select
 
     # Check if user already exists
-    stmt = select(User).where(User.email == TEST_USER_EMAIL)  # type: ignore[arg-type]
+    stmt = select(User).where(
+        User.email == TEST_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
     existing_user = db_session.execute(stmt).unique().scalar_one_or_none()
 
     if existing_user:

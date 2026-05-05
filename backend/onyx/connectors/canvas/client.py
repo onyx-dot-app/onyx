@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rl_requests,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -26,16 +25,19 @@ _STATUS_TO_ERROR_CODE: dict[int, OnyxErrorCode] = {
     401: OnyxErrorCode.CREDENTIAL_EXPIRED,
     403: OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
     404: OnyxErrorCode.BAD_GATEWAY,
-    429: OnyxErrorCode.RATE_LIMITED,
 }
 
 
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     """Map an HTTP status code to the appropriate OnyxErrorCode.
 
-    Expects a >= 400 status code. Known codes (401, 403, 404, 429) are
+    Expects a >= 400 status code. Known codes (401, 403, 404) are
     mapped to specific error codes; all other codes (unrecognised 4xx
     and 5xx) map to BAD_GATEWAY as unexpected upstream errors.
+
+    Note: 429 is intentionally omitted — the rl_requests wrapper
+    handles rate limits transparently at the HTTP layer, so 429
+    responses never reach this function.
     """
     if status_code in _STATUS_TO_ERROR_CODE:
         return _STATUS_TO_ERROR_CODE[status_code]
@@ -190,3 +192,22 @@ class CanvasApiClient:
         if clean_endpoint:
             final_url += "/" + clean_endpoint
         return final_url
+
+    def paginate(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+    ) -> Iterator[list[Any]]:
+        """Yield each page of results, following Link-header pagination.
+
+        Makes the first request with endpoint + params, then follows
+        next_url from Link headers for subsequent pages.
+        """
+        response, next_url = self.get(endpoint, params=params)
+        while True:
+            if not response:
+                break
+            yield response
+            if not next_url:
+                break
+            response, next_url = self.get(full_url=next_url)

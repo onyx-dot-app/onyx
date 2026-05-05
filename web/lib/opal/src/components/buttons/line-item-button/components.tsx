@@ -3,12 +3,9 @@ import {
   type InteractiveStatefulProps,
   InteractiveContainerRoundingVariant,
 } from "@opal/core";
-import type { ExtremaSizeVariants } from "@opal/types";
-import type { TooltipSide } from "@opal/components";
-import type { DistributiveOmit } from "@opal/types";
-import type { ContentActionProps } from "@opal/layouts/content-action/components";
-import { ContentAction } from "@opal/layouts";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import type { ExtremaSizeVariants, DistributiveOmit } from "@opal/types";
+import { Tooltip, type TooltipSide } from "@opal/components";
+import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,7 +13,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
-  "paddingVariant" | "widthVariant" | "ref"
+  "padding" | "width" | "ref"
 >;
 
 type LineItemButtonOwnProps = Pick<
@@ -33,8 +30,8 @@ type LineItemButtonOwnProps = Pick<
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
-  /** Corner rounding preset (height is always content-driven). @default "default" */
-  roundingVariant?: InteractiveContainerRoundingVariant;
+  /** Corner rounding preset (height is always content-driven). @default "md" */
+  rounding?: InteractiveContainerRoundingVariant;
 
   /** Container width. @default "full" */
   width?: ExtremaSizeVariants;
@@ -65,7 +62,7 @@ function LineItemButton({
   type = "button",
 
   // Sizing
-  roundingVariant = "default",
+  rounding = "md",
   width = "full",
   tooltip,
   tooltipSide = "top",
@@ -86,33 +83,25 @@ function LineItemButton({
     >
       <Interactive.Container
         type={type}
-        widthVariant={width}
-        heightVariant="lg"
-        roundingVariant={roundingVariant}
+        width={width}
+        size="fit"
+        rounding={rounding}
       >
-        <ContentAction
-          {...(contentActionProps as ContentActionProps)}
-          paddingVariant="fit"
-        />
+        <div className="w-full p-2">
+          <ContentAction
+            color="interactive"
+            {...(contentActionProps as ContentActionProps)}
+            padding="fit"
+          />
+        </div>
       </Interactive.Container>
     </Interactive.Stateful>
   );
 
-  if (!tooltip) return item;
-
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{item}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          {tooltip}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {item}
+    </Tooltip>
   );
 }
 

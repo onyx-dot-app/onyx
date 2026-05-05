@@ -2,8 +2,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
-import Separator from "@/refresh-components/Separator";
+import { Button, Divider } from "@opal/components";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
@@ -108,7 +107,7 @@ export function AccessTypeGroupSelector({
         userGroups &&
         userGroups?.length > 0 && (
           <>
-            <Separator />
+            <Divider />
             <div className="flex flex-col gap-3 pt-4">
               <Text as="p" mainUiAction text05>
                 Assign group access for this Connector

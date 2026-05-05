@@ -2,11 +2,14 @@
 
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   MinimalPersonaSnapshot,
   FullPersona,
+  Persona,
 } from "@/app/admin/agents/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
@@ -36,10 +39,11 @@ import useChatSessions from "./useChatSessions";
  */
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalPersonaSnapshot[]>(
-    "/api/persona",
+    SWR_KEYS.personas,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
@@ -76,10 +80,11 @@ export function useAgents() {
  */
 export function useAgent(agentId: number | null) {
   const { data, error, isLoading, mutate } = useSWR<FullPersona>(
-    agentId ? `/api/persona/${agentId}` : null,
+    agentId ? SWR_KEYS.persona(agentId) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
@@ -194,4 +199,68 @@ export function useCurrentAgent(): MinimalPersonaSnapshot | null {
   }, [agents, agentIdRaw, currentChatSession?.persona_id]);
 
   return currentAgent;
+}
+
+// ---------------------------------------------------------------------------
+// Admin agents (full Persona objects, requires admin/curator access)
+// ---------------------------------------------------------------------------
+
+interface UseAdminAgentsOptions {
+  includeDeleted?: boolean;
+  getEditable?: boolean;
+  includeDefault?: boolean;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+interface PaginatedAgentsResponse {
+  items: Persona[];
+  total_items: number;
+}
+
+export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
+  const {
+    includeDeleted = false,
+    getEditable = false,
+    includeDefault = false,
+    pageNum,
+    pageSize,
+  } = options;
+
+  // If pageNum and pageSize are provided, use paginated endpoint.
+  const usePagination = pageNum !== undefined && pageSize !== undefined;
+
+  const url = usePagination
+    ? buildApiPath("/api/admin/agents", {
+        include_deleted: includeDeleted,
+        get_editable: getEditable,
+        include_default: includeDefault,
+        page_num: pageNum,
+        page_size: pageSize,
+      })
+    : buildApiPath("/api/admin/persona", {
+        include_deleted: includeDeleted,
+        get_editable: getEditable,
+      });
+
+  const { data, error, isLoading, mutate } = useSWR<
+    Persona[] | PaginatedAgentsResponse
+  >(url, errorHandlingFetcher);
+
+  // Handle both paginated and non-paginated responses
+  const agents = usePagination
+    ? (data as PaginatedAgentsResponse)?.items || []
+    : (data as Persona[]) || [];
+
+  const totalItems = usePagination
+    ? (data as PaginatedAgentsResponse)?.total_items || 0
+    : agents.length;
+
+  return {
+    agents,
+    totalItems,
+    error,
+    isLoading,
+    refresh: mutate,
+  };
 }

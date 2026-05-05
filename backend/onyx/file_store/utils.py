@@ -55,7 +55,7 @@ def store_plaintext(file_id: str, plaintext_content: str) -> bool:
         )
         return True
     except Exception as e:
-        logger.warning(f"Failed to store plaintext for {file_id}: {e}")
+        logger.warning("Failed to store plaintext for %s: %s", file_id, e)
         return False
 
 
@@ -110,16 +110,20 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
-        # For plaintext versions, use PLAIN_TEXT type (unless it's an image which doesn't have plaintext)
-        plaintext_chat_file_type = (
-            ChatFileType.PLAIN_TEXT
-            if chat_file_type != ChatFileType.IMAGE
-            else chat_file_type
-        )
-
-        # if we have plaintext for image (which happens when image extraction is enabled), we use PLAIN_TEXT type
-        if file_io is not None:
+        # Metadata-only file types preserve their original type so
+        # downstream injection paths can route them correctly.
+        if chat_file_type.use_metadata_only():
+            plaintext_chat_file_type = chat_file_type
+        elif file_io is not None:
+            # if we have plaintext for image (which happens when image
+            # extraction is enabled), we use PLAIN_TEXT type
             plaintext_chat_file_type = ChatFileType.PLAIN_TEXT
+        else:
+            plaintext_chat_file_type = (
+                ChatFileType.PLAIN_TEXT
+                if chat_file_type != ChatFileType.IMAGE
+                else chat_file_type
+            )
 
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
@@ -130,7 +134,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         status = "plaintext"
         return chat_file
     except Exception as e:
-        logger.warning(f"Failed to load plaintext for user file {user_file.id}: {e}")
+        logger.warning("Failed to load plaintext for user file %s: %s", user_file.id, e)
         # Fall back to original file if plaintext not available
         file_io = file_store.read_file(user_file.file_id, mode="b")
 
@@ -144,7 +148,10 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         return chat_file
     finally:
         logger.debug(
-            f"load_user_file finished: file_id={user_file.file_id} chat_file_type={chat_file_type} status={status}"
+            "load_user_file finished: file_id=%s chat_file_type=%s status=%s",
+            user_file.file_id,
+            chat_file_type,
+            status,
         )
 
 
@@ -329,7 +336,8 @@ def verify_user_files(
                 user_file_ids.append(UUID(file_descriptor["user_file_id"]))
             except (ValueError, TypeError):
                 logger.warning(
-                    f"Invalid user_file_id in file descriptor: {file_descriptor['user_file_id']}"
+                    "Invalid user_file_id in file descriptor: %s",
+                    file_descriptor["user_file_id"],
                 )
                 continue
         else:

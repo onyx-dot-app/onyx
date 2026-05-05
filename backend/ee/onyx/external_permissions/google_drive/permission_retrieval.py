@@ -33,7 +33,7 @@ def get_permissions_by_ids(
 
     # Fetch all permissions for the document
     fetched_permissions = execute_paginated_retrieval(
-        retrieval_function=drive_service.permissions().list,
+        retrieval_function=drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
         list_key="permissions",
         fileId=doc_id,
         fields="permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails),nextPageToken",
@@ -55,7 +55,9 @@ def get_permissions_by_ids(
     if len(filtered_permissions) < len(permission_ids):
         missing_ids = permission_id_set - {p.id for p in filtered_permissions if p.id}
         logger.warning(
-            f"Could not find all requested permission IDs for document {doc_id}. Missing IDs: {missing_ids}"
+            "Could not find all requested permission IDs for document %s. Missing IDs: %s",
+            doc_id,
+            missing_ids,
         )
 
     return filtered_permissions

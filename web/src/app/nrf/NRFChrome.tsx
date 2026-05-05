@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
+import { ensureHrefProtocol, noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";
@@ -15,7 +16,7 @@ import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 
 const footerMarkdownComponents = {
@@ -61,7 +62,7 @@ export default function NRFChrome() {
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
-  const { setFolded } = useAppSidebarContext();
+  const { setFolded } = useSidebarState();
   const appFocus = useAppFocus();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 

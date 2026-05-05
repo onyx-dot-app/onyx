@@ -1,8 +1,10 @@
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -33,17 +35,28 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
+class SectionType(str, Enum):
+    """Discriminator for Section subclasses."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    TABULAR = "tabular"
+
+
 class Section(BaseModel):
     """Base section class with common attributes"""
 
+    type: SectionType
     link: str | None = None
     text: str | None = None
     image_file_id: str | None = None
+    heading: str | None = None
 
 
 class TextSection(Section):
     """Section containing text content"""
 
+    type: Literal[SectionType.TEXT] = SectionType.TEXT
     text: str
 
     def __sizeof__(self) -> int:
@@ -53,10 +66,23 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
+    type: Literal[SectionType.IMAGE] = SectionType.IMAGE
     image_file_id: str
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.image_file_id) + sys.getsizeof(self.link)
+
+
+class TabularSection(Section):
+    """Section containing tabular data (csv/tsv content, or one sheet of
+    an xlsx workbook rendered as CSV)."""
+
+    type: Literal[SectionType.TABULAR] = SectionType.TABULAR
+    text: str  # CSV representation in a string
+    link: str
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
@@ -134,7 +160,6 @@ class BasicExpertInfo(BaseModel):
 
     @classmethod
     def from_dict(cls, model_dict: dict[str, Any]) -> "BasicExpertInfo":
-
         first_name = cast(str, model_dict.get("FirstName"))
         last_name = cast(str, model_dict.get("LastName"))
         email = cast(str, model_dict.get("Email"))
@@ -161,7 +186,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection]
+    sections: Sequence[TextSection | ImageSection | TabularSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a
@@ -205,6 +230,8 @@ class DocumentBase(BaseModel):
     # Resolved database ID of the parent hierarchy node
     # Set during docfetching after hierarchy nodes are cached
     parent_hierarchy_node_id: int | None = None
+
+    file_id: str | None = None
 
     def get_title_for_document_index(
         self,
@@ -345,6 +372,7 @@ class Document(DocumentBase):
             secondary_owners=base.secondary_owners,
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
+            file_id=base.file_id,
         )
 
     def __sizeof__(self) -> int:
@@ -371,12 +399,9 @@ class IndexingDocument(Document):
             )
         else:
             section_len = sum(
-                (
-                    len(section.text)
-                    if isinstance(section, TextSection) and section.text is not None
-                    else 0
-                )
+                len(section.text) if section.text is not None else 0
                 for section in self.sections
+                if isinstance(section, (TextSection, TabularSection))
             )
 
         return title_len + section_len

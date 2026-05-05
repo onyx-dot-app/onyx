@@ -17,9 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             DELETE FROM slack_bot
             WHERE name = 'Default Bot'
             AND bot_token = ''
@@ -28,19 +26,13 @@ def upgrade() -> None:
                 SELECT 1 FROM slack_channel_config
                 WHERE slack_channel_config.slack_bot_id = slack_bot.id
             )
-            """
-        )
-    )
+            """))
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             INSERT INTO slack_bot (name, enabled, bot_token, app_token)
             SELECT 'Default Bot', true, '', ''
             WHERE NOT EXISTS (SELECT 1 FROM slack_bot)
             RETURNING id;
-            """
-        )
-    )
+            """))

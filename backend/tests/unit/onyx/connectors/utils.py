@@ -1,4 +1,3 @@
-from typing import cast
 from typing import Generic
 from typing import TypeVar
 
@@ -28,7 +27,7 @@ def load_everything_from_checkpoint_connector(
     end: SecondsSinceUnixEpoch,
 ) -> list[SingleConnectorCallOutput[CT]]:
 
-    checkpoint = cast(CT, connector.build_dummy_checkpoint())
+    checkpoint = connector.build_dummy_checkpoint()
     return load_everything_from_checkpoint_connector_from_checkpoint(
         connector, start, end, checkpoint
     )

@@ -12,7 +12,7 @@ from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -20,6 +20,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import Project__UserFile
@@ -58,7 +59,7 @@ def _trigger_user_file_project_sync(
         from onyx.background.task_utils import drain_project_sync_loop
 
         background_tasks.add_task(drain_project_sync_loop, tenant_id)
-        logger.info(f"Queued in-process project sync for user_file_id={user_file_id}")
+        logger.info("Queued in-process project sync for user_file_id=%s", user_file_id)
         return
 
     from onyx.background.celery.tasks.user_file_processing.tasks import (
@@ -73,9 +74,10 @@ def _trigger_user_file_project_sync(
     queue_depth = get_user_file_project_sync_queue_depth(client_app)
     if queue_depth > USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH:
         logger.warning(
-            f"Skipping immediate project sync for user_file_id={user_file_id} due to "
-            f"queue depth {queue_depth}>{USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH}. "
-            "It will be picked up by beat later."
+            "Skipping immediate project sync for user_file_id=%s due to queue depth %s>%s. It will be picked up by beat later.",
+            user_file_id,
+            queue_depth,
+            USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
         )
         return
 
@@ -89,16 +91,16 @@ def _trigger_user_file_project_sync(
     )
     if not enqueued:
         logger.info(
-            f"Skipped duplicate project sync enqueue for user_file_id={user_file_id}"
+            "Skipped duplicate project sync enqueue for user_file_id=%s", user_file_id
         )
         return
 
-    logger.info(f"Triggered project sync for user_file_id={user_file_id}")
+    logger.info("Triggered project sync for user_file_id=%s", user_file_id)
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
 def get_projects(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserProjectSnapshot]:
     user_id = user.id
@@ -111,7 +113,7 @@ def get_projects(
 @router.post("/create", tags=PUBLIC_API_TAGS)
 def create_project(
     name: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     if name == "":
@@ -129,7 +131,7 @@ def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
     try:
@@ -158,7 +160,7 @@ def upload_user_files(
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
-        logger.exception(f"Error uploading files - {type(e).__name__}: {str(e)}")
+        logger.exception("Error uploading files - %s: %s", type(e).__name__, str(e))
         raise HTTPException(
             status_code=500,
             detail="Failed to upload files. Please try again or contact support if the issue persists.",
@@ -168,7 +170,7 @@ def upload_user_files(
 @router.get("/{project_id}", tags=PUBLIC_API_TAGS)
 def get_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     user_id = user.id
@@ -185,7 +187,7 @@ def get_project(
 @router.get("/files/{project_id}", tags=PUBLIC_API_TAGS)
 def get_files_in_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
@@ -208,7 +210,7 @@ def unlink_user_file_from_project(
     project_id: int,
     file_id: UUID,
     bg_tasks: BackgroundTasks,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Unlink an existing user file from a specific project for the current user.
@@ -253,7 +255,7 @@ def link_user_file_to_project(
     project_id: int,
     file_id: UUID,
     bg_tasks: BackgroundTasks,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
     """Link an existing user file to a specific project for the current user.
@@ -300,7 +302,7 @@ class ProjectInstructionsResponse(BaseModel):
 )
 def get_project_instructions(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
     user_id = user.id
@@ -328,7 +330,7 @@ class UpsertProjectInstructionsRequest(BaseModel):
 def upsert_project_instructions(
     project_id: int,
     body: UpsertProjectInstructionsRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
     """Create or update this project's instructions stored on the project itself."""
@@ -359,7 +361,7 @@ class ProjectPayload(BaseModel):
 )
 def get_project_details(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ProjectPayload:
     project = get_project(project_id, user, db_session)
@@ -389,7 +391,7 @@ class UpdateProjectRequest(BaseModel):
 def update_project(
     project_id: int,
     body: UpdateProjectRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     user_id = user.id
@@ -414,7 +416,7 @@ def update_project(
 @router.delete("/{project_id}", tags=PUBLIC_API_TAGS)
 def delete_project(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
@@ -443,7 +445,7 @@ def delete_project(
 def delete_user_file(
     file_id: UUID,
     bg_tasks: BackgroundTasks,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserFileDeleteResult:
     """Delete a user file belonging to the current user.
@@ -479,7 +481,7 @@ def delete_user_file(
         from onyx.background.task_utils import drain_delete_loop
 
         bg_tasks.add_task(drain_delete_loop, tenant_id)
-        logger.info(f"Queued in-process delete for user_file_id={user_file.id}")
+        logger.info("Queued in-process delete for user_file_id=%s", user_file.id)
     else:
         from onyx.background.celery.versioned_apps.client import app as client_app
 
@@ -490,7 +492,9 @@ def delete_user_file(
             priority=OnyxCeleryPriority.HIGH,
         )
         logger.info(
-            f"Triggered delete for user_file_id={user_file.id} with task_id={task.id}"
+            "Triggered delete for user_file_id=%s with task_id=%s",
+            user_file.id,
+            task.id,
         )
 
     return UserFileDeleteResult(
@@ -501,7 +505,7 @@ def delete_user_file(
 @router.get("/file/{file_id}", response_model=UserFileSnapshot, tags=PUBLIC_API_TAGS)
 def get_user_file(
     file_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
     """Fetch a single user file by ID for the current user.
@@ -529,7 +533,7 @@ class UserFileIdsRequest(BaseModel):
 )
 def get_user_file_statuses(
     body: UserFileIdsRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     """Fetch statuses for a set of user file IDs owned by the current user.
@@ -555,7 +559,7 @@ def get_user_file_statuses(
 def move_chat_session(
     project_id: int,
     body: ChatSessionRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
@@ -574,7 +578,7 @@ def move_chat_session(
 @router.post("/remove_chat_session")
 def remove_chat_session(
     body: ChatSessionRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
@@ -593,7 +597,7 @@ def remove_chat_session(
 @router.get("/session/{chat_session_id}/token-count", response_model=TokenCountResponse)
 def get_chat_session_project_token_count(
     chat_session_id: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the project linked to the given chat session.
@@ -621,7 +625,7 @@ def get_chat_session_project_token_count(
 @router.get("/session/{chat_session_id}/files", tags=PUBLIC_API_TAGS)
 def get_chat_session_project_files(
     chat_session_id: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     """Return user files for the project linked to the given chat session.
@@ -659,7 +663,7 @@ def get_chat_session_project_files(
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
 def get_project_total_token_count(
     project_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the given project for the current user."""

@@ -39,7 +39,7 @@ def batch_delete(
         return 0
 
     logger.info(
-        f"Starting batch deletion of {total_count} records from {table_name}..."
+        "Starting batch deletion of %s records from %s...", total_count, table_name
     )
 
     # Determine appropriate ARRAY type
@@ -66,16 +66,23 @@ def batch_delete(
             batch_num = (i // batch_size) + 1
             if batch_num % 10 == 0 or i + batch_size >= total_count:
                 logger.info(
-                    f"  Deleted {min(i + batch_size, total_count)}/{total_count} records "
-                    f"({total_deleted} actual) from {table_name}"
+                    "  Deleted %s/%s records (%s actual) from %s",
+                    min(i + batch_size, total_count),
+                    total_count,
+                    total_deleted,
+                    table_name,
                 )
         except Exception as e:
-            logger.error(f"Failed to delete batch {(i // batch_size) + 1}: {e}")
+            logger.error("Failed to delete batch %s: %s", i // batch_size + 1, e)
             failed_batches.append((i, min(i + batch_size, total_count)))
 
     if failed_batches:
         logger.warning(
-            f"Failed to delete {len(failed_batches)} batches from {table_name}. Total deleted: {total_deleted}/{total_count}"
+            "Failed to delete %s batches from %s. Total deleted: %s/%s",
+            len(failed_batches),
+            table_name,
+            total_deleted,
+            total_count,
         )
         # Fail the migration to avoid silently succeeding on partial cleanup
         raise RuntimeError(
@@ -99,23 +106,19 @@ def upgrade() -> None:
     logger.info("Identifying user-file documents to delete...")
 
     # Get document IDs to delete
-    doc_rows = bind.execute(
-        text(
-            """
+    doc_rows = bind.execute(text("""
         SELECT DISTINCT dcc.id AS document_id
         FROM document_by_connector_credential_pair dcc
         JOIN connector_credential_pair u
           ON u.connector_id = dcc.connector_id
          AND u.credential_id = dcc.credential_id
         WHERE u.is_user_file IS TRUE
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     doc_ids = [r[0] for r in doc_rows]
 
     if doc_ids:
-        logger.info(f"Found {len(doc_ids)} user-file documents to delete")
+        logger.info("Found %s user-file documents to delete", len(doc_ids))
 
         # Delete dependent rows first
         tables_to_clean = [
@@ -130,17 +133,17 @@ def upgrade() -> None:
                 deleted = batch_delete(
                     bind, table_name, column_name, doc_ids, id_type="str"
                 )
-                logger.info(f"Deleted {deleted} records from {table_name}")
+                logger.info("Deleted %s records from %s", deleted, table_name)
 
         # Delete document_by_connector_credential_pair entries
         deleted = batch_delete(
             bind, "document_by_connector_credential_pair", "id", doc_ids, id_type="str"
         )
-        logger.info(f"Deleted {deleted} document_by_connector_credential_pair records")
+        logger.info("Deleted %s document_by_connector_credential_pair records", deleted)
 
         # Delete documents themselves
         deleted = batch_delete(bind, "document", "id", doc_ids, id_type="str")
-        logger.info(f"Deleted {deleted} document records")
+        logger.info("Deleted %s document records", deleted)
     else:
         logger.info("No user-file documents found to delete")
 
@@ -148,21 +151,18 @@ def upgrade() -> None:
     logger.info("Cleaning up user-file connector_credential_pairs...")
 
     # Get cc_pair IDs
-    cc_pair_rows = bind.execute(
-        text(
-            """
+    cc_pair_rows = bind.execute(text("""
         SELECT id AS cc_pair_id
         FROM connector_credential_pair
         WHERE is_user_file IS TRUE
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     cc_pair_ids = [r[0] for r in cc_pair_rows]
 
     if cc_pair_ids:
         logger.info(
-            f"Found {len(cc_pair_ids)} user-file connector_credential_pairs to clean up"
+            "Found %s user-file connector_credential_pairs to clean up",
+            len(cc_pair_ids),
         )
 
         # Delete related records
@@ -181,15 +181,13 @@ def upgrade() -> None:
                 deleted = batch_delete(
                     bind, table_name, column_name, cc_pair_ids, id_type="int"
                 )
-                logger.info(f"Deleted {deleted} records from {table_name}")
+                logger.info("Deleted %s records from %s", deleted, table_name)
 
     # === Step 3: Identify connectors and credentials to delete ===
     logger.info("Identifying orphaned connectors and credentials...")
 
     # Get connectors used only by user-file cc_pairs
-    connector_rows = bind.execute(
-        text(
-            """
+    connector_rows = bind.execute(text("""
         SELECT DISTINCT ccp.connector_id
         FROM connector_credential_pair ccp
         WHERE ccp.is_user_file IS TRUE
@@ -200,16 +198,12 @@ def upgrade() -> None:
             WHERE c2.connector_id = ccp.connector_id
               AND c2.is_user_file IS NOT TRUE
           )
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     userfile_only_connector_ids = [r[0] for r in connector_rows]
 
     # Get credentials used only by user-file cc_pairs
-    credential_rows = bind.execute(
-        text(
-            """
+    credential_rows = bind.execute(text("""
         SELECT DISTINCT ccp.credential_id
         FROM connector_credential_pair ccp
         WHERE ccp.is_user_file IS TRUE
@@ -220,18 +214,14 @@ def upgrade() -> None:
             WHERE c2.credential_id = ccp.credential_id
               AND c2.is_user_file IS NOT TRUE
           )
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     userfile_only_credential_ids = [r[0] for r in credential_rows]
 
     # === Step 4: Delete the cc_pairs themselves ===
     if cc_pair_ids:
         # Remove FK dependency from user_file first
-        bind.execute(
-            text(
-                """
+        bind.execute(text("""
             DO $$
             DECLARE r RECORD;
             BEGIN
@@ -247,22 +237,20 @@ def upgrade() -> None:
                 EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
-        """
-            )
-        )
+        """))
 
         # Delete cc_pairs
         deleted = batch_delete(
             bind, "connector_credential_pair", "id", cc_pair_ids, id_type="int"
         )
-        logger.info(f"Deleted {deleted} connector_credential_pair records")
+        logger.info("Deleted %s connector_credential_pair records", deleted)
 
     # === Step 5: Delete orphaned connectors ===
     if userfile_only_connector_ids:
         deleted = batch_delete(
             bind, "connector", "id", userfile_only_connector_ids, id_type="int"
         )
-        logger.info(f"Deleted {deleted} orphaned connector records")
+        logger.info("Deleted %s orphaned connector records", deleted)
 
     # === Step 6: Delete orphaned credentials ===
     if userfile_only_credential_ids:
@@ -274,13 +262,13 @@ def upgrade() -> None:
             userfile_only_credential_ids,
             id_type="int",
         )
-        logger.info(f"Deleted {deleted} credential__user_group records")
+        logger.info("Deleted %s credential__user_group records", deleted)
 
         # Delete credentials
         deleted = batch_delete(
             bind, "credential", "id", userfile_only_credential_ids, id_type="int"
         )
-        logger.info(f"Deleted {deleted} orphaned credential records")
+        logger.info("Deleted %s orphaned credential records", deleted)
 
     logger.info("Migration 5 (legacy data cleanup) completed successfully")
 

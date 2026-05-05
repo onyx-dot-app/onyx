@@ -26,6 +26,7 @@ env:
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
   JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+  JIRA_ADMIN_USER_EMAIL: ${{ vars.JIRA_ADMIN_USER_EMAIL }}
   JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
   JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
   JIRA_API_TOKEN_SCOPED: ${{ secrets.JIRA_API_TOKEN_SCOPED }}
@@ -94,7 +95,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -115,19 +116,19 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -154,7 +155,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -175,19 +176,19 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -213,20 +214,20 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       # needed for pulling openapitools/openapi-generator-cli
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -276,6 +277,9 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -290,17 +294,22 @@ jobs:
         edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -333,8 +342,6 @@ jobs:
           if [ "$EDITION" = "ee" ]; then
             cat <<EOF >> deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           EOF
           fi
@@ -422,6 +429,9 @@ jobs:
               -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e S3_ENDPOINT_URL=http://minio:9000 \
+              -e S3_AWS_ACCESS_KEY_ID=minioadmin \
+              -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -431,6 +441,7 @@ jobs:
               -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
               -e CONFLUENCE_ACCESS_TOKEN_SCOPED=${CONFLUENCE_ACCESS_TOKEN_SCOPED} \
               -e JIRA_BASE_URL=${JIRA_BASE_URL} \
+              -e JIRA_ADMIN_USER_EMAIL=${JIRA_ADMIN_USER_EMAIL} \
               -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
               -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
               -e JIRA_API_TOKEN_SCOPED=${JIRA_API_TOKEN_SCOPED} \
@@ -447,6 +458,7 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
@@ -466,7 +478,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
@@ -474,6 +486,9 @@ jobs:
 
   onyx-lite-tests:
     needs: [build-backend-image, build-integration-image]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       [
         runs-on,
@@ -484,14 +499,19 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -503,7 +523,6 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -568,6 +587,7 @@ jobs:
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 
@@ -587,7 +607,7 @@ jobs:
 
       - name: Upload logs (onyx-lite)
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-onyx-lite
           path: ${{ github.workspace }}/docker-compose-onyx-lite.log
@@ -611,14 +631,14 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -725,7 +745,7 @@ jobs:
 
       - name: Upload logs (multi-tenant)
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs-multitenant
           path: ${{ github.workspace }}/docker-compose-multitenant.log

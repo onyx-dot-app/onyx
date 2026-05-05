@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import type { IconProps } from "@opal/types";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 
 export interface StepSidebarProps {

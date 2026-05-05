@@ -11,23 +11,16 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { Interactive } from "@opal/core";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const STATES = ["empty", "filled", "selected"] as const;
-const SIZE_VARIANTS = ["lg", "md", "sm", "xs", "2xs", "fit"] as const;
+const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
+const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
 
 const meta = {
   title: "opal/components/SelectCard",
   component: SelectCard,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },
@@ -44,7 +37,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   render: () => (
     <div className="w-96">
-      <SelectCard variant="select-card" state="empty">
+      <SelectCard state="empty">
         <div className="p-2">
           <Content
             sizePreset="main-ui"
@@ -63,7 +56,7 @@ export const AllStates: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
       {STATES.map((state) => (
-        <SelectCard key={state} variant="select-card" state={state}>
+        <SelectCard key={state} state={state}>
           <div className="p-2">
             <Content
               sizePreset="main-ui"
@@ -82,11 +75,7 @@ export const AllStates: Story = {
 export const Clickable: Story = {
   render: () => (
     <div className="w-96">
-      <SelectCard
-        variant="select-card"
-        state="empty"
-        onClick={() => alert("Card clicked")}
-      >
+      <SelectCard state="empty" onClick={() => alert("Card clicked")}>
         <div className="p-2">
           <Content
             sizePreset="main-ui"
@@ -105,7 +94,7 @@ export const WithActions: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-[28rem]">
       {/* Disconnected */}
-      <SelectCard variant="select-card" state="empty" onClick={() => {}}>
+      <SelectCard state="empty" onClick={() => {}}>
         <div className="flex flex-row items-stretch w-full">
           <div className="flex-1 p-2">
             <Content
@@ -125,7 +114,7 @@ export const WithActions: Story = {
       </SelectCard>
 
       {/* Connected with foldable */}
-      <SelectCard variant="select-card" state="filled">
+      <SelectCard state="filled">
         <div className="flex flex-row items-stretch w-full">
           <div className="flex-1 p-2">
             <Content
@@ -163,7 +152,7 @@ export const WithActions: Story = {
       </SelectCard>
 
       {/* Selected */}
-      <SelectCard variant="select-card" state="selected">
+      <SelectCard state="selected">
         <div className="flex flex-row items-stretch w-full">
           <div className="flex-1 p-2">
             <Content
@@ -203,22 +192,17 @@ export const WithActions: Story = {
   ),
 };
 
-export const SizeVariants: Story = {
+export const PaddingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
-      {SIZE_VARIANTS.map((size) => (
-        <SelectCard
-          key={size}
-          variant="select-card"
-          state="filled"
-          sizeVariant={size}
-        >
+      {PADDING_VARIANTS.map((padding) => (
+        <SelectCard key={padding} state="filled" padding={padding}>
           <Content
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title={`sizeVariant: ${size}`}
-            description="Shows padding and rounding differences."
+            title={`padding: ${padding}`}
+            description="Shows padding differences."
           />
         </SelectCard>
       ))}
@@ -226,20 +210,18 @@ export const SizeVariants: Story = {
   ),
 };
 
-export const SelectHeavyVariant: Story = {
+export const RoundingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
-      {STATES.map((state) => (
-        <SelectCard key={state} variant="select-heavy" state={state}>
-          <div className="p-2">
-            <Content
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgGlobe}
-              title={`select-heavy / ${state}`}
-              description="For comparison with select-card variant."
-            />
-          </div>
+      {ROUNDING_VARIANTS.map((rounding) => (
+        <SelectCard key={rounding} state="filled" rounding={rounding}>
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgGlobe}
+            title={`rounding: ${rounding}`}
+            description="Shows rounding differences."
+          />
         </SelectCard>
       ))}
     </div>

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import cast
 
 import pytz
-import timeago  # type: ignore
+import timeago
 from slack_sdk.models.blocks import ActionsBlock
 from slack_sdk.models.blocks import Block
 from slack_sdk.models.blocks import ButtonElement

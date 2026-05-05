@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
@@ -65,7 +66,8 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     invite_only_enabled: bool = False
     deep_research_enabled: bool | None = None
-    search_ui_enabled: bool | None = None
+    multi_model_chat_enabled: bool | None = True
+    search_ui_enabled: bool | None = True
 
     # Whether EE features are unlocked for use.
     # Depends on license status: True when the user has a valid license
@@ -79,7 +81,7 @@ class Settings(BaseModel):
     query_history_type: QueryHistoryType | None = None
 
     # Image processing settings
-    image_extraction_and_analysis_enabled: bool | None = False
+    image_extraction_and_analysis_enabled: bool | None = True
     search_time_image_analysis_enabled: bool | None = False
     image_analysis_max_size_mb: int | None = 20
 
@@ -89,7 +91,8 @@ class Settings(BaseModel):
         default=DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB, ge=0
     )
     file_token_count_threshold_k: int | None = Field(
-        default=None, ge=0  # thousands of tokens; None = context-aware default
+        default=None,
+        ge=0,  # thousands of tokens; None = context-aware default
     )
 
     # Connector settings
@@ -116,13 +119,14 @@ class UserSettings(Settings):
     # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
     # document sets are unavailable.
     vector_db_enabled: bool = True
-    # True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
+    # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
     # Hard ceiling for user_file_max_upload_size_mb, derived from env var.
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
+    default_pruning_freq: int = DEFAULT_PRUNING_FREQ
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
     default_file_token_count_threshold_k: int = Field(
         default_factory=lambda: (

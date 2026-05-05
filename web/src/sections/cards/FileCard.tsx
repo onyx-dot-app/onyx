@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import { cn, isImageFile } from "@/lib/utils";
+import { isImageFile } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
-import { Interactive } from "@opal/core";
+import { Interactive, Hoverable } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -21,29 +22,39 @@ function Removable({ onRemove, children }: RemovableProps) {
   }
 
   return (
-    <div className="relative group">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        title="Remove"
-        aria-label="Remove"
-        className={cn(
-          "absolute -left-2 -top-2 z-10 h-4 w-4",
-          "flex items-center justify-center",
-          "rounded-04 border border-border text-[11px]",
-          "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
-          "opacity-0 group-hover:opacity-100 focus:opacity-100",
-          "pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto",
-          "transition-opacity duration-150 hover:opacity-90"
-        )}
-      >
-        <SvgX className="h-3 w-3 stroke-text-inverted-03" />
-      </button>
-      {children}
-    </div>
+    <Hoverable.Root group="fileCard" width="fit">
+      <div className="relative">
+        <div
+          className={cn(
+            "absolute -left-2 -top-2 z-10",
+            "pointer-events-none focus-within:pointer-events-auto"
+          )}
+        >
+          <Hoverable.Item group="fileCard" variant="appear-on-hover">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              title="Remove"
+              aria-label="Remove"
+              className={cn(
+                "h-4 w-4",
+                "flex items-center justify-center",
+                "rounded-04 border border-border text-[11px]",
+                "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
+                "pointer-events-auto",
+                "hover:opacity-90"
+              )}
+            >
+              <SvgX className="h-3 w-3 stroke-text-inverted-03" />
+            </button>
+          </Hoverable.Item>
+        </div>
+        {children}
+      </div>
+    </Hoverable.Root>
   );
 }
 
@@ -174,20 +185,18 @@ export function FileCard({
       }
     >
       <div className="min-w-0 max-w-[12rem]">
-        <Interactive.Container border heightVariant="fit">
-          <div className="[&_.opal-content-md-title-row]:min-w-0 [&_.opal-content-md-title]:break-all">
-            <AttachmentItemLayout
-              icon={isProcessing ? SimpleLoader : SvgFileText}
-              title={file.name}
-              description={
-                isProcessing
-                  ? file.status === UserFileStatus.UPLOADING
-                    ? "Uploading..."
-                    : "Processing..."
-                  : typeLabel
-              }
-            />
-          </div>
+        <Interactive.Container border size="fit" width="full">
+          <AttachmentItemLayout
+            icon={isProcessing ? SimpleLoader : SvgFileText}
+            title={file.name}
+            description={
+              isProcessing
+                ? file.status === UserFileStatus.UPLOADING
+                  ? "Uploading..."
+                  : "Processing..."
+                : typeLabel
+            }
+          />
           <Spacer horizontal rem={0.5} />
         </Interactive.Container>
       </div>

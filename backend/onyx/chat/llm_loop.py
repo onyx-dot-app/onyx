@@ -4,9 +4,8 @@ from collections.abc import Callable
 from typing import Any
 from typing import Literal
 
-from sqlalchemy.orm import Session
-
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import build_python_chat_files_from_search_docs
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import CitationMode
@@ -23,10 +22,9 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
-from onyx.chat.prompt_utils import (
-    get_default_base_system_prompt,
-)
+from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -58,9 +56,7 @@ from onyx.tools.models import PythonToolRichResponse
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.models import (
-    FinalImageGenerationResponse,
-)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -223,7 +219,8 @@ def _try_fallback_tool_extraction(
         )
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text as fallback"
+            "Extracted %s tool call(s) from response text as fallback",
+            len(extracted_tool_calls),
         )
         return (
             LlmStepResult(
@@ -238,14 +235,15 @@ def _try_fallback_tool_extraction(
     return llm_step_result, True
 
 
-# Hardcoded oppinionated value, might breaks down to something like:
+# Default 6 covers the common search → open_url pattern:
 # Cycle 1: Calls web_search for something
 # Cycle 2: Calls open_url for some results
 # Cycle 3: Calls web_search for some other aspect of the question
 # Cycle 4: Calls open_url for some results
 # Cycle 5: Maybe call open_url for some additional results or because last set failed
 # Cycle 6: No more tools available, forced to answer
-MAX_LLM_CYCLES = 6
+# Override via the MAX_LLM_CYCLES env var when running with tool-heavy MCPs
+# that legitimately need more turns. Imported from chat_configs.
 
 
 def _build_context_file_citation_mapping(
@@ -462,7 +460,8 @@ def construct_message_history(
         ]
         if forgotten_meta:
             logger.debug(
-                f"FileReader: building forgotten-files message for {[(m.file_id, m.filename) for m in forgotten_meta]}"
+                "FileReader: building forgotten-files message for %s",
+                [(m.file_id, m.filename) for m in forgotten_meta],
             )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter
@@ -635,7 +634,6 @@ def run_llm_loop(
     user_memory_context: UserMemoryContext | None,
     llm: LLM,
     token_counter: Callable[[str], int],
-    db_session: Session,
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
@@ -658,6 +656,11 @@ def run_llm_loop(
         )  # Here for lazy load LiteLLM
 
         initialize_litellm()
+
+        # Normalize chat_files to a mutable list so we can extend it mid-loop
+        # when a search hit carries an attached file the Python tool should
+        # see.
+        chat_files = list(chat_files or [])
 
         # Track when the loop starts for calculating time-to-answer
         loop_start_time = time.monotonic()
@@ -1000,6 +1003,21 @@ def run_llm_loop(
                     if search_docs and tool_call.tool_name == WebSearchTool.NAME:
                         just_ran_web_search = True
 
+                    # Stage any raw source files attached to these hits into
+                    # the session's chat_files so the next Python tool call
+                    # sees them already uploaded under their display names.
+                    if search_docs:
+                        staged = build_python_chat_files_from_search_docs(
+                            search_docs=search_docs,
+                        )
+                        if staged:
+                            existing_filenames = {cf.filename for cf in chat_files}
+                            chat_files.extend(
+                                cf
+                                for cf in staged
+                                if cf.filename not in existing_filenames
+                            )
+
                 # Extract generated_images if this is an image generation tool response
                 generated_images = None
                 if isinstance(
@@ -1020,20 +1038,16 @@ def run_llm_loop(
                     persisted_memory_id: int | None = None
                     if user_memory_context and user_memory_context.user_id:
                         if tool_response.rich_response.index_to_replace is not None:
-                            memory = update_memory_at_index(
+                            persisted_memory_id = update_memory_at_index(
                                 user_id=user_memory_context.user_id,
                                 index=tool_response.rich_response.index_to_replace,
                                 new_text=tool_response.rich_response.memory_text,
-                                db_session=db_session,
                             )
-                            persisted_memory_id = memory.id if memory else None
                         else:
-                            memory = add_memory(
+                            persisted_memory_id = add_memory(
                                 user_id=user_memory_context.user_id,
                                 memory_text=tool_response.rich_response.memory_text,
-                                db_session=db_session,
                             )
-                            persisted_memory_id = memory.id
                     operation: Literal["add", "update"] = (
                         "update"
                         if tool_response.rich_response.index_to_replace is not None
@@ -1171,7 +1185,10 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
+                placement=Placement(
+                    turn_index=llm_cycle_count  # ty: ignore[possibly-unresolved-reference]
+                    + reasoning_cycles
+                ),
                 obj=OverallStop(type="stop"),
             )
         )

@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { StatusCountMap } from "@/refresh-pages/admin/UsersPage/interfaces";
 
 type UserCountsResponse = {
@@ -22,18 +23,15 @@ type UserCounts = {
 
 export default function useUserCounts(): UserCounts {
   const { data: countsData, mutate: refreshCounts } =
-    useSWR<UserCountsResponse>(
-      "/api/manage/users/counts",
-      errorHandlingFetcher
-    );
+    useSWR<UserCountsResponse>(SWR_KEYS.userCounts, errorHandlingFetcher);
 
   const { data: invitedUsers } = useSWR<InvitedUserSnapshot[]>(
-    "/api/manage/users/invited",
+    SWR_KEYS.invitedUsers,
     errorHandlingFetcher
   );
 
   const { data: pendingUsers } = useSWR<InvitedUserSnapshot[]>(
-    NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
+    NEXT_PUBLIC_CLOUD_ENABLED ? SWR_KEYS.pendingTenantUsers : null,
     errorHandlingFetcher
   );
 

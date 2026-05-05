@@ -19,6 +19,7 @@ directories = "5.0"
 tokio = { version = "1", features = ["time"] }
 window-vibrancy = "0.7.1"
 url = "2.5"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 
 [features]
 default = ["custom-protocol"]

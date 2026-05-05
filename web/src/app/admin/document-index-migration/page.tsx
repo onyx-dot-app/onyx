@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -14,6 +15,9 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
+const TOGGLE_DISABLED_MESSAGE =
+  "Changing the retrieval source is not currently possible for this instance of Onyx.";
+
 interface MigrationStatus {
   total_chunks_migrated: number;
   created_at: string | null;
@@ -23,6 +27,7 @@ interface MigrationStatus {
 
 interface RetrievalStatus {
   enable_opensearch_retrieval: boolean;
+  toggling_retrieval_is_disabled?: boolean;
 }
 
 function formatTimestamp(iso: string): string {
@@ -31,7 +36,7 @@ function formatTimestamp(iso: string): string {
 
 function MigrationStatusSection() {
   const { data, isLoading, error } = useSWR<MigrationStatus>(
-    "/api/admin/opensearch-migration/status",
+    SWR_KEYS.opensearchMigrationStatus,
     errorHandlingFetcher
   );
 
@@ -121,7 +126,7 @@ function MigrationStatusSection() {
 
 function RetrievalSourceSection() {
   const { data, isLoading, error, mutate } = useSWR<RetrievalStatus>(
-    "/api/admin/opensearch-migration/retrieval",
+    SWR_KEYS.opensearchMigrationRetrieval,
     errorHandlingFetcher
   );
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
@@ -132,20 +137,18 @@ function RetrievalSourceSection() {
     : "vespa";
   const currentValue = selectedSource ?? serverValue;
   const hasChanges = selectedSource !== null && selectedSource !== serverValue;
+  const togglingDisabled = data?.toggling_retrieval_is_disabled ?? false;
 
   async function handleUpdate() {
     setUpdating(true);
     try {
-      const response = await fetch(
-        "/api/admin/opensearch-migration/retrieval",
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            enable_opensearch_retrieval: currentValue === "opensearch",
-          }),
-        }
-      );
+      const response = await fetch(SWR_KEYS.opensearchMigrationRetrieval, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enable_opensearch_retrieval: currentValue === "opensearch",
+        }),
+      });
       if (!response.ok) {
         throw new Error("Failed to update retrieval setting");
       }
@@ -190,7 +193,7 @@ function RetrievalSourceSection() {
       <InputSelect
         value={currentValue}
         onValueChange={setSelectedSource}
-        disabled={updating}
+        disabled={updating || togglingDisabled}
       >
         <InputSelect.Trigger placeholder="Select retrieval source" />
         <InputSelect.Content>
@@ -198,6 +201,12 @@ function RetrievalSourceSection() {
           <InputSelect.Item value="opensearch">OpenSearch</InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
+
+      {togglingDisabled && (
+        <Text mainUiBody text03>
+          {TOGGLE_DISABLED_MESSAGE}
+        </Text>
+      )}
 
       {hasChanges && (
         // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
@@ -220,7 +229,7 @@ export default function Page() {
         icon={route.icon}
         title={route.title}
         description="Monitor the migration from Vespa to OpenSearch and control the active retrieval source."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <MigrationStatusSection />

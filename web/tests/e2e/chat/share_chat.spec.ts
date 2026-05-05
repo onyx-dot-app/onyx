@@ -4,8 +4,8 @@ import { loginAsRandomUser } from "../utils/auth";
 import { expectElementScreenshot } from "../utils/visualRegression";
 
 async function sendMessageAndWaitForChat(page: Page, message: string) {
-  await page.locator("#onyx-chat-input-textarea").click();
-  await page.locator("#onyx-chat-input-textarea").fill(message);
+  await page.locator("#onyx-chat-input-textbox").click();
+  await page.locator("#onyx-chat-input-textbox").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
   await page.waitForFunction(

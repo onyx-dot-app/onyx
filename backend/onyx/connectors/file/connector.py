@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 from datetime import timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import IO
@@ -12,11 +13,16 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -24,7 +30,6 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -68,7 +73,7 @@ def _create_image_section(
         )
         return section, stored_file_name
     except Exception as e:
-        logger.error(f"Failed to store image {display_name}: {e}")
+        logger.error("Failed to store image %s: %s", display_name, e)
         raise e
 
 
@@ -93,7 +98,7 @@ def _process_file(
 
     if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(
-            f"Skipping file '{file_name}' with unrecognized extension '{extension}'"
+            "Skipping file '%s' with unrecognized extension '%s'", file_name, extension
         )
         return []
 
@@ -116,7 +121,7 @@ def _process_file(
         # Read the image data
         image_data = file.read()
         if not image_data:
-            logger.warning(f"Empty image file: {file_name}")
+            logger.warning("Empty image file: %s", file_name)
             return []
 
         # Create an ImageSection for the image
@@ -142,7 +147,7 @@ def _process_file(
                 )
             ]
         except Exception as e:
-            logger.error(f"Failed to process image file {file_name}: {e}")
+            logger.error("Failed to process image file %s: %s", file_name, e)
             return []
 
     # 2) Otherwise: text-based approach. Possibly with embedded images.
@@ -160,7 +165,9 @@ def _process_file(
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(
-            f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
+            "Found file-specific metadata for %s: %s",
+            file_name,
+            extraction_result.metadata,
         )
         onyx_metadata, more_custom_tags = process_onyx_metadata(
             extraction_result.metadata
@@ -179,9 +186,47 @@ def _process_file(
         link = onyx_metadata.link or link
 
     # Build sections: first the text as a single Section
-    sections: list[TextSection | ImageSection] = []
-    if extraction_result.text_content.strip():
-        logger.debug(f"Creating TextSection for {file_name} with link: {link}")
+    sections: list[TextSection | ImageSection | TabularSection] = []
+    # `Document.file_id` doubles as the "stage these bytes into the
+    # code-interpreter sandbox" signal read by
+    # `build_python_chat_files_from_search_docs`, which has no tabular
+    # gate of its own — stamping every file would auto-stage every cited
+    # PDF/TXT/DOCX. Trade-off: non-tabular uploads keep
+    # `Document.file_id=NULL`, forcing `_user_can_access_connector_file`
+    # into a JSONB scan (see TODO there).
+    # TODO: stamp `Document.file_id` unconditionally here and add the
+    # tabular check to `build_python_chat_files_from_search_docs` (keyed
+    # off `FileRecord.display_name`). Combined with a backfill, that lets
+    # us drop the JSONB fallback entirely.
+    doc_file_id = None
+    if is_tabular_file(file_name):
+        doc_file_id = file_id
+
+        # Produce TabularSections
+        lowered_name = file_name.lower()
+        if lowered_name.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
+            file.seek(0)
+            tabular_source: IO[bytes] = file
+        else:
+            tabular_source = BytesIO(
+                extraction_result.text_content.encode("utf-8", errors="replace")
+            )
+        try:
+            sections.extend(
+                tabular_file_to_sections(
+                    file=tabular_source,
+                    file_name=file_name,
+                    link=link or "",
+                )
+            )
+        except Exception as e:
+            logger.error("Failed to process tabular file %s: %s", file_name, e)
+            return []
+        if not sections:
+            logger.warning("No content extracted from tabular file %s", file_name)
+            return []
+    elif extraction_result.text_content.strip():
+        logger.debug("Creating TextSection for %s with link: %s", file_name, link)
         sections.append(
             TextSection(link=link, text=extraction_result.text_content.strip())
         )
@@ -202,11 +247,14 @@ def _process_file(
             )
             sections.append(image_section)
             logger.debug(
-                f"Created ImageSection for embedded image {idx} in {file_name}, stored as: {stored_file_name}"
+                "Created ImageSection for embedded image %s in %s, stored as: %s",
+                idx,
+                file_name,
+                stored_file_name,
             )
         except Exception as e:
             logger.warning(
-                f"Failed to process embedded image {idx} in {file_name}: {e}"
+                "Failed to process embedded image %s in %s: %s", idx, file_name, e
             )
 
     return [
@@ -220,6 +268,7 @@ def _process_file(
             primary_owners=primary_owners,
             secondary_owners=secondary_owners,
             metadata=custom_tags,
+            file_id=doc_file_id,
         )
     ]
 
@@ -275,7 +324,7 @@ class LocalFileConnector(LoadConnector):
                 else:
                     zip_metadata = loaded_metadata
             except Exception as e:
-                logger.warning(f"Failed to load metadata from file store: {e}")
+                logger.warning("Failed to load metadata from file store: %s", e)
         elif self._zip_metadata_deprecated:
             logger.warning(
                 "Using deprecated inline zip_metadata dict. Re-upload files to use the new file store format."
@@ -289,7 +338,9 @@ class LocalFileConnector(LoadConnector):
             file_record = file_store.read_file_record(file_id=file_id)
             if not file_record:
                 # typically an unsupported extension
-                logger.warning(f"No file record found for '{file_id}' in PG; skipping.")
+                logger.warning(
+                    "No file record found for '%s' in PG; skipping.", file_id
+                )
                 continue
 
             metadata = zip_metadata.get(

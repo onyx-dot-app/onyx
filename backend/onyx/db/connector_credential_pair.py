@@ -331,6 +331,7 @@ def get_last_successful_attempt_poll_range_end(
     earliest_index: float,
     search_settings: SearchSettings,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
@@ -339,7 +340,7 @@ def get_last_successful_attempt_poll_range_end(
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
     """
-    latest_successful_index_attempt = (
+    query = (
         db_session.query(IndexAttempt)
         .join(
             ConnectorCredentialPair,
@@ -350,9 +351,12 @@ def get_last_successful_attempt_poll_range_end(
             IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
-        .order_by(IndexAttempt.poll_range_end.desc())
-        .first()
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    latest_successful_index_attempt = query.order_by(
+        IndexAttempt.poll_range_end.desc()
+    ).first()
     if (
         not latest_successful_index_attempt
         or not latest_successful_index_attempt.poll_range_end
@@ -397,7 +401,8 @@ def update_connector_credential_pair_from_id(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for Connector Credential Pair '{cc_pair_id}' but it does not exist"
+            "Attempted to update pair for Connector Credential Pair '%s' but it does not exist",
+            cc_pair_id,
         )
         return
 
@@ -425,7 +430,9 @@ def update_connector_credential_pair(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for connector id {connector_id} and credential id {credential_id}"
+            "Attempted to update pair for connector id %s and credential id %s",
+            connector_id,
+            credential_id,
         )
         return
 
@@ -728,6 +735,7 @@ def resync_cc_pair(
                 ConnectorCredentialPair.connector_id == connector_id,
                 ConnectorCredentialPair.credential_id == credential_id,
                 IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
         )
 
@@ -750,31 +758,3 @@ def resync_cc_pair(
     )
 
     db_session.commit()
-
-
-# ── Metrics query helpers ──────────────────────────────────────────────
-
-
-def get_connector_health_for_metrics(
-    db_session: Session,
-) -> list:  # Returns list of Row tuples
-    """Return connector health data for Prometheus metrics.
-
-    Each row is (cc_pair_id, status, in_repeated_error_state,
-    last_successful_index_time, name, source).
-    """
-    return (
-        db_session.query(
-            ConnectorCredentialPair.id,
-            ConnectorCredentialPair.status,
-            ConnectorCredentialPair.in_repeated_error_state,
-            ConnectorCredentialPair.last_successful_index_time,
-            ConnectorCredentialPair.name,
-            Connector.source,
-        )
-        .join(
-            Connector,
-            ConnectorCredentialPair.connector_id == Connector.id,
-        )
-        .all()
-    )

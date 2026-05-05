@@ -30,7 +30,6 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 
-
 if TYPE_CHECKING:
     pass
 
@@ -84,6 +83,9 @@ class UserPreferences(BaseModel):
     theme_preference: ThemePreference | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
+
+    # Input preferences
+    paste_as_tile: bool | None = None
 
     # Voice preferences
     voice_auto_send: bool | None = None
@@ -147,6 +149,7 @@ class UserInfo(BaseModel):
         is_anonymous_user: bool | None = None,
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
+        memories: list[MemoryItem] | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -169,6 +172,7 @@ class UserInfo(BaseModel):
                     theme_preference=user.theme_preference,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
+                    paste_as_tile=user.paste_as_tile,
                     voice_auto_send=user.voice_auto_send,
                     voice_auto_playback=user.voice_auto_playback,
                     voice_playback_speed=user.voice_playback_speed,
@@ -191,10 +195,7 @@ class UserInfo(BaseModel):
                 role=user.personal_role or "",
                 use_memories=user.use_memories,
                 enable_memory_tool=user.enable_memory_tool,
-                memories=[
-                    MemoryItem(id=memory.id, content=memory.memory_text)
-                    for memory in (user.memories or [])
-                ],
+                memories=memories or [],
                 user_preferences=user.user_preferences or "",
             ),
         )

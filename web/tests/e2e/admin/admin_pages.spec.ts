@@ -13,7 +13,7 @@ test.describe.configure({ mode: "parallel" });
  * user / feature-flag configuration.
  */
 async function discoverAdminPages(page: Page): Promise<string[]> {
-  await page.goto("/admin/configuration/llm");
+  await page.goto("/admin/configuration/language-models");
   await page.waitForLoadState("networkidle");
 
   return page.evaluate(() => {
@@ -59,7 +59,10 @@ for (const theme of THEMES) {
 
           await expectScreenshot(page, {
             name: `admin-${theme}-${slug}`,
-            mask: ['[data-testid="admin-date-range-selector-button"]'],
+            mask: [
+              '[data-testid="admin-date-range-selector-button"]',
+              '[data-column-id="updated_at"]',
+            ],
           });
         },
         { box: true }

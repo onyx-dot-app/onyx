@@ -128,7 +128,7 @@ def mark_task_start(
     if not task:
         raise ValueError(f"No task found with name {task_name}")
 
-    task.start_time = func.now()  # type: ignore
+    task.start_time = func.now()
     db_session.commit()
 
 

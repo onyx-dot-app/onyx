@@ -3,14 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Section } from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { Content, InputErrorText, InputVertical } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button as OpalButton, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Message from "@/refresh-components/messages/Message";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import {
@@ -22,9 +19,16 @@ import {
   SvgFileText,
   SvgOrganization,
 } from "@opal/icons";
-import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
+import {
+  BillingInformation,
+  BillingStatus,
+  LicenseStatus,
+  PaymentMethodRequiredError,
+  StripePortalFlowType,
+} from "@/lib/billing/interfaces";
 import {
   createCustomerPortalSession,
+  endTrial,
   resetStripeConnection,
   updateSeatCount,
   claimLicense,
@@ -149,6 +153,7 @@ function SubscriptionCard({
   disabled,
   isManualLicenseOnly,
   onReconnect,
+  onRefresh,
 }: {
   billing?: BillingInformation;
   license?: LicenseStatus;
@@ -156,8 +161,11 @@ function SubscriptionCard({
   disabled?: boolean;
   isManualLicenseOnly?: boolean;
   onReconnect?: () => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isEndingTrial, setIsEndingTrial] = useState(false);
+  const [endTrialError, setEndTrialError] = useState<string | null>(null);
 
   const planName = isManualLicenseOnly ? "Enterprise Plan" : "Business Plan";
   const PlanIcon = isManualLicenseOnly ? SvgOrganization : SvgUsers;
@@ -209,6 +217,45 @@ function SubscriptionCard({
     }
   };
 
+  const handleEndTrial = async () => {
+    setIsEndingTrial(true);
+    setEndTrialError(null);
+    try {
+      await endTrial();
+      await onRefresh?.();
+    } catch (error) {
+      if (error instanceof PaymentMethodRequiredError) {
+        // Deep-link the user to the Stripe add-payment-method screen, then
+        // return to /admin/billing with a marker that auto-retries the
+        // upgrade so they don't have to click the button again.
+        try {
+          const response = await createCustomerPortalSession({
+            return_url: `${window.location.origin}/admin/billing?portal_return=true&retry_upgrade=1`,
+            flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
+          });
+          if (response.stripe_customer_portal_url) {
+            window.location.href = response.stripe_customer_portal_url;
+            return;
+          }
+        } catch (portalError) {
+          console.error("Failed to open customer portal:", portalError);
+          setEndTrialError(
+            "Add a payment method first, then try upgrading again."
+          );
+        }
+      } else {
+        setEndTrialError(
+          error instanceof Error ? error.message : "Failed to end trial"
+        );
+      }
+    } finally {
+      setIsEndingTrial(false);
+    }
+  };
+
+  const isTrialing =
+    NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === BillingStatus.TRIALING;
+
   return (
     <Card>
       <Section
@@ -246,19 +293,44 @@ function SubscriptionCard({
               to make changes.
             </Text>
           ) : disabled ? (
-            <Disabled disabled={isReconnecting}>
-              <OpalButton
-                prominence="secondary"
-                onClick={handleReconnect}
-                rightIcon={SvgArrowRight}
-              >
-                {isReconnecting ? "Connecting..." : "Connect to Stripe"}
-              </OpalButton>
-            </Disabled>
-          ) : (
-            <OpalButton onClick={handleManagePlan} rightIcon={SvgExternalLink}>
-              Manage Plan
+            <OpalButton
+              disabled={isReconnecting}
+              prominence="secondary"
+              onClick={handleReconnect}
+              rightIcon={SvgArrowRight}
+            >
+              {isReconnecting ? "Connecting..." : "Connect to Stripe"}
             </OpalButton>
+          ) : (
+            <Section
+              flexDirection="row"
+              gap={0.5}
+              alignItems="end"
+              height="auto"
+              width="auto"
+            >
+              {isTrialing && (
+                <OpalButton
+                  disabled={isEndingTrial}
+                  onClick={handleEndTrial}
+                  rightIcon={SvgArrowRight}
+                >
+                  {isEndingTrial ? "Upgrading..." : "Upgrade now"}
+                </OpalButton>
+              )}
+              <OpalButton
+                prominence={isTrialing ? "secondary" : "primary"}
+                onClick={handleManagePlan}
+                rightIcon={SvgExternalLink}
+              >
+                Manage Plan
+              </OpalButton>
+            </Section>
+          )}
+          {endTrialError && (
+            <Text secondaryBody className="text-status-error-04">
+              {endTrialError}
+            </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
@@ -377,11 +449,13 @@ function SeatsCard({
             sizePreset="main-content"
             variant="section"
           />
-          <Disabled disabled={isSubmitting}>
-            <OpalButton prominence="secondary" onClick={handleCancel}>
-              Cancel
-            </OpalButton>
-          </Disabled>
+          <OpalButton
+            disabled={isSubmitting}
+            prominence="secondary"
+            onClick={handleCancel}
+          >
+            Cancel
+          </OpalButton>
         </Section>
 
         <div className="billing-content-area">
@@ -392,7 +466,7 @@ function SeatsCard({
             padding={1}
             height="auto"
           >
-            <InputLayouts.Vertical title="Seats">
+            <InputVertical title="Seats" withLabel>
               <InputNumber
                 value={newSeatCount}
                 onChange={(v) => setNewSeatCount(v ?? 1)}
@@ -401,10 +475,10 @@ function SeatsCard({
                 showReset
                 variant={isBelowMinimum ? "error" : "primary"}
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
 
             {isBelowMinimum ? (
-              <InputLayouts.ErrorTextLayout type="error">
+              <InputErrorText type="error">
                 You cannot set seats below current{" "}
                 <span className="font-semibold">{minRequiredSeats}</span> seats
                 in use/pending.{" "}
@@ -415,7 +489,7 @@ function SeatsCard({
                   Remove users
                 </Link>{" "}
                 first before adjusting seats.
-              </InputLayouts.ErrorTextLayout>
+              </InputErrorText>
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
                 {Math.abs(seatDifference)} seat
@@ -463,15 +537,14 @@ function SeatsCard({
               No changes to your billing.
             </Text>
           )}
-          <Disabled
+          <OpalButton
             disabled={
               isSubmitting || newSeatCount === totalSeats || isBelowMinimum
             }
+            onClick={handleConfirm}
           >
-            <OpalButton onClick={handleConfirm}>
-              {isSubmitting ? "Saving..." : "Confirm Change"}
-            </OpalButton>
-          </Disabled>
+            {isSubmitting ? "Saving..." : "Confirm Change"}
+          </OpalButton>
         </Section>
       </Card>
     );
@@ -509,15 +582,14 @@ function SeatsCard({
             View Users
           </OpalButton>
           {!hideUpdateSeats && (
-            <Disabled disabled={isLoadingUsers || disabled || !billing}>
-              <OpalButton
-                prominence="secondary"
-                onClick={handleStartEdit}
-                icon={SvgPlus}
-              >
-                Update Seats
-              </OpalButton>
-            </Disabled>
+            <OpalButton
+              disabled={isLoadingUsers || disabled || !billing}
+              prominence="secondary"
+              onClick={handleStartEdit}
+              icon={SvgPlus}
+            >
+              Update Seats
+            </OpalButton>
           )}
         </Section>
       </Section>
@@ -640,35 +712,27 @@ export default function BillingDetailsView({
     <Section gap={1} height="auto" width="full">
       {/* Stripe connection error banner */}
       {hasStripeError && (
-        <Message
-          static
-          warning
-          text="Unable to connect to Stripe payment portal."
+        <MessageCard
+          variant="warning"
+          title="Unable to connect to Stripe payment portal."
           description="Check your internet connection or manually provide a license."
-          close={false}
-          className="w-full"
         />
       )}
 
       {/* Air-gapped mode info banner */}
       {isAirGapped && !hasStripeError && !isManualLicenseOnly && (
-        <Message
-          static
-          info
-          text="Air-gapped deployment"
+        <MessageCard
+          variant="info"
+          title="Air-gapped deployment"
           description="Online billing management is disabled. Contact support to update your subscription."
-          close={false}
-          className="w-full"
         />
       )}
 
       {/* Expiration banner */}
       {expirationState && (
-        <Message
-          static
-          warning={expirationState.variant === "warning"}
-          error={expirationState.variant === "error"}
-          text={
+        <MessageCard
+          variant={expirationState.variant}
+          title={
             expirationState.variant === "error"
               ? expirationState.daysUntilDeletion
                 ? `Your subscription has expired. Data will be deleted in ${expirationState.daysUntilDeletion} days.`
@@ -682,8 +746,6 @@ export default function BillingDetailsView({
                 : "Renew your subscription to restore access to paid features."
               : `Renew your subscription by ${expirationState.expirationDate} to avoid disruption.`
           }
-          close={false}
-          className="w-full"
         />
       )}
 
@@ -696,6 +758,7 @@ export default function BillingDetailsView({
           disabled={disableBillingActions}
           isManualLicenseOnly={isManualLicenseOnly}
           onReconnect={onRefresh}
+          onRefresh={onRefresh}
         />
       )}
 

@@ -466,13 +466,15 @@ class DynamicCitationProcessor:
                 num = int(num_str)
             except ValueError:
                 # Invalid citation, skip it
-                logger.warning(f"Invalid citation number format: {num_str}")
+                logger.warning("Invalid citation number format: %s", num_str)
                 continue
 
             # Check if we have a mapping for this citation number
             if num not in self.citation_to_doc:
                 logger.warning(
-                    f"Citation number {num} not found in mapping. Available: {list(self.citation_to_doc.keys())}"
+                    "Citation number %s not found in mapping. Available: %s",
+                    num,
+                    list(self.citation_to_doc.keys()),
                 )
                 continue
 

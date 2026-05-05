@@ -269,7 +269,9 @@ class ChatSessionManager:
                 )
                 is not None
             ):
-                packet_type_str = str(packet_type)
+                packet_type_str = str(
+                    packet_type  # ty: ignore[possibly-unresolved-reference]
+                )
                 if packet_type_str == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
@@ -283,12 +285,16 @@ class ChatSessionManager:
                         if data_obj.get("is_internet_search", False)
                         else ToolName.INTERNAL_SEARCH
                     )
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=tool_name,
+                    ind_to_tool_use[ind] = (  # type: ignore
+                        ToolResult(
+                            tool_name=tool_name,
+                        )
                     )
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_START.value:
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.IMAGE_GENERATION,
+                    ind_to_tool_use[ind] = (  # type: ignore
+                        ToolResult(
+                            tool_name=ToolName.IMAGE_GENERATION,
+                        )
                     )
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
@@ -299,11 +305,13 @@ class ChatSessionManager:
                     )
 
                     images = data_obj.get("images", [])
-                    ind_to_tool_use[ind].images.extend(
-                        [GeneratedImage(**img) for img in images]
-                    )
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].images.extend([GeneratedImage(**img) for img in images])
                 elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
-                    ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].queries.extend(data_obj.get("queries", []))
                 elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
                     docs = []
                     for doc in data_obj.get("documents", []):
@@ -316,7 +324,9 @@ class ChatSessionManager:
                             docs.append(
                                 SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
                             )
-                    ind_to_tool_use[ind].documents.extend(docs)
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].documents.extend(docs)
                 elif packet_type_str == StreamingType.TOOL_CALL_DEBUG.value:
                     tool_call_debug.append(
                         ToolCallDebug(
@@ -336,7 +346,10 @@ class ChatSessionManager:
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
-            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            heartbeat_packets=[
+                dict(packet)  # ty: ignore[no-matching-overload]
+                for packet in heartbeat_packets
+            ],
             error=error,
         )
 

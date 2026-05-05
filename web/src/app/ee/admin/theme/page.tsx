@@ -3,7 +3,6 @@
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,
@@ -15,6 +14,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
 import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -54,7 +54,7 @@ export default function ThemePage() {
       }),
     });
     if (response.ok) {
-      await mutate("/api/enterprise-settings");
+      await mutate(SWR_KEYS.enterpriseSettings);
       return true;
     } else {
       const errorMsg = (await response.json()).detail;
@@ -224,26 +224,21 @@ export default function ThemePage() {
                 description="Customize how the application appears to users across your organization."
                 icon={route.icon}
                 rightChildren={
-                  <Disabled
+                  <Button
                     disabled={isSubmitting || (!dirty && !hasLogoChange)}
+                    type="button"
+                    onClick={async () => {
+                      const errors = await validateForm();
+                      if (Object.keys(errors).length > 0) {
+                        setErrors(errors);
+                        appearanceSettingsRef.current?.focusFirstError(errors);
+                        return;
+                      }
+                      await submitForm();
+                    }}
                   >
-                    <Button
-                      type="button"
-                      onClick={async () => {
-                        const errors = await validateForm();
-                        if (Object.keys(errors).length > 0) {
-                          setErrors(errors);
-                          appearanceSettingsRef.current?.focusFirstError(
-                            errors
-                          );
-                          return;
-                        }
-                        await submitForm();
-                      }}
-                    >
-                      {isSubmitting ? "Applying..." : "Apply Changes"}
-                    </Button>
-                  </Disabled>
+                    {isSubmitting ? "Applying..." : "Apply Changes"}
+                  </Button>
                 }
               />
               <SettingsLayouts.Body>

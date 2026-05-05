@@ -9,6 +9,7 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 
+from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
@@ -23,6 +24,7 @@ from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
 from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
+from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -33,8 +35,10 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
+from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
@@ -89,10 +93,10 @@ def _verify_indexing_attempt(
             )
 
     logger.info(
-        f"docfetching_task - IndexAttempt verified: "
-        f"attempt_id={index_attempt_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        "docfetching_task - IndexAttempt verified: attempt_id=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        cc_pair_id,
+        search_settings_id,
     )
 
 
@@ -134,20 +138,24 @@ def _docfetching_task(
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
+        from onyx.configs.sentry import _add_instance_tags
+
         sentry_sdk.init(
             dsn=SENTRY_DSN,
-            traces_sample_rate=0.1,
+            traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
+            release=__version__,
+            before_send=_add_instance_tags,
         )
         logger.info("Sentry initialized")
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
     logger.info(
-        f"Indexing spawned task starting: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        "Indexing spawned task starting: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        tenant_id,
+        cc_pair_id,
+        search_settings_id,
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -201,10 +209,11 @@ def _docfetching_task(
         )
 
         logger.info(
-            f"Indexing spawned task running entrypoint: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
+            "Indexing spawned task running entrypoint: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+            index_attempt_id,
+            tenant_id,
+            cc_pair_id,
+            search_settings_id,
         )
 
         # This is where the heavy/real work happens
@@ -228,10 +237,11 @@ def _docfetching_task(
 
     except Exception as e:
         logger.exception(
-            f"Indexing spawned task failed: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
+            "Indexing spawned task failed: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+            index_attempt_id,
+            tenant_id,
+            cc_pair_id,
+            search_settings_id,
         )
 
         # special bulletproofing ... truncate long exception messages
@@ -245,7 +255,10 @@ def _docfetching_task(
             raise e
 
     logger.info(
-        f"Indexing spawned task finished: attempt={index_attempt_id} cc_pair={cc_pair_id} search_settings={search_settings_id}"
+        "Indexing spawned task finished: attempt=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        cc_pair_id,
+        search_settings_id,
     )
     os._exit(0)  # ensure process exits cleanly
 
@@ -465,6 +478,15 @@ def docfetching_proxy_task(
                 index_attempt.connector_credential_pair.connector.source.value
             )
 
+            cc_pair = index_attempt.connector_credential_pair
+            on_index_attempt_status_change(
+                tenant_id=tenant_id,
+                source=result.connector_source,
+                cc_pair_id=cc_pair_id,
+                connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
+                status="in_progress",
+            )
+
         while True:
             sleep(5)
 
@@ -503,8 +525,10 @@ def docfetching_proxy_task(
                     )
                     last_memory_emit_time = current_time
 
-            # if the spawned task is still running, restart the check once again
-            # if the index attempt is not in a finished status
+            # if the IndexAttempt row has been marked terminal (failed/canceled/
+            # succeeded) by anyone else, the spawned subprocess is no longer doing
+            # work that anyone cares about. Kill it so the worker thread is freed
+            # up and a fresh attempt can be scheduled with a clean slate.
             try:
                 with get_session_with_current_tenant() as db_session:
                     index_attempt = get_index_attempt(
@@ -517,6 +541,7 @@ def docfetching_proxy_task(
                     if not index_attempt.is_finished():
                         continue
 
+                    attempt_status = index_attempt.status
             except Exception:
                 task_logger.exception(
                     log_builder.build(
@@ -524,6 +549,30 @@ def docfetching_proxy_task(
                     )
                 )
                 continue
+
+            task_logger.warning(
+                log_builder.build(
+                    "Indexing watchdog - IndexAttempt reached terminal status while "
+                    "subprocess was still running; terminating subprocess",
+                    attempt_status=str(attempt_status.value),
+                    pid=str(job.process.pid),
+                )
+            )
+            result.status = (
+                IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
+            )
+            try:
+                job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+            except Exception:
+                task_logger.exception(
+                    log_builder.build(
+                        "Indexing watchdog - exception while terminating subprocess "
+                        "after attempt finalization"
+                    )
+                )
+            if job.process is not None:
+                result.exit_code = job.process.exitcode
+            break
 
     except Exception as e:
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
@@ -583,7 +632,8 @@ def docfetching_proxy_task(
         try:
             with get_session_with_current_tenant() as db_session:
                 logger.exception(
-                    f"Marking attempt {index_attempt_id} as canceled due to termination signal"
+                    "Marking attempt %s as canceled due to termination signal",
+                    index_attempt_id,
                 )
                 mark_attempt_canceled(
                     index_attempt_id,
@@ -597,7 +647,7 @@ def docfetching_proxy_task(
                 )
             )
 
-        job.cancel()
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
     elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
         try:
             with get_session_with_current_tenant() as db_session:
@@ -614,7 +664,16 @@ def docfetching_proxy_task(
                     "Indexing watchdog - transient exception marking index attempt as failed"
                 )
             )
-        job.cancel()
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    elif (
+        result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
+    ):
+        # the IndexAttempt row was already marked terminal by whoever finalized it
+        # (e.g. heartbeat watchdog marking it FAILED, user requesting cancellation,
+        # successful completion in the spawned process before we noticed). The
+        # subprocess has been killed in the watchdog loop above; no further DB
+        # writes are needed here.
+        pass
     else:
         pass
 

@@ -1,9 +1,8 @@
 "use client";
 import { use } from "react";
 
-import { Text } from "@opal/components";
+import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
@@ -12,6 +11,7 @@ import BackButton from "@/refresh-components/buttons/BackButton";
 import { FeedbackBadge } from "../FeedbackBadge";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import CardSection from "@/components/admin/CardSection";
@@ -60,7 +60,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
           </div>
         </div>
       )}
-      <Separator />
+      <Divider />
     </div>
   );
 }
@@ -72,7 +72,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
     isLoading,
     error,
   } = useSWR<ChatSessionSnapshot>(
-    `/api/admin/chat-session-history/${params.id}`,
+    SWR_KEYS.adminChatSession(params.id),
     errorHandlingFetcher
   );
 
@@ -111,7 +111,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
           }`}
         </Text>
 
-        <Separator />
+        <Divider />
 
         <div className="flex flex-col">
           {chatSessionSnapshot.messages.map((message) => {

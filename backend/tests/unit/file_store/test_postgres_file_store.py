@@ -29,7 +29,7 @@ def _make_session_ctx(
     from contextlib import contextmanager
 
     @contextmanager
-    def _ctx(session: Any = None):  # type: ignore
+    def _ctx(session: Any = None):
         yield session if session is not None else mock_session
 
     return _ctx

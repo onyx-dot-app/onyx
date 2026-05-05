@@ -1,17 +1,16 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { DocumentSetSummary } from "@/lib/types";
 import useSWR, { mutate } from "swr";
-
-const DOCUMENT_SETS_URL = "/api/manage/document-set";
-const GET_EDITABLE_DOCUMENT_SETS_URL =
-  "/api/manage/document-set?get_editable=true";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function refreshDocumentSets() {
-  mutate(DOCUMENT_SETS_URL);
+  mutate(SWR_KEYS.documentSets);
 }
 
 export function useDocumentSets(getEditable: boolean = false) {
-  const url = getEditable ? GET_EDITABLE_DOCUMENT_SETS_URL : DOCUMENT_SETS_URL;
+  const url = getEditable
+    ? SWR_KEYS.documentSetsEditable
+    : SWR_KEYS.documentSets;
 
   const swrResponse = useSWR<DocumentSetSummary[]>(url, errorHandlingFetcher, {
     refreshInterval: 5000, // 5 seconds

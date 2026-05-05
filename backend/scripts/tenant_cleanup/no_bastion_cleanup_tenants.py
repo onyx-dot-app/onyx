@@ -20,6 +20,7 @@ import sys
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from threading import Lock
 
@@ -32,7 +33,6 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import read_tenant_ids_from
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
 )
-
 
 # Global lock for thread-safe operations
 _print_lock: Lock = Lock()
@@ -778,7 +778,7 @@ def main() -> None:
                         successful_tenants.append(tenant_id)
 
                         # Write to CSV immediately after successful cleanup
-                        timestamp = datetime.utcnow().isoformat()
+                        timestamp = datetime.now(timezone.utc).isoformat()
                         csv_writer.writerow([tenant_id, timestamp])
                         csv_file.flush()
                         print(f"✓ Recorded cleanup in {csv_output_path}")
@@ -843,7 +843,7 @@ def main() -> None:
                         failed_tenants.append((tenant_id, error))
                     elif was_cleaned:
                         with _csv_lock:
-                            timestamp = datetime.utcnow().isoformat()
+                            timestamp = datetime.now(timezone.utc).isoformat()
                             csv_writer.writerow([tenant_id, timestamp])
                             csv_file.flush()
                         successful_tenants.append(tenant_id)

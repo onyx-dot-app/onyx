@@ -36,13 +36,16 @@ from ee.onyx.server.scim.filtering import ScimFilter
 from ee.onyx.server.scim.filtering import ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
+from onyx.db.enums import AccountType
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
+from onyx.db.models import PermissionGrant
 from onyx.db.models import ScimGroupMapping
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -118,7 +121,7 @@ class ScimDAL(DAL):
         """Update the last_used_at timestamp for a token."""
         token = self._session.get(ScimToken, token_id)
         if token:
-            token.last_used_at = func.now()  # type: ignore[assignment]
+            token.last_used_at = func.now()
 
     # ------------------------------------------------------------------
     # User mapping operations
@@ -226,7 +229,7 @@ class ScimDAL(DAL):
     def get_user(self, user_id: UUID) -> User | None:
         """Fetch a user by ID."""
         return self._session.scalar(
-            select(User).where(User.id == user_id)  # type: ignore[arg-type]
+            select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         )
 
     def get_user_by_email(self, email: str) -> User | None:
@@ -280,7 +283,9 @@ class ScimDAL(DAL):
         query = (
             select(User)
             .join(ScimUserMapping, ScimUserMapping.user_id == User.id)
-            .where(User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]))
+            .where(
+                User.account_type.notin_([AccountType.BOT, AccountType.EXT_PERM_USER])
+            )
         )
 
         if scim_filter:
@@ -288,16 +293,22 @@ class ScimDAL(DAL):
             if attr == "username":
                 # arg-type: fastapi-users types User.email as str, not a column expression
                 # assignment: union return type widens but query is still Select[tuple[User]]
-                query = _apply_scim_string_op(query, User.email, scim_filter)  # type: ignore[arg-type, assignment]
+                query = _apply_scim_string_op(
+                    query, User.email, scim_filter  # ty: ignore[invalid-argument-type]
+                )
             elif attr == "active":
                 query = query.where(
-                    User.is_active.is_(scim_filter.value.lower() == "true")  # type: ignore[attr-defined]
+                    User.is_active.is_(  # ty: ignore[unresolved-attribute]
+                        scim_filter.value.lower() == "true"
+                    )
                 )
             elif attr == "externalid":
                 mapping = self.get_user_mapping_by_external_id(scim_filter.value)
                 if not mapping:
                     return [], 0
-                query = query.where(User.id == mapping.user_id)  # type: ignore[arg-type]
+                query = query.where(
+                    User.id == mapping.user_id  # ty: ignore[invalid-argument-type]
+                )
             else:
                 raise ValueError(
                     f"Unsupported filter attribute: {scim_filter.attribute}"
@@ -313,7 +324,9 @@ class ScimDAL(DAL):
         offset = max(start_index - 1, 0)
         users = list(
             self._session.scalars(
-                query.order_by(User.id).offset(offset).limit(count)  # type: ignore[arg-type]
+                query.order_by(User.id)  # ty: ignore[invalid-argument-type]
+                .offset(offset)
+                .limit(count)
             )
             .unique()
             .all()
@@ -521,6 +534,22 @@ class ScimDAL(DAL):
         self._session.add(group)
         self._session.flush()
 
+    def add_permission_grant_to_group(
+        self,
+        group_id: int,
+        permission: Permission,
+        grant_source: GrantSource,
+    ) -> None:
+        """Grant a permission to a group and flush."""
+        self._session.add(
+            PermissionGrant(
+                group_id=group_id,
+                permission=permission,
+                grant_source=grant_source,
+            )
+        )
+        self._session.flush()
+
     def update_group(
         self,
         group: UserGroup,
@@ -556,7 +585,7 @@ class ScimDAL(DAL):
             attr = scim_filter.attribute.lower()
             if attr == "displayname":
                 # assignment: union return type widens but query is still Select[tuple[UserGroup]]
-                query = _apply_scim_string_op(query, UserGroup.name, scim_filter)  # type: ignore[assignment]
+                query = _apply_scim_string_op(query, UserGroup.name, scim_filter)
             elif attr == "externalid":
                 mapping = self.get_group_mapping_by_external_id(scim_filter.value)
                 if not mapping:
@@ -594,7 +623,9 @@ class ScimDAL(DAL):
 
         users = (
             self._session.scalars(
-                select(User).where(User.id.in_(user_ids))  # type: ignore[attr-defined]
+                select(User).where(
+                    User.id.in_(user_ids)  # ty: ignore[unresolved-attribute]
+                )
             )
             .unique()
             .all()
@@ -619,7 +650,9 @@ class ScimDAL(DAL):
             return []
         existing_users = (
             self._session.scalars(
-                select(User).where(User.id.in_(uuids))  # type: ignore[attr-defined]
+                select(User).where(
+                    User.id.in_(uuids)  # ty: ignore[unresolved-attribute]
+                )
             )
             .unique()
             .all()

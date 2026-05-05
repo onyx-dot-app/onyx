@@ -294,11 +294,19 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentId).not.toBeNull();
       await expectScreenshot(page, {
         name: "welcome-page-with-assistant",
-        hide: ["[data-testid='AppInputBar/llm-popover-trigger']"],
+        hide: ["[data-testid='model-selector']"],
       });
 
       // Store assistant ID for cleanup
       knowledgeAssistantId = Number(agentId);
+
+      // Verify SearchTool is persisted in the agent's tools via API
+      const createdAgent =
+        await onyxApiClient.getAssistant(knowledgeAssistantId);
+      expect(
+        createdAgent.tools.some((t) => t.in_code_tool_id === "SearchTool"),
+        "Agent created with knowledge enabled should have SearchTool in tools"
+      ).toBe(true);
 
       // Navigate directly to the edit page
       await page.goto(`/app/agents/edit/${agentId}`);
@@ -345,6 +353,15 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Verify redirection back to the chat page
       await page.waitForURL(/.*\/app\?agentId=\d+.*/);
       expect(page.url()).toContain(`agentId=${agentId}`);
+
+      // Verify SearchTool persists after editing (knowledge still enabled)
+      const editedAgent = await onyxApiClient.getAssistant(
+        knowledgeAssistantId!
+      );
+      expect(
+        editedAgent.tools.some((t) => t.in_code_tool_id === "SearchTool"),
+        "Agent should still have SearchTool after edit with knowledge enabled"
+      ).toBe(true);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
       await page.goto(`/app/agents/edit/${agentId}`);

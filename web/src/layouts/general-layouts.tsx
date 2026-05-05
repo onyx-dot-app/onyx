@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 import React from "react";
@@ -173,8 +173,13 @@ function AttachmentItemLayout({
   rightChildren,
 }: AttachmentItemLayoutProps) {
   return (
-    <Section flexDirection="row" gap={0.25} padding={0.25}>
-      <div className={cn("h-[2.25rem] aspect-square rounded-08")}>
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      gap={0.25}
+      padding={0.25}
+    >
+      <div className={cn("h-[2.25rem] aspect-square rounded-08 flex-shrink-0")}>
         <Section>
           <div
             className="attachment-button__icon-wrapper"
@@ -189,6 +194,7 @@ function AttachmentItemLayout({
         justifyContent="between"
         alignItems="center"
         gap={1.5}
+        className="min-w-0"
       >
         <div data-testid="attachment-item-title" className="flex-1 min-w-0">
           <Content
@@ -196,7 +202,7 @@ function AttachmentItemLayout({
             description={description}
             sizePreset="main-ui"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
         </div>
         {middleText && (

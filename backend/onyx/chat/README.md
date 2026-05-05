@@ -1,25 +1,33 @@
 # Overview of Context Management
 
+This document reviews some design decisions around the main agent-loop powering Onyx's chat flow.
+It is highly recommended for all engineers contributing to this flow to be familiar with the concepts here.
+
+> Note: it is assumed the reader is familiar with the Onyx product and features such as Projects, User files, Citations, etc. 
+
 ## System Prompt
+
 The system prompt is a default prompt that comes packaged with the system. Users can edit the default prompt and it will be persisted in the database.
 
 Some parts of the system prompt are dynamically updated / inserted:
+
 - Datetime of the message sent
 - Tools description of when to use certain tools depending on if the tool is available in that cycle
 - If the user has just called a search related tool, then a section about citations is included
 
-
 ## Custom Agent Prompt
+
 The custom agent is inserted as a user message above the most recent user message, it is dynamically moved in the history as the user sends more messages.
 If the user has opted to completely replace the System Prompt, then this Custom Agent prompt replaces the system prompt and does not move along the history.
 
-
 ## How Files are handled
+
 On upload, Files are processed for tokens, if too many tokens to fit in the context, it’s considered a failed inclusion. This is done using the LLM tokenizer.
+
 - In many cases, there is not a known tokenizer for each LLM so there is a default tokenizer used as a catchall.
 - File upload happens in 2 parts - the actual upload + token counting.
 - Files are added into chat context as a “point in time” inclusion and move up the context window as the conversation progresses.
-Every file knows how many tokens it is (model agnostic), image files have some assumed number of tokens.
+  Every file knows how many tokens it is (model agnostic), image files have some assumed number of tokens.
 
 Image files are attached to User Messages also as point in time inclusions.
 
@@ -27,8 +35,8 @@ Image files are attached to User Messages also as point in time inclusions.
 Files selected from the search results are also counted as “point in time” inclusions. Files that are too large cannot be selected.
 For these files, the "entire file" does not exist for most connectors, it's pieced back together from the search engine.
 
-
 ## Projects
+
 If a Project contains few enough files that it all fits in the model context, we keep it close enough in the history to ensure it is easy for the LLM to
 access. Note that the project documents are assumed to be quite useful and that they should 1. never be dropped from context, 2. is not just a needle in
 a haystack type search with a strong keyword to make the LLM attend to it.
@@ -36,11 +44,12 @@ a haystack type search with a strong keyword to make the LLM attend to it.
 Project files are vectorized and stored in the Search Engine so that if the user chooses a model with less context than the number of tokens in the project,
 the system can RAG over the project files.
 
-
 ## How documents are represented
-Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix to make the
-context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of message
-rather than a user message.
+
+Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix string to
+make the context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of
+message rather than a user message.
+
 ```
 Here are some documents provided for context, they may not all be relevant:
 {
@@ -50,33 +59,37 @@ Here are some documents provided for context, they may not all be relevant:
     ]
 }
 ```
-Documents are represented with document so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
+
+Documents are represented with the `document` key so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
 
 Note that documents included in a single turn should be collapsed into a single user message.
 
-Search tools give URLs to the LLM though so that open_url (a separate tool) can be called on them.
-
+Search tools also give URLs to the LLM so that open_url (a separate tool) can be called on them.
 
 ## Reminders
+
 To ensure the LLM follows certain specific instructions, instructions are added at the very end of the chat context as a user message. If a search related
 tool is used, a citation reminder is always added. Otherwise, by default there is no reminder. If the user configures reminders, those are added to the
 final message. If a search related tool just ran and the user has reminders, both appear in a single message.
 
 If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent has responded.
 
-
 ## Tool Calls
-As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are today replaced with a hardcoded
+
+As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are current replaced with a hardcoded
 string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
 rich and generally very few tokens.
+
+> Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
+> What the LLM sees in the history (to be most informative for future calls) is the full set of expanded queries.
 
 **Possible Future Extension**:
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
 this is questionable value add because anything relevant and useful should be already captured in the Agent response.
 
-
 ## Examples
+
 ```
 S -> System Message
 CA -> Custom Agent as a User Message
@@ -98,15 +111,15 @@ Flow with Project and File Upload
 S, CA, P, F, U1, A1 -- user sends another message -> S, F, U1, A1, CA, P, U2, A2
 - File stays in place, above the user message
 - Project files move along the chain as new messages are sent
-- Custom Agent prompt comes before project files which comes before user uploaded files in each turn
+- Custom Agent prompt comes before project files which come before user uploaded files in each turn
 
 Reminders during a single Turn
 S, U1, TC, TR, R -- agent calls another tool -> S, U1, TC, TR, TC, TR, R, A1
 - Reminder moved to the end
 ```
 
-
 ## Product considerations
+
 Project files are important to the entire duration of the chat session. If the user has uploaded project files, they are likely very intent on working with
 those files. The LLM is much better at referencing documents close to the end of the context window so keeping it there for ease of access.
 
@@ -117,9 +130,9 @@ User Message further away. This tradeoff is accepted for Projects because of the
 Reminder are absolutely necessary to ensure 1-2 specific instructions get followed with a very high probability. It is less detailed than the system prompt
 and should be very targetted for it to work reliably and also not interfere with the last user message.
 
-
 ## Reasons / Experiments
-Custom Agent instructions being placed in the system prompt is poorly followed. It also degrade performance of the system especially when the instructions
+
+Custom Agent instructions being placed in the system prompt is poorly followed. It also degrades performance of the system especially when the instructions
 are orthogonal (or even possibly contradictory) to the system prompt. For weaker models, it causes strange artifacts in tool calls and final responses
 that completely ruins the user experience. Empirically, this way works better across a range of models especially when the history gets longer.
 Having the Custom Agent instructions not move means it fades more as the chat gets long which is also not ok from a UX perspective.
@@ -146,10 +159,10 @@ In a similar concept, LLM instructions in the system prompt are structured speci
 fairly surprising actually but if there is a line of instructions effectively saying "If you try to use some tools and find that you need more information or
 need to call additional tools, you are encouraged to do this", having this in the Tool section of the System prompt makes all the LLMs follow it well but if it's
 even just a paragraph away like near the beginning of the prompt, it is often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
-rate even just moving the same statement a few sentences.
-
+rate by even just moving the same statement a few sentences.
 
 ## Other related pointers
+
 - How messages, files, images are stored can be found in backend/onyx/db/models.py, there is also a README.md under that directory that may be helpful.
 
 ---
@@ -160,32 +173,38 @@ rate even just moving the same statement a few sentences.
 Turn: User sends a message and AI does some set of things and responds
 Step/Cycle: 1 single LLM inference given some context and some tools
 
-
 ## 1. Top Level (process_message function):
+
 This function can be thought of as the set-up and validation layer. It ensures that the database is in a valid state, reads the
 messages in the session and sets up all the necessary items to run the chat loop and state containers. The major things it does
 are:
+
 - Validates the request
 - Builds the chat history for the session
 - Fetches any additional context such as files and images
 - Prepares all of the tools for the LLM
 - Creates the state container objects for use in the loop
 
-### Wrapper (run_chat_loop_with_state_containers function):
-This wrapper is used to run the LLM flow in a background thread and monitor the emitter for stop signals. This means the top
-level is as isolated from the LLM flow as possible and can continue to yield packets as soon as they are available from the lower
-levels. This also means that if the lower levels fail, the top level will still guarantee a reasonable response to the user.
-All of the saving and database operations are abstracted away from the lower levels.
+### Execution (`_run_models` function):
+
+Each model runs in its own worker thread inside a `ThreadPoolExecutor`. Workers write packets to a shared
+`merged_queue` via an `Emitter`; the main thread drains the queue and yields packets in arrival order. This
+means the top level is isolated from the LLM flow and can yield packets as soon as they are produced. If a
+worker fails, the main thread yields a `StreamingError` for that model and keeps the other models running.
+All saving and database operations are handled by the main thread after the workers complete (or by the
+workers themselves via self-completion if the drain loop exits early).
 
 ### Emitter
-The emitter is designed to be an object queue so that lower levels do not need to yield objects all the way back to the top.
-This way the functions can be better designed (not everything as a generator) and more easily tested. The wrapper around the
-LLM flow (run_chat_loop_with_state_containers) is used to monitor the emitter and handle packets as soon as they are available
-from the lower levels. Both the emitter and the state container are mutating state objects and only used to accumulate state.
-There should be no logic dependent on the states of these objects, especially in the lower levels. The emitter should only take
-packets and should not be used for other things.
+
+The emitter is an object that lower levels use to send packets without needing to yield them all the way back
+up the call stack. Each `Emitter` tags every packet with a `model_index` and places it on the shared
+`merged_queue` as a `(model_idx, packet)` tuple. The drain loop in `_run_models` consumes these tuples and
+yields the packets to the caller. Both the emitter and the state container are mutating state objects used
+only to accumulate state. There should be no logic dependent on the states of these objects, especially in
+the lower levels. The emitter should only take packets and should not be used for other things.
 
 ### State Container
+
 The state container is used to accumulate state during the LLM flow. Similar to the emitter, it should not be used for logic,
 only for accumulating state. It is used to gather all of the necessary information for saving the chat turn into the database.
 So it will accumulate answer tokens, reasoning tokens, tool calls, citation info, etc. This is used at the end of the flow once
@@ -193,35 +212,40 @@ the lower level is completed whether on its own or stopped by the user. At that 
 the database. The state container can be added to by any of the underlying layers, this is fine.
 
 ### Stopping Generation
-A stop signal is checked every 300ms by the wrapper around the LLM flow. The signal itself
-is stored in Redis and is set by the user calling the stop endpoint. The wrapper ensures that no matter what the lower level is
-doing at the time, the thread can be killed by the top level. It does not require a cooperative cancellation from the lower level
-and in fact the lower level does not know about the stop signal at all.
 
+The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
+is stored in Redis and is set by the user calling the stop endpoint. On disconnect, the drain loop saves
+partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
+A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
+already completed successfully will self-complete (persist their response) if the drain loop exited before
+reaching the normal completion path.
 
 ## 2. LLM Loop (run_llm_loop function)
+
 This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
 is outlined in the first half of this doc). Its main functionality is:
+
 - Translate and truncate the context for the LLM inference
 - Add context modifiers like reminders, updates to the system prompts, etc.
 - Run tool calls and gather results
 - Build some of the objects stored in the state container.
 
-
 ## 3. LLM Step (run_llm_step function)
+
 This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
 so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
 do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
 tool calls and returns that to the LLM Loop to execute.
 
-
 ## Things to know
-- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
-concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
-comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
 
-- There are 3 representations of "message". The first is the database model ChatMessage, this one should be translated away and
-not used deep into the flow. The second is ChatMessageSimple which is the data model which should be used throughout the code
-as much as possible. If modifications/additions are needed, it should be to this object. This is the rich representation of a
-message for the code. Finally there is the LanguageModelInput representation of a message. This one is for the LLM interface
-layer and is as stripped down as possible so that the LLM interface can be clean and easy to maintain/extend.
+- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
+  concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
+  comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
+
+- There are 3 representations of a message, each scoped to a different layer:
+  1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
+  2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
+     of a message. Any modifications or additions to message structure should be made here.
+  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
+     easy to maintain/extend.

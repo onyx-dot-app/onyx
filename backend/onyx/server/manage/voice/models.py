@@ -15,6 +15,10 @@ class VoiceProviderView(BaseModel):
     stt_model: str | None
     tts_model: str | None
     default_voice: str | None
+    api_key: str | None = Field(
+        default=None,
+        description="Masked API key for display (e.g. 'sk-a...b1c2').",
+    )
     has_api_key: bool = Field(
         default=False,
         description="Indicates whether an API key is stored for this provider.",

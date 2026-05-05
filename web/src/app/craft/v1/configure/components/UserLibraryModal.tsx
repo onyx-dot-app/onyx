@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   fetchLibraryTree,
   uploadLibraryFiles,
@@ -13,7 +14,6 @@ import {
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import Modal from "@/refresh-components/Modal";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section } from "@/layouts/general-layouts";
@@ -28,7 +28,7 @@ import {
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
@@ -94,7 +94,7 @@ export default function UserLibraryModal({
     error,
     isLoading,
     mutate,
-  } = useSWR(open ? "/api/build/user-library/tree" : null, fetchLibraryTree, {
+  } = useSWR(open ? SWR_KEYS.buildUserLibraryTree : null, fetchLibraryTree, {
     revalidateOnFocus: false,
   });
 
@@ -261,15 +261,30 @@ export default function UserLibraryModal({
                     disabled={isUploading}
                     accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
                   />
-                  <Disabled disabled={isUploading}>
-                    <Button
-                      prominence="secondary"
-                      icon={SvgUploadCloud}
-                      onClick={() => handleUploadToFolder("/")}
-                      tooltip={isUploading ? "Uploading..." : "Upload"}
-                      aria-label={isUploading ? "Uploading..." : "Upload"}
-                    />
-                  </Disabled>
+                  <Button
+                    disabled={isUploading}
+                    prominence="secondary"
+                    icon={SvgUploadCloud}
+                    onClick={() => handleUploadToFolder("/")}
+                    tooltip={isUploading ? "Uploading..." : "Upload"}
+                    aria-label={isUploading ? "Uploading..." : "Upload"}
+                  />
+                </Section>
+
+                {/* The exact cap is controlled by the backend env var
+                    MAX_EMBEDDED_IMAGES_PER_FILE (default 500). This copy is
+                    deliberately vague so it doesn't drift if the limit is
+                    tuned per-deployment; the precise number is surfaced in
+                    the rejection error the server returns. */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  padding={0.5}
+                  height="fit"
+                >
+                  <Text secondaryBody text03>
+                    PDFs with many embedded images may be rejected.
+                  </Text>
                 </Section>
 
                 {isLoading ? (
@@ -383,9 +398,12 @@ export default function UserLibraryModal({
             >
               Cancel
             </Button>
-            <Disabled disabled={!newFolderName.trim()}>
-              <Button onClick={handleCreateDirectory}>Create</Button>
-            </Disabled>
+            <Button
+              disabled={!newFolderName.trim()}
+              onClick={handleCreateDirectory}
+            >
+              Create
+            </Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
@@ -538,7 +556,7 @@ function LibraryTreeView({
               </Section>
 
               {/* Sync toggle */}
-              <SimpleTooltip
+              <Tooltip
                 tooltip={
                   entry.sync_enabled
                     ? "Synced to sandbox - click to disable"
@@ -549,7 +567,7 @@ function LibraryTreeView({
                   checked={entry.sync_enabled}
                   onCheckedChange={(checked) => onToggleSync(entry, checked)}
                 />
-              </SimpleTooltip>
+              </Tooltip>
             </Section>
 
             {/* Children */}

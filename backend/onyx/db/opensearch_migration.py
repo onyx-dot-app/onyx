@@ -20,6 +20,7 @@ from onyx.background.celery.tasks.opensearch_migration.constants import (
     TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
 )
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
@@ -324,6 +325,15 @@ def mark_migration_completed_time_if_not_set_with_commit(
     db_session.commit()
 
 
+def is_migration_completed(db_session: Session) -> bool:
+    """Returns True if the migration is completed.
+
+    Can be run even if the migration record does not exist.
+    """
+    record = db_session.query(OpenSearchTenantMigrationRecord).first()
+    return record is not None and record.migration_completed_at is not None
+
+
 def build_sanitized_to_original_doc_id_mapping(
     db_session: Session,
 ) -> dict[str, str]:
@@ -403,7 +413,11 @@ def get_opensearch_retrieval_state(
 
     If the tenant migration record is not found, defaults to
     ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX.
+
+    If ONYX_DISABLE_VESPA is True, always returns True.
     """
+    if ONYX_DISABLE_VESPA:
+        return True
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
         return ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX

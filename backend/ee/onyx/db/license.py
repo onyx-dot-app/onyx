@@ -13,6 +13,7 @@ from ee.onyx.server.license.models import LicenseSource
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.db.enums import AccountType
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -107,12 +108,13 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     Get current seat usage directly from database.
 
     For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users (excludes EXT_PERM_USER role
-    and the anonymous system user).
+    For self-hosted: counts all active users.
 
-    TODO: Exclude API key dummy users from seat counting. API keys create
-    users with emails like `__DANSWER_API_KEY_*` that should not count toward
-    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
+    Only human accounts count toward seat limits.
+    SERVICE_ACCOUNT (API key dummy users), EXT_PERM_USER, and the
+    anonymous system user are excluded. BOT (Slack users) ARE counted
+    because they represent real humans and get upgraded to STANDARD
+    when they log in via web.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
@@ -126,9 +128,10 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 select(func.count())
                 .select_from(User)
                 .where(
-                    User.is_active == True,  # type: ignore  # noqa: E712
+                    User.is_active == True,  # noqa: E712
                     User.role != UserRole.EXT_PERM_USER,
-                    User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
+                    User.email != ANONYMOUS_USER_EMAIL,
+                    User.account_type != AccountType.SERVICE_ACCOUNT,
                 )
             )
             return result.scalar() or 0
@@ -160,7 +163,7 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
         )
         return LicenseMetadata.model_validate_json(cached_str)
     except Exception as e:
-        logger.warning(f"Failed to parse cached license metadata: {e}")
+        logger.warning("Failed to parse cached license metadata: %s", e)
         return None
 
 
@@ -204,12 +207,19 @@ def update_license_cache(
         The cached LicenseMetadata
     """
     from ee.onyx.utils.license import get_license_status
+    from ee.onyx.utils.license_expiry import get_expiry_warning_stage
+    from ee.onyx.utils.license_expiry import get_grace_period_end
 
     tenant = tenant_id or get_current_tenant_id()
     cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
-    status = get_license_status(payload, grace_period_end)
+    # Default the grace window to 14 days past expires_at so the license-
+    # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
+    # that window — matching the banner copy and daily admin emails.
+    effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
+    status = get_license_status(payload, effective_grace_end)
+    warning_stage = get_expiry_warning_stage(payload.expires_at)
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -219,8 +229,9 @@ def update_license_cache(
         plan_type=payload.plan_type,
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
-        grace_period_end=grace_period_end,
+        grace_period_end=effective_grace_end,
         status=status,
+        expiry_warning_stage=warning_stage,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
     )
@@ -231,7 +242,9 @@ def update_license_cache(
         ex=LICENSE_CACHE_TTL_SECONDS,
     )
 
-    logger.info(f"License cache updated: {metadata.seats} seats, status={status.value}")
+    logger.info(
+        "License cache updated: %s seats, status=%s", metadata.seats, status.value
+    )
     return metadata
 
 
@@ -270,7 +283,7 @@ def refresh_license_cache(
             tenant_id=tenant_id,
         )
     except ValueError as e:
-        logger.error(f"Failed to verify license during cache refresh: {e}")
+        logger.error("Failed to verify license during cache refresh: %s", e)
         invalidate_license_cache(tenant_id)
         return None
 

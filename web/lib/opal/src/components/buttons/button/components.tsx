@@ -1,18 +1,11 @@
-import "@opal/components/tooltip.css";
-import {
-  Disabled,
-  Interactive,
-  type InteractiveStatelessProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
+import { Text, type TooltipSide, Tooltip } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------
@@ -49,7 +42,7 @@ type ButtonProps = InteractiveStatelessProps &
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
 
-    /** Wraps the button in a Disabled context. `false` overrides parent contexts. */
+    /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
   };
 
@@ -94,15 +87,17 @@ function Button({
   ) : null;
 
   const button = (
-    <Interactive.Stateless type={type} {...interactiveProps}>
+    <Interactive.Stateless
+      type={type}
+      disabled={disabled}
+      {...interactiveProps}
+    >
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        size={size}
+        width={width}
+        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}
@@ -120,28 +115,11 @@ function Button({
     </Interactive.Stateless>
   );
 
-  const result = tooltip ? (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          {tooltip}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
-  ) : (
-    button
+  return (
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
   );
-
-  if (disabled != null) {
-    return <Disabled disabled={disabled}>{result}</Disabled>;
-  }
-
-  return result;
 }
 
 export { Button, type ButtonProps };

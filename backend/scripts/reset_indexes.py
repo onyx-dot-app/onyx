@@ -36,7 +36,7 @@ def wipe_vespa_index() -> bool:
                 response.raise_for_status()
 
                 response_json = response.json()
-                logger.info(f"Response: {response_json}")
+                logger.info("Response: %s", response_json)
 
                 continuation = response_json.get("continuation")
                 should_continue = bool(continuation)
@@ -46,7 +46,7 @@ def wipe_vespa_index() -> bool:
                 logger.exception("Request failed")
                 sleep(2**attempt)  # Exponential backoff
         else:
-            logger.error(f"Max retries ({RETRIES}) exceeded. Exiting.")
+            logger.error("Max retries (%s) exceeded. Exiting.", RETRIES)
             return False
 
     return True

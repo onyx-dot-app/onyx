@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
@@ -42,7 +42,12 @@ export default function FileDisplay({ files }: FileDisplayProps) {
       file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
+  // TODO(danelegend): XLSX files are binary (OOXML) and will fail to parse in CsvContent.
+  // The backend should convert XLSX to CSV text before serving via /api/chat/file,
+  // or XLSX should be split into a separate ChatFileType and rendered as an Attachment.
+  const tabularFiles = files.filter(
+    (file) => file.type === ChatFileType.TABULAR
+  );
 
   const presentingDocument: MinimalOnyxDocument = {
     document_id: previewingFile?.id ?? "",
@@ -78,9 +83,9 @@ export default function FileDisplay({ files }: FileDisplayProps) {
         </FileContainer>
       )}
 
-      {csvFiles.length > 0 && (
+      {tabularFiles.length > 0 && (
         <FileContainer className="overflow-auto">
-          {csvFiles.map((file) =>
+          {tabularFiles.map((file) =>
             close ? (
               <ExpandableContentWrapper
                 key={file.id}

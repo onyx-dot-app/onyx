@@ -81,6 +81,10 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
+// Cookie controlling the per-character typewriter reveal in chat.
+// "false" disables smooth streaming — chunks render as they arrive.
+export const SMOOTH_STREAMING_COOKIE_NAME = "smoothStreamingEnabled";
+
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
@@ -122,7 +126,7 @@ export const ART_ASSISTANT_ID = -3;
 export const MAX_FILES_TO_SHOW = 3;
 
 // SIZES
-export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
+export const MOBILE_SIDEBAR_BREAKPOINT_PX = 724;
 export const DESKTOP_SMALL_BREAKPOINT_PX = 912;
 export const DESKTOP_MEDIUM_BREAKPOINT_PX = 1232;
 export const DEFAULT_AVATAR_SIZE_PX = 18;
@@ -133,3 +137,5 @@ export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
 
 export const APP_SLOGAN = "Open Source AI Platform";
+
+export const DEFAULT_PAGE_SIZE = 10;

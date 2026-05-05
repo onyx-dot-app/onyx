@@ -3,6 +3,7 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Fetches MCP (Model Context Protocol) servers configuration.
@@ -28,7 +29,7 @@ export default function useMcpServers() {
     isLoading: isMcpLoading,
     mutate: mutateMcpServers,
   } = useSWR<MCPServersResponse>(
-    "/api/admin/mcp/servers",
+    SWR_KEYS.adminMcpServers,
     errorHandlingFetcher
   );
 

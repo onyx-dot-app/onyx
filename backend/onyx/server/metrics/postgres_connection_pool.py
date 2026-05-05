@@ -240,12 +240,14 @@ def setup_postgres_connection_pool_metrics(
         pool = sync_engine.pool
         if not isinstance(pool, QueuePool):
             logger.info(
-                f"Skipping pool metrics for engine '{label}' ({type(pool).__name__} — no pool state)"
+                "Skipping pool metrics for engine '%s' (%s — no pool state)",
+                label,
+                type(pool).__name__,
             )
             continue
 
         collector.add_pool(label, pool)
         _register_pool_events(sync_engine, label)
-        logger.info(f"Registered pool metrics for engine '{label}'")
+        logger.info("Registered pool metrics for engine '%s'", label)
 
     REGISTRY.register(collector)

@@ -1,8 +1,6 @@
 from unittest.mock import MagicMock
 
-from onyx.context.search.federated.slack_search_utils import (
-    build_channel_query_filter,
-)
+from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
 from onyx.context.search.federated.slack_search_utils import matches_exclude_pattern
 from onyx.onyxbot.slack.models import ChannelType
 

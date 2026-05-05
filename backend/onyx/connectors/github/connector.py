@@ -22,6 +22,7 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -35,10 +36,16 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import ConnectorFailure
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -133,11 +140,13 @@ def _paginate_until_error(
 
             if num_objs % CURSOR_LOG_FREQUENCY == 0:
                 logger.info(
-                    f"Retrieved {num_objs} objects with current cursor url: {get_nextUrl(pag_list, nextUrl_key)}"
+                    "Retrieved %s objects with current cursor url: %s",
+                    num_objs,
+                    get_nextUrl(pag_list, nextUrl_key),
                 )
 
     except Exception as e:
-        logger.exception(f"Error during cursor-based pagination: {e}")
+        logger.exception("Error during cursor-based pagination: %s", e)
         if num_objs - prev_num_objs > 0:
             raise
 
@@ -223,7 +232,7 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
         try:
             return cast(str | None, getattr(user, attr_name))
         except GithubException:
-            logger.debug(f"Error getting {attr_name} for user")
+            logger.debug("Error getting %s for user", attr_name)
             return None
 
     return {
@@ -427,7 +436,11 @@ def make_cursor_url_callback(
     return cursor_url_callback
 
 
-class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint]):
+class GithubConnector(
+    CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint],
+    SlimConnector,
+    SlimConnectorWithPermSync,
+):
     def __init__(
         self,
         repo_owner: str,
@@ -493,7 +506,10 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                         repos.append(repo)
                     except GithubException as e:
                         logger.warning(
-                            f"Could not fetch repo {self.repo_owner}/{repo_name}: {e}"
+                            "Could not fetch repo %s/%s: %s",
+                            self.repo_owner,
+                            repo_name,
+                            e,
                         )
 
             return repos
@@ -559,6 +575,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         start: datetime | None = None,
         end: datetime | None = None,
         include_permissions: bool = False,
+        is_slim: bool = False,
     ) -> Generator[Document | ConnectorFailure, None, GithubConnectorCheckpoint]:
         if self.github_client is None:
             raise ConnectorMissingCredentialError("GitHub")
@@ -597,7 +614,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                 repo, self.github_client
             )
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
-            logger.info(f"Fetching PRs for repo: {repo.name}")
+            logger.info("Fetching PRs for repo: %s", repo.name)
 
             pr_batch = _get_batch_rate_limited(
                 self._pull_requests_func(repo),
@@ -614,36 +631,46 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
             for pr in pr_batch:
                 num_prs += 1
 
-                # we iterate backwards in time, so at this point we stop processing prs
-                if (
-                    start is not None
-                    and pr.updated_at
-                    and pr.updated_at.replace(tzinfo=timezone.utc) < start
-                ):
-                    done_with_prs = True
-                    break
-                # Skip PRs updated after the end date
-                if (
-                    end is not None
-                    and pr.updated_at
-                    and pr.updated_at.replace(tzinfo=timezone.utc) > end
-                ):
-                    continue
-                try:
-                    yield _convert_pr_to_document(
-                        cast(PullRequest, pr), repo_external_access
+                if is_slim:
+                    yield Document(
+                        id=pr.html_url,
+                        sections=[],
+                        external_access=repo_external_access,
+                        source=DocumentSource.GITHUB,
+                        semantic_identifier="",
+                        metadata={},
                     )
-                except Exception as e:
-                    error_msg = f"Error converting PR to document: {e}"
-                    logger.exception(error_msg)
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=str(pr.id), document_link=pr.html_url
-                        ),
-                        failure_message=error_msg,
-                        exception=e,
-                    )
-                    continue
+                else:
+                    # we iterate backwards in time, so at this point we stop processing prs
+                    if (
+                        start is not None
+                        and pr.updated_at
+                        and pr.updated_at.replace(tzinfo=timezone.utc) < start
+                    ):
+                        done_with_prs = True
+                        break
+                    # Skip PRs updated after the end date
+                    if (
+                        end is not None
+                        and pr.updated_at
+                        and pr.updated_at.replace(tzinfo=timezone.utc) > end
+                    ):
+                        continue
+                    try:
+                        yield _convert_pr_to_document(
+                            cast(PullRequest, pr), repo_external_access
+                        )
+                    except Exception as e:
+                        error_msg = f"Error converting PR to document: {e}"
+                        logger.exception(error_msg)
+                        yield ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=str(pr.id), document_link=pr.html_url
+                            ),
+                            failure_message=error_msg,
+                            exception=e,
+                        )
+                        continue
 
             # If we reach this point with a cursor url in the checkpoint, we were using
             # the fallback cursor-based pagination strategy. That strategy tries to get all
@@ -654,7 +681,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
             used_cursor = checkpoint.cursor_url is not None
-            logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
+            logger.info("Fetched %s PRs for repo: %s", num_prs, repo.name)
             if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
@@ -670,7 +697,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
-            logger.info(f"Fetching issues for repo: {repo.name}")
+            logger.info("Fetching issues for repo: %s", repo.name)
 
             issue_batch = list(
                 _get_batch_rate_limited(
@@ -682,47 +709,56 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                     self.github_client,
                 )
             )
-            logger.info(f"Fetched {len(issue_batch)} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", len(issue_batch), repo.name)
             checkpoint.curr_page += 1
             done_with_issues = False
             num_issues = 0
             for issue in issue_batch:
                 num_issues += 1
                 issue = cast(Issue, issue)
-                # we iterate backwards in time, so at this point we stop processing prs
-                if (
-                    start is not None
-                    and issue.updated_at.replace(tzinfo=timezone.utc) < start
-                ):
-                    done_with_issues = True
-                    break
-                # Skip PRs updated after the end date
-                if (
-                    end is not None
-                    and issue.updated_at.replace(tzinfo=timezone.utc) > end
-                ):
-                    continue
-
                 if issue.pull_request is not None:
                     # PRs are handled separately
                     continue
 
-                try:
-                    yield _convert_issue_to_document(issue, repo_external_access)
-                except Exception as e:
-                    error_msg = f"Error converting issue to document: {e}"
-                    logger.exception(error_msg)
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=str(issue.id),
-                            document_link=issue.html_url,
-                        ),
-                        failure_message=error_msg,
-                        exception=e,
+                if is_slim:
+                    yield Document(
+                        id=issue.html_url,
+                        sections=[],
+                        external_access=repo_external_access,
+                        source=DocumentSource.GITHUB,
+                        semantic_identifier="",
+                        metadata={},
                     )
-                    continue
+                else:
+                    # we iterate backwards in time, so at this point we stop processing issues
+                    if (
+                        start is not None
+                        and issue.updated_at.replace(tzinfo=timezone.utc) < start
+                    ):
+                        done_with_issues = True
+                        break
+                    # Skip issues updated after the end date
+                    if (
+                        end is not None
+                        and issue.updated_at.replace(tzinfo=timezone.utc) > end
+                    ):
+                        continue
+                    try:
+                        yield _convert_issue_to_document(issue, repo_external_access)
+                    except Exception as e:
+                        error_msg = f"Error converting issue to document: {e}"
+                        logger.exception(error_msg)
+                        yield ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=str(issue.id),
+                                document_link=issue.html_url,
+                            ),
+                            failure_message=error_msg,
+                            exception=e,
+                        )
+                        continue
 
-            logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", num_issues, repo.name)
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
@@ -747,7 +783,9 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
 
         if checkpoint.cached_repo_ids:
             logger.info(
-                f"{len(checkpoint.cached_repo_ids)} repos remaining (IDs: {checkpoint.cached_repo_ids})"
+                "%s repos remaining (IDs: %s)",
+                len(checkpoint.cached_repo_ids),
+                checkpoint.cached_repo_ids,
             )
         else:
             logger.info("No more repos remaining")
@@ -803,6 +841,60 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
             start, end, checkpoint, include_permissions=True
         )
 
+    def _retrieve_slim_docs(
+        self,
+        include_permissions: bool,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Iterate all PRs and issues across all configured repos as SlimDocuments.
+
+        Drives _fetch_from_github in a checkpoint loop — each call processes one
+        page and returns an updated checkpoint. CheckpointOutputWrapper handles
+        draining the generator and extracting the returned checkpoint. Rate
+        limiting and pagination are handled centrally by _fetch_from_github via
+        _get_batch_rate_limited.
+        """
+        checkpoint = self.build_dummy_checkpoint()
+        while checkpoint.has_more:
+            batch: list[SlimDocument | HierarchyNode] = []
+            gen = self._fetch_from_github(
+                checkpoint, include_permissions=include_permissions, is_slim=True
+            )
+            wrapper: CheckpointOutputWrapper[GithubConnectorCheckpoint] = (
+                CheckpointOutputWrapper()
+            )
+            for document, _, _, next_checkpoint in wrapper(gen):
+                if document is not None:
+                    batch.append(
+                        SlimDocument(
+                            id=document.id, external_access=document.external_access
+                        )
+                    )
+                if next_checkpoint is not None:
+                    checkpoint = next_checkpoint
+            if batch:
+                yield batch
+            if callback and callback.should_stop():
+                raise RuntimeError("github_slim_docs: Stop signal detected")
+
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_slim_docs(include_permissions=False, callback=callback)
+
+    @override
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        return self._retrieve_slim_docs(include_permissions=True, callback=callback)
+
     def validate_connector_settings(self) -> None:
         if self.github_client is None:
             raise ConnectorMissingCredentialError("GitHub credentials not loaded.")
@@ -835,7 +927,9 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                                 f"{self.repo_owner}/{repo_name}"
                             )
                             logger.info(
-                                f"Successfully accessed repository: {self.repo_owner}/{repo_name}"
+                                "Successfully accessed repository: %s/%s",
+                                self.repo_owner,
+                                repo_name,
                             )
                             test_repo.get_contents("")
                             valid_repos = True

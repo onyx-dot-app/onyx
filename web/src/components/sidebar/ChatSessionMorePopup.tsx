@@ -13,7 +13,8 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";

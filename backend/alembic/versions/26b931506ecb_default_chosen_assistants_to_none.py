@@ -22,16 +22,14 @@ def upgrade() -> None:
         "user", sa.Column("chosen_assistants_new", postgresql.JSONB(), nullable=True)
     )
 
-    op.execute(
-        """
+    op.execute("""
     UPDATE "user"
     SET chosen_assistants_new =
         CASE
             WHEN chosen_assistants = '[-2, -1, 0]' THEN NULL
             ELSE chosen_assistants
         END
-    """
-    )
+    """)
 
     op.drop_column("user", "chosen_assistants")
 
@@ -51,16 +49,14 @@ def downgrade() -> None:
         ),
     )
 
-    op.execute(
-        """
+    op.execute("""
     UPDATE "user"
     SET chosen_assistants_old =
         CASE
             WHEN chosen_assistants IS NULL THEN '[-2, -1, 0]'::jsonb
             ELSE chosen_assistants
         END
-    """
-    )
+    """)
 
     op.drop_column("user", "chosen_assistants")
 

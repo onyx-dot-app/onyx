@@ -21,7 +21,7 @@ test.skip("User changes password and logs in with new password", async ({
 
   // Navigate to user settings
   await page.click("#onyx-user-dropdown");
-  await page.getByText("User Settings").click();
+  await page.getByText("Settings").click();
   await page.getByRole("button", { name: "Password" }).click();
 
   // Change password

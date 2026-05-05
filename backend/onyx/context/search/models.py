@@ -164,6 +164,10 @@ class InferenceChunk(BaseChunk):
 
     is_federated: bool = False
 
+    # `Document.file_id` for the doc this chunk belongs to. Populated post-
+    # retrieval via a Postgres lookup
+    file_id: str | None = None
+
     @property
     def unique_id(self) -> str:
         return f"{self.document_id}__{self.chunk_id}"
@@ -263,6 +267,10 @@ class SearchDoc(BaseModel):
     secondary_owners: list[str] | None = None
     is_internet: bool = False
 
+    # Mirrors `InferenceChunk.file_id`. Only present once sections have been
+    # run through `populate_file_ids_on_sections`.
+    file_id: str | None = None
+
     @classmethod
     def from_chunks_or_sections(
         cls,
@@ -295,11 +303,12 @@ class SearchDoc(BaseModel):
                 primary_owners=chunk.primary_owners,
                 secondary_owners=chunk.secondary_owners,
                 is_internet=False,
+                file_id=chunk.file_id,
             )
             for item in items
         ]
 
-        return search_docs
+        return search_docs  # ty: ignore[invalid-return-type]
 
     # TODO - there is likely a way to clean this all up and not have the switch between these
     @classmethod
@@ -319,8 +328,12 @@ class SearchDoc(BaseModel):
             for saved_search_doc in saved_search_docs
         ]
 
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
+    def model_dump(  # ty: ignore[invalid-method-override]
+        self, *args: list, **kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        initial_dict = super().model_dump(
+            *args, **kwargs  # ty: ignore[invalid-argument-type]
+        )
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None
         )

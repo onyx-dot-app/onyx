@@ -17,7 +17,6 @@ from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -185,6 +184,10 @@ class MinimalPersonaSnapshot(BaseModel):
         for doc_set in persona.document_sets:
             for cc_pair in doc_set.connector_credential_pairs:
                 sources.add(cc_pair.connector.source)
+            for fed_ds in doc_set.federated_connectors:
+                non_fed = fed_ds.federated_connector.source.to_non_federated_source()
+                if non_fed is not None:
+                    sources.add(non_fed)
 
         # Sources from hierarchy nodes
         for node in persona.hierarchy_nodes:
@@ -194,6 +197,9 @@ class MinimalPersonaSnapshot(BaseModel):
         for doc in persona.attached_documents:
             if doc.parent_hierarchy_node:
                 sources.add(doc.parent_hierarchy_node.source)
+
+        if persona.user_files:
+            sources.add(DocumentSource.USER_FILE)
 
         return MinimalPersonaSnapshot(
             # Core fields actually used by ChatPage

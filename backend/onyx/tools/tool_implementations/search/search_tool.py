@@ -59,6 +59,7 @@ from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
+from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -92,21 +93,11 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.constants import (
-    KEYWORD_QUERY_HYBRID_ALPHA,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_KEYWORD_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_NON_CUSTOM_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    LLM_SEMANTIC_QUERY_WEIGHT,
-)
-from onyx.tools.tool_implementations.search.constants import (
-    MAX_CHUNKS_FOR_RELEVANCE,
-)
+from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
+from onyx.tools.tool_implementations.search.constants import LLM_KEYWORD_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import LLM_NON_CUSTOM_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -221,7 +212,11 @@ def _trim_sections_by_tokens(
             break
 
     logger.debug(
-        f"Trimmed sections from {len(sections)} to {len(trimmed_sections)} ({total_tokens} tokens, budget: {max_tokens})"
+        "Trimmed sections from %s to %s (%s tokens, budget: %s)",
+        len(sections),
+        len(trimmed_sections),
+        total_tokens,
+        max_tokens,
     )
 
     return trimmed_sections
@@ -310,12 +305,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ):
                     entities = mapping.federated_connector.config or {}
                     found_slack_connector = True
-                    logger.debug(f"Found Slack federated connector config: {entities}")
+                    logger.debug("Found Slack federated connector config: %s", entities)
                     break
 
             if not found_slack_connector:
                 logger.debug(
-                    f"Skipping Slack federated search: no Slack federated connector linked to document sets {document_set_names}"
+                    "Skipping Slack federated search: no Slack federated connector linked to document sets %s",
+                    document_set_names,
                 )
                 return None, None, {}
 
@@ -346,7 +342,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     )
                     access_token = user_token or bot_token
             except Exception as e:
-                logger.warning(f"Could not fetch Slack bot tokens: {e}")
+                logger.warning("Could not fetch Slack bot tokens: %s", e)
 
         # Case 2: Web user with federated OAuth (if bot context didn't yield a token)
         if not access_token and self.user:
@@ -370,7 +366,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     access_token = slack_oauth_token.token.get_value(apply_mask=False)
                     entities = slack_oauth_token.federated_connector.config or {}
             except Exception as e:
-                logger.warning(f"Could not fetch Slack OAuth token: {e}")
+                logger.warning("Could not fetch Slack OAuth token: %s", e)
 
         return access_token, bot_token, entities
 
@@ -414,11 +410,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 search_settings=search_settings,
             )
 
-            logger.info(f"Slack federated search returned {len(chunks)} chunks")
+            logger.info("Slack federated search returned %s chunks", len(chunks))
             return chunks
 
         except Exception as e:
-            logger.error(f"Slack federated search error: {e}", exc_info=True)
+            logger.error("Slack federated search error: %s", e, exc_info=True)
             return []
 
     def _run_search_for_query(
@@ -659,7 +655,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # End timing for query expansion/rephrase
             query_expansion_elapsed = time.time() - query_expansion_start_time
             logger.debug(
-                f"Search tool - Query expansion/rephrase took {query_expansion_elapsed:.3f} seconds"
+                "Search tool - Query expansion/rephrase took %s seconds",
+                format(query_expansion_elapsed, ".3f"),
             )
             semantic_query = expansion_results[0]  # str
             keyword_queries = (
@@ -713,7 +710,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 seen_lower.add(query_lower)
 
         logger.debug(
-            f"All Queries (sorted by weight): {all_queries}, Keyword queries: {[q for q, _ in deduplicated_keyword_queries]}"
+            "All Queries (sorted by weight): %s, Keyword queries: %s",
+            all_queries,
+            [q for q, _ in deduplicated_keyword_queries],
         )
 
         # Emit the queries early so the UI can display them immediately
@@ -814,6 +813,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 llm_facing_response="",
             )
 
+        # Enrich chunks with `Document.file_id` (Postgres-only metadata not
+        # stored in Vespa).
+        with get_session_with_current_tenant() as enrichment_session:
+            populate_file_ids_on_sections(top_sections, enrichment_session)
+
         # Convert InferenceSections to SearchDocs for emission
         search_docs = convert_inference_sections_to_search_docs(
             top_sections, is_internet=False
@@ -858,8 +862,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # End timing for LLM document selection
         document_selection_elapsed = time.time() - document_selection_start_time
         logger.debug(
-            f"Search tool - LLM picking documents took {document_selection_elapsed:.3f} seconds "
-            f"(selected {len(selected_sections)} sections)"
+            "Search tool - LLM picking documents took %s seconds (selected %s sections)",
+            format(document_selection_elapsed, ".3f"),
+            len(selected_sections),
         )
 
         # Create a set of best document IDs for quick lookup
@@ -900,7 +905,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 return expanded_section if expanded_section is not None else section
             except Exception as e:
                 logger.warning(
-                    f"Error processing section context expansion: {e}. Using original section."
+                    "Error processing section context expansion: %s. Using original section.",
+                    e,
                 )
                 return section
 
@@ -928,8 +934,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time
         logger.debug(
-            f"Search tool - Expansion of selected documents took {document_expansion_elapsed:.3f} seconds "
-            f"(expanded {len(expanded_sections)} sections)"
+            "Search tool - Expansion of selected documents took %s seconds (expanded %s sections)",
+            format(document_expansion_elapsed, ".3f"),
+            len(expanded_sections),
         )
 
         if not expanded_sections:
@@ -949,10 +956,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # End overall timing
         overall_elapsed = time.time() - overall_start_time
         logger.debug(
-            f"Search tool - Total execution time: {overall_elapsed:.3f} seconds "
-            f"(query expansion: {query_expansion_elapsed:.3f}s, "
-            f"document selection: {document_selection_elapsed:.3f}s, "
-            f"document expansion: {document_expansion_elapsed:.3f}s)"
+            "Search tool - Total execution time: %s seconds (query expansion: %ss, document selection: %ss, document expansion: %ss)",
+            format(overall_elapsed, ".3f"),
+            format(query_expansion_elapsed, ".3f"),
+            format(document_selection_elapsed, ".3f"),
+            format(document_expansion_elapsed, ".3f"),
         )
 
         return ToolResponse(

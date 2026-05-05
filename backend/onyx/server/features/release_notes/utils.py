@@ -120,7 +120,7 @@ def get_cached_etag() -> str | None:
             return etag.decode("utf-8")
         return None
     except Exception as e:
-        logger.error(f"Failed to get cached etag: {e}")
+        logger.error("Failed to get cached etag: %s", e)
         return None
 
 
@@ -139,7 +139,7 @@ def get_last_fetch_time() -> datetime | None:
 
         return last_fetch
     except Exception as e:
-        logger.error(f"Failed to get last fetch time from cache: {e}")
+        logger.error("Failed to get last fetch time from cache: %s", e)
         return None
 
 
@@ -152,7 +152,7 @@ def save_fetch_metadata(etag: str | None) -> None:
         if etag:
             cache.set(REDIS_KEY_ETAG, etag, ex=REDIS_CACHE_TTL)
     except Exception as e:
-        logger.error(f"Failed to save fetch metadata to cache: {e}")
+        logger.error("Failed to save fetch metadata to cache: %s", e)
 
 
 def is_cache_stale() -> bool:
@@ -229,7 +229,7 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
             create_release_notifications_for_versions(db_session, entries)
 
         except Exception as e:
-            logger.error(f"Failed to check release notes: {e}")
+            logger.error("Failed to check release notes: %s", e)
             # Update timestamp even on failure to prevent retry storms
             # We don't save etag on failure to allow retry with conditional request
             save_fetch_metadata(None)

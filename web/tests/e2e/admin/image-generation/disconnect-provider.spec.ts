@@ -78,7 +78,8 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "image-gen-disconnect-non-default-before",
     });
 
-    // Verify disconnect button exists and is enabled
+    // Hover to reveal disconnect button, then verify
+    await card.hover();
     const disconnectButton = card.getByRole("button", {
       name: "Disconnect DALL-E 3",
     });
@@ -154,7 +155,8 @@ test.describe("Image Generation Provider Disconnect", () => {
     const defaultCard = getProviderCard(page, "openai_gpt_image_1");
     await defaultCard.waitFor({ state: "visible", timeout: 10000 });
 
-    // The disconnect button should be visible and enabled
+    // Hover to reveal disconnect button
+    await defaultCard.hover();
     const disconnectButton = defaultCard.getByRole("button", {
       name: "Disconnect GPT Image 1",
     });
@@ -196,6 +198,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     const defaultCard = getProviderCard(page, "openai_gpt_image_1");
     await defaultCard.waitFor({ state: "visible", timeout: 10000 });
 
+    await defaultCard.hover();
     const disconnectButton = defaultCard.getByRole("button", {
       name: "Disconnect GPT Image 1",
     });

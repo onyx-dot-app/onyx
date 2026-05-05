@@ -9,12 +9,14 @@ import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
-import { Hanken_Grotesk } from "next/font/google";
+import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
+import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
+import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
@@ -23,6 +25,29 @@ const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-hanken-grotesk",
   display: "swap",
+  fallback: [
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "Roboto",
+    "sans-serif",
+  ],
+});
+
+const dmMono = DM_Mono({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-dm-mono",
+  display: "swap",
+  fallback: [
+    "SF Mono",
+    "Monaco",
+    "Cascadia Code",
+    "Roboto Mono",
+    "Consolas",
+    "Courier New",
+    "monospace",
+  ],
 });
 
 export const metadata: Metadata = {
@@ -44,7 +69,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${hankenGrotesk.variable}`}
+      className={cn(hankenGrotesk.variable, dmMono.variable)}
       suppressHydrationWarning
     >
       <head>
@@ -82,6 +107,7 @@ export default function RootLayout({
               <PHProvider>
                 <SWRConfigProvider>
                   <AppHealthBanner />
+                  <LicenseExpiryBanner />
                   <AppProvider>
                     <DynamicMetadata />
                     <CustomAnalyticsScript />

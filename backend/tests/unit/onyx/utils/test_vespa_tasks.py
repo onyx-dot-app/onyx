@@ -71,8 +71,10 @@ def test_monitor_preserves_federated_only_document_set(monkeypatch: Any) -> None
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_1",
-        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]  # noqa: ARG005
-        db_session=SimpleNamespace(),  # type: ignore[arg-type]
+        r=SimpleNamespace(  # ty: ignore[invalid-argument-type]
+            scard=lambda key: 0  # noqa: ARG005
+        ),
+        db_session=SimpleNamespace(),  # ty: ignore[invalid-argument-type]
     )
 
     assert calls["synced"] is True
@@ -90,8 +92,10 @@ def test_monitor_deletes_document_set_with_no_connectors(monkeypatch: Any) -> No
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_2",
-        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]  # noqa: ARG005
-        db_session=SimpleNamespace(),  # type: ignore[arg-type]
+        r=SimpleNamespace(  # ty: ignore[invalid-argument-type]
+            scard=lambda key: 0  # noqa: ARG005
+        ),
+        db_session=SimpleNamespace(),  # ty: ignore[invalid-argument-type]
     )
 
     assert calls["deleted"] is True

@@ -4,13 +4,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, Divider, MessageCard } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
-import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import KeyValueInput, {
@@ -21,7 +19,6 @@ import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
-import Message from "@/refresh-components/messages/Message";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
@@ -415,7 +412,7 @@ export default function OpenAPIAuthenticationModal({
                       </FormField>
                     </div>
 
-                    <Separator className="py-0" />
+                    <Divider paddingPerpendicular="fit" />
 
                     {values.authMethod === "oauth" && (
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
@@ -649,14 +646,9 @@ export default function OpenAPIAuthenticationModal({
                       </section>
                     )}
                     {values.authMethod === "pt-oauth" && (
-                      <Message
-                        text="Use pass-through for services with shared identity provider."
+                      <MessageCard
+                        title="Use pass-through for services with shared identity provider."
                         description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
-                        default
-                        medium
-                        static
-                        className="w-full"
-                        close={false}
                       />
                     )}
                   </>
@@ -671,15 +663,14 @@ export default function OpenAPIAuthenticationModal({
                 >
                   Cancel
                 </Button>
-                <Disabled
+                <Button
                   disabled={
                     !isValid || isSubmitting || shouldDisableForm || !dirty
                   }
+                  type="submit"
                 >
-                  <Button type="submit">
-                    {isSubmitting ? "Connecting..." : "Connect"}
-                  </Button>
-                </Disabled>
+                  {isSubmitting ? "Connecting..." : "Connect"}
+                </Button>
               </Modal.Footer>
             </Form>
           )}

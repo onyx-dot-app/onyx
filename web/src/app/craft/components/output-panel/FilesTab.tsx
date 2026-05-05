@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useBuildSessionStore,
   useFilesTabState,
@@ -9,7 +10,8 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
-import { cn, getFileIcon } from "@/lib/utils";
+import { getFileIcon } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgHardDrive,
@@ -86,7 +88,7 @@ export default function FilesTab({
     error,
     mutate,
   } = useSWR(
-    sessionId ? `/api/build/sessions/${sessionId}/files?path=` : null,
+    sessionId ? SWR_KEYS.buildSessionFiles(sessionId) : null,
     () => (sessionId ? fetchDirectoryListing(sessionId, "") : null),
     {
       revalidateOnFocus: false,

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import * as AppLayouts from "@/layouts/app-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { useAuthType } from "@/lib/hooks";
@@ -25,7 +25,7 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <AppLayouts.Root>
       <SettingsLayouts.Root width="lg">
-        <SettingsLayouts.Header icon={SvgSliders} title="Settings" separator />
+        <SettingsLayouts.Header icon={SvgSliders} title="Settings" divider />
 
         <SettingsLayouts.Body>
           <Section

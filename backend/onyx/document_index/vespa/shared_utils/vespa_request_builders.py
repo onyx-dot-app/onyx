@@ -155,7 +155,7 @@ def build_vespa_filters(
         try:
             pid = int(persona_id)
         except Exception:
-            logger.warning(f"Invalid persona ID: {persona_id}")
+            logger.warning("Invalid persona ID: %s", persona_id)
             return ""
         return f'({PERSONAS} contains "{pid}")'
 

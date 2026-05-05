@@ -14,7 +14,7 @@ import {
   ConnectorCredentialPairStatus,
   PermissionSyncStatusEnum,
 } from "@/app/admin/connector/[ccPairId]/types";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 
 export function IndexAttemptStatus({
   status,
@@ -33,9 +33,9 @@ export function IndexAttemptStatus({
     );
     if (errorMsg) {
       badge = (
-        <SimpleTooltip tooltip={errorMsg}>
+        <Tooltip tooltip={errorMsg}>
           <div className="cursor-pointer">{icon}</div>
-        </SimpleTooltip>
+        </Tooltip>
       );
     } else {
       badge = icon;
@@ -104,9 +104,9 @@ export function PermissionSyncStatus({
     );
     if (errorMsg) {
       badge = (
-        <SimpleTooltip tooltip={errorMsg} side="bottom">
+        <Tooltip tooltip={errorMsg} side="bottom">
           <div className="cursor-pointer">{icon}</div>
-        </SimpleTooltip>
+        </Tooltip>
       );
     } else {
       badge = icon;
@@ -204,6 +204,15 @@ export function CCPairStatus({
       badge = (
         <Badge variant="in_progress" icon={FiClock}>
           Indexing
+        </Badge>
+      );
+    } else if (
+      lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "not_started"
+    ) {
+      badge = (
+        <Badge variant="not_started" icon={FiClock}>
+          Scheduled
         </Badge>
       );
     } else if (

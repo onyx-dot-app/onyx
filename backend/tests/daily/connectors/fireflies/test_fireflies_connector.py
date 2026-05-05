@@ -1,5 +1,4 @@
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +9,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.FIREFLIES_API_KEY)
 
 
 def load_test_data(file_name: str = "test_fireflies_data.json") -> dict[str, Any]:
@@ -19,10 +21,12 @@ def load_test_data(file_name: str = "test_fireflies_data.json") -> dict[str, Any
 
 
 @pytest.fixture
-def fireflies_connector() -> FirefliesConnector:
+def fireflies_connector(
+    test_secrets: dict[TestSecret, str],
+) -> FirefliesConnector:
     connector = FirefliesConnector()
     connector.load_credentials(
-        {"fireflies_api_key": os.environ["FIREFLIES_API_KEY"]},
+        {"fireflies_api_key": test_secrets[TestSecret.FIREFLIES_API_KEY]},
     )
     return connector
 

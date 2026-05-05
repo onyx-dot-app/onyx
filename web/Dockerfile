@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS base
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -73,11 +73,20 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
 
+ARG SENTRY_RELEASE
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
+
 # Add NODE_OPTIONS argument
 ARG NODE_OPTIONS
 
+# SENTRY_AUTH_TOKEN is injected via BuildKit secret mount so it is never written
+# to any image layer, build cache, or registry manifest.
 # Use NODE_OPTIONS in the build command
-RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+RUN --mount=type=secret,id=sentry_auth_token \
+    if [ -f /run/secrets/sentry_auth_token ]; then \
+        export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    fi && \
+    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner
@@ -150,7 +159,10 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG SENTRY_RELEASE
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
+
+# Default ONYX_VERSION, typically overridden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 

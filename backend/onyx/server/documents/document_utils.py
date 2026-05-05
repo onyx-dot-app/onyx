@@ -43,12 +43,12 @@ def validate_pkcs12_content(file_bytes: bytes) -> bool:
             if _is_password_related_error(e):
                 # These errors indicate the file format is correct but password is wrong/missing
                 logger.debug(
-                    f"PKCS#12 format appears valid, password-related error: {e}"
+                    "PKCS#12 format appears valid, password-related error: %s", e
                 )
                 return True
             else:
                 # Other ValueError likely indicates format issues
-                logger.debug(f"PKCS#12 format validation failed: {e}")
+                logger.debug("PKCS#12 format validation failed: %s", e)
                 return False
         except Exception as e:
             # Try with empty password as fallback
@@ -58,18 +58,19 @@ def validate_pkcs12_content(file_bytes: bytes) -> bool:
             except ValueError as e2:
                 if _is_password_related_error(e2):
                     logger.debug(
-                        f"PKCS#12 format appears valid with empty password attempt: {e2}"
+                        "PKCS#12 format appears valid with empty password attempt: %s",
+                        e2,
                     )
                     return True
                 else:
                     logger.debug(
-                        f"PKCS#12 validation failed on both attempts: {e}, {e2}"
+                        "PKCS#12 validation failed on both attempts: %s, %s", e, e2
                     )
                     return False
             except Exception:
-                logger.debug(f"PKCS#12 validation failed: {e}")
+                logger.debug("PKCS#12 validation failed: %s", e)
                 return False
 
     except Exception as e:
-        logger.debug(f"Unexpected error during PKCS#12 validation: {e}")
+        logger.debug("Unexpected error during PKCS#12 validation: %s", e)
         return False

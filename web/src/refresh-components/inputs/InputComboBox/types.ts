@@ -40,11 +40,13 @@ export interface InputComboBoxProps
   rightSection?: React.ReactNode;
   /** Label for the separator between matched and unmatched options */
   separatorLabel?: string;
-  /** Show "Add" prefix in create option (e.g., "Add [value]") */
-  showAddPrefix?: boolean;
+  /** Prefix shown before the typed value in the create option (e.g., "Use", "Add"). When omitted, the raw value is shown without a prefix. */
+  createPrefix?: string;
   /**
    * When true, keep non-matching options visible under a separator while searching.
    * Defaults to false so search results are strictly filtered.
    */
   showOtherOptions?: boolean;
+  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+  dropdownMaxHeight?: string;
 }

@@ -1,4 +1,3 @@
-import json
 import traceback
 from collections import defaultdict
 from typing import Any
@@ -14,7 +13,6 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
 from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.models import ImageGenerationToolOverrideKwargs
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ParallelToolCallResponse
 from onyx.tools.models import PythonToolOverrideKwargs
@@ -24,9 +22,6 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -110,63 +105,6 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
     return merged_calls
 
 
-def _extract_image_file_ids_from_tool_response_message(
-    message: str,
-) -> list[str]:
-    try:
-        parsed_message = json.loads(message)
-    except json.JSONDecodeError:
-        return []
-
-    parsed_items: list[Any] = (
-        parsed_message if isinstance(parsed_message, list) else [parsed_message]
-    )
-    file_ids: list[str] = []
-    for item in parsed_items:
-        if not isinstance(item, dict):
-            continue
-
-        file_id = item.get("file_id")
-        if isinstance(file_id, str):
-            file_ids.append(file_id)
-
-    return file_ids
-
-
-def _extract_recent_generated_image_file_ids(
-    message_history: list[ChatMessageSimple],
-) -> list[str]:
-    tool_name_by_tool_call_id: dict[str, str] = {}
-    recent_image_file_ids: list[str] = []
-    seen_file_ids: set[str] = set()
-
-    for message in message_history:
-        if message.message_type == MessageType.ASSISTANT and message.tool_calls:
-            for tool_call in message.tool_calls:
-                tool_name_by_tool_call_id[tool_call.tool_call_id] = tool_call.tool_name
-            continue
-
-        if (
-            message.message_type != MessageType.TOOL_CALL_RESPONSE
-            or not message.tool_call_id
-        ):
-            continue
-
-        tool_name = tool_name_by_tool_call_id.get(message.tool_call_id)
-        if tool_name != ImageGenerationTool.NAME:
-            continue
-
-        for file_id in _extract_image_file_ids_from_tool_response_message(
-            message.message
-        ):
-            if file_id in seen_file_ids:
-                continue
-            seen_file_ids.add(file_id)
-            recent_image_file_ids.append(file_id)
-
-    return recent_image_file_ids
-
-
 def _safe_run_single_tool(
     tool: Tool,
     tool_call: ToolCallKickoff,
@@ -199,7 +137,7 @@ def _safe_run_single_tool(
         except ToolCallException as e:
             # ToolCallException is an expected error from tool execution
             # Use llm_facing_message which is specifically designed for LLM consumption
-            logger.error(f"Tool call error for {tool.name}: {e}")
+            logger.error("Tool call error for %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(
@@ -222,7 +160,7 @@ def _safe_run_single_tool(
             )
         except ToolExecutionException as e:
             # Unexpected error during tool execution
-            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            logger.error("Unexpected error running tool %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
@@ -249,7 +187,7 @@ def _safe_run_single_tool(
                 )
         except Exception as e:
             # Unexpected error during tool execution
-            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            logger.error("Unexpected error running tool %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
@@ -355,7 +293,7 @@ def run_tool_calls(
     filtered_tool_calls: list[ToolCallKickoff] = []
     for tool_call in merged_tool_calls:
         if tool_call.tool_name not in tools_by_name:
-            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
+            logger.warning("Tool %s not found in tools list", tool_call.tool_name)
             continue
         filtered_tool_calls.append(tool_call)
 
@@ -386,9 +324,6 @@ def run_tool_calls(
     url_to_citation: dict[str, int] = {
         url: citation_num for citation_num, url in citation_mapping.items()
     }
-    recent_generated_image_file_ids = _extract_recent_generated_image_file_ids(
-        message_history
-    )
 
     # Prepare all tool calls with their override_kwargs
     # Each tool gets a unique starting citation number to avoid conflicts when running in parallel
@@ -405,7 +340,6 @@ def run_tool_calls(
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
             | PythonToolOverrideKwargs
-            | ImageGenerationToolOverrideKwargs
             | MemoryToolOverrideKwargs
             | None
         ) = None
@@ -453,10 +387,6 @@ def run_tool_calls(
         elif isinstance(tool, PythonTool):
             override_kwargs = PythonToolOverrideKwargs(
                 chat_files=chat_files or [],
-            )
-        elif isinstance(tool, ImageGenerationTool):
-            override_kwargs = ImageGenerationToolOverrideKwargs(
-                recent_generated_image_file_ids=recent_generated_image_file_ids
             )
         elif isinstance(tool, MemoryTool):
             override_kwargs = MemoryToolOverrideKwargs(

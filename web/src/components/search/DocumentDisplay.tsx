@@ -1,5 +1,6 @@
 "use client";
-import React, { JSX } from "react";
+
+import { JSX } from "react";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { SourceIcon } from "../SourceIcon";
 import { WebResultIcon } from "../WebResultIcon";
@@ -140,6 +141,9 @@ export function CompactDocumentCard({
           openDocument(document, updatePresentingDocument);
         }}
         className="max-w-[20rem] p-3 flex flex-col gap-1"
+        aria-label={`Open document: ${
+          document.semantic_identifier ?? document.document_id
+        }`}
       >
         <div className="flex flex-row gap-2 items-center w-full">
           {isWebSource && document.link ? (

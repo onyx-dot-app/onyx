@@ -1,6 +1,7 @@
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { User } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Fetches the current authenticated user via SWR (`/api/me`).
@@ -29,11 +30,12 @@ export function useCurrentUser(): {
   userError: (Error & { status?: number }) | undefined;
 } {
   const { data, mutate, error } = useSWR<User>(
-    "/api/me",
+    SWR_KEYS.me,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 30_000,
     }
   );

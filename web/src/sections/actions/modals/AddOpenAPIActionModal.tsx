@@ -4,14 +4,12 @@ import { markdown } from "@opal/utils";
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, Divider } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -35,7 +33,7 @@ import {
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Section } from "@/layouts/general-layouts";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
@@ -236,41 +234,54 @@ function FormContent({
       />
 
       <Modal.Body>
-        <InputLayouts.Vertical
-          name="definition"
+        <InputVertical
+          withLabel="definition"
           title="OpenAPI Schema Definition"
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
+              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
+              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
+              `current request's values at call time. ` +
+              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
           )}
         >
-          <div className="group/DefinitionTextAreaField relative w-full">
-            {values.definition.trim() && (
-              <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
-                <CopyIconButton
-                  prominence="tertiary"
-                  size="sm"
-                  getCopyText={() => values.definition}
-                  tooltip="Copy definition"
-                />
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  icon={SvgBracketCurly}
-                  tooltip="Format definition"
-                  onClick={handleFormat}
-                />
-              </div>
-            )}
-            <InputTextAreaField
-              name="definition"
-              rows={14}
-              placeholder="Enter your OpenAPI schema here"
-              className="font-main-ui-mono"
-            />
-          </div>
-        </InputLayouts.Vertical>
+          <Hoverable.Root group="definitionField" width="full">
+            <div className="relative w-full">
+              {values.definition.trim() && (
+                <div className="absolute z-[100000] top-2 right-2 bg-background-tint-00">
+                  <Hoverable.Item
+                    group="definitionField"
+                    variant="appear-on-hover"
+                  >
+                    <div className="flex">
+                      <CopyIconButton
+                        prominence="tertiary"
+                        size="sm"
+                        getCopyText={() => values.definition}
+                        tooltip="Copy definition"
+                      />
+                      <Button
+                        prominence="tertiary"
+                        size="sm"
+                        icon={SvgBracketCurly}
+                        tooltip="Format definition"
+                        onClick={handleFormat}
+                      />
+                    </div>
+                  </Hoverable.Item>
+                </div>
+              )}
+              <InputTextAreaField
+                name="definition"
+                rows={14}
+                placeholder="Enter your OpenAPI schema here"
+                className="font-main-ui-mono"
+              />
+            </div>
+          </Hoverable.Root>
+        </InputVertical>
 
-        <Separator noPadding />
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
         {methodSpecs && methodSpecs.length > 0 ? (
           <>
@@ -288,7 +299,7 @@ function FormContent({
                 description="URL found in the schema. Only connect to servers you trust."
               />
             )}
-            <Separator noPadding />
+            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
             <Section gap={0.5}>
               {methodSpecs.map((method) => (
                 <ToolItem
@@ -305,7 +316,8 @@ function FormContent({
             </Section>
           </>
         ) : (
-          <EmptyMessage
+          <EmptyMessageCard
+            sizePreset="main-ui"
             title="No Actions Found"
             icon={SvgActions}
             description="Provide OpenAPI schema to preview actions here."
@@ -357,29 +369,31 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <Disabled disabled={!onEditAuthentication}>
-                <Button
-                  prominence="secondary"
-                  type="button"
-                  onClick={handleEditAuthenticationClick}
-                >
-                  Edit Configs
-                </Button>
-              </Disabled>
+              <Button
+                disabled={!onEditAuthentication}
+                prominence="secondary"
+                type="button"
+                onClick={handleEditAuthenticationClick}
+              >
+                Edit Configs
+              </Button>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <Disabled disabled={isSubmitting}>
-          <Button prominence="secondary" type="button" onClick={handleClose}>
-            Cancel
-          </Button>
-        </Disabled>
-        <Disabled disabled={isSubmitting || !dirty}>
-          <Button type="submit">{primaryButtonLabel}</Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          prominence="secondary"
+          type="button"
+          onClick={handleClose}
+        >
+          Cancel
+        </Button>
+        <Button disabled={isSubmitting || !dirty} type="submit">
+          {primaryButtonLabel}
+        </Button>
       </Modal.Footer>
     </Form>
   );

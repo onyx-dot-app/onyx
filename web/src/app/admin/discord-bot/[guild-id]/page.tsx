@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
@@ -11,9 +11,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
-import Message from "@/refresh-components/messages/Message";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, MessageCard } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -26,7 +24,7 @@ import {
 } from "@/app/admin/discord-bot/lib";
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
-import { useAdminPersonas } from "@/hooks/useAdminPersonas";
+import { useAdminAgents } from "@/hooks/useAgents";
 import { Persona } from "@/app/admin/agents/interfaces";
 
 interface Props {
@@ -105,16 +103,20 @@ function GuildDetailContent({
                 width="fit"
                 gap={0.5}
               >
-                <Disabled disabled={disabled}>
-                  <Button prominence="secondary" onClick={handleEnableAll}>
-                    Enable All
-                  </Button>
-                </Disabled>
-                <Disabled disabled={disabled}>
-                  <Button prominence="secondary" onClick={handleDisableAll}>
-                    Disable All
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={disabled}
+                  prominence="secondary"
+                  onClick={handleEnableAll}
+                >
+                  Enable All
+                </Button>
+                <Button
+                  disabled={disabled}
+                  prominence="secondary"
+                  onClick={handleDisableAll}
+                >
+                  Disable All
+                </Button>
               </Section>
             ) : undefined
           }
@@ -155,7 +157,7 @@ export default function Page({ params }: Props) {
     error: channelsError,
     refreshChannels,
   } = useDiscordChannels(guildId);
-  const { personas, isLoading: personasLoading } = useAdminPersonas({
+  const { agents, isLoading: personasLoading } = useAdminAgents({
     includeDefault: true,
   });
   const [isUpdating, setIsUpdating] = useState(false);
@@ -335,9 +337,9 @@ export default function Page({ params }: Props) {
         description={registeredText}
         backButton
         rightChildren={
-          <Disabled disabled={isUpdateDisabled}>
-            <Button onClick={handleSaveChanges}>Update Configuration</Button>
-          </Disabled>
+          <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
+            Update Configuration
+          </Button>
         }
       />
       <SettingsLayouts.Body>
@@ -363,7 +365,7 @@ export default function Page({ params }: Props) {
                   <InputSelect.Item value="default">
                     Default Agent
                   </InputSelect.Item>
-                  {personas.map((persona) => (
+                  {agents.map((persona) => (
                     <InputSelect.Item
                       key={persona.id}
                       value={persona.id.toString()}
@@ -379,7 +381,7 @@ export default function Page({ params }: Props) {
 
         <GuildDetailContent
           guildId={guildId}
-          personas={personas}
+          personas={agents}
           localChannels={localChannels}
           onChannelUpdate={handleChannelUpdate}
           handleEnableAll={handleEnableAll}
@@ -399,11 +401,10 @@ export default function Page({ params }: Props) {
               : "opacity-0 translate-y-4 pointer-events-none"
           )}
         >
-          <Message
-            warning
-            text="You have unsaved changes"
+          <MessageCard
+            variant="warning"
+            title="You have unsaved changes"
             description="Click Update to save them."
-            close={false}
           />
         </div>
       </SettingsLayouts.Body>

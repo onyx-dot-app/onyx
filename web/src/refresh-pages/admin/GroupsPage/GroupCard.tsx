@@ -14,9 +14,10 @@ import {
   buildGroupDescription,
   formatMemberCount,
 } from "./utils";
-import { renameGroup, USER_GROUP_URL } from "./svc";
+import { renameGroup } from "./svc";
 import { toast } from "@/hooks/useToast";
 import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface GroupCardProps {
   group: UserGroup;
@@ -33,7 +34,7 @@ function GroupCard({ group }: GroupCardProps) {
   async function handleRename(newName: string) {
     try {
       await renameGroup(group.id, newName);
-      mutate(USER_GROUP_URL);
+      mutate(SWR_KEYS.adminUserGroups);
       toast.success(`Group renamed to "${newName}"`);
     } catch (e) {
       console.error("Failed to rename group:", e);

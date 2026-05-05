@@ -2,10 +2,8 @@ import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
 import { timeAgo } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
@@ -42,7 +40,7 @@ export default function ScimSyncCard({
         description="Connect your identity provider to import and sync users and groups."
         sizePreset="main-ui"
         variant="section"
-        paddingVariant="fit"
+        padding="fit"
         rightChildren={
           hasToken ? (
             <Button
@@ -54,18 +52,20 @@ export default function ScimSyncCard({
               Regenerate Token
             </Button>
           ) : (
-            <Disabled disabled={isSubmitting}>
-              <Button rightIcon={SvgKey} onClick={onGenerate}>
-                Generate SCIM Token
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              rightIcon={SvgKey}
+              onClick={onGenerate}
+            >
+              Generate SCIM Token
+            </Button>
           )
         }
       />
 
       {hasToken && (
         <>
-          <Separator noPadding />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           <Section
             flexDirection="row"

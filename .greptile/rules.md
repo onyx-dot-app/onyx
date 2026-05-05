@@ -6,7 +6,7 @@ Use explicit type annotations for variables to enhance code clarity, especially 
 
 ## Best Practices
 
-Use `contributing_guides/best_practices.md` as core review context. Prefer consistency with existing patterns, fix issues in code you touch, avoid tacking new features onto muddy interfaces, fail loudly instead of silently swallowing errors, keep code strictly typed, preserve clear state boundaries, remove duplicate or dead logic, break up overly long functions, avoid hidden import-time side effects, respect module boundaries, and favor correctness-by-construction over relying on callers to use an API correctly.
+Use the "Engineering Best Practices" section of `CONTRIBUTING.md` as core review context. Prefer consistency with existing patterns, fix issues in code you touch, avoid tacking new features onto muddy interfaces, fail loudly instead of silently swallowing errors, keep code strictly typed, preserve clear state boundaries, remove duplicate or dead logic, break up overly long functions, avoid hidden import-time side effects, respect module boundaries, and favor correctness-by-construction over relying on callers to use an API correctly.
 
 ## TODOs
 
@@ -27,6 +27,7 @@ Code changes must consider both multi-tenant and single-tenant deployments. In m
 ## Nginx Routing — New Backend Routes
 
 Whenever a new backend route is added that does NOT start with `/api`, it must also be explicitly added to ALL nginx configs:
+
 - `deployment/helm/charts/onyx/templates/nginx-conf.yaml` (Helm/k8s)
 - `deployment/data/nginx/app.conf.template` (docker-compose dev)
 - `deployment/data/nginx/app.conf.template.prod` (docker-compose prod)
@@ -37,3 +38,11 @@ Routes not starting with `/api` are not caught by the existing `^/(api|openapi\.
 ## Full vs Lite Deployments
 
 Code changes must consider both regular Onyx deployments and Onyx lite deployments. Lite deployments disable the vector DB, Redis, model servers, and background workers by default, use PostgreSQL-backed cache/auth/file storage, and rely on the API server to handle background work. Do not assume those services are available unless the code path is explicitly limited to full deployments.
+
+## LLM Call Tagging — Always Use LLMFlow Registry
+
+Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use `llm_generation_span(llm=..., flow=LLMFlow.X, ...)` for calls going through an `LLM` subclass, or `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., ...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction. Never pass raw strings to `flow=` — add a new `LLMFlow` enum value first. Flow tags name the operation (e.g. `IMAGE_EDIT`, `RERANK`), not the provider; provider goes in `model_config["model_provider"]`. The auto-wrap fallback emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for missing instrumentation — those sentinels are a signal to fix the call site, not a substitute for explicit tagging.
+
+## SWR Cache Keys — Always Use SWR_KEYS Registry
+
+All `useSWR()` calls and `mutate()` calls in the frontend must reference the centralized `SWR_KEYS` registry in `web/src/lib/swr-keys.ts` instead of inline endpoint strings or local string constants. Never write `useSWR("/api/some/endpoint", ...)` or `mutate("/api/some/endpoint")` — always use the corresponding `SWR_KEYS.someEndpoint` constant. If the endpoint does not yet exist in the registry, add it there first. This applies to all variants of an endpoint (e.g. query-string variants like `?get_editable=true` must also be registered as their own key).

@@ -55,7 +55,7 @@ func NewModel(cfg config.OnyxCliConfig) Model {
 	return Model{
 		config:          cfg,
 		client:          client,
-		viewport:        newViewport(80),
+		viewport:        newViewport(80, cfg.Features.StreamMarkdownEnabled()),
 		input:           newInputModel(),
 		status:          newStatusBar(),
 		agentID:       cfg.DefaultAgentID,

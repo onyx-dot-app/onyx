@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/onyx-dot-app/onyx/cli/cmd"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 )
 
 var (
@@ -18,6 +20,10 @@ func main() {
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		var exitErr *exitcodes.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		os.Exit(1)
 	}
 }

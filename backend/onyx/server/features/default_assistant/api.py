@@ -5,8 +5,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
 from onyx.db.persona import update_default_assistant_configuration
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/admin/default-assistant")
 
 @router.get("/configuration")
 def get_default_assistant_configuration(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DefaultAssistantConfiguration:
     """Get the current default assistant configuration.
@@ -47,7 +48,7 @@ def get_default_assistant_configuration(
 @router.patch("")
 def update_default_assistant(
     update_request: DefaultAssistantUpdateRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DefaultAssistantConfiguration:
     """Update the default assistant configuration.

@@ -2,6 +2,7 @@
 export {
   Content,
   type ContentProps,
+  type ContentColor,
   type SizePreset,
   type ContentVariant,
 } from "@opal/layouts/content/components";
@@ -12,11 +13,24 @@ export {
   type ContentActionProps,
 } from "@opal/layouts/content-action/components";
 
-/* CardHeaderLayout */
+/* Card */
+export { Card, type CardHeaderProps } from "@opal/layouts/cards/components";
+
+/* Input */
 export {
-  CardHeaderLayout,
-  type CardHeaderLayoutProps,
-} from "@opal/layouts/cards/header-layout/components";
+  Label,
+  type LabelProps,
+  Vertical as InputVertical,
+  type VerticalProps as InputVerticalProps,
+  Horizontal as InputHorizontal,
+  type HorizontalProps as InputHorizontalProps,
+  InputErrorText,
+  type InputErrorTextProps,
+  type InputErrorType,
+  InputDivider,
+  InputPadder,
+  type InputPadderProps,
+} from "@opal/layouts/inputs/components";
 
 /* IllustrationContent */
 export {

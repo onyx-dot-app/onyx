@@ -149,3 +149,20 @@ export const LoadingTab: Story = {
     </Tabs>
   ),
 };
+
+// ---------------------------------------------------------------------------
+// Underline variant
+// ---------------------------------------------------------------------------
+
+export const Underline: Story = {
+  render: () => (
+    <Tabs defaultValue="cloud">
+      <Tabs.List variant="underline">
+        <Tabs.Trigger value="cloud">Cloud-based</Tabs.Trigger>
+        <Tabs.Trigger value="self">Self-hosted</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="cloud">Cloud-based models</Tabs.Content>
+      <Tabs.Content value="self">Self-hosted models</Tabs.Content>
+    </Tabs>
+  ),
+};

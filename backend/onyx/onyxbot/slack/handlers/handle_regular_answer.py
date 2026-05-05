@@ -68,7 +68,7 @@ def resolve_channel_references(
                 channel_info = get_channel_from_id(client=client, channel_id=channel_id)
                 channel_name = channel_info.get("name") or None
             except Exception:
-                logger.warning(f"Failed to resolve channel name for ID: {channel_id}")
+                logger.warning("Failed to resolve channel name for ID: %s", channel_id)
 
             if not channel_name:
                 continue
@@ -197,7 +197,7 @@ def handle_regular_answer(
                 document_set.name for document_set in persona.document_sets
             ]
     else:
-        logger.info(f"Using persona {persona.name} for channel config")
+        logger.info("Using persona %s for channel config", persona.name)
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
@@ -306,7 +306,8 @@ def handle_regular_answer(
 
     except Exception as e:
         logger.exception(
-            f"Unable to process message - did not successfully answer in {num_retries} attempts"
+            "Unable to process message - did not successfully answer in %s attempts",
+            num_retries,
         )
         # Optionally, respond in thread with the error message, Used primarily
         # for debugging purposes
@@ -359,7 +360,7 @@ def handle_regular_answer(
         and not channel_tags
     ):
         logger.error(
-            f"Unable to find citations to answer: '{answer.answer}' - not answering!"
+            "Unable to find citations to answer: '%s' - not answering!", answer.answer
         )
         # Optionally, respond in thread with the error message
         # Used primarily for debugging purposes
@@ -434,6 +435,7 @@ def handle_regular_answer(
 
     except Exception:
         logger.exception(
-            f"Unable to process message - could not respond in slack in {num_retries} attempts"
+            "Unable to process message - could not respond in slack in %s attempts",
+            num_retries,
         )
         return True

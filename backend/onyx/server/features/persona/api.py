@@ -4,21 +4,25 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
+from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
+from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -38,6 +42,8 @@ from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
@@ -150,7 +156,7 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -187,7 +193,7 @@ def patch_persona_featured_status(
 @admin_agents_router.patch("/display-priorities")
 def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -265,7 +271,7 @@ def get_agents_admin_paginated(
 @admin_router.patch("/{persona_id}/undelete", tags=PUBLIC_API_TAGS)
 def undelete_persona(
     persona_id: int,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_not_deleted(
@@ -279,7 +285,7 @@ def undelete_persona(
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
     file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
@@ -298,7 +304,7 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
@@ -328,7 +334,7 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -350,7 +356,7 @@ class PersonaLabelPatchRequest(BaseModel):
 @basic_router.get("/labels")
 def get_labels(
     db: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[PersonaLabelResponse]:
     return [
         PersonaLabelResponse.from_model(label)
@@ -362,7 +368,7 @@ def get_labels(
 def create_label(
     label: PersonaLabelCreate,
     db: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> PersonaLabelResponse:
     """Create a new assistant label"""
     try:
@@ -379,7 +385,7 @@ def create_label(
 def patch_persona_label(
     label_id: int,
     persona_label_patch_request: PersonaLabelPatchRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_label(
@@ -392,7 +398,7 @@ def patch_persona_label(
 @admin_router.delete("/label/{label_id}")
 def delete_label(
     label_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     delete_persona_label(label_id=label_id, db_session=db_session)
@@ -410,7 +416,7 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -434,7 +440,7 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_deleted(
@@ -537,3 +543,62 @@ def get_persona(
             db_session.commit()
 
     return FullPersonaSnapshot.from_model(persona)
+
+
+@basic_router.get("/{persona_id}/avatar")
+def get_persona_avatar(
+    persona_id: int,
+    request: Request,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    # Mirror `fetch_chat_file`: return 404 (not 403) for any failure so
+    # callers cannot probe persona existence or avatar ownership.
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    file_id = persona.uploaded_image_id
+    if not file_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    # Defense-in-depth: reject file_ids that weren't produced by the
+    # avatar upload endpoint, so a crafted PATCH cannot rebind a persona
+    # to another user's USER_FILE / CHAT_IMAGE_GEN asset.
+    file_record = get_filerecord_by_file_id_optional(file_id, db_session)
+    if not file_record:
+        logger.warning(
+            "Persona %s references avatar file %s with no matching FileRecord; rejecting.",
+            persona_id,
+            file_id,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+    if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
+        logger.warning(
+            "Persona %s avatar references file %s with unexpected origin %s; rejecting.",
+            persona_id,
+            file_id,
+            file_record.file_origin,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    etag = f'"{file_id}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    file_store = get_default_file_store()
+    file_io = file_store.read_file(file_id, mode="b")
+    return StreamingResponse(
+        file_io, media_type=file_record.file_type, headers=cache_headers
+    )

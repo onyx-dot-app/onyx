@@ -42,7 +42,8 @@ from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
-from onyx.utils.logger import is_running_in_container
+from onyx.utils.platform import is_running_in_container
+from onyx.utils.platform import is_running_in_kubernetes
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.configs import MULTI_TENANT
@@ -349,6 +350,7 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
                 .filter(
                     IndexAttempt.connector_credential_pair_id == cc_pair.id,
                     IndexAttempt.search_settings_id == search_settings.id,
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
                 .order_by(IndexAttempt.time_created.desc())
                 .limit(2)
@@ -1002,6 +1004,11 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
 
     # Skip memory monitoring if not in container
     if not is_running_in_container():
+        return
+
+    # In k8s each worker runs in its own pod with an isolated pid namespace,
+    # so psutil.process_iter() only sees the local worker.
+    if is_running_in_kubernetes():
         return
 
     try:

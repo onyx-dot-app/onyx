@@ -50,7 +50,7 @@ class MockImageGenerationProvider(
         return True
 
     @classmethod
-    def _build_from_credentials(
+    def _build_from_credentials(  # ty: ignore[invalid-method-override]
         cls,
         _: ImageGenerationProviderCredentials,
     ) -> ImageGenerationProvider:

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import {
@@ -22,7 +23,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
@@ -40,10 +41,7 @@ export default function ArtifactsTab({
   const filesNeedsRefresh = useFilesNeedsRefresh();
   const { data: outputsListing } = useSWR(
     sessionId
-      ? [
-          `/api/build/sessions/${sessionId}/files?path=outputs`,
-          filesNeedsRefresh,
-        ]
+      ? [SWR_KEYS.buildSessionOutputFiles(sessionId), filesNeedsRefresh]
       : null,
     () => (sessionId ? fetchDirectoryListing(sessionId, "outputs") : null),
     {

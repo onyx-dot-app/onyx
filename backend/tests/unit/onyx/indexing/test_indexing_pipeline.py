@@ -1,7 +1,10 @@
+import random
 import threading
+import time
 from typing import Any
 from typing import cast
 from typing import List
+from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -12,8 +15,13 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.hooks.executor import HookSkipped
+from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
+from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
@@ -223,3 +231,370 @@ def test_contextual_rag(
             count += 1
         assert chunk.doc_summary == doc_summary
         assert chunk.chunk_context == chunk_context
+
+
+# ---------------------------------------------------------------------------
+# _apply_document_ingestion_hook
+# ---------------------------------------------------------------------------
+
+_PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+
+
+def _make_doc(
+    doc_id: str = "doc1",
+    sections: list[TextSection | ImageSection] | None = None,
+) -> Document:
+    if sections is None:
+        sections = [TextSection(text="Hello", link="http://example.com")]
+    return Document(
+        id=doc_id,
+        title="Test Doc",
+        semantic_identifier="test-doc",
+        sections=sections,
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
+def test_document_ingestion_hook_skipped_passes_through() -> None:
+    doc = _make_doc()
+    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == [doc]
+
+
+def test_document_ingestion_hook_soft_failed_passes_through() -> None:
+    doc = _make_doc()
+    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == [doc]
+
+
+def test_document_ingestion_hook_none_sections_drops_document() -> None:
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=None, rejection_reason="PII detected"
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_all_invalid_sections_drops_document() -> None:
+    """A non-empty list where every section has neither text nor image_file_id drops the doc."""
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(sections=[DocumentIngestionSection()]),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_empty_sections_drops_document() -> None:
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(sections=[]),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_rewrites_text_sections() -> None:
+    doc = _make_doc(sections=[TextSection(text="original", link="http://a.com")])
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=[DocumentIngestionSection(text="rewritten", link="http://b.com")]
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert len(result) == 1
+    assert len(result[0].sections) == 1
+    section = result[0].sections[0]
+    assert isinstance(section, TextSection)
+    assert section.text == "rewritten"
+    assert section.link == "http://b.com"
+
+
+def test_document_ingestion_hook_preserves_image_section_order() -> None:
+    """Hook receives all sections including images and controls final ordering."""
+    image = ImageSection(image_file_id="img-1", link=None)
+    doc = _make_doc(
+        sections=[TextSection(text="original", link=None), image],
+    )
+    # Hook moves the image before the text section
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=[
+                DocumentIngestionSection(image_file_id="img-1", link=None),
+                DocumentIngestionSection(text="rewritten", link=None),
+            ]
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert len(result) == 1
+    sections = result[0].sections
+    assert len(sections) == 2
+    assert (
+        isinstance(sections[0], ImageSection) and sections[0].image_file_id == "img-1"
+    )
+    assert isinstance(sections[1], TextSection) and sections[1].text == "rewritten"
+
+
+def test_document_ingestion_hook_mixed_batch() -> None:
+    """Drop one doc, rewrite another, pass through a third."""
+    doc_drop = _make_doc(doc_id="drop")
+    doc_rewrite = _make_doc(doc_id="rewrite")
+    doc_skip = _make_doc(doc_id="skip")
+
+    def _side_effect(**kwargs: Any) -> Any:
+        doc_id = kwargs["payload"]["document_id"]
+        if doc_id == "drop":
+            return DocumentIngestionResponse(sections=None)
+        if doc_id == "rewrite":
+            return DocumentIngestionResponse(
+                sections=[DocumentIngestionSection(text="new text", link=None)]
+            )
+        return HookSkipped()
+
+    with patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect):
+        result = _apply_document_ingestion_hook(
+            [doc_drop, doc_rewrite, doc_skip], MagicMock()
+        )
+
+    assert len(result) == 2
+    ids = {d.id for d in result}
+    assert ids == {"rewrite", "skip"}
+    rewritten = next(d for d in result if d.id == "rewrite")
+    assert isinstance(rewritten.sections[0], TextSection)
+    assert rewritten.sections[0].text == "new text"
+
+
+# ---------------------------------------------------------------------------
+# process_image_sections
+# ---------------------------------------------------------------------------
+
+_PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
+
+
+def _mock_file_store(image_map: dict[str, bytes]) -> MagicMock:
+    """Build a fake file store that serves images from a dict."""
+    store = MagicMock()
+
+    def _read_file_record(file_id: str) -> MagicMock | None:
+        if file_id not in image_map:
+            return None
+        record = MagicMock()
+        record.display_name = file_id
+        return record
+
+    def _read_file(file_id: str) -> MagicMock:
+        data = MagicMock()
+        data.read.return_value = image_map[file_id]
+        return data
+
+    store.read_file_record = _read_file_record
+    store.read_file = _read_file
+    return store
+
+
+def _make_image_doc(
+    doc_id: str,
+    sections: list[TextSection | ImageSection],
+) -> Document:
+    return Document(
+        id=doc_id,
+        title=f"Doc {doc_id}",
+        semantic_identifier=doc_id,
+        sections=sections,
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
+class TestProcessImageSections:
+    """Validate that parallel image summarization places results in the
+    correct section positions — especially under concurrent execution."""
+
+    def _run(
+        self,
+        documents: list[Document],
+        image_map: dict[str, bytes],
+        summarize_side_effect: Any = None,
+    ) -> list[Any]:
+        """Helper that patches all external deps and calls process_image_sections."""
+        if summarize_side_effect is None:
+
+            def summarize_side_effect(
+                **kwargs: Any,
+            ) -> str:
+                return f"summary-of-{kwargs['context_name']}"
+
+        with (
+            patch(
+                f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+                return_value=True,
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+                return_value=MagicMock(),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_file_store",
+                return_value=_mock_file_store(image_map),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.summarize_image_with_error_handling",
+                side_effect=summarize_side_effect,
+            ),
+        ):
+            return process_image_sections(documents)
+
+    def test_interleaved_sections_preserve_order(self) -> None:
+        """Text and image sections must stay in their original positions."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                TextSection(text="text-0", link="link-0"),
+                ImageSection(image_file_id="img-A"),
+                TextSection(text="text-2", link="link-2"),
+                ImageSection(image_file_id="img-B"),
+                TextSection(text="text-4", link="link-4"),
+            ],
+        )
+        image_map = {"img-A": b"aa", "img-B": b"bb"}
+        result = self._run([doc], image_map)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 5
+        assert sections[0].text == "text-0"
+        assert sections[1].text == "summary-of-img-A"
+        assert sections[1].image_file_id == "img-A"
+        assert sections[2].text == "text-2"
+        assert sections[3].text == "summary-of-img-B"
+        assert sections[3].image_file_id == "img-B"
+        assert sections[4].text == "text-4"
+
+    def test_multiple_documents_preserve_order(self) -> None:
+        """Each document's sections must be independent and correctly ordered."""
+        doc1 = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="img-1"),
+                TextSection(text="middle", link=None),
+                ImageSection(image_file_id="img-2"),
+            ],
+        )
+        doc2 = _make_image_doc(
+            "doc2",
+            [
+                TextSection(text="start", link=None),
+                ImageSection(image_file_id="img-3"),
+            ],
+        )
+        image_map = {"img-1": b"a", "img-2": b"b", "img-3": b"c"}
+        result = self._run([doc1, doc2], image_map)
+
+        s1 = result[0].processed_sections
+        assert len(s1) == 3
+        assert s1[0].text == "summary-of-img-1"
+        assert s1[1].text == "middle"
+        assert s1[2].text == "summary-of-img-2"
+
+        s2 = result[1].processed_sections
+        assert len(s2) == 2
+        assert s2[0].text == "start"
+        assert s2[1].text == "summary-of-img-3"
+
+    def test_ordering_under_varied_latency(self) -> None:
+        """Simulate threads finishing in random order — results must still
+        land in the correct section positions."""
+        num_images = 10
+        sections: list[TextSection | ImageSection] = []
+        image_map: dict[str, bytes] = {}
+        for i in range(num_images):
+            fid = f"img-{i}"
+            sections.append(TextSection(text=f"text-{i}", link=None))
+            sections.append(ImageSection(image_file_id=fid))
+            image_map[fid] = f"data-{i}".encode()
+
+        doc = _make_image_doc("doc1", sections)
+
+        def _slow_summarize(**kwargs: Any) -> str:
+            time.sleep(random.uniform(0.001, 0.02))
+            return f"summary-of-{kwargs['context_name']}"
+
+        result = self._run([doc], image_map, summarize_side_effect=_slow_summarize)
+
+        ps = result[0].processed_sections
+        assert len(ps) == num_images * 2
+        for i in range(num_images):
+            assert ps[i * 2].text == f"text-{i}"
+            assert ps[i * 2 + 1].text == f"summary-of-img-{i}"
+            assert ps[i * 2 + 1].image_file_id == f"img-{i}"
+
+    def test_text_only_document_unchanged(self) -> None:
+        doc = _make_image_doc(
+            "doc1",
+            [
+                TextSection(text="hello", link="a"),
+                TextSection(text="world", link="b"),
+            ],
+        )
+        result = self._run([doc], {})
+
+        sections = result[0].processed_sections
+        assert len(sections) == 2
+        assert sections[0].text == "hello"
+        assert sections[1].text == "world"
+
+    def test_missing_file_record_does_not_corrupt_order(self) -> None:
+        """An image whose file record is missing should get a placeholder
+        without shifting other sections."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="exists"),
+                ImageSection(image_file_id="missing"),
+                TextSection(text="after", link=None),
+            ],
+        )
+        image_map = {"exists": b"data"}
+        result = self._run([doc], image_map)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 3
+        assert sections[0].text == "summary-of-exists"
+        assert sections[1].text == "[Image could not be processed]"
+        assert sections[2].text == "after"
+
+    def test_summarization_failure_does_not_corrupt_order(self) -> None:
+        """If one summarization fails, other sections must be unaffected."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="ok"),
+                ImageSection(image_file_id="fail"),
+                ImageSection(image_file_id="ok2"),
+            ],
+        )
+        image_map = {"ok": b"a", "fail": b"b", "ok2": b"c"}
+
+        def _sometimes_fail(**kwargs: Any) -> str | None:
+            if kwargs["context_name"] == "fail":
+                raise ValueError("boom")
+            return f"summary-of-{kwargs['context_name']}"
+
+        result = self._run([doc], image_map, summarize_side_effect=_sometimes_fail)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 3
+        assert sections[0].text == "summary-of-ok"
+        # allow_failures=True → None result → fallback text
+        assert sections[1].text == "[Error processing image]"
+        assert sections[2].text == "summary-of-ok2"

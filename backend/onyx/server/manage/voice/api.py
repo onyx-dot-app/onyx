@@ -3,8 +3,9 @@ from fastapi import Depends
 from fastapi import Response
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import User
 from onyx.db.models import VoiceProvider
@@ -24,6 +25,7 @@ from onyx.server.manage.voice.models import VoiceProviderTestRequest
 from onyx.server.manage.voice.models import VoiceProviderUpdateSuccess
 from onyx.server.manage.voice.models import VoiceProviderUpsertRequest
 from onyx.server.manage.voice.models import VoiceProviderView
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -57,6 +59,7 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
 
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
     """Convert a VoiceProvider model to a VoiceProviderView."""
+    raw_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else None
     return VoiceProviderView(
         id=provider.id,
         name=provider.name,
@@ -66,6 +69,7 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         stt_model=provider.stt_model,
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
+        api_key=mask_string(raw_key) if raw_key else None,
         has_api_key=bool(provider.api_key),
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
     )
@@ -73,7 +77,7 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
 
 @admin_router.get("/providers")
 def list_voice_providers(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[VoiceProviderView]:
     """List all configured voice providers."""
@@ -84,7 +88,7 @@ def list_voice_providers(
 @admin_router.post("/providers")
 async def upsert_voice_provider_endpoint(
     request: VoiceProviderUpsertRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Create or update a voice provider."""
@@ -137,7 +141,7 @@ async def upsert_voice_provider_endpoint(
         raise
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Voice provider credential validation failed on save: {e}")
+        logger.error("Voice provider credential validation failed on save: %s", e)
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
@@ -153,7 +157,7 @@ async def upsert_voice_provider_endpoint(
 )
 def delete_voice_provider_endpoint(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Delete a voice provider."""
@@ -165,7 +169,7 @@ def delete_voice_provider_endpoint(
 @admin_router.post("/providers/{provider_id}/activate-stt")
 def activate_stt_provider_endpoint(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default STT provider."""
@@ -177,7 +181,7 @@ def activate_stt_provider_endpoint(
 @admin_router.post("/providers/{provider_id}/deactivate-stt")
 def deactivate_stt_provider_endpoint(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderUpdateSuccess:
     """Remove the default STT status from a voice provider."""
@@ -190,7 +194,7 @@ def deactivate_stt_provider_endpoint(
 def activate_tts_provider_endpoint(
     provider_id: int,
     tts_model: str | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
@@ -204,7 +208,7 @@ def activate_tts_provider_endpoint(
 @admin_router.post("/providers/{provider_id}/deactivate-tts")
 def deactivate_tts_provider_endpoint(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderUpdateSuccess:
     """Remove the default TTS status from a voice provider."""
@@ -216,7 +220,7 @@ def deactivate_tts_provider_endpoint(
 @admin_router.post("/providers/test")
 async def test_voice_provider(
     request: VoiceProviderTestRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderUpdateSuccess:
     """Test a voice provider connection by making a real API call."""
@@ -251,7 +255,7 @@ async def test_voice_provider(
         api_base=api_base,
         custom_config=request.custom_config or {},
     )
-    temp_provider.api_key = api_key  # type: ignore[assignment]
+    temp_provider.api_key = api_key  # ty: ignore[invalid-assignment]
 
     try:
         provider = get_voice_provider(temp_provider)
@@ -264,20 +268,20 @@ async def test_voice_provider(
     except OnyxError:
         raise
     except Exception as e:
-        logger.error(f"Voice provider connection test failed: {e}")
+        logger.error("Voice provider connection test failed: %s", e)
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
         ) from e
 
-    logger.info(f"Voice provider test succeeded for {request.provider_type}.")
+    logger.info("Voice provider test succeeded for %s.", request.provider_type)
     return VoiceProviderUpdateSuccess()
 
 
 @admin_router.get("/providers/{provider_id}/voices")
 def get_provider_voices(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[VoiceOption]:
     """Get available voices for a provider."""
@@ -301,7 +305,7 @@ def get_provider_voices(
 @admin_router.get("/voices")
 def get_voices_by_type(
     provider_type: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[VoiceOption]:
     """Get available voices for a provider type.
 

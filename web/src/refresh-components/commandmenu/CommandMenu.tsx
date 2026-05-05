@@ -11,7 +11,7 @@ import React, {
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";

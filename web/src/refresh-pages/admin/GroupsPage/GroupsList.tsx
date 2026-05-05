@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { UserGroup } from "@/lib/types";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import GroupCard from "./GroupCard";
 import { isBuiltInGroup } from "./utils";
 import { Section } from "@/layouts/general-layouts";
@@ -41,7 +41,7 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
       ))}
 
       {builtInGroups.length > 0 && customGroups.length > 0 && (
-        <Separator paddingYRem={0.5} />
+        <Divider paddingPerpendicular="sm" paddingParallel="fit" />
       )}
 
       {customGroups.map((group) => (

@@ -2,8 +2,8 @@
 
 import React, { useMemo } from "react";
 import type { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { cn } from "@opal/utils";
+import { Tooltip } from "@opal/components";
 
 const buttonClasses = (transient: boolean | undefined) =>
   ({
@@ -292,10 +292,9 @@ export interface IconButtonProps
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
-  small?: boolean;
 
   // Button size
-  large?: boolean;
+  small?: boolean;
 
   // Button states
   transient?: boolean;
@@ -307,7 +306,6 @@ export interface IconButtonProps
   icon: React.FunctionComponent<IconProps>;
   tooltip?: string;
   toolTipPosition?: "top" | "bottom" | "left" | "right";
-  tooltipSize?: "sm" | "md" | "lg";
   /** Additional className to apply to the icon element */
   iconClassName?: string;
 }
@@ -333,7 +331,6 @@ export default function IconButton({
   iconClassName,
   tooltip,
   toolTipPosition = "top",
-  tooltipSize = "lg",
   ...props
 }: IconButtonProps) {
   const variant = main
@@ -401,8 +398,8 @@ export default function IconButton({
   if (!tooltip) return buttonElement;
 
   return (
-    <SimpleTooltip side={toolTipPosition} size={tooltipSize} tooltip={tooltip}>
+    <Tooltip side={toolTipPosition} tooltip={tooltip}>
       {buttonElement}
-    </SimpleTooltip>
+    </Tooltip>
   );
 }

@@ -4,13 +4,12 @@ import {
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
-  SvgHookNodes,
+  SvgShareWebhook,
   SvgBarChart,
   SvgBookOpen,
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
-  SvgDiscordMono,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -19,12 +18,10 @@ import {
   SvgHistory,
   SvgImage,
   SvgMcp,
-  SvgNetworkGraph,
   SvgOnyxOctagon,
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
-  SvgSlack,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -34,6 +31,8 @@ import {
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
+  SvgDiscord,
+  SvgSlack,
 } from "@opal/icons";
 
 export interface AdminRouteEntry {
@@ -92,7 +91,7 @@ export const ADMIN_ROUTES = {
   },
   DISCORD_BOTS: {
     path: "/admin/discord-bot",
-    icon: SvgDiscordMono,
+    icon: SvgDiscord,
     title: "Discord Integration",
     sidebarLabel: "Discord Integration",
   },
@@ -127,7 +126,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Chat Preferences",
   },
   LLM_MODELS: {
-    path: "/admin/configuration/llm",
+    path: "/admin/configuration/language-models",
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
@@ -157,7 +156,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Code Interpreter",
   },
   INDEX_SETTINGS: {
-    path: "/admin/configuration/search",
+    path: "/admin/configuration/index-settings",
     icon: SvgSearchMenu,
     title: "Index Settings",
     sidebarLabel: "Index Settings",
@@ -168,12 +167,6 @@ export const ADMIN_ROUTES = {
     title: "Document Processing",
     sidebarLabel: "Document Processing",
   },
-  KNOWLEDGE_GRAPH: {
-    path: "/admin/kg",
-    icon: SvgNetworkGraph,
-    title: "Knowledge Graph",
-    sidebarLabel: "Knowledge Graph",
-  },
   USERS: {
     path: "/admin/users",
     icon: SvgUser,
@@ -181,7 +174,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Users",
   },
   API_KEYS: {
-    path: "/admin/api-key",
+    path: "/admin/service-accounts",
     icon: SvgUserKey,
     title: "Service Accounts",
     sidebarLabel: "Service Accounts",
@@ -230,7 +223,7 @@ export const ADMIN_ROUTES = {
   },
   HOOKS: {
     path: "/admin/hooks",
-    icon: SvgHookNodes,
+    icon: SvgShareWebhook,
     title: "Hook Extensions",
     sidebarLabel: "Hook Extensions",
   },

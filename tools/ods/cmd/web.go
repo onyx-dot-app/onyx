@@ -48,6 +48,19 @@ func runWebScript(args []string) {
 		log.Fatalf("Failed to find web directory: %v", err)
 	}
 
+	nodeModules := filepath.Join(webDir, "node_modules")
+	if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
+		log.Info("node_modules not found, running npm install --no-save...")
+		installCmd := exec.Command("npm", "install", "--no-save")
+		installCmd.Dir = webDir
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		installCmd.Stdin = os.Stdin
+		if err := installCmd.Run(); err != nil {
+			log.Fatalf("Failed to run npm install: %v", err)
+		}
+	}
+
 	scriptName := args[0]
 	scriptArgs := args[1:]
 	if len(scriptArgs) > 0 && scriptArgs[0] == "--" {

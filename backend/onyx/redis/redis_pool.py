@@ -11,8 +11,13 @@ from typing import Optional
 import redis
 from fastapi import Request
 from redis import asyncio as aioredis
+from redis.backoff import ExponentialBackoff
 from redis.client import Redis
+from redis.exceptions import BusyLoadingError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
+from redis.retry import Retry
 
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
@@ -37,6 +42,24 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 SCAN_ITER_COUNT_DEFAULT = 4096
+
+# Retry transient Redis errors — in particular BusyLoadingError, which is
+# raised while Redis is loading its RDB snapshot after a restart or
+# failover. redis-py's default retry policy only covers ConnectionError,
+# so these surface as uncaught exceptions and ship to Sentry
+# (ONYX-BACKEND-H4NT / H43M).
+_RETRYABLE_ERRORS: list[type[Exception]] = [
+    BusyLoadingError,
+    RedisConnectionError,
+    RedisTimeoutError,
+]
+
+
+def _client_retry_kwargs() -> dict[str, Any]:
+    return {
+        "retry": Retry(ExponentialBackoff(cap=2.0, base=0.1), retries=3),
+        "retry_on_error": _RETRYABLE_ERRORS,
+    }
 
 
 class TenantRedis(redis.Redis):
@@ -125,6 +148,13 @@ class TenantRedis(redis.Redis):
             "sadd",
             "srem",
             "scard",
+            "zadd",
+            "zrange",
+            "zrevrange",
+            "zrangebyscore",
+            "zremrangebyscore",
+            "zscore",
+            "zcard",
             "hexists",
             "hset",
             "hdel",
@@ -160,24 +190,28 @@ class RedisPool:
         )
 
     def get_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(tenant_id, connection_pool=self._pool)
+        return TenantRedis(
+            tenant_id, connection_pool=self._pool, **_client_retry_kwargs()
+        )
 
     def get_replica_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(tenant_id, connection_pool=self._replica_pool)
+        return TenantRedis(
+            tenant_id, connection_pool=self._replica_pool, **_client_retry_kwargs()
+        )
 
     def get_raw_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the primary connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._pool)
+        return redis.Redis(connection_pool=self._pool, **_client_retry_kwargs())
 
     def get_raw_replica_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the replica connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._replica_pool)
+        return redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs())
 
     @staticmethod
     def create_pool(
@@ -434,7 +468,7 @@ async def retrieve_auth_token_data(token: str) -> dict | None:
         token_data_str = await redis.get(redis_key)
 
         if not token_data_str:
-            logger.debug(f"Token key {redis_key} not found or expired in Redis")
+            logger.debug("Token key %s not found or expired in Redis", redis_key)
             return None
 
         return json.loads(token_data_str)
@@ -442,7 +476,7 @@ async def retrieve_auth_token_data(token: str) -> dict | None:
         logger.error("Error decoding token data from Redis")
         return None
     except Exception as e:
-        logger.error(f"Unexpected error in retrieve_auth_token_data: {str(e)}")
+        logger.error("Unexpected error in retrieve_auth_token_data: %s", str(e))
         raise ValueError(f"Unexpected error in retrieve_auth_token_data: {str(e)}")
 
 
@@ -492,7 +526,7 @@ async def store_ws_token(token: str, user_id: str) -> None:
     if new_count > WS_TOKEN_RATE_LIMIT_MAX:
         # Over limit — decrement back since we won't use this slot
         await redis.decr(rate_limit_key)
-        logger.warning(f"WS token rate limit exceeded for user {user_id}")
+        logger.warning("WS token rate limit exceeded for user %s", user_id)
         raise WsTokenRateLimitExceeded(
             f"Rate limit exceeded. Maximum {WS_TOKEN_RATE_LIMIT_MAX} tokens per minute."
         )
@@ -530,7 +564,7 @@ async def retrieve_ws_token_data(token: str) -> dict | None:
         logger.error("Error decoding WS token data from Redis")
         return None
     except Exception as e:
-        logger.error(f"Unexpected error in retrieve_ws_token_data: {str(e)}")
+        logger.error("Unexpected error in retrieve_ws_token_data: %s", str(e))
         return None
 
 
@@ -550,11 +584,11 @@ def redis_lock_dump(lock: RedisLock, r: Redis) -> None:
         remote_token = None
 
     logger.warning(
-        f"RedisLock diagnostic: "
-        f"name={name} "
-        f"locked={locked} "
-        f"owned={owned} "
-        f"local_token={local_token} "
-        f"remote_token={remote_token} "
-        f"ttl={ttl}"
+        "RedisLock diagnostic: name=%s locked=%s owned=%s local_token=%s remote_token=%s ttl=%s",
+        name,
+        locked,
+        owned,
+        local_token,
+        remote_token,
+        ttl,
     )

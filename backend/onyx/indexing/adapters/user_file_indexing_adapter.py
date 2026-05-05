@@ -96,7 +96,9 @@ class UserFileIndexingAdapter:
                         break
             except OperationalError as e:
                 logger.warning(
-                    f"Failed to acquire locks for user files on attempt {i}, retrying. Error: {e}"
+                    "Failed to acquire locks for user files on attempt %s, retrying. Error: %s",
+                    i,
+                    e,
                 )
 
             time.sleep(retry_delay)
@@ -157,7 +159,7 @@ class UserFileIndexingAdapter:
                 provider_type=llm.config.model_provider,
             )
         except Exception as e:
-            logger.error(f"Error getting tokenizer: {e}")
+            logger.error("Error getting tokenizer: %s", e)
             llm_tokenizer = None
 
         user_file_id_to_raw_text: dict[str, str] = {}

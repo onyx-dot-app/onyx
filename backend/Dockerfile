@@ -1,4 +1,4 @@
-FROM python:3.11.7-slim-bookworm
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -12,7 +12,7 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 ARG ENABLE_CRAFT=false
 
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV DANSWER_RUNNING_IN_DOCKER="true" \
+ENV ONYX_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
     PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
 
@@ -76,7 +76,8 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade \
+# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
@@ -146,6 +147,8 @@ COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/fo
 COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
 COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
+COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
+COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
 RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
 
 # Run Craft template setup at build time when ENABLE_CRAFT=true

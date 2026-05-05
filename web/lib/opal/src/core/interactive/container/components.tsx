@@ -3,32 +3,29 @@ import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
 import { cn } from "@opal/utils";
-import type { ButtonType, WithoutStyles } from "@opal/types";
+import type { ButtonType, RoundingVariants, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
   type ContainerSizeVariants,
   widthVariants,
   type ExtremaSizeVariants,
 } from "@opal/shared";
-import { useDisabled } from "@opal/core/disabled/components";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Border-radius presets for `Interactive.Container`.
- *
- * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
- * - `"compact"` — Smaller radius of 0.5rem (8px), for tighter/inline elements
- * - `"mini"` — Smallest radius of 0.25rem (4px)
- */
-type InteractiveContainerRoundingVariant =
-  keyof typeof interactiveContainerRoundingVariants;
-const interactiveContainerRoundingVariants = {
-  default: "rounded-12",
-  compact: "rounded-08",
-  mini: "rounded-04",
+type InteractiveContainerRoundingVariant = Extract<
+  RoundingVariants,
+  "md" | "sm" | "xs"
+>;
+const interactiveContainerRoundingVariants: Record<
+  InteractiveContainerRoundingVariant,
+  string
+> = {
+  md: "rounded-12",
+  sm: "rounded-08",
+  xs: "rounded-04",
 } as const;
 
 /**
@@ -66,21 +63,21 @@ interface InteractiveContainerProps
    *
    * @default "default"
    */
-  roundingVariant?: InteractiveContainerRoundingVariant;
+  rounding?: InteractiveContainerRoundingVariant;
 
   /**
    * Size preset controlling the container's height, min-width, and padding.
    *
    * @default "lg"
    */
-  heightVariant?: ContainerSizeVariants;
+  size?: ContainerSizeVariants;
 
   /**
    * Width preset controlling the container's horizontal size.
    *
    * @default "fit"
    */
-  widthVariant?: ExtremaSizeVariants;
+  width?: ExtremaSizeVariants;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,12 +96,11 @@ function InteractiveContainer({
   ref,
   type,
   border,
-  roundingVariant = "default",
-  heightVariant = "lg",
-  widthVariant = "fit",
+  rounding = "md",
+  size = "lg",
+  width = "fit",
   ...props
 }: InteractiveContainerProps) {
-  const { allowClick } = useDisabled();
   const {
     className: slotClassName,
     style: slotStyle,
@@ -119,16 +115,16 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
-  const { height, minWidth, padding } = containerSizeVariants[heightVariant];
+  const { height, minWidth, padding } = containerSizeVariants[size];
   const sharedProps = {
     ...rest,
     className: cn(
       "interactive-container",
-      interactiveContainerRoundingVariants[roundingVariant],
+      interactiveContainerRoundingVariants[rounding],
       height,
       minWidth,
       padding,
-      widthVariants[widthVariant],
+      widthVariants[width],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
@@ -150,8 +146,7 @@ function InteractiveContainer({
   if (type) {
     const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
     const nativeDisabled =
-      (type === "submit" || !allowClick) &&
-      (ariaDisabled === true || ariaDisabled === "true" || undefined);
+      ariaDisabled === true || ariaDisabled === "true" || undefined;
     return (
       <button
         ref={ref as React.Ref<HTMLButtonElement>}

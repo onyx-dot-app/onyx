@@ -125,6 +125,40 @@ class SimpleJob:
             return True
         return False
 
+    def terminate_and_wait(self, sigterm_grace_seconds: float) -> bool:
+        """Best-effort hard-kill of the spawned process.
+
+        Sends SIGTERM, waits up to `sigterm_grace_seconds` for the process to exit,
+        then escalates to SIGKILL if the process is still alive. Joins after each
+        signal so the OS can reap the child. Returns True if the process was alive
+        when this was called (i.e. we actually had to do something).
+        """
+        if self.process is None:
+            return False
+        if not self.process.is_alive():
+            return False
+
+        pid = self.process.pid
+        logger.warning(
+            "SimpleJob.terminate_and_wait - sending SIGTERM to job: id=%s pid=%s",
+            self.id,
+            pid,
+        )
+        self.process.terminate()
+        self.process.join(timeout=sigterm_grace_seconds)
+
+        if self.process.is_alive():
+            logger.warning(
+                "SimpleJob.terminate_and_wait - SIGTERM grace exceeded, sending SIGKILL: id=%s pid=%s grace=%ss",
+                self.id,
+                pid,
+                sigterm_grace_seconds,
+            )
+            self.process.kill()
+            self.process.join()
+
+        return True
+
     @property
     def status(self) -> JobStatusType:
         if not self.process:
@@ -171,7 +205,7 @@ class SimpleJobClient:
         for job_id in current_job_ids:
             job = self.jobs.get(job_id)
             if job and job.done():
-                logger.debug(f"Cleaning up job with id: '{job.id}'")
+                logger.debug("Cleaning up job with id: '%s'", job.id)
                 del self.jobs[job.id]
 
     def submit(
@@ -184,7 +218,9 @@ class SimpleJobClient:
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug(
-                f"No available workers to run job. Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
+                "No available workers to run job. Currently running '%s' jobs, with a limit of '%s'.",
+                len(self.jobs),
+                self.n_workers,
             )
             return None
 

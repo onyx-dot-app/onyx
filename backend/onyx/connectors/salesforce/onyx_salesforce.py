@@ -5,9 +5,7 @@ from simple_salesforce import Salesforce
 from simple_salesforce import SFType
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_OBJECTS
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_PREFIXES
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_SUFFIXES
@@ -15,7 +13,6 @@ from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-
 
 logger = setup_logger()
 
@@ -81,7 +78,7 @@ class OnyxSalesforce(Salesforce):
         except SalesforceRefusedRequest as e:
             if is_salesforce_rate_limit_error(e):
                 logger.warning(
-                    f"Salesforce rate limit exceeded for query: {query[:100]}..."
+                    "Salesforce rate limit exceeded for query: %s...", query[:100]
                 )
                 # Add additional delay for rate limit errors
                 time.sleep(5)
@@ -102,7 +99,7 @@ class OnyxSalesforce(Salesforce):
         except SalesforceRefusedRequest as e:
             if is_salesforce_rate_limit_error(e):
                 logger.warning(
-                    f"Salesforce rate limit exceeded for query_all: {query[:100]}..."
+                    "Salesforce rate limit exceeded for query_all: %s...", query[:100]
                 )
                 # Add additional delay for rate limit errors
                 time.sleep(5)
@@ -209,7 +206,7 @@ class OnyxSalesforce(Salesforce):
                 try:
                     result = self.safe_query(query)
                 except Exception:
-                    logger.exception(f"Query failed: {query=}")
+                    logger.exception("Query failed: query=%r", query)
                 else:
                     for child_record_key, child_result in result["records"][0].items():
                         if child_record_key == "attributes":
@@ -259,7 +256,7 @@ class OnyxSalesforce(Salesforce):
         except SalesforceRefusedRequest as e:
             if is_salesforce_rate_limit_error(e):
                 logger.warning(
-                    f"Salesforce rate limit exceeded for describe_type: {name}"
+                    "Salesforce rate limit exceeded for describe_type: %s", name
                 )
                 # Add additional delay for rate limit errors
                 time.sleep(3)
@@ -306,14 +303,23 @@ class OnyxSalesforce(Salesforce):
             valid, reason = self._is_valid_child_object(child_relationship)
             if not valid:
                 logger.debug(
-                    f"{index}/{len_relationships} - Invalid child object: "
-                    f"parent={sf_type} child={child_name} child_field_backreference={child_relationship['field']} {reason=}"
+                    "%s/%s - Invalid child object: parent=%s child=%s child_field_backreference=%s reason=%r",
+                    index,
+                    len_relationships,
+                    sf_type,
+                    child_name,
+                    child_relationship["field"],
+                    reason,
                 )
                 continue
 
             logger.debug(
-                f"{index}/{len_relationships} - Found valid child object: "
-                f"parent={sf_type} child={child_name} child_field_backreference={child_relationship['field']}"
+                "%s/%s - Found valid child object: parent=%s child=%s child_field_backreference=%s",
+                index,
+                len_relationships,
+                sf_type,
+                child_name,
+                child_relationship["field"],
             )
 
             name = child_name

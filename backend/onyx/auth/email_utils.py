@@ -7,8 +7,8 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
 
-import sendgrid  # type: ignore
-from sendgrid.helpers.mail import Attachment  # type: ignore
+import sendgrid
+from sendgrid.helpers.mail import Attachment
 from sendgrid.helpers.mail import Content
 from sendgrid.helpers.mail import ContentId
 from sendgrid.helpers.mail import Disposition
@@ -243,7 +243,7 @@ def send_email_with_sendgrid(
     sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
     response = sg.client.mail.send.post(request_body=mail_json)  # can raise
     if response.status_code != 202:
-        logger.warning(f"Unexpected status code {response.status_code}")
+        logger.warning("Unexpected status code %s", response.status_code)
 
 
 def send_email_with_smtplib(

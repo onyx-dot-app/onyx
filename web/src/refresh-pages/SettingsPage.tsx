@@ -2,9 +2,14 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
-import { Content, ContentAction } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputHorizontal,
+  InputVertical,
+} from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -12,6 +17,7 @@ import {
   SvgKey,
   SvgLock,
   SvgMinusCircle,
+  SvgPlusCircle,
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
@@ -32,15 +38,14 @@ import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";
@@ -48,7 +53,7 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
-import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { EmptyMessageCard } from "@opal/components";
 import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
@@ -56,12 +61,13 @@ import {
   CHAT_BACKGROUND_NONE,
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
-import { cn } from "@/lib/utils";
-import { Disabled, Interactive } from "@opal/core";
+import { cn } from "@opal/utils";
+import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 interface PAT {
   id: number;
@@ -109,11 +115,12 @@ function PATModal({
         !!createdToken?.token ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
-          <Disabled disabled={isCreating || !newTokenName.trim()}>
-            <Button onClick={onCreate}>
-              {isCreating ? "Creating Token..." : "Create Token"}
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isCreating || !newTokenName.trim()}
+            onClick={onCreate}
+          >
+            {isCreating ? "Creating Token..." : "Create Token"}
+          </Button>
         )
       }
       hideCancel={!!createdToken}
@@ -121,12 +128,12 @@ function PATModal({
       <Section gap={1}>
         {/* Token Creation*/}
         {!!createdToken?.token ? (
-          <InputLayouts.Vertical title="Token Value">
+          <InputVertical title="Token Value" withLabel>
             <Code>{createdToken.token}</Code>
-          </InputLayouts.Vertical>
+          </InputVertical>
         ) : (
           <>
-            <InputLayouts.Vertical title="Token Name">
+            <InputVertical title="Token Name" withLabel>
               <InputTypeIn
                 placeholder="Name your token"
                 value={newTokenName}
@@ -134,8 +141,8 @@ function PATModal({
                 variant={isCreating ? "disabled" : undefined}
                 autoComplete="new-password"
               />
-            </InputLayouts.Vertical>
-            <InputLayouts.Vertical
+            </InputVertical>
+            <InputVertical
               title="Expires in"
               subDescription={
                 expirationDays === "null"
@@ -152,6 +159,7 @@ function PATModal({
                         .replace(".999Z", " UTC")}`;
                     })()
               }
+              withLabel
             >
               <InputSelect
                 value={expirationDays}
@@ -168,7 +176,7 @@ function PATModal({
                   </InputSelect.Item>
                 </InputSelect.Content>
               </InputSelect>
-            </InputLayouts.Vertical>
+            </InputVertical>
           </>
         )}
       </Section>
@@ -184,6 +192,24 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+
+  const applyBackground = useCallback(
+    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
+      try {
+        await updateUserChatBackground(
+          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+        );
+        if (bg.theme) {
+          setTheme(bg.theme);
+          await updateUserThemePreference(bg.theme);
+        }
+      } catch {
+        // errors are already logged and state is rolled back via refreshUser
+        // inside the update functions
+      }
+    },
+    [updateUserChatBackground, setTheme, updateUserThemePreference]
+  );
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -235,16 +261,15 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Disabled disabled={isDeleting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  void handleDeleteAllChats();
-                }}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDeleting}
+              variant="danger"
+              onClick={() => {
+                void handleDeleteAllChats();
+              }}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -263,13 +288,14 @@ function GeneralSettings() {
             title="Profile"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
-            <InputLayouts.Horizontal
+            <InputHorizontal
               title="Full Name"
               description="We'll display this name in the app."
               center
+              withLabel
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -290,11 +316,12 @@ function GeneralSettings() {
                   }
                 }}
               />
-            </InputLayouts.Horizontal>
-            <InputLayouts.Horizontal
+            </InputHorizontal>
+            <InputHorizontal
               title="Work Role"
               description="Share your role to better tailor responses."
               center
+              withLabel
             >
               <InputTypeIn
                 placeholder="Your role"
@@ -315,7 +342,7 @@ function GeneralSettings() {
                   }
                 }}
               />
-            </InputLayouts.Horizontal>
+            </InputHorizontal>
           </Card>
         </Section>
 
@@ -324,13 +351,14 @@ function GeneralSettings() {
             title="Appearance"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
-            <InputLayouts.Horizontal
+            <InputHorizontal
               title="Color Mode"
               description="Select your preferred color mode for the UI."
               center
+              withLabel
             >
               <InputSelect
                 value={theme}
@@ -373,8 +401,8 @@ function GeneralSettings() {
                   </InputSelect.Item>
                 </InputSelect.Content>
               </InputSelect>
-            </InputLayouts.Horizontal>
-            <InputLayouts.Vertical title="Chat Background">
+            </InputHorizontal>
+            <InputVertical title="Chat Background">
               <div className="flex flex-wrap gap-2">
                 {CHAT_BACKGROUND_OPTIONS.map((bg) => {
                   const currentBackgroundId =
@@ -385,11 +413,7 @@ function GeneralSettings() {
                   return (
                     <button
                       key={bg.id}
-                      onClick={() =>
-                        updateUserChatBackground(
-                          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-                        )
-                      }
+                      onClick={() => applyBackground(bg)}
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
                       aria-label={`${bg.label} background${
@@ -423,21 +447,21 @@ function GeneralSettings() {
                   );
                 })}
               </div>
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Card>
         </Section>
 
-        <Separator noPadding />
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
         <Section gap={0.75}>
           <Content
             title="Danger Zone"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
-            <InputLayouts.Horizontal
+            <InputHorizontal
               title="Delete All Chats"
               description="Permanently delete all your chat sessions."
               center
@@ -451,7 +475,7 @@ function GeneralSettings() {
               >
                 Delete All Chats
               </Button>
-            </InputLayouts.Horizontal>
+            </InputHorizontal>
           </Card>
         </Section>
       </Section>
@@ -697,21 +721,18 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <Disabled
+                  <Button
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                  >
-                    <Button
-                      icon={SvgMinusCircle}
-                      onClick={() => void handleRemoveShortcut(index)}
-                      prominence="tertiary"
-                      aria-label="Remove shortcut"
-                      tooltip={
-                        shortcut.is_public
-                          ? "Cannot delete public prompt-shortcuts."
-                          : undefined
-                      }
-                    />
-                  </Disabled>
+                    icon={SvgMinusCircle}
+                    onClick={() => void handleRemoveShortcut(index)}
+                    prominence="tertiary"
+                    aria-label="Remove shortcut"
+                    tooltip={
+                      shortcut.is_public
+                        ? "Cannot delete public prompt-shortcuts."
+                        : undefined
+                    }
+                  />
                 </Section>
                 <InputTextArea
                   placeholder="Provide a concise 1–2 sentence summary of the following:"
@@ -749,6 +770,7 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserPasteAsTile,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
@@ -757,6 +779,10 @@ function ChatPreferencesSettings() {
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
+  const {
+    enabled: smoothStreamingEnabled,
+    setEnabled: setSmoothStreamingEnabled,
+  } = useSmoothStreaming();
 
   const {
     personalizationValues,
@@ -825,12 +851,13 @@ function ChatPreferencesSettings() {
           title="Chats"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Default Model"
             description="This model will be used by Onyx by default in your chats."
+            withLabel
           >
             <LLMPopover
               llmManager={llmManager}
@@ -838,11 +865,12 @@ function ChatPreferencesSettings() {
                 void updateUserDefaultModel(selected);
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Chat Auto-scroll"
             description="Automatically scroll to new content as chat generates response."
+            withLabel
           >
             <Switch
               checked={user?.preferences.auto_scroll}
@@ -850,10 +878,34 @@ function ChatPreferencesSettings() {
                 updateUserAutoScroll(checked);
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Smooth Streaming"
+            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+            withLabel
+          >
+            <Switch
+              checked={smoothStreamingEnabled}
+              onCheckedChange={setSmoothStreamingEnabled}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Collapse Large Pastes"
+            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            withLabel
+          >
+            <Switch
+              checked={user?.preferences?.paste_as_tile ?? false}
+              onCheckedChange={(checked) => {
+                updateUserPasteAsTile(checked);
+              }}
+            />
+          </InputHorizontal>
 
           {isPaidEnterpriseFeaturesEnabled && (
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 searchUiEnabled
                   ? undefined
@@ -861,11 +913,12 @@ function ChatPreferencesSettings() {
               }
               side="top"
             >
-              <InputLayouts.Horizontal
+              <InputHorizontal
                 title="Default App Mode"
                 description="Choose whether new sessions start in Search or Chat mode."
                 center
                 disabled={!searchUiEnabled}
+                withLabel
               >
                 <InputSelect
                   value={user?.preferences.default_app_mode ?? "CHAT"}
@@ -880,16 +933,17 @@ function ChatPreferencesSettings() {
                     <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
                   </InputSelect.Content>
                 </InputSelect>
-              </InputLayouts.Horizontal>
-            </SimpleTooltip>
+              </InputHorizontal>
+            </Tooltip>
           )}
         </Card>
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Vertical
+        <InputVertical
           title="Personal Preferences"
           description="Provide your custom preferences in natural language."
+          withLabel
         >
           <InputTextArea
             placeholder="Describe how you want the system to behave and the tone it should use."
@@ -905,17 +959,18 @@ function ChatPreferencesSettings() {
             value={personalizationValues.user_preferences || ""}
             limit={500}
           />
-        </InputLayouts.Vertical>
+        </InputVertical>
         <Content
           title="Memory"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Reference Stored Memories"
             description="Let Onyx reference stored memories in chats."
+            withLabel
           >
             <Switch
               checked={personalizationValues.use_memories}
@@ -924,10 +979,11 @@ function ChatPreferencesSettings() {
                 void handleSavePersonalization({ use_memories: checked });
               }}
             />
-          </InputLayouts.Horizontal>
-          <InputLayouts.Horizontal
+          </InputHorizontal>
+          <InputHorizontal
             title="Update Memories"
             description="Let Onyx generate and update stored memories."
+            withLabel
           >
             <Switch
               checked={personalizationValues.enable_memory_tool}
@@ -938,7 +994,7 @@ function ChatPreferencesSettings() {
                 });
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           {(personalizationValues.use_memories ||
             personalizationValues.enable_memory_tool ||
@@ -956,12 +1012,13 @@ function ChatPreferencesSettings() {
           title="Prompt Shortcuts"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Use Prompt Shortcuts"
             description="Enable shortcuts to quickly insert common prompts."
+            withLabel
           >
             <Switch
               checked={user?.preferences?.shortcut_enabled}
@@ -969,7 +1026,7 @@ function ChatPreferencesSettings() {
                 updateUserShortcuts(checked);
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
         </Card>
@@ -980,12 +1037,13 @@ function ChatPreferencesSettings() {
           title="Voice"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         <Card>
-          <InputLayouts.Horizontal
-            title="Auto-Send"
-            description="Automatically send voice input when recording stops."
+          <InputHorizontal
+            title="Auto-Send on Pause"
+            description="Automatically send voice input when you stop speaking."
+            withLabel
           >
             <Switch
               checked={user?.preferences.voice_auto_send ?? false}
@@ -993,11 +1051,12 @@ function ChatPreferencesSettings() {
                 void saveVoiceSettings({ auto_send: checked });
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Auto-Playback"
             description="Automatically play voice responses."
+            withLabel
           >
             <Switch
               checked={user?.preferences.voice_auto_playback ?? false}
@@ -1005,11 +1064,12 @@ function ChatPreferencesSettings() {
                 void saveVoiceSettings({ auto_playback: checked });
               }}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Playback Speed"
             description="Adjust the speed of voice playback."
+            withLabel
           >
             <div className="flex items-center gap-3">
               <input
@@ -1034,7 +1094,7 @@ function ChatPreferencesSettings() {
                 {draftVoicePlaybackSpeed.toFixed(1)}x
               </span>
             </div>
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
         </Card>
       </Section>
     </Section>
@@ -1080,7 +1140,7 @@ function AccountsAccessSettings() {
     error,
     isLoading,
   } = useSWR<PAT[]>(
-    showTokensSection ? "/api/user/pats" : null,
+    showTokensSection ? SWR_KEYS.userPats : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: true,
@@ -1274,20 +1334,19 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Disabled disabled={isSubmitting || !dirty || !isValid}>
-                    <Button
-                      onClick={async () => {
-                        setSubmitting(true);
-                        try {
-                          await handleChangePassword(values);
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      }}
-                    >
-                      {isSubmitting ? "Updating..." : "Update"}
-                    </Button>
-                  </Disabled>
+                  <Button
+                    disabled={isSubmitting || !dirty || !isValid}
+                    onClick={async () => {
+                      setSubmitting(true);
+                      try {
+                        await handleChangePassword(values);
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                  >
+                    {isSubmitting ? "Updating..." : "Update"}
+                  </Button>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1295,8 +1354,8 @@ function AccountsAccessSettings() {
               >
                 <Section gap={1}>
                   <Section gap={0.25} alignItems="start">
-                    <InputLayouts.Vertical
-                      name="currentPassword"
+                    <InputVertical
+                      withLabel="currentPassword"
                       title="Current Password"
                     >
                       <PasswordInputTypeIn
@@ -1308,13 +1367,10 @@ function AccountsAccessSettings() {
                           touched.currentPassword && !!errors.currentPassword
                         }
                       />
-                    </InputLayouts.Vertical>
+                    </InputVertical>
                   </Section>
                   <Section gap={0.25} alignItems="start">
-                    <InputLayouts.Vertical
-                      name="newPassword"
-                      title="New Password"
-                    >
+                    <InputVertical withLabel="newPassword" title="New Password">
                       <PasswordInputTypeIn
                         name="newPassword"
                         value={values.newPassword}
@@ -1322,11 +1378,11 @@ function AccountsAccessSettings() {
                         onBlur={handleBlur}
                         error={touched.newPassword && !!errors.newPassword}
                       />
-                    </InputLayouts.Vertical>
+                    </InputVertical>
                   </Section>
                   <Section gap={0.25} alignItems="start">
-                    <InputLayouts.Vertical
-                      name="confirmPassword"
+                    <InputVertical
+                      withLabel="confirmPassword"
                       title="Confirm New Password"
                     >
                       <PasswordInputTypeIn
@@ -1338,7 +1394,7 @@ function AccountsAccessSettings() {
                           touched.confirmPassword && !!errors.confirmPassword
                         }
                       />
-                    </InputLayouts.Vertical>
+                    </InputVertical>
                   </Section>
                 </Section>
               </ConfirmationModalLayout>
@@ -1353,20 +1409,19 @@ function AccountsAccessSettings() {
             title="Accounts"
             sizePreset="main-content"
             variant="section"
-            widthVariant="full"
+            width="full"
           />
           <Card>
-            <InputLayouts.Horizontal
+            <InputHorizontal
               title="Email"
               description="Your account email address."
               center
-              nonInteractive
             >
               <Text>{user?.email ?? "anonymous"}</Text>
-            </InputLayouts.Horizontal>
+            </InputHorizontal>
 
             {showPasswordSection && (
-              <InputLayouts.Horizontal
+              <InputHorizontal
                 title="Password"
                 description="Update your account password."
                 center
@@ -1379,7 +1434,7 @@ function AccountsAccessSettings() {
                 >
                   Change Password
                 </Button>
-              </InputLayouts.Horizontal>
+              </InputHorizontal>
             )}
           </Card>
         </Section>
@@ -1390,7 +1445,7 @@ function AccountsAccessSettings() {
               title="Access Tokens"
               sizePreset="main-content"
               variant="section"
-              widthVariant="full"
+              width="full"
             />
             {canCreateTokens ? (
               <Card padding={0.25}>
@@ -1413,15 +1468,16 @@ function AccountsAccessSettings() {
                         variant="internal"
                       />
                     )}
-                    <CreateButton
-                      onClick={() => setShowCreateModal(true)}
-                      secondary={false}
-                      internal
-                      transient={showCreateModal}
-                      rightIcon
-                    >
-                      New Access Token
-                    </CreateButton>
+                    <div className="shrink-0">
+                      <Button
+                        rightIcon={SvgPlusCircle}
+                        prominence="internal"
+                        interaction={showCreateModal ? "active" : "rest"}
+                        onClick={() => setShowCreateModal(true)}
+                      >
+                        New Access Token
+                      </Button>
+                    </div>
                   </Section>
 
                   <Section gap={0.25}>
@@ -1452,8 +1508,8 @@ function AccountsAccessSettings() {
                       return (
                         <Interactive.Container
                           key={pat.id}
-                          heightVariant="fit"
-                          widthVariant="full"
+                          size="fit"
+                          width="full"
                         >
                           <div className="w-full bg-background-tint-01">
                             <AttachmentItemLayout
@@ -1559,14 +1615,16 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={`Disconnect ${sourceMetadata.displayName}`}
+          title={markdown(`Disconnect *${sourceMetadata.displayName}*`)}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Disabled disabled={isDisconnecting}>
-              <Button variant="danger" onClick={() => void handleDisconnect()}>
-                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDisconnecting}
+              variant="danger"
+              onClick={() => void handleDisconnect()}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1592,17 +1650,16 @@ function FederatedConnectorCard({
           }
           sizePreset="main-content"
           variant="section"
-          paddingVariant="sm"
+          padding="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <Disabled disabled={isDisconnecting}>
-                <Button
-                  icon={SvgUnplug}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={() => setShowDisconnectConfirmation(true)}
-                />
-              </Disabled>
+              <Button
+                disabled={isDisconnecting}
+                icon={SvgUnplug}
+                prominence="tertiary"
+                size="sm"
+                onClick={() => setShowDisconnectConfirmation(true)}
+              />
             ) : connector.authorize_url ? (
               <Button
                 prominence="internal"
@@ -1666,7 +1723,7 @@ function ConnectorsSettings() {
           title="Connectors"
           sizePreset="main-content"
           variant="section"
-          widthVariant="full"
+          width="full"
         />
         {hasConnectors ? (
           <>
@@ -1689,7 +1746,10 @@ function ConnectorsSettings() {
             ))}
           </>
         ) : (
-          <EmptyMessage title="No connectors set up for your organization." />
+          <EmptyMessageCard
+            sizePreset="main-ui"
+            title="No connectors set up for your organization."
+          />
         )}
       </Section>
     </Section>

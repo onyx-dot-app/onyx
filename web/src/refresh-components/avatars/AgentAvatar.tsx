@@ -1,8 +1,8 @@
 "use client";
 
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { OnyxIcon } from "@/components/icons/icons";
+import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
+import { SvgOnyxLogo } from "@opal/logos";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
@@ -35,18 +35,14 @@ export default function AgentAvatar({
         />
       </div>
     ) : (
-      <OnyxIcon size={size} className="shrink-0" />
+      <SvgOnyxLogo size={size} className="shrink-0" />
     );
   }
 
   return (
     <CustomAgentAvatar
       name={agent.name}
-      src={
-        agent.uploaded_image_id
-          ? buildImgUrl(agent.uploaded_image_id)
-          : undefined
-      }
+      src={agent.uploaded_image_id ? buildAgentAvatarUrl(agent.id) : undefined}
       iconName={agent.icon_name}
       size={size}
       {...props}

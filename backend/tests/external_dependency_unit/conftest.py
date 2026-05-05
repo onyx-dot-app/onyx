@@ -7,14 +7,20 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.full_setup import (
-    ensure_full_deployment_setup,
+from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
+
+# Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
+from tests.utils.pytest_secrets import (
+    pytest_collection_modifyitems as pytest_collection_modifyitems,
 )
+from tests.utils.pytest_secrets import pytest_configure as pytest_configure
+from tests.utils.pytest_secrets import test_secrets as test_secrets
 
 
 @pytest.fixture(scope="function")
@@ -52,7 +58,12 @@ def tenant_context() -> Generator[None, None, None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def create_test_user(db_session: Session, email_prefix: str) -> User:
+def create_test_user(
+    db_session: Session,
+    email_prefix: str,
+    role: UserRole = UserRole.BASIC,
+    account_type: AccountType = AccountType.STANDARD,
+) -> User:
     """Helper to create a test user with a unique email"""
     # Use UUID to ensure unique email addresses
     unique_email = f"{email_prefix}_{uuid4().hex[:8]}@example.com"
@@ -68,7 +79,8 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
+        role=role,
+        account_type=account_type,
     )
     db_session.add(user)
     db_session.commit()

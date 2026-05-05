@@ -1,0 +1,52 @@
+/* ---------------------------------------------------------------------------
+   Divider
+
+   A horizontal rule with optional title, foldable chevron, or description.
+   Padding is controlled via Tailwind classes applied by the component.
+   --------------------------------------------------------------------------- */
+
+/* ── Horizontal ─────────────────────────────────────────────────────────────── */
+
+.opal-divider {
+  @apply flex flex-col w-full;
+  gap: 0.75rem;
+}
+
+.opal-divider-row {
+  @apply flex flex-row items-center w-full;
+  gap: 2px;
+  padding: 0px;
+}
+
+.opal-divider-title {
+  @apply flex flex-col justify-center;
+  padding: 0px 2px;
+}
+
+.opal-divider-line {
+  @apply flex-1 h-px bg-border-01;
+}
+
+.opal-divider-description {
+  padding: 0px 2px;
+}
+
+/* ── Vertical orientation ───────────────────────────────────────────────────── */
+
+.opal-divider-vertical {
+  @apply flex flex-row h-full;
+}
+
+.opal-divider-line-vertical {
+  @apply flex-1 w-px bg-border-01;
+}
+
+/* ── Foldable chevron ───────────────────────────────────────────────────────── */
+
+.opal-divider-chevron {
+  @apply transition-transform duration-200 ease-in-out;
+}
+
+.opal-divider-chevron[data-open="true"] {
+  transform: rotate(90deg);
+}

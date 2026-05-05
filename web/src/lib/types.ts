@@ -32,6 +32,8 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Input preferences
+  paste_as_tile?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -50,6 +52,14 @@ export interface UserPersonalization {
   use_memories: boolean;
   enable_memory_tool: boolean;
   user_preferences: string;
+}
+
+export enum AccountType {
+  STANDARD = "STANDARD",
+  BOT = "BOT",
+  EXT_PERM_USER = "EXT_PERM_USER",
+  SERVICE_ACCOUNT = "SERVICE_ACCOUNT",
+  ANONYMOUS = "ANONYMOUS",
 }
 
 export enum UserRole {
@@ -203,6 +213,54 @@ export interface IndexAttemptSnapshot {
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
+}
+
+// Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
+// declaration order is the canonical pipeline order — the API serializes
+// stages in this order and the "Pipeline order" sort renders them as-is.
+// Keep in sync with the Python enum.
+export const INDEX_ATTEMPT_STAGES = [
+  "CONNECTOR_VALIDATION",
+  "PERMISSION_VALIDATION",
+  "CHECKPOINT_LOAD",
+  "CONNECTOR_FETCH",
+  "HIERARCHY_UPSERT",
+  "DOC_BATCH_STORE",
+  "DOC_BATCH_ENQUEUE",
+  "QUEUE_WAIT",
+  "DOCPROCESSING_SETUP",
+  "BATCH_LOAD",
+  "DOC_DB_PREPARE",
+  "IMAGE_PROCESSING",
+  "CHUNKING",
+  "CONTEXTUAL_RAG",
+  "EMBEDDING",
+  "VECTOR_DB_WRITE",
+  "POST_INDEX_DB_UPDATE",
+  "COORDINATION_UPDATE",
+  "BATCH_TOTAL",
+] as const;
+
+export type IndexAttemptStage = (typeof INDEX_ATTEMPT_STAGES)[number];
+
+export type StageScope = "ATTEMPT_LEVEL" | "BATCH_LEVEL";
+
+export interface IndexAttemptStageMetric {
+  stage: IndexAttemptStage;
+  scope: StageScope;
+  event_count: number;
+  total_duration_ms: number;
+  avg_duration_ms: number | null;
+  std_dev_duration_ms: number | null;
+  min_duration_ms: number | null;
+  max_duration_ms: number | null;
+  time_first_event: string | null;
+  time_last_event: string | null;
+}
+
+export interface IndexAttemptStageMetricsResponse {
+  index_attempt_id: number;
+  stages: IndexAttemptStageMetric[];
 }
 
 export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
@@ -479,6 +537,7 @@ export interface UserGroup {
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
+  is_default: boolean;
 }
 
 export enum ValidSources {

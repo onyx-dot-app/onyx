@@ -2,14 +2,15 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Button, Divider, MessageCard } from "@opal/components";
+import { markdown } from "@opal/utils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
@@ -23,11 +24,9 @@ import {
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Separator from "@/refresh-components/Separator";
 import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
-import Message from "@/refresh-components/messages/Message";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
@@ -124,7 +123,7 @@ export default function MCPAuthenticationModal({
 
   // Get the current frontend URL for redirect URI
   const { data: fullServer } = useSWR<MCPServer>(
-    mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
+    mcpServer ? SWR_KEYS.adminMcpServer(mcpServer.id) : null,
     errorHandlingFetcher
   );
 
@@ -200,9 +199,30 @@ export default function MCPAuthenticationModal({
     };
   }, [fullServer, mcpServer?.server_url]);
 
+  // Mirrors the LLM-provider `api_key_changed` pattern in
+  // `web/src/sections/modals/llmConfig/svc.ts`. The backend uses these flags
+  // to decide whether to overwrite the stored OAuth credentials or to leave
+  // them untouched, which prevents masked placeholders sent back from the
+  // GET response from accidentally wiping out the real stored values.
+  const computeOAuthChangedFlags = (values: MCPAuthFormValues) => {
+    if (values.auth_type !== MCPAuthenticationType.OAUTH) {
+      return {
+        oauth_client_id_changed: false,
+        oauth_client_secret_changed: false,
+      };
+    }
+    return {
+      oauth_client_id_changed:
+        values.oauth_client_id !== initialValues.oauth_client_id,
+      oauth_client_secret_changed:
+        values.oauth_client_secret !== initialValues.oauth_client_secret,
+    };
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
+    const oauthChangedFlags = computeOAuthChangedFlags(values);
 
     return {
       name: mcpServer.name,
@@ -234,6 +254,7 @@ export default function MCPAuthenticationModal({
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_secret
           : undefined,
+      ...oauthChangedFlags,
       existing_server_id: mcpServer.id,
     };
   };
@@ -264,6 +285,7 @@ export default function MCPAuthenticationModal({
 
       // Step 3: For OAuth, initiate the OAuth flow
       if (authType === MCPAuthenticationType.OAUTH) {
+        const oauthChangedFlags = computeOAuthChangedFlags(values);
         const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
           method: "POST",
           headers: {
@@ -273,6 +295,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
+            ...oauthChangedFlags,
             return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
@@ -317,7 +340,11 @@ export default function MCPAuthenticationModal({
       <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
-          title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
+          title={
+            mcpServer
+              ? markdown(`Authenticate *${mcpServer.name}*`)
+              : "Authenticate MCP Server"
+          }
           description="Authenticate your connection to start using the MCP server."
         />
 
@@ -427,7 +454,7 @@ export default function MCPAuthenticationModal({
                         }}
                       />
                     </FormField>
-                    <Separator className="py-0" />
+                    <Divider paddingPerpendicular="fit" />
                   </div>
 
                   {/* OAuth Section */}
@@ -609,25 +636,15 @@ export default function MCPAuthenticationModal({
                     </div>
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
-                    <Message
-                      text="No authentication for this MCP server"
+                    <MessageCard
+                      title="No authentication for this MCP server"
                       description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
-                    <Message
-                      text="Use pass-through for services with shared identity provider."
+                    <MessageCard
+                      title="Use pass-through for services with shared identity provider."
                       description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                 </Modal.Body>
@@ -640,11 +657,13 @@ export default function MCPAuthenticationModal({
                   >
                     Cancel
                   </Button>
-                  <Disabled disabled={!isValid || isSubmitting}>
-                    <Button type="submit" data-testid="mcp-auth-connect-button">
-                      {isSubmitting ? "Connecting..." : "Connect"}
-                    </Button>
-                  </Disabled>
+                  <Button
+                    disabled={!isValid || isSubmitting}
+                    type="submit"
+                    data-testid="mcp-auth-connect-button"
+                  >
+                    {isSubmitting ? "Connecting..." : "Connect"}
+                  </Button>
                 </Modal.Footer>
               </Form>
             );

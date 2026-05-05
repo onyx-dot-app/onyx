@@ -17,8 +17,8 @@ import Title from "@/components/ui/title";
 import Spacer from "@/refresh-components/Spacer";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -26,11 +26,11 @@ import Link from "next/link";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import Popover from "@/refresh-components/Popover";
 import Calendar from "@/refresh-components/Calendar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Spinner } from "@/components/Spinner";
 import { SvgCalendar, SvgDownloadCloud } from "@opal/icons";
 
@@ -201,15 +201,14 @@ function GenerateReportInput({
           </Popover.Content>
         </Popover>
       </div>
-      <Disabled disabled={isLoading || isWaitingForReport}>
-        <OpalButton
-          color={"blue"}
-          icon={SvgDownloadCloud}
-          onClick={() => requestReport()}
-        >
-          {isWaitingForReport ? "Generating..." : "Generate Report"}
-        </OpalButton>
-      </Disabled>
+      <OpalButton
+        disabled={isLoading || isWaitingForReport}
+        color={"blue"}
+        icon={SvgDownloadCloud}
+        onClick={() => requestReport()}
+      >
+        {isWaitingForReport ? "Generating..." : "Generate Report"}
+      </OpalButton>
       <p className="mt-1 text-xs">
         {isWaitingForReport
           ? "A report is currently being generated. Please wait..."
@@ -225,7 +224,7 @@ function GenerateReportInput({
   );
 }
 
-const USAGE_REPORT_URL = "/api/admin/usage-report";
+const USAGE_REPORT_URL = SWR_KEYS.usageReport;
 
 function UsageReportsTable({
   refreshTrigger,
@@ -443,7 +442,7 @@ export default function UsageReports() {
             </div>
           </div>
         )}
-        <Separator />
+        <Divider />
         <UsageReportsTable
           refreshTrigger={refreshTrigger}
           isWaitingForReport={isWaitingForReport}

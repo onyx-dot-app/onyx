@@ -13,28 +13,26 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 from onyx.context.search.models import IndexFilters  # noqa: E402
-from onyx.document_index.interfaces import VespaChunkRequest  # noqa: E402
-from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
 from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
-from onyx.db.tag import delete_orphan_tags__no_commit  # noqa: E402
-from onyx.db.search_settings import get_current_search_settings  # noqa: E402
-from onyx.document_index.vespa.index import VespaIndex  # noqa: E402
 from onyx.db.document import get_document  # noqa: E402
+from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
+from onyx.db.search_settings import get_current_search_settings  # noqa: E402
+from onyx.db.tag import delete_orphan_tags__no_commit  # noqa: E402
+from onyx.document_index.interfaces import VespaChunkRequest  # noqa: E402
+from onyx.document_index.vespa.index import VespaIndex  # noqa: E402
 
 BATCH_SIZE = 100
 
 
 def _get_orphaned_document_ids(db_session: Session, limit: int) -> list[str]:
     """Get document IDs that don't have any entries in document_by_connector_credential_pair"""
-    query = text(
-        """
+    query = text("""
         SELECT d.id
         FROM document d
         LEFT JOIN document_by_connector_credential_pair dbcc ON d.id = dbcc.id
         WHERE dbcc.id IS NULL
         LIMIT :limit
-    """
-    )
+    """)
     orphaned_ids = [doc_id[0] for doc_id in db_session.execute(query, {"limit": limit})]
     print(f"Found {len(orphaned_ids)} orphaned documents in this batch")
     return orphaned_ids

@@ -1,19 +1,16 @@
 import {
   Interactive,
-  useDisabled,
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
+import { Text, Tooltip, type TooltipSide } from "@opal/components";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
-import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
@@ -73,7 +70,10 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    roundingVariant?: InteractiveContainerRoundingVariant;
+    rounding?: InteractiveContainerRoundingVariant;
+
+    /** Applies disabled styling and suppresses clicks. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -89,13 +89,12 @@ function OpenButton({
   justifyContent,
   tooltip,
   tooltipSide = "top",
-  roundingVariant: roundingVariantOverride,
+  rounding: roundingOverride,
   interaction,
   variant = "select-heavy",
+  disabled,
   ...statefulProps
 }: OpenButtonProps) {
-  const { isDisabled } = useDisabled();
-
   // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
   const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
     | string
@@ -119,15 +118,15 @@ function OpenButton({
     <Interactive.Stateful
       variant={variant}
       interaction={resolvedInteraction}
+      disabled={disabled}
       {...statefulProps}
     >
       <Interactive.Container
         type="button"
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={
-          roundingVariantOverride ??
-          (isLarge ? "default" : size === "2xs" ? "mini" : "compact")
+        size={size}
+        width={width}
+        rounding={
+          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
         }
       >
         <div
@@ -168,23 +167,12 @@ function OpenButton({
   );
 
   const resolvedTooltip =
-    tooltip ?? (foldable && isDisabled && children ? children : undefined);
-
-  if (!resolvedTooltip) return button;
+    tooltip ?? (foldable && disabled && children ? children : undefined);
 
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          <Text>{resolvedTooltip}</Text>
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={resolvedTooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
   );
 }
 

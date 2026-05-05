@@ -2,7 +2,7 @@
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { useState } from "react";
 import {
   insertGlobalTokenRateLimit,
@@ -12,19 +12,18 @@ import {
 import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
+import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.TOKEN_RATE_LIMITS;
-const BASE_URL = "/api/admin/token-rate-limits";
-const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
-const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
-const USER_GROUP_FETCH_URL = `${BASE_URL}/user-groups`;
+const GLOBAL_TOKEN_FETCH_URL = SWR_KEYS.globalTokenRateLimits;
+const USER_TOKEN_FETCH_URL = SWR_KEYS.userTokenRateLimits;
+const USER_GROUP_FETCH_URL = SWR_KEYS.userGroupTokenRateLimits;
 
 const GLOBAL_DESCRIPTION =
   "Global rate limits apply to all users, user groups, and API keys. When the global \
@@ -137,9 +136,13 @@ function Main() {
         </li>
       </ul>
 
-      <CreateButton onClick={() => setModalIsOpen(true)}>
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        onClick={() => setModalIsOpen(true)}
+      >
         Create a Token Rate Limit
-      </CreateButton>
+      </Button>
 
       {isPaidEnterpriseFeaturesEnabled ? (
         <SimpleTabs
@@ -212,7 +215,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Header title={route.title} icon={route.icon} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

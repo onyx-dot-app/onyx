@@ -3,6 +3,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/interfaces";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ToolAuthStatus {
   // whether or not the user has EVER auth'd
@@ -18,7 +19,7 @@ export function useToolOAuthStatus(agentId?: number) {
     error: swrError,
     mutate,
   } = useSWR<OAuthTokenStatus[]>(
-    "/api/user-oauth-token/status",
+    SWR_KEYS.oauthTokenStatus,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

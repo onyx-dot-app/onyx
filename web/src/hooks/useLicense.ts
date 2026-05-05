@@ -3,6 +3,7 @@ import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LicenseStatus } from "@/lib/billing/interfaces";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Hook to fetch license status for self-hosted deployments.
@@ -10,7 +11,7 @@ import { LicenseStatus } from "@/lib/billing/interfaces";
  * Skips the fetch on cloud deployments (uses tenant auth instead).
  */
 export function useLicense() {
-  const url = NEXT_PUBLIC_CLOUD_ENABLED ? null : "/api/license";
+  const url = NEXT_PUBLIC_CLOUD_ENABLED ? null : SWR_KEYS.license;
 
   const { data, error, mutate, isLoading } = useSWR<LicenseStatus>(
     url,
@@ -18,6 +19,7 @@ export function useLicense() {
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 30000,
       shouldRetryOnError: false,
       keepPreviousData: true,

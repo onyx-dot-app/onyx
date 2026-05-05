@@ -1,9 +1,9 @@
 import base64
 from enum import Enum
 from typing import NotRequired
-from typing_extensions import TypedDict  # noreorder
 
 from pydantic import BaseModel
+from typing_extensions import TypedDict  # noreorder
 
 
 class ChatFileType(str, Enum):
@@ -13,14 +13,20 @@ class ChatFileType(str, Enum):
     DOC = "document"
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
-    CSV = "csv"
+    # Tabular data files (CSV, XLSX)
+    TABULAR = "tabular"
 
     def is_text_file(self) -> bool:
         return self in (
             ChatFileType.PLAIN_TEXT,
             ChatFileType.DOC,
-            ChatFileType.CSV,
+            ChatFileType.TABULAR,
         )
+
+    def use_metadata_only(self) -> bool:
+        """File types where we can ignore the file content
+        and only use the metadata."""
+        return self in (ChatFileType.TABULAR,)
 
 
 class FileDescriptor(TypedDict):

@@ -8,7 +8,6 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
@@ -19,13 +18,13 @@ import {
   SvgFiles,
   SvgFileText,
   SvgImage,
+  SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
@@ -193,13 +192,13 @@ export default function UserFilesModal({
                 }}
               />
               {handleUploadChange && (
-                <CreateButton
+                <Button
+                  icon={SvgPlusCircle}
+                  prominence="internal"
                   onClick={triggerUploadPicker}
-                  secondary={false}
-                  internal
                 >
                   Add Files
-                </CreateButton>
+                </Button>
               )}
             </Section>
           </Modal.Header>
@@ -276,14 +275,13 @@ export default function UserFilesModal({
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
                   interaction={showOnlySelected ? "hover" : "rest"}
                 />
-                <Disabled disabled={selectedCount === 0}>
-                  <Button
-                    icon={SvgXCircle}
-                    prominence="tertiary"
-                    size="sm"
-                    onClick={handleDeselectAll}
-                  />
-                </Disabled>
+                <Button
+                  disabled={selectedCount === 0}
+                  icon={SvgXCircle}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={handleDeselectAll}
+                />
               </Section>
             )}
 

@@ -1,20 +1,14 @@
 "use client";
 
 import "@opal/components/buttons/select-button/styles.css";
-import {
-  Interactive,
-  useDisabled,
-  type InteractiveStatefulProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { Text, Tooltip, type TooltipSide } from "@opal/components";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
@@ -64,6 +58,9 @@ type SelectButtonProps = InteractiveStatefulProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Applies disabled styling and suppresses clicks. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -80,9 +77,9 @@ function SelectButton({
   width,
   tooltip,
   tooltipSide = "top",
+  disabled,
   ...statefulProps
 }: SelectButtonProps) {
-  const { isDisabled } = useDisabled();
   const isLarge = size === "lg";
 
   const labelEl = children ? (
@@ -96,14 +93,12 @@ function SelectButton({
   ) : null;
 
   const button = (
-    <Interactive.Stateful {...statefulProps}>
+    <Interactive.Stateful disabled={disabled} {...statefulProps}>
       <Interactive.Container
         type={type}
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        size={size}
+        width={width}
+        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div
           className={cn(
@@ -130,23 +125,12 @@ function SelectButton({
   );
 
   const resolvedTooltip =
-    tooltip ?? (foldable && isDisabled && children ? children : undefined);
-
-  if (!resolvedTooltip) return button;
+    tooltip ?? (foldable && disabled && children ? children : undefined);
 
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          <Text>{resolvedTooltip}</Text>
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={resolvedTooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
   );
 }
 

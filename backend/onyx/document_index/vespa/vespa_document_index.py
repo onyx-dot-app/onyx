@@ -35,9 +35,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import get_all_chunks_paginated
 from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import (
-    parallel_visit_api_retrieval,
-)
+from onyx.document_index.vespa.chunk_retrieval import parallel_visit_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
@@ -68,7 +66,6 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
@@ -267,8 +264,11 @@ def _update_single_chunk(
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
         logger.error(
-            f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
-            f"Code: {e.response.status_code}. Details: {e.response.text}"
+            "Failed to update doc chunk %s (doc_id=%s). Code: %s. Details: %s",
+            doc_chunk_id,
+            doc_id,
+            e.response.status_code,
+            e.response.text,
         )
         # Re-raise so the @retry decorator will catch and retry, unless the
         # status code is < 5xx, in which case wrap the exception in something
@@ -484,8 +484,8 @@ class VespaDocumentIndex(DocumentIndex):
         self,
         update_requests: list[MetadataUpdateRequest],
     ) -> None:
-        # WARNING: This method can be called by vespa_metadata_sync_task, which
-        # is kicked off by check_for_vespa_sync_task, notably before a document
+        # WARNING: This method can be called by document_index_metadata_sync_task,
+        # which is kicked off by check_for_vespa_sync_task, notably before a document
         # has finished indexing. In this way, chunk_count below could be unknown
         # even for chunks not on the "old" chunk ID system; i.e. there could be
         # a race condition. Passing in None to _enrich_basic_chunk_info should
@@ -526,7 +526,7 @@ class VespaDocumentIndex(DocumentIndex):
                         )
 
                     logger.info(
-                        f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
+                        "Updated %s chunks for document %s.", len(doc_chunk_ids), doc_id
                     )
 
     def id_based_retrieval(
@@ -597,9 +597,9 @@ class VespaDocumentIndex(DocumentIndex):
             f"hybrid_search_{query_type.value}_base_{len(query_embedding)}"
         )
 
-        logger.info(f"Selected ranking profile: {ranking_profile}")
+        logger.info("Selected ranking profile: %s", ranking_profile)
 
-        logger.debug(f"Query YQL: {yql}")
+        logger.debug("Query YQL: %s", yql)
 
         # In this interface we do not pass in hybrid alpha. Tracing the codepath
         # of the legacy Vespa interface, it so happens that KEYWORD always

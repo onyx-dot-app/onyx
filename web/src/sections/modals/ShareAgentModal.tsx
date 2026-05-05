@@ -12,11 +12,10 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Message from "@/refresh-components/messages/Message";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
@@ -27,10 +26,11 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
+import { FetchError } from "@/lib/fetcher";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -58,8 +58,12 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty, isSubmitting } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useShareableUsers({ includeApiKeys: true });
+  const { data: usersData, error: usersError } = useShareableUsers({
+    includeApiKeys: true,
+  });
   const { data: groupsData } = useShareableGroups();
+  const userDirectoryRestricted =
+    usersError instanceof FetchError && usersError.status === 403;
   const { user: currentUser, isAdmin, isCurator } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
@@ -72,12 +76,14 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
-    const userOptions = acceptedUsers
-      .filter((user) => user.id !== currentUser?.id)
-      .map((user) => ({
-        value: `user-${user.id}`,
-        label: user.email,
-      }));
+    const userOptions = userDirectoryRestricted
+      ? []
+      : acceptedUsers
+          .filter((user) => user.id !== currentUser?.id)
+          .map((user) => ({
+            value: `user-${user.id}`,
+            label: user.email,
+          }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
@@ -85,7 +91,10 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     }));
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups, currentUser?.id]);
+  }, [acceptedUsers, groups, currentUser?.id, userDirectoryRestricted]);
+
+  const comboBoxDisabled =
+    userDirectoryRestricted && comboBoxOptions.length === 0;
 
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
@@ -216,14 +225,30 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
             <Tabs.Content value={USERS_AND_GROUPS_TAB}>
               <Section gap={0.5} alignItems="start">
-                <InputComboBox
-                  placeholder="Add users and groups"
-                  value=""
-                  onChange={() => {}}
-                  onValueChange={handleComboBoxSelect}
-                  options={comboBoxOptions}
-                  strict
-                />
+                <Disabled
+                  disabled={comboBoxDisabled}
+                  tooltip={
+                    comboBoxDisabled
+                      ? "Your administrator has restricted the user directory. Contact an admin to share this agent with other users."
+                      : undefined
+                  }
+                >
+                  <div className="w-full">
+                    <InputComboBox
+                      placeholder={
+                        userDirectoryRestricted
+                          ? "Add groups"
+                          : "Add users and groups"
+                      }
+                      value=""
+                      onChange={() => {}}
+                      onValueChange={handleComboBoxSelect}
+                      options={comboBoxOptions}
+                      strict
+                      disabled={comboBoxDisabled}
+                    />
+                  </div>
+                </Disabled>
                 {(displayedUsers.length > 0 || displayedGroups.length > 0) && (
                   <Section gap={0} alignItems="stretch">
                     {/* Shared Users */}
@@ -286,12 +311,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               </Section>
               {values.isPublic && (
                 <Section>
-                  <Message
-                    iconComponent={SvgOrganization}
-                    close={false}
-                    static
-                    className="w-full"
-                    text="This agent is public to your organization."
+                  <MessageCard
+                    icon={SvgOrganization}
+                    title="This agent is public to your organization."
                     description="Everyone in your organization has access to this agent."
                   />
                 </Section>
@@ -300,23 +322,25 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
               <Section gap={1} alignItems="stretch">
-                <InputLayouts.Horizontal
+                <InputHorizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."
+                  withLabel
                 >
                   <SwitchField name="isPublic" />
-                </InputLayouts.Horizontal>
+                </InputHorizontal>
 
                 {canUpdateFeaturedStatus && (
                   <>
                     <div className="border-t border-border-02" />
 
-                    <InputLayouts.Horizontal
+                    <InputHorizontal
                       title="Feature This Agent"
                       description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                      withLabel
                     >
                       <SwitchField name="isFeatured" />
-                    </InputLayouts.Horizontal>
+                    </InputHorizontal>
                   </>
                 )}
 
@@ -353,16 +377,21 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             ) : undefined
           }
           cancel={
-            <Disabled disabled={isSubmitting}>
-              <Button prominence="secondary" onClick={handleClose}>
-                Cancel
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              prominence="secondary"
+              onClick={handleClose}
+            >
+              Cancel
+            </Button>
           }
           submit={
-            <Disabled disabled={!dirty || isSubmitting}>
-              <Button onClick={() => handleSubmit()}>Save</Button>
-            </Disabled>
+            <Button
+              disabled={!dirty || isSubmitting}
+              onClick={() => handleSubmit()}
+            >
+              Save
+            </Button>
           }
         />
       </Modal.Footer>

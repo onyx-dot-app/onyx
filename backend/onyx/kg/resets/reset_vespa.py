@@ -71,7 +71,10 @@ def reset_vespa_kg_index(
     or all documents from kg grounded sources if source_name is None.
     """
     logger.info(
-        f"Resetting kg vespa index {index_name} for tenant {tenant_id}, source: {source_name if source_name else 'all'}"
+        "Resetting kg vespa index %s for tenant %s, source: %s",
+        index_name,
+        tenant_id,
+        source_name if source_name else "all",
     )
 
     last_lock_time = time.monotonic()
@@ -121,5 +124,8 @@ def reset_vespa_kg_index(
         )
 
     logger.info(
-        f"Finished resetting kg vespa index {index_name} for tenant {tenant_id}, source: {source_name if source_name else 'all'}"
+        "Finished resetting kg vespa index %s for tenant %s, source: %s",
+        index_name,
+        tenant_id,
+        source_name if source_name else "all",
     )

@@ -13,13 +13,14 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import optional_user
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -45,7 +46,9 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
 
-def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
+def require_onyx_craft_enabled(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> User:
     """
     Dependency that checks if Onyx Craft is enabled for the user.
     Raises HTTP 403 if Onyx Craft is disabled via feature flag.
@@ -73,7 +76,7 @@ router.include_router(user_library_router, tags=["build"])
 
 @router.get("/limit", response_model=RateLimitResponse)
 def get_rate_limit(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> RateLimitResponse:
     """Get rate limit information for the current user."""
@@ -87,7 +90,7 @@ def get_rate_limit(
 
 @router.get("/connectors", response_model=BuildConnectorListResponse)
 def get_build_connectors(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> BuildConnectorListResponse:
     """Get all connectors for the build admin panel.
@@ -388,7 +391,7 @@ def _proxy_request(
     if request.query_params:
         target_url = f"{target_url}?{request.query_params}"
 
-    logger.debug(f"Proxying request to: {target_url}")
+    logger.debug("Proxying request to: %s", target_url)
 
     try:
         # Make the request to the target URL
@@ -434,10 +437,10 @@ def _proxy_request(
             )
 
     except httpx.TimeoutException:
-        logger.error(f"Timeout while proxying request to {target_url}")
+        logger.error("Timeout while proxying request to %s", target_url)
         raise HTTPException(status_code=504, detail="Gateway timeout")
     except httpx.RequestError as e:
-        logger.error(f"Error proxying request to {target_url}: {e}")
+        logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
 
@@ -518,7 +521,7 @@ def get_webapp(
 
 @router.post("/sandbox/reset", response_model=None)
 def reset_sandbox(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Reset the user's sandbox by terminating it and cleaning up all sessions.
@@ -543,7 +546,7 @@ def reset_sandbox(
         raise
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Failed to reset sandbox for user {user.id}: {e}")
+        logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to reset sandbox: {e}",

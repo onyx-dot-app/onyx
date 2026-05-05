@@ -2,6 +2,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
@@ -58,8 +60,10 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_FOLDER_ID,
 )
+from tests.utils.secret_names import TestSecret
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -124,6 +128,7 @@ def test_include_all(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -181,6 +186,7 @@ def test_include_shared_drives_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -219,6 +225,7 @@ def test_include_my_drives_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -263,6 +270,7 @@ def test_drive_one_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -312,6 +320,7 @@ def test_folder_and_shared_drive(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -366,6 +375,7 @@ def test_folders_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,

@@ -6,15 +6,17 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.hooks.utils import HOOKS_AVAILABLE
+from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
@@ -67,6 +69,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -76,6 +79,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale checkpoints to clean.
+            "skip_gated": False,
         },
     },
     {
@@ -85,6 +90,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale index attempts.
+            "skip_gated": False,
         },
     },
     {
@@ -94,6 +101,9 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still have connectors awaiting deletion.
+            "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -103,6 +113,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -112,6 +123,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -137,11 +149,19 @@ beat_task_templates: list[dict] = [
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-        "schedule": timedelta(minutes=1),
+        # SANDBOX_IDLE_TIMEOUT_SECONDS defaults to 1 hour, so there is no
+        # functional reason to scan more often than every ~15 minutes. In the
+        # cloud this is multiplied by CLOUD_BEAT_MULTIPLIER_DEFAULT (=8) so
+        # the effective cadence becomes ~2 hours, which still meets the
+        # idle-detection SLA. The previous 1-minute base schedule produced
+        # an 8-minute per-tenant fan-out and was the dominant source of
+        # background DB load on the cloud cluster.
+        "schedule": timedelta(minutes=15),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.SANDBOX,
+            "work_gated": True,
         },
     },
     {
@@ -156,7 +176,9 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-if ENTERPRISE_EDITION_ENABLED:
+# Mirror set_is_ee_based_on_env_variable(): EE features are active when either
+# ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
+if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
     beat_task_templates.extend(
         [
             {
@@ -166,6 +188,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
             {
@@ -175,6 +198,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
         ]
@@ -214,7 +238,11 @@ if SCHEDULED_EVAL_DATASET_NAMES:
     )
 
 # Add OpenSearch migration task if enabled.
-if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+if (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and not DISABLE_OPENSEARCH_MIGRATION_TASK
+    and not ONYX_DISABLE_VESPA
+):
     beat_task_templates.append(
         {
             "name": "migrate-chunks-from-vespa-to-opensearch",
@@ -267,7 +295,7 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task["kwargs"] = {}
     cloud_task["kwargs"]["task_name"] = task["task"]
 
-    optional_fields = ["queue", "priority", "expires"]
+    optional_fields = ["queue", "priority", "expires", "skip_gated", "work_gated"]
     for field in optional_fields:
         if field in task["options"]:
             cloud_task["kwargs"][field] = task["options"][field]
@@ -303,7 +331,7 @@ beat_cloud_tasks: list[dict] = [
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
         "task": OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
-        "schedule": timedelta(minutes=10),
+        "schedule": timedelta(minutes=2),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
@@ -360,20 +388,15 @@ if not MULTI_TENANT:
         ]
     )
 
-    tasks_to_schedule.extend(beat_task_templates)
-
-if HOOKS_AVAILABLE:
-    tasks_to_schedule.append(
-        {
-            "name": "hook-execution-log-cleanup",
-            "task": OnyxCeleryTask.HOOK_EXECUTION_LOG_CLEANUP_TASK,
-            "schedule": timedelta(days=1),
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        }
-    )
+    # `skip_gated` and `work_gated` are cloud-only hints consumed by
+    # `cloud_beat_task_generator`. Strip them before extending the self-hosted
+    # schedule so they don't leak into apply_async as unrecognised options on
+    # every fired task message.
+    for _template in beat_task_templates:
+        _self_hosted_template = copy.deepcopy(_template)
+        _self_hosted_template["options"].pop("skip_gated", None)
+        _self_hosted_template["options"].pop("work_gated", None)
+        tasks_to_schedule.append(_self_hosted_template)
 
 
 def generate_cloud_tasks(

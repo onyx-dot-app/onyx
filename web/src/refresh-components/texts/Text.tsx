@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 const fonts = {
   // Heading
@@ -25,6 +25,7 @@ const fonts = {
   secondaryBody: "font-secondary-body",
   secondaryAction: "font-secondary-action",
   secondaryMono: "font-secondary-mono",
+  secondaryMonoLabel: "font-secondary-mono-label",
 
   // Figure
   figureSmallLabel: "font-figure-small-label",
@@ -56,6 +57,7 @@ const colors = {
   },
 };
 
+/** @deprecated Use `Text` from `@opal/components` with string-enum `font` and `color` props instead. */
 export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
 
@@ -75,6 +77,7 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   secondaryBody?: boolean;
   secondaryAction?: boolean;
   secondaryMono?: boolean;
+  secondaryMonoLabel?: boolean;
   figureSmallLabel?: boolean;
   figureSmallValue?: boolean;
   figureKeystroke?: boolean;
@@ -95,6 +98,7 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   as?: "p" | "span" | "li";
 }
 
+/** @deprecated Use `Text` from `@opal/components` with string-enum `font` and `color` props instead. */
 export default function Text({
   nowrap,
   headingH1,
@@ -112,6 +116,7 @@ export default function Text({
   secondaryBody,
   secondaryAction,
   secondaryMono,
+  secondaryMonoLabel,
   figureSmallLabel,
   figureSmallValue,
   figureKeystroke,
@@ -160,13 +165,15 @@ export default function Text({
                               ? "secondaryAction"
                               : secondaryMono
                                 ? "secondaryMono"
-                                : figureSmallLabel
-                                  ? "figureSmallLabel"
-                                  : figureSmallValue
-                                    ? "figureSmallValue"
-                                    : figureKeystroke
-                                      ? "figureKeystroke"
-                                      : "mainUiBody";
+                                : secondaryMonoLabel
+                                  ? "secondaryMonoLabel"
+                                  : figureSmallLabel
+                                    ? "figureSmallLabel"
+                                    : figureSmallValue
+                                      ? "figureSmallValue"
+                                      : figureKeystroke
+                                        ? "figureKeystroke"
+                                        : "mainUiBody";
 
   const color = text01
     ? "text01"

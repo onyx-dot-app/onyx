@@ -11,6 +11,9 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.AIRTABLE_ACCESS_TOKEN)
 
 BASE_VIEW_ID = "viwVUEJjWPd8XYjh8"
 
@@ -22,7 +25,10 @@ class AirtableConfig(BaseModel):
 
 
 @pytest.fixture(params=[True, False])
-def airtable_config(request: pytest.FixtureRequest) -> AirtableConfig:
+def airtable_config(
+    request: pytest.FixtureRequest,
+    test_secrets: dict[TestSecret, str],
+) -> AirtableConfig:
     table_identifier = (
         os.environ["AIRTABLE_TEST_TABLE_NAME"]
         if request.param
@@ -31,7 +37,7 @@ def airtable_config(request: pytest.FixtureRequest) -> AirtableConfig:
     return AirtableConfig(
         base_id=os.environ["AIRTABLE_TEST_BASE_ID"],
         table_identifier=table_identifier,
-        access_token=os.environ["AIRTABLE_ACCESS_TOKEN"],
+        access_token=test_secrets[TestSecret.AIRTABLE_ACCESS_TOKEN],
     )
 
 

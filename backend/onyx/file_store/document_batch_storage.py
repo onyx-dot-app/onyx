@@ -125,7 +125,7 @@ class DocumentBatchStorage(ABC):
         if converted_keys:
             doc_id = doc_dict.get("id", "unknown")
             logger.warning(
-                f"Normalized legacy metadata for document {doc_id}: {converted_keys}"
+                "Normalized legacy metadata for document %s: %s", doc_id, converted_keys
             )
 
         doc_dict["metadata"] = normalized_metadata
@@ -167,10 +167,13 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             )
 
             logger.debug(
-                f"Stored batch {batch_num} with {len(documents)} documents to FileStore as {file_name}"
+                "Stored batch %s with %s documents to FileStore as %s",
+                batch_num,
+                len(documents),
+                file_name,
             )
         except Exception as e:
-            logger.error(f"Failed to store batch {batch_num}: {e}")
+            logger.error("Failed to store batch %s: %s", batch_num, e)
             raise
 
     def get_batch(self, batch_num: int) -> list[Document] | None:
@@ -184,7 +187,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
                 file_type="application/json",
             ):
                 logger.warning(
-                    f"Batch {batch_num} not found in FileStore with name {file_name}"
+                    "Batch %s not found in FileStore with name %s", batch_num, file_name
                 )
                 return None
 
@@ -193,23 +196,27 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
             documents = self._deserialize_documents(data)
             logger.debug(
-                f"Retrieved batch {batch_num} with {len(documents)} documents from FileStore"
+                "Retrieved batch %s with %s documents from FileStore",
+                batch_num,
+                len(documents),
             )
             return documents
         except Exception as e:
-            logger.error(f"Failed to retrieve batch {batch_num}: {e}")
+            logger.error("Failed to retrieve batch %s: %s", batch_num, e)
             raise
 
     def delete_batch_by_name(self, batch_file_name: str) -> None:
         """Delete a specific batch from FileStore."""
         self.file_store.delete_file(batch_file_name)
-        logger.debug(f"Deleted batch {batch_file_name} from FileStore")
+        logger.debug("Deleted batch %s from FileStore", batch_file_name)
 
     def delete_batch_by_num(self, batch_num: int) -> None:
         """Delete a specific batch from FileStore."""
         batch_file_name = self._get_batch_file_name(batch_num)
         self.delete_batch_by_name(batch_file_name)
-        logger.debug(f"Deleted batch num {batch_num} {batch_file_name} from FileStore")
+        logger.debug(
+            "Deleted batch num %s %s from FileStore", batch_num, batch_file_name
+        )
 
     def cleanup_all_batches(self) -> None:
         """Clean up all batches for this index attempt."""
@@ -235,7 +242,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             path_info = self.extract_path_info(batch_file_name)
             if path_info is None:
                 logger.warning(
-                    f"Could not extract path info from batch file: {batch_file_name}"
+                    "Could not extract path info from batch file: %s", batch_file_name
                 )
                 continue
             new_batch_file_name = self._get_batch_file_name(path_info.batch_num)
@@ -255,7 +262,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
                 batch_num=int(batch_num.split(".")[0]),  # remove .json
             )
         except Exception as e:
-            logger.error(f"Failed to extract path info from {path}: {e}")
+            logger.error("Failed to extract path info from %s: %s", path, e)
             return None
 
 

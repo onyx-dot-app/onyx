@@ -1,4 +1,3 @@
-import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -11,6 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
+import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
@@ -40,7 +40,7 @@ import {
 } from "@/app/ee/admin/performance/query-history/constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {
   SvgDownloadCloud,
@@ -60,7 +60,7 @@ function QueryHistoryTableRow({
       key={chatSessionMinimal.id}
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
-      <TableCell>
+      <TableCell className="max-w-xs">
         <Text className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
@@ -101,34 +101,32 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   return (
-    <div>
-      <Text as="p" className="my-auto mr-2 font-medium mb-1">
+    <Section alignItems="start" gap={0.25}>
+      <Text as="p" className="font-medium">
         Feedback Type
       </Text>
-      <div className="max-w-sm space-y-6">
-        <InputSelect
-          value={value}
-          onValueChange={onValueChange as (value: string) => void}
-        >
-          <InputSelect.Trigger />
+      <InputSelect
+        value={value}
+        onValueChange={onValueChange as (value: string) => void}
+      >
+        <InputSelect.Trigger />
 
-          <InputSelect.Content>
-            <InputSelect.Item value="all" icon={SvgMinusCircle}>
-              Any
-            </InputSelect.Item>
-            <InputSelect.Item value="like" icon={SvgThumbsUp}>
-              Like
-            </InputSelect.Item>
-            <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-              Dislike
-            </InputSelect.Item>
-            <InputSelect.Item value="mixed" icon={SvgMinus}>
-              Mixed
-            </InputSelect.Item>
-          </InputSelect.Content>
-        </InputSelect>
-      </div>
-    </div>
+        <InputSelect.Content>
+          <InputSelect.Item value="all" icon={SvgMinusCircle}>
+            Any
+          </InputSelect.Item>
+          <InputSelect.Item value="like" icon={SvgThumbsUp}>
+            Like
+          </InputSelect.Item>
+          <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
+            Dislike
+          </InputSelect.Item>
+          <InputSelect.Item value="mixed" icon={SvgMinus}>
+            Mixed
+          </InputSelect.Item>
+        </InputSelect.Content>
+      </InputSelect>
+    </Section>
   );
 }
 
@@ -185,60 +183,61 @@ function PreviousQueryHistoryExportsModal({
           onClose={() => setShowModal(false)}
         />
         <Modal.Body>
-          <div className="flex flex-col w-full">
-            <div className="flex flex-1">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Generated At</TableHead>
-                    <TableHead>Start Range</TableHead>
-                    <TableHead>End Range</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Download</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedTasks.map((task, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        {humanReadableFormatWithTime(task.startTime)}
-                      </TableCell>
-                      <TableCell>{task.start.toDateString()}</TableCell>
-                      <TableCell>{task.end.toDateString()}</TableCell>
-                      <TableCell>
-                        <ExportBadge status={task.status} />
-                      </TableCell>
-                      <TableCell>
-                        {task.status === "SUCCESS" ? (
-                          <a
-                            className="flex justify-center"
-                            href={withRequestId(
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Generated At</TableHead>
+                <TableHead>Start Range</TableHead>
+                <TableHead>End Range</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Download</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedTasks.map((task, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    {humanReadableFormatWithTime(task.startTime)}
+                  </TableCell>
+                  <TableCell>{task.start.toDateString()}</TableCell>
+                  <TableCell>{task.end.toDateString()}</TableCell>
+                  <TableCell>
+                    <ExportBadge status={task.status} />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="default"
+                      prominence="tertiary"
+                      icon={SvgDownloadCloud}
+                      size="sm"
+                      disabled={task.status !== "SUCCESS"}
+                      tooltip={
+                        task.status !== "SUCCESS"
+                          ? "Export is not yet ready"
+                          : undefined
+                      }
+                      href={
+                        task.status === "SUCCESS"
+                          ? withRequestId(
                               DOWNLOAD_QUERY_HISTORY_URL,
                               task.taskId
-                            )}
-                          >
-                            <SvgDownloadCloud className="h-4 w-4 text-action-link-05" />
-                          </a>
-                        ) : (
-                          <SvgDownloadCloud className="h-4 w-4 text-action-link-05 opacity-20" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                            )
+                          : undefined
+                      }
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
-            <div className="flex mt-3">
-              <div className="mx-auto">
-                <PageSelector
-                  currentPage={taskPage}
-                  totalPages={totalTaskPages}
-                  onPageChange={setTaskPage}
-                />
-              </div>
-            </div>
-          </div>
+          <Section>
+            <PageSelector
+              currentPage={taskPage}
+              totalPages={totalTaskPages}
+              onPageChange={setTaskPage}
+            />
+          </Section>
         </Modal.Body>
       </Modal.Content>
     </Modal>
@@ -329,49 +328,49 @@ export function QueryHistoryTable() {
             </Button>
           </div>
         </div>
-        <Separator />
-        <Table className="mt-5">
-          <TableHeader>
-            <TableRow>
-              <TableHead>First User Message</TableHead>
-              <TableHead>First AI Response</TableHead>
-              <TableHead>Feedback</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Persona</TableHead>
-              <TableHead>Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          {isLoading ? (
-            <TableBody>
+        <Divider />
+        <Section>
+          <Table className="mt-5">
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                  <ThreeDotsLoader />
-                </TableCell>
+                <TableHead>First User Message</TableHead>
+                <TableHead>First AI Response</TableHead>
+                <TableHead>Feedback</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Persona</TableHead>
+                <TableHead>Date</TableHead>
               </TableRow>
-            </TableBody>
-          ) : (
-            <TableBody>
-              {chatSessionData?.map((chatSessionMinimal) => (
-                <QueryHistoryTableRow
-                  key={chatSessionMinimal.id}
-                  chatSessionMinimal={chatSessionMinimal}
-                />
-              ))}
-            </TableBody>
-          )}
-        </Table>
+            </TableHeader>
+            {isLoading ? (
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center">
+                    <ThreeDotsLoader />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            ) : (
+              <TableBody>
+                {chatSessionData?.map((chatSessionMinimal) => (
+                  <QueryHistoryTableRow
+                    key={chatSessionMinimal.id}
+                    chatSessionMinimal={chatSessionMinimal}
+                  />
+                ))}
+              </TableBody>
+            )}
+          </Table>
 
-        {chatSessionData && (
-          <div className="mt-3 flex">
-            <div className="mx-auto">
+          {chatSessionData && (
+            <Section>
               <PageSelector
                 totalPages={totalPages}
                 currentPage={currentPage}
                 onPageChange={goToPage}
               />
-            </div>
-          </div>
-        )}
+            </Section>
+          )}
+        </Section>
       </CardSection>
 
       {showModal && (
