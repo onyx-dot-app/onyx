@@ -13,7 +13,9 @@
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",
     "source=onyx-devcontainer-cache,target=/home/dev/.cache,type=volume",
-    "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
+    "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume",
+    "source=onyx-devcontainer-web-node-modules,target=/workspace/web/node_modules,type=volume",
+    "source=onyx-devcontainer-web-next,target=/workspace/web/.next,type=volume"
   ],
   "containerEnv": {
     "COLORTERM": "truecolor",
