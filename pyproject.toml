@@ -205,7 +205,7 @@ override-dependencies = [
     "aiohttp>=3.10",
     "click",
     "fastuuid>=0.13.0",
-    "httpx>=0.23.0",
+    "httpx[http2]>=0.23.0",
     "importlib-metadata>=6.8.0",
     "jinja2>=3.1.2,<4.0.0",
     "jsonschema>=4.23.0,<5.0.0",

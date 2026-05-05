@@ -20,7 +20,7 @@ overrides = [
     { name = "click" },
     { name = "fastuuid", specifier = ">=0.13.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.38.0" },
-    { name = "httpx", specifier = ">=0.23.0" },
+    { name = "httpx", extras = ["http2"], specifier = ">=0.23.0" },
     { name = "importlib-metadata", specifier = ">=6.8.0" },
     { name = "jinja2", specifier = ">=3.1.2,<4.0.0" },
     { name = "jsonschema", specifier = ">=4.23.0,<5.0.0" },
@@ -1124,7 +1124,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "fastavro" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "httpx-sse" },
     { name = "parameterized" },
     { name = "pydantic" },
@@ -1608,7 +1608,7 @@ name = "exa-py"
 version = "1.15.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "openai" },
     { name = "pydantic" },
     { name = "requests" },
@@ -1769,7 +1769,7 @@ dependencies = [
     { name = "authlib" },
     { name = "cyclopts" },
     { name = "exceptiongroup" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "jsonref" },
     { name = "jsonschema-path" },
     { name = "mcp" },
@@ -2264,7 +2264,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "google-auth" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "pydantic" },
     { name = "requests" },
     { name = "tenacity" },
@@ -2444,6 +2444,19 @@ wheels = [
 ]
 
 [[package]]
+name = "h2"
+version = "4.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "hpack" },
+    { name = "hyperframe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/17/afa56379f94ad0fe8defd37d6eb3f89a25404ffc71d4d848893d270325fc/h2-4.3.0.tar.gz", hash = "sha256:6c59efe4323fa18b47a632221a1888bd7fde6249819beda254aeca909f221bf1", size = 2152026, upload-time = "2025-08-23T18:12:19.778Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/b2/119f6e6dcbd96f9069ce9a2665e0146588dc9f88f29549711853645e736a/h2-4.3.0-py3-none-any.whl", hash = "sha256:c438f029a25f7945c69e0ccf0fb951dc3f73a5f6412981daee861431b70e2bdd", size = 61779, upload-time = "2025-08-23T18:12:17.779Z" },
+]
+
+[[package]]
 name = "hatchling"
 version = "1.28.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2488,6 +2501,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/4b/53951592882d9c23080c7644542fda34a3813104e9e11fa1a7d82d419cb8/hf_xet-1.4.3-cp37-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:7716d62015477a70ea272d2d68cd7cad140f61c52ee452e133e139abfe2c17ba", size = 4429392, upload-time = "2026-03-31T22:40:03.492Z" },
     { url = "https://files.pythonhosted.org/packages/8a/21/75a6c175b4e79662ad8e62f46a40ce341d8d6b206b06b4320d07d55b188c/hf_xet-1.4.3-cp37-abi3-win_amd64.whl", hash = "sha256:6b591fcad34e272a5b02607485e4f2a1334aebf1bc6d16ce8eb1eb8978ac2021", size = 3677359, upload-time = "2026-03-31T22:40:13.619Z" },
     { url = "https://files.pythonhosted.org/packages/8a/7c/44314ecd0e89f8b2b51c9d9e5e7a60a9c1c82024ac471d415860557d3cd8/hf_xet-1.4.3-cp37-abi3-win_arm64.whl", hash = "sha256:7c2c7e20bcfcc946dc67187c203463f5e932e395845d098cc2a93f5b67ca0b47", size = 3533664, upload-time = "2026-03-31T22:40:12.152Z" },
+]
+
+[[package]]
+name = "hpack"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/48/71de9ed269fdae9c8057e5a4c0aa7402e8bb16f2c6e90b3aa53327b113f8/hpack-4.1.0.tar.gz", hash = "sha256:ec5eca154f7056aa06f196a557655c5b009b382873ac8d1e66e79e87535f1dca", size = 51276, upload-time = "2025-01-22T21:44:58.347Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/c6/80c95b1b2b94682a72cbdbfb85b81ae2daffa4291fbfa1b1464502ede10d/hpack-4.1.0-py3-none-any.whl", hash = "sha256:157ac792668d995c657d93111f46b4535ed114f0c9c8d672271bbec7eae1b496", size = 34357, upload-time = "2025-01-22T21:44:56.92Z" },
 ]
 
 [[package]]
@@ -2559,12 +2581,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
 ]
 
+[package.optional-dependencies]
+http2 = [
+    { name = "h2" },
+]
+
 [[package]]
 name = "httpx-oauth"
 version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6d/08/b2e0f360e84994ec5c67473cef7198d22ccb2215e5068c0a21182d22baaa/httpx_oauth-0.15.1.tar.gz", hash = "sha256:4094cf0938fc7252b5f5dfd62cd1ab5aee2fcb6734e621942ee17d1af4806b74", size = 41302, upload-time = "2024-08-22T13:01:20.328Z" }
 wheels = [
@@ -2605,7 +2632,7 @@ dependencies = [
     { name = "filelock" },
     { name = "fsspec" },
     { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "tqdm" },
@@ -2627,6 +2654,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cc/3f/2c29224acb2e2df4d2046e4c73ee2662023c58ff5b113c4c1adac0886c43/humanfriendly-10.0.tar.gz", hash = "sha256:6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc", size = 360702, upload-time = "2021-09-17T21:40:43.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl", hash = "sha256:1697e1a8a8f550fd43c2865cd84542fc175a61dcb779b6fee18cf6b6ccba1477", size = 86794, upload-time = "2021-09-17T21:40:39.897Z" },
+]
+
+[[package]]
+name = "hyperframe"
+version = "6.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/e7/94f8232d4a74cc99514c13a9f995811485a6903d48e5d952771ef6322e30/hyperframe-6.1.0.tar.gz", hash = "sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08", size = 26566, upload-time = "2025-01-22T21:41:49.302Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl", hash = "sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5", size = 13007, upload-time = "2025-01-22T21:41:47.295Z" },
 ]
 
 [[package]]
@@ -3225,7 +3261,7 @@ version = "3.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -3245,7 +3281,7 @@ name = "langsmith"
 version = "0.7.32"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "orjson", marker = "platform_python_implementation != 'PyPy'" },
     { name = "packaging" },
     { name = "pydantic" },
@@ -3277,7 +3313,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "click" },
     { name = "fastuuid" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "importlib-metadata" },
     { name = "jinja2" },
     { name = "jsonschema" },
@@ -3727,7 +3763,7 @@ version = "1.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "httpx-sse" },
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -4420,7 +4456,7 @@ backend = [
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
     { name = "httpcore" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "httpx-oauth" },
     { name = "hubspot-api-client" },
     { name = "inflection" },
@@ -4733,7 +4769,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "distro" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "jiter" },
     { name = "pydantic" },
     { name = "sniffio" },
@@ -7828,7 +7864,7 @@ dependencies = [
     { name = "aiofiles" },
     { name = "cryptography" },
     { name = "httpcore" },
-    { name = "httpx" },
+    { name = "httpx", extra = ["http2"] },
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "requests-toolbelt" },
