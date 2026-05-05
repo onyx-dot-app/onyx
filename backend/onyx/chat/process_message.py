@@ -752,10 +752,13 @@ def build_chat_turn(
         # branch the server's current mainline pointer doesn't reflect.
         # Bulk-fetch session messages with tool calls eagerly loaded so the
         # ancestor walk and downstream history iteration stay at one round trip.
+        # Session ownership was already validated by `get_chat_session_by_id`
+        # above, so skip the redundant permission re-check (extra DB query).
         all_messages = get_chat_messages_by_session(
             chat_session_id=chat_session.id,
             user_id=user_id,
             db_session=db_session,
+            skip_permission_check=True,
             prefetch_top_two_level_tool_calls=True,
         )
         by_id: dict[int, ChatMessage] = {m.id: m for m in all_messages}
