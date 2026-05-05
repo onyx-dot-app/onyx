@@ -31,7 +31,7 @@ Intentionally deferred for V1 and why:
 - **Use-case-specific UIs** (sales/support/eng/exec) — too narrow before the core platform settles.
 - **Rebuilding the agent runtime** — OpenCode is good enough; we keep a clean boundary so it can be swapped later.
 - **Merging Craft into the main chat surface** — Craft stays at `/craft/v1` to keep UX and concerns separated.
-- **MCP support.**
+- **MCP support.** - prefer using an intercept layer + skills + raw API calls.
 - **Event triggers** (Slack, webhooks, calendar, file changes) — scheduled-only for V1; event triggers wait.
 - **Renaming backend `build/` modules to `craft/`** — broad rename adds migration risk without product value.
 - **Skill editing in the browser** — admins upload bundles; in-browser authoring is later.
@@ -121,12 +121,17 @@ Compact run/audit layer on top of existing session/message/artifact records (whi
 
 Detail doc: `audit.md` (to be written).
 
+## Smaller Improvements
+
+- Test different agent harnesses (Pi vs OpenCode)
+- Nuke ACP (while maintaining harness flexibility)
+- Powerpoint generation enhancements
+
 ## Other Important Notes
 
 - **Treat existing Craft/Build code as the foundation.** `backend/onyx/server/features/build/` already owns sessions, messages, artifacts, sandbox setup, uploads, and OpenCode streaming. `web/src/app/craft/v1/` already provides the separate UI. Don't rewrite — integrate.
 - **No backwards compatibility requirement.** Craft was alpha, so losing existing sessions, artifacts, sandboxes, or other Craft state is acceptable if it simplifies the V1 implementation. Preserve them when it's cheap to do so, but do not bend the design or add migration shims to keep old data alive. This applies to data only — don't break unrelated Onyx surfaces.
 - **Keep the product name "Craft" but do not rename backend `build/` modules** in V1. The existing names are implementation details; a broad rename adds migration risk without product value.
-- **Use OpenCode for V1.** It's already integrated and good enough to validate the product. Leave a clean runtime boundary so a homebuilt agent runner can replace it later.
 - **The sandbox should never receive:** the full Onyx document corpus, raw admin secrets, long-lived user auth tokens, or approval-bypass tokens. It receives only a session-scoped Craft token, session uploads/library files, materialized skill bundles, OpenCode config, and proxy/trust configuration.
 - **Approval enforcement must live in Onyx-controlled paths** (proxy + backend orchestration). Agent prompts and OpenCode tool permissions are guidance, not the approval boundary.
 - **Repo conventions to follow throughout:**
@@ -143,5 +148,4 @@ Detail doc: `audit.md` (to be written).
   4. Slack DM delivery is available only through a skill, not a custom Craft integration.
   5. Built-in skills are seeded into the DB so built-in and custom share one admin/selection path.
   6. Non-secret internet access defaults to pass-through.
-  7. Approvals are in scope for V1.
-  8. Approval enforcement lives in Onyx-controlled backend/proxy paths; review/notifications live in the Craft app.
+  7. Approval enforcement lives in Onyx-controlled backend/proxy paths; review/notifications live in the Craft app.
