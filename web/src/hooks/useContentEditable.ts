@@ -376,6 +376,11 @@ export function useContentEditable({
         return true;
       }
 
+      // Modifier combos (Ctrl+C, Ctrl+X, etc.) pass through without deselecting
+      if (event.ctrlKey || event.metaKey) {
+        return false;
+      }
+
       // Unrelated keys deselect tile and place cursor after it
       if (!isNav && !isDelete) {
         if (selectedTileRef.current) {
