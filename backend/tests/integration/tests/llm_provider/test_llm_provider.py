@@ -77,9 +77,12 @@ def assert_response_is_equivalent(
             "version": parsed.version,
         }
 
-    # Compare model configurations by name (order-independent)
+    # Compare model configurations by name (order-independent).
+    # Strip `id` from the actual — it's a DB-assigned primary key that the
+    # expected dict doesn't include and is not part of the business logic being tested.
     actual_by_name = {
-        config["name"]: config for config in provider_data["model_configurations"]
+        config["name"]: {k: v for k, v in config.items() if k != "id"}
+        for config in provider_data["model_configurations"]
     }
     expected_by_name = {
         config.name: fill_max_input_tokens_and_supports_image_input(config)
