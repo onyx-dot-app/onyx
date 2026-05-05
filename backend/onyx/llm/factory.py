@@ -12,6 +12,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
@@ -115,11 +116,24 @@ def get_llm_for_persona(
             provider_model = fetch_existing_llm_provider(
                 provider_name_override, db_session
             )
-            model = model_version_override or persona.llm_model_version_override
+            if model_version_override:
+                model = model_version_override
+            elif persona.llm_model_version_override:
+                model = persona.llm_model_version_override
+            elif persona.default_model_configuration_id:
+                # Migrated persona: no legacy string, use FK model name.
+                mc = db_session.get(
+                    ModelConfiguration, persona.default_model_configuration_id
+                )
+                model = mc.name if mc else None
+            else:
+                model = None
         elif persona.default_model_configuration_id:
-            # Canonical path: load provider and model name directly from the FK.
-            db_session.refresh(persona)
-            model_config = persona.default_model_configuration
+            # Canonical path: load provider and model name directly from the FK,
+            # avoiding any relationship access on a possibly-detached persona.
+            model_config = db_session.get(
+                ModelConfiguration, persona.default_model_configuration_id
+            )
             if model_config is None:
                 logger.warning(
                     "Persona %s has default_model_configuration_id=%s but config not found."

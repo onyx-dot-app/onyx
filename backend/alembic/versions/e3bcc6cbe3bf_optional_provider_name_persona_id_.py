@@ -43,6 +43,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Backfill any null names with the provider type before re-adding the NOT NULL
     # and UNIQUE constraints. Providers created after the upgrade may have null names.
-    op.execute("UPDATE llm_provider SET name = provider WHERE name IS NULL")
+    op.execute(
+        "UPDATE llm_provider SET name = provider || '-' || id::text WHERE name IS NULL"
+    )
     op.create_unique_constraint("llm_provider_name_key", "llm_provider", ["name"])
     op.alter_column("llm_provider", "name", nullable=False)
