@@ -9,7 +9,6 @@ from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
@@ -96,11 +95,12 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    # Resolve the provider: explicit runtime override by name takes priority, then
-    # the persona's FK-based override (ID), then legacy name override, then global default.
+    # Resolve the provider and model.
+    # Priority: explicit runtime override by name > persona's model config FK >
+    # legacy string fields > global default.
     has_override = bool(
         provider_name_override
-        or persona.llm_provider_override_id
+        or persona.default_model_configuration_id
         or persona.llm_model_provider_override
     )
     if not has_override:
@@ -110,23 +110,41 @@ def get_llm_for_persona(
         )
 
     with get_session_with_current_tenant() as db_session:
+        model: str | None
         if provider_name_override:
             provider_model = fetch_existing_llm_provider(
                 provider_name_override, db_session
             )
-        elif persona.llm_provider_override_id:
-            provider_model = fetch_existing_llm_provider_by_id(
-                persona.llm_provider_override_id, db_session
-            )
+            model = model_version_override or persona.llm_model_version_override
+        elif persona.default_model_configuration_id:
+            # Canonical path: load provider and model name directly from the FK.
+            db_session.refresh(persona)
+            model_config = persona.default_model_configuration
+            if model_config is None:
+                logger.warning(
+                    "Persona %s has default_model_configuration_id=%s but config not found."
+                    " Falling back to default.",
+                    persona.id,
+                    persona.default_model_configuration_id,
+                )
+                return get_default_llm(
+                    temperature=temperature_override or GEN_AI_TEMPERATURE,
+                    additional_headers=additional_headers,
+                )
+            provider_model = model_config.llm_provider
+            model = model_version_override or model_config.name
         else:
-            # Legacy fallback: persona was created before the ID-based migration.
-            # has_override guarantees llm_model_provider_override is set here.
+            # Legacy fallback: persona was saved before the model-config FK migration.
             assert persona.llm_model_provider_override is not None
             provider_model = fetch_existing_llm_provider(
                 persona.llm_model_provider_override, db_session
             )
+            model = model_version_override or persona.llm_model_version_override
+
         if not provider_model:
             raise ValueError("No LLM provider found")
+        if not model:
+            raise ValueError("No model name found")
 
         # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
@@ -146,10 +164,6 @@ def get_llm_for_persona(
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
-
-    model = model_version_override or persona.llm_model_version_override
-    if not model:
-        raise ValueError("No model name found")
 
     return llm_from_provider(
         model_name=model,

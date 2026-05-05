@@ -808,9 +808,6 @@ def list_llm_providers_for_persona(
         format(duration, ".2f"),
     )
 
-    # Get the default model and vision model for the persona
-    persona_default_model = persona.llm_model_version_override
-
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
 
@@ -819,22 +816,32 @@ def list_llm_providers_for_persona(
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
-    if persona.llm_provider_override_id:
-        provider = fetch_existing_llm_provider_by_id(
-            persona.llm_provider_override_id, db_session
+    if persona.default_model_configuration_id:
+        # Canonical path: model config FK encodes both provider and model name.
+        db_session.refresh(persona)
+        model_config = persona.default_model_configuration
+        if model_config and can_user_access_llm_provider(
+            model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
+        ):
+            default_text = DefaultModel(
+                provider_id=model_config.llm_provider_id,
+                model_name=model_config.name,
+            )
+    elif persona.llm_model_provider_override:
+        # Legacy fallback: persona was saved before the model-config FK migration.
+        provider = fetch_existing_llm_provider(
+            persona.llm_model_provider_override, db_session
         )
         if provider and can_user_access_llm_provider(
             provider, user_group_ids, persona, is_admin=is_admin
         ):
-            if persona_default_model:
-                # Persona specifies both provider and model — use them directly
+            model_name = persona.llm_model_version_override
+            if model_name:
                 default_text = DefaultModel(
                     provider_id=provider.id,
-                    model_name=persona_default_model,
+                    model_name=model_name,
                 )
             else:
-                # Persona specifies only the provider — pick a visible (public) model,
-                # falling back to any model on this provider
                 visible_model = next(
                     (mc for mc in provider.model_configurations if mc.is_visible),
                     None,
