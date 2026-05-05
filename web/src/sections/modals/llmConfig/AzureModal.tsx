@@ -185,7 +185,7 @@ export default function AzureModal({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

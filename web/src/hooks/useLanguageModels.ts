@@ -240,7 +240,7 @@ export function useLlmDefaults(): LlmDefaults {
       if (!llmProviders || !raw) return null;
       const provider = llmProviders.find((p) => p.id === raw.provider_id);
       if (!provider) return null;
-      return { providerName: provider.name, modelName: raw.model_name };
+      return { providerName: provider.name ?? "", modelName: raw.model_name };
     },
     [llmProviders]
   );

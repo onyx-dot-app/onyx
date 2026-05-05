@@ -421,7 +421,7 @@ export default function CustomModal({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

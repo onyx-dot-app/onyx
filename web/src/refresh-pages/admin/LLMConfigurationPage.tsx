@@ -31,6 +31,10 @@ import { markdown } from "@opal/utils";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
+function providerDisplayName(provider: LLMProviderView): string {
+  return provider.name || getProvider(provider.provider, provider).companyName;
+}
+
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)
 // ============================================================================
@@ -94,7 +98,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(`Delete *${provider.name}*`)}
+          title={markdown(`Delete *${providerDisplayName(provider)}*`)}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -116,7 +120,9 @@ function ExistingProviderCard({
               <>
                 <Text font="main-ui-body" color="text-03">
                   {markdown(
-                    `All LLM models from provider **${provider.name}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                    `All LLM models from provider **${providerDisplayName(
+                      provider
+                    )}** will be removed and unavailable for future chats. Chat history will be preserved.`
                   )}
                 </Text>
                 {isLastProvider && (
@@ -142,7 +148,7 @@ function ExistingProviderCard({
         >
           <ContentAction
             icon={icon}
-            title={provider.name}
+            title={providerDisplayName(provider)}
             description={companyName}
             sizePreset="main-ui"
             variant="section"
@@ -157,7 +163,7 @@ function ExistingProviderCard({
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
-                    aria-label={`Delete ${provider.name}`}
+                    aria-label={`Delete ${providerDisplayName(provider)}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteModal.toggle(true);
@@ -167,7 +173,7 @@ function ExistingProviderCard({
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
-                  aria-label={`Edit ${provider.name}`}
+                  aria-label={`Edit ${providerDisplayName(provider)}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsOpen(true);
@@ -355,7 +361,9 @@ export default function LLMConfigurationPage() {
                   {providersWithVisibleModels.map(
                     ({ provider, visibleModels }) => (
                       <InputSelect.Group key={provider.id}>
-                        <InputSelect.Label>{provider.name}</InputSelect.Label>
+                        <InputSelect.Label>
+                          {providerDisplayName(provider)}
+                        </InputSelect.Label>
                         {visibleModels.map((model) => (
                           <InputSelect.Item
                             key={`${provider.id}:${model.name}`}

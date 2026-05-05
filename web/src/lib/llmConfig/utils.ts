@@ -65,7 +65,7 @@ export function getProviderOverrideForPersona(
 
   if (matchingProvider) {
     return {
-      name: matchingProvider.name,
+      name: matchingProvider.name ?? "",
       provider: matchingProvider.provider,
       modelName: overrideModel,
     };

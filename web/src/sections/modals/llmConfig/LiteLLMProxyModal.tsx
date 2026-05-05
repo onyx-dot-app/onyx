@@ -53,7 +53,7 @@ function LiteLLMProxyModalInternals({
     const { models, error } = await fetchLiteLLMProxyModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
-      provider_name: existingLlmProvider?.name,
+      provider_name: existingLlmProvider?.name ?? undefined,
     });
     if (error) {
       throw new Error(error);
@@ -79,7 +79,7 @@ function LiteLLMProxyModalInternals({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

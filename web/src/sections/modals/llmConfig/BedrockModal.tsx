@@ -238,7 +238,7 @@ function BedrockModalInternals({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

@@ -114,7 +114,7 @@ export function BuildLLMPopover({
         visibleModels.forEach((model) => {
           options.push({
             providerKey: provider.provider,
-            providerName: provider.name,
+            providerName: provider.name ?? "",
             providerDisplayName:
               provider.provider_display_name || provider.provider,
             modelName: model.name,

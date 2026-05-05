@@ -77,7 +77,7 @@ function OllamaModalInternals({
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
-      provider_name: existingLlmProvider?.name,
+      provider_name: existingLlmProvider?.name ?? undefined,
       signal,
     });
     if (signal?.aborted) return;
@@ -134,7 +134,7 @@ function OllamaModalInternals({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

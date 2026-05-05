@@ -151,6 +151,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   const finalValues = {
     ...rest,
+    name: rest.name || null,
     api_base: normalizedApiBase,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),

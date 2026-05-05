@@ -17,7 +17,7 @@ const LLM_SELECTION_PRIORITY = [
 
 // Minimal provider interface for selection logic
 interface MinimalLlmProvider {
-  name: string;
+  name: string | null;
   provider: string;
   model_configurations: { name: string; is_visible: boolean }[];
 }
@@ -36,7 +36,7 @@ export function getDefaultLlmSelection(
     const matchingProvider = llmProviders.find((p) => p.provider === provider);
     if (matchingProvider) {
       return {
-        providerName: matchingProvider.name,
+        providerName: matchingProvider.name ?? "",
         provider: matchingProvider.provider,
         modelName,
       };
@@ -50,7 +50,7 @@ export function getDefaultLlmSelection(
       (m) => m.is_visible
     );
     return {
-      providerName: firstProvider.name,
+      providerName: firstProvider.name ?? "",
       provider: firstProvider.provider,
       modelName: firstModel?.name ?? "",
     };

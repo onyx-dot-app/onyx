@@ -57,7 +57,7 @@ function LMStudioModalInternals({
       api_base: formikProps.values.api_base,
       custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
       api_key_changed: apiKey !== initialApiKey,
-      name: existingLlmProvider?.name,
+      name: existingLlmProvider?.name ?? undefined,
     });
     if (data.error) {
       throw new Error(data.error);
@@ -87,7 +87,7 @@ function LMStudioModalInternals({
       {!isOnboarding && (
         <>
           <InputDivider />
-          <DisplayNameField disabled={!!existingLlmProvider} />
+          <DisplayNameField />
         </>
       )}
 

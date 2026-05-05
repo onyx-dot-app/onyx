@@ -54,22 +54,15 @@ import { getProvider } from "@/lib/llmConfig";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
-export interface DisplayNameFieldProps {
-  disabled?: boolean;
-}
-export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
+export function DisplayNameField() {
   return (
     <InputPadder>
       <InputVertical
         withLabel="name"
         title="Display Name"
-        subDescription="Used to identify this provider in the app."
+        subDescription="Optional. Used to identify this provider in the app."
       >
-        <InputTypeInField
-          name="name"
-          placeholder="Display Name"
-          variant={disabled ? "disabled" : undefined}
-        />
+        <InputTypeInField name="name" placeholder="Display Name (optional)" />
       </InputVertical>
     </InputPadder>
   );

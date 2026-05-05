@@ -81,14 +81,14 @@ export default function LLMSelector({
         const option: LLMOption = {
           name: displayName,
           value: structureValue(
-            provider.name,
+            provider.name ?? "",
             provider.provider,
             modelConfiguration.name
           ),
           icon: getModelIcon(provider.provider, modelConfiguration.name),
           modelName: modelConfiguration.name,
           providerId: provider.id,
-          providerName: provider.name,
+          providerName: provider.name ?? "",
           provider: provider.provider,
           supportsImageInput,
           vendor: modelConfiguration.vendor || null,

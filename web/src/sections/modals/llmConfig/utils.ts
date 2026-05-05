@@ -43,7 +43,7 @@ export function useInitialValues(
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
-    name: isOnboarding ? providerName : existingLlmProvider?.name ?? "",
+    name: isOnboarding ? providerName : existingLlmProvider?.name ?? undefined,
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
@@ -95,7 +95,7 @@ export function buildValidationSchema(
   }
 
   return Yup.object({
-    name: Yup.string().required("Display Name is required"),
+    name: Yup.string().optional(),
     is_public: Yup.boolean().required(),
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
@@ -109,7 +109,7 @@ export function buildValidationSchema(
 
 /** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
-  name: string;
+  name?: string;
   api_key?: string;
   api_base?: string;
   /** Model name used for the test request — automatically derived. */
