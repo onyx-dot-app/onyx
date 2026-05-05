@@ -39,6 +39,7 @@ def targeted_reindex_task(
     self: Task,
     *,
     targeted_reindex_job_id: int,
+    tenant_id: str,  # noqa: ARG001  # consumed by TenantAwareTask wrapper
 ) -> None:
     """Stub: mark the job IN_PROGRESS and immediately COMPLETED.
 

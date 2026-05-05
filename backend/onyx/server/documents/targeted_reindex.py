@@ -36,6 +36,7 @@ from onyx.db.targeted_reindex import TargetSpec
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -120,6 +121,7 @@ def submit_targeted_reindex(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
+    tenant_id = get_current_tenant_id()
     try:
         # Route to the existing PRIMARY queue. The design has the trigger
         # task running on the primary worker that already owns the
@@ -128,7 +130,10 @@ def submit_targeted_reindex(
         # docprocessing queues from inside the task body.
         celery_app.send_task(
             OnyxCeleryTask.TARGETED_REINDEX_TASK,
-            kwargs={"targeted_reindex_job_id": result.targeted_reindex_job_id},
+            kwargs={
+                "targeted_reindex_job_id": result.targeted_reindex_job_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.PRIMARY,
             priority=OnyxCeleryPriority.HIGHEST,
             task_id=result.celery_task_id,
