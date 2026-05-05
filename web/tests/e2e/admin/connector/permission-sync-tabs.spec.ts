@@ -188,10 +188,10 @@ test.describe("Permission sync tabs", () => {
       // No tab triggers should appear for a non-sync (file) connector.
       await expect(page.getByRole("tab", { name: "Indexing" })).toHaveCount(0);
       await expect(
-        page.getByRole("tab", { name: "Document Permissions" })
+        page.getByRole("tab", { name: "Document Permission Sync" })
       ).toHaveCount(0);
       await expect(
-        page.getByRole("tab", { name: "Group Membership" })
+        page.getByRole("tab", { name: "Group Membership Sync" })
       ).toHaveCount(0);
     } finally {
       await apiClient.deleteCCPair(ccPairId);
@@ -232,10 +232,10 @@ test.describe("Permission sync tabs", () => {
 
     const indexingTab = page.getByRole("tab", { name: "Indexing" });
     const docPermissionsTab = page.getByRole("tab", {
-      name: "Document Permissions",
+      name: "Document Permission Sync",
     });
     const groupMembershipTab = page.getByRole("tab", {
-      name: "Group Membership",
+      name: "Group Membership Sync",
     });
 
     await expect(indexingTab).toBeVisible();
@@ -318,7 +318,7 @@ test.describe("Permission sync tabs", () => {
 
     await page.getByRole("button", { name: "Advanced" }).click();
 
-    await page.getByRole("tab", { name: "Document Permissions" }).click();
+    await page.getByRole("tab", { name: "Document Permission Sync" }).click();
     // The error-message button is keyed on the cell's aria-label so the
     // assertion stays robust if the truncated text changes.
     await page.getByRole("button", { name: "View full error message" }).click();
@@ -337,7 +337,7 @@ test.describe("Permission sync tabs", () => {
     await page.keyboard.press("Escape");
     await expect(docModal).not.toBeVisible();
 
-    await page.getByRole("tab", { name: "Group Membership" }).click();
+    await page.getByRole("tab", { name: "Group Membership Sync" }).click();
     await page.getByRole("button", { name: "View full error message" }).click();
 
     const groupModal = page.getByRole("dialog", {
