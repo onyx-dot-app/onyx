@@ -7,12 +7,12 @@ import { MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Tabs from "@/refresh-components/Tabs";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 
 import { DocPermissionSyncAttemptsTable } from "./DocPermissionSyncAttemptsTable";
 import { ExternalGroupSyncAttemptsTable } from "./ExternalGroupSyncAttemptsTable";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
-import { buildCCPairInfoUrl } from "./lib";
 import type {
   CCPairFullInfo,
   DocPermissionSyncAttemptSnapshot,
@@ -122,10 +122,10 @@ export function SyncAttemptsTabs({
 }
 
 function DocPermissionsTabBody({ ccPairId }: { ccPairId: number }) {
-  const endpoint = `${buildCCPairInfoUrl(ccPairId)}/permission-sync-attempts`;
   const result =
     useSyncAttemptsPaginatedFetch<DocPermissionSyncAttemptSnapshot>({
-      endpoint,
+      endpoint: SWR_KEYS.ccPairPermissionSyncAttempts(ccPairId),
+      swrProbeKey: SWR_KEYS.ccPairPermissionSyncAttemptsProbe(ccPairId),
       itemsPerPage: ITEMS_PER_PAGE,
       pagesPerBatch: PAGES_PER_BATCH,
     });
@@ -144,12 +144,10 @@ function DocPermissionsTabBody({ ccPairId }: { ccPairId: number }) {
 }
 
 function GroupMembershipTabBody({ ccPairId }: { ccPairId: number }) {
-  const endpoint = `${buildCCPairInfoUrl(
-    ccPairId
-  )}/external-group-sync-attempts`;
   const result =
     useSyncAttemptsPaginatedFetch<ExternalGroupSyncAttemptSnapshot>({
-      endpoint,
+      endpoint: SWR_KEYS.ccPairExternalGroupSyncAttempts(ccPairId),
+      swrProbeKey: SWR_KEYS.ccPairExternalGroupSyncAttemptsProbe(ccPairId),
       itemsPerPage: ITEMS_PER_PAGE,
       pagesPerBatch: PAGES_PER_BATCH,
     });

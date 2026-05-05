@@ -27,7 +27,6 @@ import type { CCPairSyncAttemptsResponse } from "./types";
  * @see plans/permission-sync-attempt-tabs.md (PR C, option B)
  */
 
-const APPLICABILITY_PROBE_PAGE_SIZE = 1;
 const ATTEMPTS_REFRESH_INTERVAL_MS = 5000;
 
 interface PaginatedItem {
@@ -38,8 +37,17 @@ export interface UseSyncAttemptsPaginatedFetchConfig {
   /**
    * Base API URL for the sync-attempts endpoint, without query params.
    * E.g. `/api/manage/admin/cc-pair/123/permission-sync-attempts`.
+   * Should be sourced from `SWR_KEYS` so that any future `mutate()` callers
+   * can target the same key.
    */
   endpoint: string;
+  /**
+   * SWR cache key for the applicability probe (the `?page_num=0&page_size=1`
+   * read). Must be a `SWR_KEYS` entry so that callers wanting to force-refresh
+   * the probe can do so without re-deriving the URL inline. See the
+   * `ccPair*SyncAttemptsProbe` builders in `web/src/lib/swr-keys.ts`.
+   */
+  swrProbeKey: string;
   itemsPerPage: number;
   pagesPerBatch: number;
 }
@@ -75,16 +83,16 @@ interface ApplicabilityProbeResponse {
 
 export default function useSyncAttemptsPaginatedFetch<T extends PaginatedItem>({
   endpoint,
+  swrProbeKey,
   itemsPerPage,
   pagesPerBatch,
 }: UseSyncAttemptsPaginatedFetchConfig): UseSyncAttemptsPaginatedFetchReturn<T> {
-  const probeUrl = `${endpoint}?page_num=0&page_size=${APPLICABILITY_PROBE_PAGE_SIZE}`;
   const {
     data: probeData,
     error: probeError,
     isLoading: applicableIsLoading,
   } = useSWR<CCPairSyncAttemptsResponse<T> | ApplicabilityProbeResponse>(
-    probeUrl,
+    swrProbeKey,
     errorHandlingFetcher
   );
 
