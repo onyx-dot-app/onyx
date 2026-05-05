@@ -107,6 +107,9 @@ class PersonaUpsertRequest(BaseModel):
     description: str
     document_set_ids: list[int]
     is_public: bool
+    # Preferred: reference the provider by integer PK.
+    llm_provider_override_id: int | None = None
+    # Deprecated: legacy string-based override kept for backward compat with old clients.
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
@@ -159,6 +162,7 @@ class MinimalPersonaSnapshot(BaseModel):
     knowledge_sources: list[DocumentSource]
     llm_model_version_override: str | None
     llm_model_provider_override: str | None
+    llm_provider_override_id: int | None
 
     uploaded_image_id: str | None
     icon_name: str | None
@@ -221,6 +225,7 @@ class MinimalPersonaSnapshot(BaseModel):
             knowledge_sources=list(sources),
             llm_model_version_override=persona.llm_model_version_override,
             llm_model_provider_override=persona.llm_model_provider_override,
+            llm_provider_override_id=persona.llm_provider_override_id,
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             is_public=persona.is_public,
@@ -259,6 +264,7 @@ class PersonaSnapshot(BaseModel):
     document_sets: list[DocumentSetSummary]
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
+    llm_provider_override_id: int | None = None
     # Hierarchy nodes attached for scoped search
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
     # Individual documents attached for scoped search
@@ -315,6 +321,7 @@ class PersonaSnapshot(BaseModel):
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
+            llm_provider_override_id=persona.llm_provider_override_id,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
@@ -382,6 +389,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             search_start_date=persona.search_start_date,
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
+            llm_provider_override_id=persona.llm_provider_override_id,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,

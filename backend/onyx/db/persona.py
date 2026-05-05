@@ -306,6 +306,7 @@ def create_update_persona(
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
+            llm_provider_override_id=create_persona_request.llm_provider_override_id,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
             llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
@@ -922,6 +923,7 @@ def upsert_persona(
     datetime_aware: bool | None,
     is_public: bool,
     db_session: Session,
+    llm_provider_override_id: int | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
@@ -1048,6 +1050,7 @@ def upsert_persona(
         # `default` and `built-in` properties can only be set when creating a persona.
         existing_persona.name = name
         existing_persona.description = description
+        existing_persona.llm_provider_override_id = llm_provider_override_id
         existing_persona.llm_model_provider_override = llm_model_provider_override
         existing_persona.llm_model_version_override = llm_model_version_override
         existing_persona.starter_messages = starter_messages
@@ -1121,6 +1124,7 @@ def upsert_persona(
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
             replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
+            llm_provider_override_id=llm_provider_override_id,
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,

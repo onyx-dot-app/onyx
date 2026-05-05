@@ -439,41 +439,24 @@ def put_llm_provider(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
-    # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
-    # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
-    # the result
+    # Validate that the provider exists (or doesn't) as expected for the operation.
+    # Identity is the integer PK — name is now a mutable display label with no uniqueness
+    # guarantee, so we no longer check for name duplicates or block renaming.
     existing_provider = None
     if llm_provider_upsert_request.id:
         existing_provider = fetch_existing_llm_provider_by_id(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
-    # Check name constraints
-    # TODO: Once port from name to id is complete, unique name will no longer be required
-    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Renaming providers is not currently supported",
-        )
-
-    found_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
-    if found_provider is not None and found_provider is not existing_provider:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"Provider with name={llm_provider_upsert_request.name} already exists",
-        )
-
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} already exists",
+            f"LLM Provider with id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
+            f"LLM Provider with id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -826,8 +809,6 @@ def list_llm_providers_for_persona(
     )
 
     # Get the default model and vision model for the persona
-    # TODO: Port persona's over to use ID
-    persona_default_provider = persona.llm_model_provider_override
     persona_default_model = persona.llm_model_version_override
 
     default_text_model = fetch_default_llm_model(db_session)
@@ -838,8 +819,10 @@ def list_llm_providers_for_persona(
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
-    if persona_default_provider:
-        provider = fetch_existing_llm_provider(persona_default_provider, db_session)
+    if persona.llm_provider_override_id:
+        provider = fetch_existing_llm_provider_by_id(
+            persona.llm_provider_override_id, db_session
+        )
         if provider and can_user_access_llm_provider(
             provider, user_group_ids, persona, is_admin=is_admin
         ):
@@ -911,7 +894,7 @@ def get_provider_contextual_cost(
             cost = get_llm_contextual_cost(llm)
             costs.append(
                 LLMCost(
-                    provider=provider.name,
+                    provider=provider.name or provider.provider,
                     model_name=model_configuration.name,
                     cost=cost,
                 )

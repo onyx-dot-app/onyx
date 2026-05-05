@@ -9,6 +9,7 @@ from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
@@ -95,15 +96,35 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    provider_name = provider_name_override or persona.llm_model_provider_override
-    if not provider_name:
+    # Resolve the provider: explicit runtime override by name takes priority, then
+    # the persona's FK-based override (ID), then legacy name override, then global default.
+    has_override = bool(
+        provider_name_override
+        or persona.llm_provider_override_id
+        or persona.llm_model_provider_override
+    )
+    if not has_override:
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
         )
 
     with get_session_with_current_tenant() as db_session:
-        provider_model = fetch_existing_llm_provider(provider_name, db_session)
+        if provider_name_override:
+            provider_model = fetch_existing_llm_provider(
+                provider_name_override, db_session
+            )
+        elif persona.llm_provider_override_id:
+            provider_model = fetch_existing_llm_provider_by_id(
+                persona.llm_provider_override_id, db_session
+            )
+        else:
+            # Legacy fallback: persona was created before the ID-based migration.
+            # has_override guarantees llm_model_provider_override is set here.
+            assert persona.llm_model_provider_override is not None
+            provider_model = fetch_existing_llm_provider(
+                persona.llm_model_provider_override, db_session
+            )
         if not provider_model:
             raise ValueError("No LLM provider found")
 

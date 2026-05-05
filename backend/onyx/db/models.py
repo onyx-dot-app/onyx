@@ -3152,7 +3152,7 @@ class LLMProvider(Base):
     __tablename__ = "llm_provider"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String, unique=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
@@ -3668,8 +3668,14 @@ class Persona(Base):
     # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
     # auto-detected time filters, relevance filters, etc.
+    # Deprecated: use llm_provider_override_id instead. Kept for backward compat reads.
     llm_model_provider_override: Mapped[str | None] = mapped_column(
         String, nullable=True
+    )
+    llm_provider_override_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("llm_provider.id", ondelete="SET NULL"),
+        nullable=True,
     )
     llm_model_version_override: Mapped[str | None] = mapped_column(
         String, nullable=True
