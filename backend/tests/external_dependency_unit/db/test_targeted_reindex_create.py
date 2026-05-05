@@ -66,7 +66,15 @@ def test_create_job_writes_rows_and_synthetic_attempt(
     assert result.queued_count == 2
     assert result.skipped_count == 0
     assert result.celery_task_id  # non-empty UUID
-    assert len(result.synthetic_attempt_ids) == 1  # one cc_pair → one attempt
+    # One synthetic attempt per (cc_pair × active search settings). Test env
+    # may have PRESENT only or PRESENT+FUTURE, so just assert all attempts
+    # belong to our cc_pair and the (cc_pair, search_settings) tuples are
+    # unique.
+    assert len(result.synthetic_attempt_ids) >= 1
+    assert {p[0] for p in result.cc_pair_search_settings_pairs} == {cc_pair.id}
+    assert len(set(result.cc_pair_search_settings_pairs)) == len(
+        result.cc_pair_search_settings_pairs
+    )
 
     job = get_targeted_reindex_job(db_session, result.targeted_reindex_job_id)
     assert job is not None
@@ -89,9 +97,9 @@ def test_create_job_writes_rows_and_synthetic_attempt(
         .filter(IndexAttempt.targeted_reindex_job_id == result.targeted_reindex_job_id)
         .all()
     )
-    assert len(attempts) == 1
-    assert attempts[0].connector_credential_pair_id == cc_pair.id
-    assert attempts[0].status == IndexingStatus.NOT_STARTED
+    assert len(attempts) == len(result.synthetic_attempt_ids)
+    assert {a.connector_credential_pair_id for a in attempts} == {cc_pair.id}
+    assert all(a.status == IndexingStatus.NOT_STARTED for a in attempts)
 
 
 def test_create_job_dedups_duplicate_targets(
