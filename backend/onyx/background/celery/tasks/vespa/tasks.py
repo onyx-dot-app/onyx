@@ -409,7 +409,11 @@ def monitor_document_set_taskset(
 
     document_set = cast(
         DocumentSet,
-        get_document_set_by_id(db_session=db_session, document_set_id=document_set_id),
+        get_document_set_by_id(
+            db_session=db_session,
+            document_set_id=document_set_id,
+            prefetch_relationships=True,
+        ),
     )  # casting since we "know" a document set with this ID exists
     if document_set:
         has_connector_pairs = bool(document_set.connector_credential_pairs)
