@@ -38,16 +38,15 @@ def _write_count(provider: str, outcome: str) -> float:
 
 
 class TestCacheThenRetrieve:
-    def test_round_trip_preserves_floats(self) -> None:
+    def test_round_trip_preserves_floats(self, test_embedding: list[float]) -> None:
         """
         Tests that the cache round trip preserves the floats.
         """
         # Precondition.
         query = _unique_query()
-        embedding = [0.1, -0.2, 3.4, 0.0, 1e-3]
         cache_query_embeddings(
             queries=[query],
-            embeddings=[embedding],
+            embeddings=[test_embedding],
             search_settings_id=1,
             provider_type=None,
             ttl_seconds=60,
@@ -63,7 +62,7 @@ class TestCacheThenRetrieve:
 
         # Postcondition.
         assert got[0] is not None
-        assert got[0] == embedding
+        assert got[0] == test_embedding
 
     def test_miss_returns_none(self) -> None:
         """
@@ -158,7 +157,7 @@ class TestTenantIsolation:
             ttl_seconds=60,
         )
 
-        other_tenant = f"tenant_{uuid4().hex[:8]}"
+        other_tenant = f"tenant_test_other_{uuid4().hex[:8]}"
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(other_tenant)
         try:
             # Under test.

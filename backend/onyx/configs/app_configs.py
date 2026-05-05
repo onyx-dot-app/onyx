@@ -91,7 +91,11 @@ CACHE_BACKEND = CacheBackendType(
 QUERY_EMBEDDING_CACHE_ENABLED = (
     os.environ.get("QUERY_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
 )
-QUERY_EMBEDDING_CACHE_TTL_S = int(os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900"))
+assert (
+    QUERY_EMBEDDING_CACHE_TTL_S := int(
+        os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900")
+    )
+) > 0, "QUERY_EMBEDDING_CACHE_TTL_S must be positive."
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"

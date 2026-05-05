@@ -39,29 +39,37 @@ def _build_key(query: str, search_settings_id: int) -> str:
     return f"{_EMBEDDING_CACHE_KEY_PREFIX}:{search_settings_id}:{digest}"
 
 
-def _pack(vector: Embedding) -> bytes:
+def _safe_pack_or_none(vector: Embedding) -> bytes | None:
     """Serializes an embedding to a little-endian float32 buffer.
 
     Args:
         vector: The embedding to serialize.
 
     Returns:
-        The little-endian float32 buffer.
+        The little-endian float32 buffer or None if the packing failed.
     """
-    return struct.pack(f"<{len(vector)}f", *vector)
+    try:
+        return struct.pack(f"<{len(vector)}f", *vector)
+    except struct.error:
+        logger.warning("Failed to pack embedding.", exc_info=True)
+        return None
 
 
-def _unpack(buf: bytes) -> Embedding:
+def _safe_unpack_or_none(buf: bytes) -> Embedding | None:
     """Deserializes a little-endian float32 buffer to an embedding.
 
     Args:
         buf: The little-endian float32 buffer to deserialize.
 
     Returns:
-        The deserialized embedding.
+        The deserialized embedding or None if the unpacking failed.
     """
-    num_floats = len(buf) // 4
-    return list(struct.unpack(f"<{num_floats}f", buf))
+    try:
+        num_floats = len(buf) // 4
+        return list(struct.unpack(f"<{num_floats}f", buf))
+    except struct.error:
+        logger.warning("Failed to unpack embedding.", exc_info=True)
+        return None
 
 
 def get_cached_query_embeddings(
@@ -96,7 +104,7 @@ def get_cached_query_embeddings(
 
     results: list[Embedding | None] = [None] * len(queries)
     try:
-        backend = get_cache_backend()
+        cache_backend = get_cache_backend()
     except CACHE_TRANSIENT_ERRORS:
         logger.warning(
             "Failed to obtain cache backend for query embedding cache; "
@@ -117,7 +125,7 @@ def get_cached_query_embeddings(
     for i, query in enumerate(queries):
         key = _build_key(query, search_settings_id)
         try:
-            raw = backend.get(key)
+            raw = cache_backend.get(key)
         except CACHE_TRANSIENT_ERRORS:
             logger.warning(
                 "Query embedding cache get failed; treating as miss.", exc_info=True
@@ -129,11 +137,8 @@ def get_cached_query_embeddings(
             misses += 1
             continue
 
-        try:
-            results[i] = _unpack(raw)
-        except struct.error:
-            # Corrupt entry — treat as miss; will be overwritten on the
-            # next encode + write.
+        results[i] = _safe_unpack_or_none(raw)
+        if results[i] is None:
             logger.warning(
                 "Corrupt query embedding cache entry at %s; treating as miss.", key
             )
@@ -146,7 +151,7 @@ def get_cached_query_embeddings(
         # ``EXPIRE`` calls, so the EXPIRE would target the wrong key. Re-set is
         # one byte heavier on the wire and entirely safe.
         try:
-            backend.set(key, raw, ex=ttl_seconds)
+            cache_backend.set(key, raw, ex=ttl_seconds)
         except CACHE_TRANSIENT_ERRORS:
             logger.debug("Failed to refresh TTL for %s.", key, exc_info=True)
 
@@ -206,7 +211,7 @@ def cache_query_embeddings(
         )
 
     try:
-        backend = get_cache_backend()
+        cache_backend = get_cache_backend()
     except CACHE_TRANSIENT_ERRORS:
         logger.warning(
             "Failed to obtain cache backend for query embedding cache write.",
@@ -224,7 +229,11 @@ def cache_query_embeddings(
     for query, embedding in zip(queries, embeddings):
         key = _build_key(query, search_settings_id)
         try:
-            backend.set(key, _pack(embedding), ex=ttl_seconds)
+            packed = _safe_pack_or_none(embedding)
+            if packed is None:
+                errors += 1
+                continue
+            cache_backend.set(key, packed, ex=ttl_seconds)
             successes += 1
         except CACHE_TRANSIENT_ERRORS:
             logger.warning(

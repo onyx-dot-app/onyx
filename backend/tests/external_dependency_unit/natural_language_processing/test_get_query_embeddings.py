@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import uuid4
 
-import pytest
 from sqlalchemy.orm import Session
 
 from onyx.context.search.utils import get_query_embeddings
@@ -28,6 +28,7 @@ class TestWiring:
         self,
         full_deployment_setup: None,  # noqa: ARG002
         db_session: Session,
+        test_embedding: list[float],
     ) -> None:
         """
         Tests that the second call to get_query_embeddings skips the encode call
@@ -35,8 +36,8 @@ class TestWiring:
         """
         # Precondition.
         # Make a unique query so prior test runs don't pollute the assertion.
-        query = "testing wiring"
-        emb = [[0.5, -0.5, 0.25]]
+        query = f"testing wiring {uuid4().hex[:8]}"
+        emb = [test_embedding]
 
         model, encode = _make_fake_embedding_model(emb)
         first = get_query_embeddings(
@@ -56,7 +57,7 @@ class TestWiring:
 
         # Postcondition.
         assert encode2.call_count == 0
-        assert second[0] == pytest.approx(first[0])
+        assert second == first
 
     def test_partial_fill_only_encodes_misses(
         self,
@@ -68,7 +69,7 @@ class TestWiring:
         in the cache.
         """
         # Precondition.
-        q_hit = "testing partial hit"
+        q_hit = f"testing partial hit {uuid4().hex[:8]}"
         q_miss = "testing partial miss"
 
         model, encode = _make_fake_embedding_model([[1.0, 1.0]])
@@ -94,9 +95,9 @@ class TestWiring:
         assert miss_call.args[0] == [q_miss]
         assert miss_call.kwargs.get("text_type") == EmbedTextType.QUERY
 
-        assert results[0] == pytest.approx([1.0, 1.0])
-        assert results[1] == pytest.approx([2.0, 2.0])
-        assert results[2] == pytest.approx([1.0, 1.0])
+        assert results[0] == [1.0, 1.0]
+        assert results[1] == [2.0, 2.0]
+        assert results[2] == [1.0, 1.0]
 
     def test_disabled_flag_skips_cache(
         self,
@@ -133,7 +134,7 @@ class TestWiring:
         even for the same query.
         """
         # Precondition.
-        query = "testing search settings isolation"
+        query = f"testing search settings isolation {uuid4().hex[:8]}"
         emb = [[9.0, 9.0]]
 
         model, _ = _make_fake_embedding_model(emb)
