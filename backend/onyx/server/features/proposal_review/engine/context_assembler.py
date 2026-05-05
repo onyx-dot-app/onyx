@@ -2,15 +2,15 @@
 
 V1 LIMITATION: Document body text (the main text content extracted by connectors)
 is stored in Vespa, not in the PostgreSQL Document table. The DB row only stores
-metadata (semantic_id, link, doc_metadata, primary_owners, etc.). For Jira tickets,
+metadata (semantic_id, link, tags, primary_owners, etc.). For Jira tickets,
 the Description and Comments text are indexed into Vespa during connector runs and
 are NOT accessible here without a Vespa query.
 
 As a result, the primary source of rich text for rule evaluation in V1 is:
   - Manually uploaded documents (proposal_review_document.extracted_text)
-  - Structured metadata from the Document row's doc_metadata JSONB column
-  - For Jira tickets: the connector populates doc_metadata with field values,
-    which often includes Description, Status, Priority, Assignee, etc.
+  - Structured metadata from Tag rows linked to the Document
+  - For Jira tickets: the connector stores custom field data in the Tag table
+    (tag_key / tag_value pairs), which includes Status, Priority, Assignee, etc.
 
 Future improvement: add a Vespa retrieval step to fetch indexed text chunks for
 the parent document and its attachments.
@@ -19,21 +19,25 @@ the parent document and its attachments.
 import json
 from dataclasses import dataclass
 from dataclasses import field
+from typing import Any
 from uuid import UUID
 
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Document
+from onyx.db.models import Tag
 from onyx.server.features.proposal_review.db.models import ProposalReviewDocument
 from onyx.server.features.proposal_review.db.models import ProposalReviewProposal
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_SENTINEL_VALUES = {"Please Select", "please select", "NULL"}
 
-# Metadata keys from Jira connector that commonly carry useful text content.
-# These are extracted from doc_metadata and presented as labeled sections to
-# give the LLM more signal when evaluating rules.
+# Metadata keys from the Jira connector that commonly carry useful text content.
+# These are extracted from Tag rows and presented as labeled sections to give
+# the LLM more signal when evaluating rules.
 _JIRA_TEXT_METADATA_KEYS = [
     "description",
     "summary",
@@ -63,9 +67,11 @@ class ProposalContext:
     proposal_text: str  # concatenated text from all documents
     budget_text: str  # best-effort budget section extraction
     foa_text: str  # FOA content (auto-fetched or uploaded)
-    metadata: dict  # structured metadata from Document.doc_metadata
+    metadata: dict[str, Any]  # structured metadata from Document tags
     jira_key: str  # for display/reference
-    metadata_raw: dict = field(default_factory=dict)  # full unresolved metadata
+    metadata_raw: dict[str, Any] = field(
+        default_factory=dict
+    )  # full unresolved metadata
 
 
 def get_proposal_context(
@@ -75,20 +81,19 @@ def get_proposal_context(
     """Assemble context for rule evaluation.
 
     Gathers text from three sources:
-    1. Jira ticket content (from Document.semantic_id + doc_metadata)
+    1. Jira ticket content (from Document.semantic_id + Tag rows)
     2. Jira attachments (child Documents linked by ID prefix convention)
     3. Manually uploaded documents (from proposal_review_document.extracted_text)
 
     For MVP, returns full text of everything. Future: smart section selection.
     """
-    # 1. Get the proposal record to find the linked document_id
     proposal = (
         db_session.query(ProposalReviewProposal)
         .filter(ProposalReviewProposal.id == proposal_id)
         .one_or_none()
     )
     if not proposal:
-        logger.warning(f"Proposal {proposal_id} not found during context assembly")
+        logger.warning("Proposal %s not found during context assembly", proposal_id)
         return ProposalContext(
             proposal_text="",
             budget_text="",
@@ -98,26 +103,26 @@ def get_proposal_context(
             metadata_raw={},
         )
 
-    # 2. Fetch the parent Document (Jira ticket)
     parent_doc = (
         db_session.query(Document)
+        .options(selectinload(Document.tags))
         .filter(Document.id == proposal.document_id)
         .one_or_none()
     )
 
     jira_key = ""
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
     all_text_parts: list[str] = []
     budget_parts: list[str] = []
     foa_parts: list[str] = []
 
     if parent_doc:
         jira_key = parent_doc.semantic_id or ""
-        metadata = parent_doc.doc_metadata or {}
+        metadata = _build_metadata_from_tags(parent_doc.tags)
 
         # Build text from DB-available fields. The actual ticket body text lives
-        # in Vespa and is not accessible here. The doc_metadata JSONB column
-        # often contains structured Jira fields that the connector extracted.
+        # in Vespa and is not accessible here. Tag rows contain structured Jira
+        # fields that the connector extracted.
         parent_text = _build_parent_document_text(parent_doc)
         if parent_text:
             all_text_parts.append(parent_text)
@@ -134,9 +139,11 @@ def get_proposal_context(
         child_docs = _find_child_documents(parent_doc, db_session)
         if child_docs:
             logger.info(
-                f"Found {len(child_docs)} child documents for {jira_key}. "
-                f"Note: their text content is in Vespa and only metadata is "
-                f"available for rule evaluation."
+                "Found %d child documents for %s. "
+                "Note: their text content is in Vespa and only metadata is "
+                "available for rule evaluation.",
+                len(child_docs),
+                jira_key,
             )
         for child_doc in child_docs:
             child_text = _build_child_document_text(child_doc)
@@ -145,9 +152,11 @@ def get_proposal_context(
                 _classify_child_text(child_doc, child_text, budget_parts, foa_parts)
     else:
         logger.warning(
-            f"Parent Document not found for proposal {proposal_id} "
-            f"(document_id={proposal.document_id}). "
-            f"Context will rely on manually uploaded documents only."
+            "Parent Document not found for proposal %s "
+            "(document_id=%s). "
+            "Context will rely on manually uploaded documents only.",
+            proposal_id,
+            proposal.document_id,
         )
 
     # 4. Fetch manually uploaded documents from proposal_review_document.
@@ -182,6 +191,27 @@ def get_proposal_context(
     )
 
 
+def _build_metadata_from_tags(tags: list[Tag]) -> dict[str, Any]:
+    """Build a metadata dict from a Document's Tag rows.
+
+    Jira custom field data is stored as Tag rows (tag_key / tag_value),
+    NOT in Document.doc_metadata.  This mirrors the approach used in
+    proposals_api._resolve_document_metadata.
+    """
+    metadata: dict[str, Any] = {}
+    for tag in tags:
+        value = tag.tag_value
+        if value in _SENTINEL_VALUES:
+            continue
+        key = tag.tag_key
+        if tag.is_list:
+            metadata.setdefault(key, [])
+            metadata[key].append(value)
+        else:
+            metadata[key] = value
+    return metadata
+
+
 def _build_parent_document_text(doc: Document) -> str:
     """Build text representation from a parent Document row (Jira ticket).
 
@@ -189,8 +219,8 @@ def _build_parent_document_text(doc: Document) -> str:
     What we DO have access to:
       - semantic_id: typically "{ISSUE_KEY}: {summary}"
       - link: URL to the Jira ticket
-      - doc_metadata: JSONB with structured fields from the connector (may include
-        description, status, priority, assignee, custom fields, etc.)
+      - tags: Tag rows with structured fields from the connector (status,
+        priority, assignee, custom fields, etc.)
       - primary_owners / secondary_owners: people associated with the document
 
     We extract all available metadata and present it as labeled sections to
@@ -203,46 +233,38 @@ def _build_parent_document_text(doc: Document) -> str:
     if doc.link:
         parts.append(f"Link: {doc.link}")
 
-    # Include owner information which may be useful for compliance checks
     if doc.primary_owners:
         parts.append(f"Primary Owners: {', '.join(doc.primary_owners)}")
     if doc.secondary_owners:
         parts.append(f"Secondary Owners: {', '.join(doc.secondary_owners)}")
 
-    # doc_metadata contains structured data from the Jira connector.
-    # Extract well-known text-bearing fields first, then include the rest.
-    if doc.doc_metadata:
-        metadata = doc.doc_metadata
+    metadata = _build_metadata_from_tags(doc.tags)
 
-        # Extract well-known Jira fields as labeled sections
-        for key in _JIRA_TEXT_METADATA_KEYS:
-            value = metadata.get(key)
-            if value is not None and value != "" and value != []:
-                label = key.replace("_", " ").title()
-                if isinstance(value, list):
-                    parts.append(f"{label}: {', '.join(str(v) for v in value)}")
-                elif isinstance(value, dict):
-                    parts.append(
-                        f"{label}:\n{json.dumps(value, indent=2, default=str)}"
-                    )
-                else:
-                    parts.append(f"{label}: {value}")
+    # Extract well-known Jira fields as labeled sections
+    for key in _JIRA_TEXT_METADATA_KEYS:
+        value = metadata.get(key)
+        if value is not None and value != "" and value != []:
+            label = key.replace("_", " ").title()
+            if isinstance(value, list):
+                parts.append(f"{label}: {', '.join(str(v) for v in value)}")
+            elif isinstance(value, dict):
+                parts.append(f"{label}:\n{json.dumps(value, indent=2, default=str)}")
+            else:
+                parts.append(f"{label}: {value}")
 
-        # Include any remaining metadata keys not in the well-known set,
-        # so custom fields and connector-specific data are not lost.
-        remaining = {
-            k: v
-            for k, v in metadata.items()
-            if k.lower() not in _JIRA_TEXT_METADATA_KEYS
-            and v is not None
-            and v != ""
-            and v != []
-        }
-        if remaining:
-            parts.append(
-                f"Additional Metadata:\n"
-                f"{json.dumps(remaining, indent=2, default=str)}"
-            )
+    # Include any remaining metadata keys not in the well-known set
+    remaining = {
+        k: v
+        for k, v in metadata.items()
+        if k.lower() not in _JIRA_TEXT_METADATA_KEYS
+        and v is not None
+        and v != ""
+        and v != []
+    }
+    if remaining:
+        parts.append(
+            f"Additional Metadata:\n{json.dumps(remaining, indent=2, default=str)}"
+        )
 
     return "\n".join(parts) if parts else ""
 
@@ -251,8 +273,8 @@ def _build_child_document_text(doc: Document) -> str:
     """Build text representation from a child Document row (Jira attachment).
 
     V1 LIMITATION: The actual extracted text of the attachment lives in Vespa,
-    not in the Document table. We can only present the metadata that the
-    connector stored in doc_metadata (filename, mime type, size, parent ticket).
+    not in the Document table. We can only present metadata from Tag rows
+    (filename, mime type, size, parent ticket).
 
     This means the LLM knows an attachment EXISTS and its metadata, but cannot
     read its contents. Future versions should add a Vespa retrieval step.
@@ -264,18 +286,18 @@ def _build_child_document_text(doc: Document) -> str:
     if doc.link:
         parts.append(f"Link: {doc.link}")
 
-    # Child document metadata typically includes:
-    #   parent_ticket, attachment_filename, attachment_mime_type, attachment_size
-    if doc.doc_metadata:
-        for key, value in doc.doc_metadata.items():
-            if value is not None and value != "":
-                label = key.replace("_", " ").title()
+    child_metadata = _build_metadata_from_tags(doc.tags)
+    for key, value in child_metadata.items():
+        if value is not None and value != "":
+            label = key.replace("_", " ").title()
+            if isinstance(value, list):
+                parts.append(f"{label}: {', '.join(str(v) for v in value)}")
+            else:
                 parts.append(f"{label}: {value}")
 
     if not parts:
         return ""
 
-    # Note the limitation inline for the LLM context
     parts.append(
         "[Note: Full attachment text is indexed in Vespa and not available "
         "in this context. Upload the document manually for full text analysis.]"
@@ -307,6 +329,7 @@ def _find_child_documents(parent_doc: Document, db_session: Session) -> list[Doc
     escaped_id = parent_doc.id.replace("%", r"\%").replace("_", r"\_")
     child_docs = (
         db_session.query(Document)
+        .options(selectinload(Document.tags))
         .filter(
             Document.id.like(f"{escaped_id}/%"),
             Document.id != parent_doc.id,
