@@ -7,7 +7,6 @@ Create Date: 2026-05-05 10:33:13.148334
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "e3bcc6cbe3bf"
@@ -22,39 +21,26 @@ def upgrade() -> None:
     op.alter_column("llm_provider", "name", nullable=True)
     op.drop_constraint("llm_provider_name_key", "llm_provider", type_="unique")
 
-    # 2. Add a proper integer FK column to persona so that the provider override
-    #    is referenced by stable PK rather than the mutable display name string.
-    op.add_column(
-        "persona",
-        sa.Column("llm_provider_override_id", sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_persona_llm_provider_override",
-        "persona",
-        "llm_provider",
-        ["llm_provider_override_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-
-    # 3. Data migration: convert the existing string-based override to the
-    #    matching integer FK. Rows with no match (provider already deleted)
-    #    are left as NULL, which is safe — they would have fallen back to the
-    #    default provider anyway.
+    # 2. Data migration: populate default_model_configuration_id from the existing
+    #    string pair (llm_model_provider_override, llm_model_version_override).
+    #    default_model_configuration_id was added by a prior migration but never
+    #    written to — this backfills it for all pre-existing personas.
+    #    Rows with no match (provider/model deleted or mismatched) stay NULL and
+    #    fall back to the default provider at runtime.
     op.execute("""
         UPDATE persona
-        SET llm_provider_override_id = llm_provider.id
-        FROM llm_provider
-        WHERE persona.llm_model_provider_override = llm_provider.name
+        SET default_model_configuration_id = mc.id
+        FROM llm_provider lp
+        JOIN model_configuration mc ON mc.llm_provider_id = lp.id
+        WHERE persona.llm_model_provider_override = lp.name
+          AND persona.llm_model_version_override = mc.name
           AND persona.llm_model_provider_override IS NOT NULL
+          AND persona.llm_model_version_override IS NOT NULL
+          AND persona.default_model_configuration_id IS NULL
         """)
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "fk_persona_llm_provider_override", "persona", type_="foreignkey"
-    )
-    op.drop_column("persona", "llm_provider_override_id")
     # Backfill any null names with the provider type before re-adding the NOT NULL
     # and UNIQUE constraints. Providers created after the upgrade may have null names.
     op.execute("UPDATE llm_provider SET name = provider WHERE name IS NULL")

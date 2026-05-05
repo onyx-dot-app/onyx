@@ -163,11 +163,16 @@ def validate_persona_ids_exist(
 
 
 def get_personas_using_provider(db_session: Session, provider_id: int) -> list[Persona]:
-    """Get all non-deleted personas that use a specific LLM provider."""
+    """Get all non-deleted personas whose default_model_configuration references this provider."""
     return list(
         db_session.scalars(
-            select(Persona).where(
-                Persona.llm_provider_override_id == provider_id,
+            select(Persona)
+            .join(
+                ModelConfiguration,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
+            )
+            .where(
+                ModelConfiguration.llm_provider_id == provider_id,
                 Persona.deleted == False,  # noqa: E712
             )
         ).all()
@@ -580,10 +585,11 @@ def remove_embedding_provider(
 def _clear_persona_provider_overrides(
     db_session: Session, provider_id: int, provider_name: str | None
 ) -> None:
-    """Clear both FK and legacy string overrides from personas that reference this provider."""
+    """Clear model configuration and legacy string overrides from personas using this provider."""
     for persona in get_personas_using_provider(db_session, provider_id):
-        persona.llm_provider_override_id = None
+        persona.default_model_configuration_id = None
         persona.llm_model_provider_override = None
+        persona.llm_model_version_override = None
 
     # Also clear legacy string-only overrides (personas created before the FK migration)
     if provider_name:
@@ -597,6 +603,7 @@ def _clear_persona_provider_overrides(
         )
         for persona in legacy_personas:
             persona.llm_model_provider_override = None
+            persona.llm_model_version_override = None
 
 
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:

@@ -190,6 +190,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
 
 
 class ModelConfigurationView(BaseModel):
+    id: int
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
@@ -219,6 +220,7 @@ class ModelConfigurationView(BaseModel):
             )
 
             return cls(
+                id=model_configuration_model.id,
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
@@ -256,6 +258,7 @@ class ModelConfigurationView(BaseModel):
         )
 
         return cls(
+            id=model_configuration_model.id,
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
