@@ -1,7 +1,7 @@
 /**
  * E2E coverage for the connector-detail "Advanced" → permission-sync tabs UX.
  *
- * Two scenarios:
+ * Three scenarios:
  *
  * 1. **Non-sync connector** (real file cc-pair): the legacy "Indexing
  *    Attempts" title + table render exactly as before. No tab UI.
@@ -11,6 +11,10 @@
  *    Document Permissions tab loads its endpoint and shows the row, and
  *    the Group Membership tab shows the explicit "not applicable"
  *    message rather than a blank empty state.
+ * 3. **Failed-attempt error modal**: in both sync tables, a `failed` row
+ *    surfaces the error message as a clickable button that opens
+ *    `ExceptionTraceModal` with a tab-specific title and the full error
+ *    text rendered in the body.
  *
  * The backend behavior (route correctness, `applicable` flag computation,
  * source-wide attribution for cc-pair-agnostic sources) is covered by
@@ -28,6 +32,11 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 const MOCK_SYNC_CC_PAIR_ID = 99999;
 const MOCK_SOURCE = "google_drive";
 const MOCK_DOC_ATTEMPT_ID = 5001;
+const MOCK_GROUP_ATTEMPT_ID = 6001;
+const MOCK_DOC_ERROR_MESSAGE =
+  "Traceback: doc permission sync failed because the upstream API returned 503";
+const MOCK_GROUP_ERROR_MESSAGE =
+  "Traceback: group membership sync failed because the upstream API returned 502";
 
 function jsonResponse(data: unknown, status = 200) {
   return {
@@ -263,5 +272,78 @@ test.describe("Permission sync tabs", () => {
     await expect(
       page.getByRole("columnheader", { name: "Docs Synced" })
     ).toHaveCount(0);
+  });
+
+  test("sync connector: clicking a failed row's Error Message opens the trace modal in both sync tables", async ({
+    page,
+  }) => {
+    await mockSyncConnectorEndpoints(page, {
+      docPermissions: {
+        applicable: true,
+        items: [
+          {
+            id: MOCK_DOC_ATTEMPT_ID,
+            status: "failed",
+            error_message: MOCK_DOC_ERROR_MESSAGE,
+            total_docs_synced: 0,
+            docs_with_permission_errors: 0,
+            time_created: "2026-05-03T11:55:00Z",
+            time_started: "2026-05-03T12:00:00Z",
+            time_finished: "2026-05-03T12:01:30Z",
+          },
+        ],
+        total_items: 1,
+      },
+      externalGroup: {
+        applicable: true,
+        items: [
+          {
+            id: MOCK_GROUP_ATTEMPT_ID,
+            status: "failed",
+            error_message: MOCK_GROUP_ERROR_MESSAGE,
+            total_users_processed: 0,
+            total_groups_processed: 0,
+            total_group_memberships_synced: 0,
+            time_created: "2026-05-03T11:55:00Z",
+            time_started: "2026-05-03T12:00:00Z",
+            time_finished: "2026-05-03T12:01:30Z",
+          },
+        ],
+        total_items: 1,
+      },
+    });
+
+    await page.goto(`/admin/connector/${MOCK_SYNC_CC_PAIR_ID}`);
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: "Advanced" }).click();
+
+    await page.getByRole("tab", { name: "Document Permissions" }).click();
+    // The error-message button is keyed on the cell's aria-label so the
+    // assertion stays robust if the truncated text changes.
+    await page.getByRole("button", { name: "View full error message" }).click();
+
+    const docModal = page.getByRole("dialog", {
+      name: "Document Permission Sync Error",
+    });
+    await expect(docModal).toBeVisible();
+    // `toContainText` concatenates text across descendants — needed
+    // because `CodePreview` runs the body through a syntax highlighter
+    // that splits each token into its own `<span>`.
+    await expect(docModal).toContainText(MOCK_DOC_ERROR_MESSAGE);
+
+    // Escape closes Radix dialogs; the listener restores focus to the
+    // trigger so re-entering the tab does not race with state cleanup.
+    await page.keyboard.press("Escape");
+    await expect(docModal).not.toBeVisible();
+
+    await page.getByRole("tab", { name: "Group Membership" }).click();
+    await page.getByRole("button", { name: "View full error message" }).click();
+
+    const groupModal = page.getByRole("dialog", {
+      name: "Group Membership Sync Error",
+    });
+    await expect(groupModal).toBeVisible();
+    await expect(groupModal).toContainText(MOCK_GROUP_ERROR_MESSAGE);
   });
 });

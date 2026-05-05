@@ -93,10 +93,10 @@ export function SyncAttemptsTabs({
       <Tabs.List variant="contained">
         <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
-          Document Permissions
+          Document Permission Sync
         </Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.GROUP_MEMBERSHIP}>
-          Group Membership
+          Group Membership Sync
         </Tabs.Trigger>
       </Tabs.List>
 
