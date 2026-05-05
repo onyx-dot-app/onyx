@@ -190,7 +190,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
 
 
 class ModelConfigurationView(BaseModel):
-    id: int
+    id: int | None = None
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
