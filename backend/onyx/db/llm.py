@@ -577,16 +577,38 @@ def remove_embedding_provider(
     db_session.commit()
 
 
+def _clear_persona_provider_overrides(
+    db_session: Session, provider_id: int, provider_name: str | None
+) -> None:
+    """Clear both FK and legacy string overrides from personas that reference this provider."""
+    for persona in get_personas_using_provider(db_session, provider_id):
+        persona.llm_provider_override_id = None
+        persona.llm_model_provider_override = None
+
+    # Also clear legacy string-only overrides (personas created before the FK migration)
+    if provider_name:
+        legacy_personas = list(
+            db_session.scalars(
+                select(Persona).where(
+                    Persona.llm_model_provider_override == provider_name,
+                    Persona.deleted == False,  # noqa: E712
+                )
+            ).all()
+        )
+        for persona in legacy_personas:
+            persona.llm_model_provider_override = None
+
+
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:
-    if not db_session.get(LLMProviderModel, provider_id):
+    provider = db_session.get(LLMProviderModel, provider_id)
+    if not provider:
         raise ValueError("LLM Provider not found")
 
     # Clear the provider override from any personas using it so they fall back
     # to the default provider. The FK has ON DELETE SET NULL so the DB would do
     # this automatically, but we clear it here explicitly for transactional safety
     # before the DELETE fires.
-    for persona in get_personas_using_provider(db_session, provider_id):
-        persona.llm_provider_override_id = None
+    _clear_persona_provider_overrides(db_session, provider_id, provider.name)
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
@@ -601,11 +623,11 @@ def remove_llm_provider(db_session: Session, provider_id: int) -> None:
 
 def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> None:
     """Remove LLM provider."""
-    if not db_session.get(LLMProviderModel, provider_id):
+    provider = db_session.get(LLMProviderModel, provider_id)
+    if not provider:
         raise ValueError("LLM Provider not found")
 
-    for persona in get_personas_using_provider(db_session, provider_id):
-        persona.llm_provider_override_id = None
+    _clear_persona_provider_overrides(db_session, provider_id, provider.name)
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
