@@ -29,8 +29,10 @@ def create_import_job(
     db_session.add(job)
     db_session.flush()
     logger.info(
-        f"Created import job {job.id} for ruleset {ruleset_id} "
-        f"(file: {source_filename})"
+        "Created import job %s for ruleset %s (file: %s)",
+        job.id,
+        ruleset_id,
+        source_filename,
     )
     return job
 

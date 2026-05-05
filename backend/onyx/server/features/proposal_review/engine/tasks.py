@@ -51,7 +51,7 @@ def run_proposal_review(
 
             _execute_review(review_run_id, rule_ids=rule_ids)
     except Exception as e:
-        logger.error(f"Review run {review_run_id} failed: {e}", exc_info=True)
+        logger.error("Review run %s failed: %s", review_run_id, e, exc_info=True)
         from onyx.server.features.proposal_review.engine.review_engine import (
             _mark_run_failed,
         )
@@ -80,7 +80,7 @@ def run_checklist_import(_self: object, import_job_id: str, tenant_id: str) -> N
 
             _execute_checklist_import(import_job_id)
     except Exception as e:
-        logger.error(f"Import job {import_job_id} failed: {e}", exc_info=True)
+        logger.error("Import job %s failed: %s", import_job_id, e, exc_info=True)
         from onyx.server.features.proposal_review.engine.review_engine import (
             _mark_import_failed,
         )
@@ -112,10 +112,12 @@ def sync_decision_to_jira(_self: object, proposal_id: str, tenant_id: str) -> No
             sync_to_jira(UUID(proposal_id), db_session)
             db_session.commit()
 
-        logger.info(f"Jira sync completed for proposal {proposal_id}")
+        logger.info("Jira sync completed for proposal %s", proposal_id)
 
     except Exception as e:
-        logger.error(f"Jira sync failed for proposal {proposal_id}: {e}", exc_info=True)
+        logger.error(
+            "Jira sync failed for proposal %s: %s", proposal_id, e, exc_info=True
+        )
         raise
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.set(None)
@@ -151,7 +153,8 @@ def check_for_dangling_import_jobs(_self: object, *, tenant_id: str) -> None:
 
     if not lock.acquire(blocking=False):
         logger.info(
-            f"check_for_dangling_import_jobs - Lock not acquired: tenant={tenant_id}"
+            "check_for_dangling_import_jobs - Lock not acquired: tenant=%s",
+            tenant_id,
         )
         return None
 
@@ -166,8 +169,11 @@ def check_for_dangling_import_jobs(_self: object, *, tenant_id: str) -> None:
 
             for job in dangling:
                 logger.warning(
-                    f"Marking dangling import job {job.id} as FAILED "
-                    f"(status={job.status}, created_at={job.created_at})"
+                    "Marking dangling import job %s as FAILED "
+                    "(status=%s, created_at=%s)",
+                    job.id,
+                    job.status,
+                    job.created_at,
                 )
                 imports_db.mark_import_job_failed(
                     job,
@@ -178,8 +184,9 @@ def check_for_dangling_import_jobs(_self: object, *, tenant_id: str) -> None:
 
             db_session.commit()
             logger.info(
-                f"Cleaned up {len(dangling)} dangling import job(s) "
-                f"for tenant {tenant_id}"
+                "Cleaned up %d dangling import job(s) for tenant %s",
+                len(dangling),
+                tenant_id,
             )
     except Exception:
         logger.exception("Unexpected error during dangling import job cleanup")
@@ -189,7 +196,8 @@ def check_for_dangling_import_jobs(_self: object, *, tenant_id: str) -> None:
                 lock.release()
             else:
                 logger.error(
-                    f"check_for_dangling_import_jobs - "
-                    f"Lock not owned on completion: tenant={tenant_id}"
+                    "check_for_dangling_import_jobs - "
+                    "Lock not owned on completion: tenant=%s",
+                    tenant_id,
                 )
         CURRENT_TENANT_ID_CONTEXTVAR.set(None)

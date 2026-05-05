@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { SvgArrowLeft, SvgCheckSquare, SvgSettings } from "@opal/icons";
 import { SidebarTab } from "@opal/components";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarState, useSidebarFolded } from "@/layouts/sidebar-layouts";
+import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 
 // ============================================================================
@@ -57,10 +57,8 @@ const MemoizedSidebarContent = memo(function ProposalReviewSidebarContent() {
 // ============================================================================
 
 export default function ProposalReviewSidebar() {
-  const { folded, setFolded } = useSidebarState();
-
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={setFolded} foldable>
+    <SidebarLayouts.Root foldable>
       <MemoizedSidebarContent />
     </SidebarLayouts.Root>
   );

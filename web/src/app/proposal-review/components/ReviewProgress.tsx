@@ -2,7 +2,7 @@
 
 import { Text } from "@opal/components";
 import { SvgCheckCircle, SvgAlertCircle } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { ReviewRun } from "@/app/proposal-review/types";
 
 interface ReviewProgressProps {

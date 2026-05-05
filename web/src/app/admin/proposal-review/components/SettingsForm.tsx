@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import useSWR from "swr";
-import { Text } from "@opal/components";
+import { Text, Checkbox } from "@opal/components";
 import { Button } from "@opal/components/buttons/button/components";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -14,7 +13,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SvgPlus, SvgTrash } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
+import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
 import type {
   ConfigResponse,
   ConfigUpdate,

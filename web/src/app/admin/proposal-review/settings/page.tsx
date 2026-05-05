@@ -43,7 +43,7 @@ function ProposalReviewSettingsPage() {
         icon={SvgSettings}
         title="Proposal Review Configuration"
         description="Configure the proposal review process."
-        separator
+        divider
         backButton
         onBack={() => router.push("/admin/proposal-review")}
       />

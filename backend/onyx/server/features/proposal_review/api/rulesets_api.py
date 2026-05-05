@@ -407,9 +407,7 @@ def test_rule(
     from onyx.server.features.proposal_review.engine.context_assembler import (
         ProposalContext,
     )
-    from onyx.server.features.proposal_review.engine.rule_evaluator import (
-        evaluate_rule,
-    )
+    from onyx.server.features.proposal_review.engine.rule_evaluator import evaluate_rule
 
     # Build a minimal test context
     test_context = ProposalContext(
@@ -485,9 +483,7 @@ async def refine_rule_endpoint(
                 file_text = file_content.decode("utf-8", errors="replace")
             else:
                 try:
-                    from onyx.file_processing.extract_file_text import (
-                        extract_file_text,
-                    )
+                    from onyx.file_processing.extract_file_text import extract_file_text
 
                     file_text = extract_file_text(
                         file=io.BytesIO(file_content),
@@ -522,7 +518,7 @@ async def refine_rule_endpoint(
         )
     except RuntimeError as e:
         raise OnyxError(
-            OnyxErrorCode.SERVER_ERROR,
+            OnyxErrorCode.INTERNAL_ERROR,
             f"Refinement failed: {str(e)}",
         )
 

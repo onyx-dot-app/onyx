@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgHistory, SvgChevronDown } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Popover from "@/refresh-components/Popover";
 import type { ReviewRun } from "@/app/proposal-review/types";
 

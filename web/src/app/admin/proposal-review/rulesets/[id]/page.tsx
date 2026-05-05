@@ -8,9 +8,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import InputSearch from "@/refresh-components/inputs/InputSearch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { toast } from "@/hooks/useToast";
-import { Button, Text, Tag, Card } from "@opal/components";
+import { Button, Text, Tag, Card, Checkbox, Tooltip } from "@opal/components";
 import { ContentAction, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
@@ -27,7 +26,6 @@ import {
 } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
 import RuleEditor from "@/app/admin/proposal-review/components/RuleEditor";
@@ -401,7 +399,7 @@ function RulesetDetailPage() {
                   onClick={(e) => e.stopPropagation()}
                 >
                   {rule.category && (
-                    <SimpleTooltip
+                    <Tooltip
                       tooltip={rule.category}
                       side="top"
                       delayDuration={0}
@@ -409,7 +407,7 @@ function RulesetDetailPage() {
                       <div className="max-w-[160px] overflow-hidden [&>.opal-auxiliary-tag]:shrink [&>.opal-auxiliary-tag>span]:truncate">
                         <Tag title={rule.category} color="gray" size="sm" />
                       </div>
-                    </SimpleTooltip>
+                    </Tooltip>
                   )}
                   <Tag
                     title={rule.is_active ? "Active" : "Inactive"}
@@ -489,7 +487,7 @@ function RulesetDetailPage() {
           icon={SvgClipboard}
           title="Loading..."
           backButton
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <SimpleLoader />
@@ -505,7 +503,7 @@ function RulesetDetailPage() {
           icon={SvgClipboard}
           title="Ruleset"
           backButton
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
@@ -541,7 +539,7 @@ function RulesetDetailPage() {
         onTitleChange={async (newName) => {
           await handleUpdateRuleset({ name: newName });
         }}
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         {/* Import progress bar */}

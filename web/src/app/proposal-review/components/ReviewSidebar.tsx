@@ -8,7 +8,7 @@ import {
   SvgAlertTriangle,
   SvgShield,
 } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { useFindings } from "@/app/proposal-review/hooks/useFindings";
 import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";

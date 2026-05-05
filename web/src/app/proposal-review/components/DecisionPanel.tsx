@@ -8,7 +8,7 @@ import {
   SvgXCircle,
   SvgRefreshCw,
 } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import "@/app/proposal-review/components/decision-toggle.css";

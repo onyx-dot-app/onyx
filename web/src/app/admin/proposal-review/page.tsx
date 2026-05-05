@@ -221,7 +221,7 @@ function RulesetsPage() {
           title={route.title}
           icon={route.icon}
           description="Manage review rulesets for automated proposal evaluation."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
@@ -241,7 +241,7 @@ function RulesetsPage() {
           title={route.title}
           icon={route.icon}
           description="Manage review rulesets for automated proposal evaluation."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <SimpleLoader />
@@ -258,7 +258,7 @@ function RulesetsPage() {
         title={route.title}
         icon={route.icon}
         description="Manage review rulesets for automated proposal evaluation."
-        separator
+        divider
         rightChildren={
           <Button
             icon={SvgSettings}

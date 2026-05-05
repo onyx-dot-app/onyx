@@ -10,7 +10,7 @@ import {
 } from "@opal/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import "@/app/proposal-review/components/decision-toggle.css";
 
 /** Tailwind prose classes with design-system color tokens so dark mode works
