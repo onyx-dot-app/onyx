@@ -1037,17 +1037,16 @@ const AppInputBar = React.memo(
                 />
               </div>
             )}
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+              />
+            )}
           </div>
         </Disabled>
-
-        {tilePopover && (
-          <PasteTilePopover
-            text={tilePopover.text}
-            tileElement={tilePopover.tile}
-            onDismiss={dismissTilePopover}
-            onTextChange={updateTileText}
-          />
-        )}
       </>
     );
   }

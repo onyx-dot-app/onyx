@@ -297,15 +297,14 @@ const InputBar = memo(
         !sandboxInitializing;
 
       return (
-        <>
-          <Disabled disabled={disabled}>
-            <div
-              ref={containerRef}
-              className={cn(
-                "w-full flex flex-col shadow-01 bg-background-neutral-00",
-                noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
-              )}
-            >
+        <Disabled disabled={disabled}>
+          <div
+            ref={containerRef}
+            className={cn(
+              "w-full flex flex-col shadow-01 bg-background-neutral-00",
+              noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
+            )}
+          >
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -426,17 +425,17 @@ const InputBar = memo(
                 </div>
               </div>
             </div>
-          </Disabled>
 
-          {tilePopover && (
-            <PasteTilePopover
-              text={tilePopover.text}
-              tileElement={tilePopover.tile}
-              onDismiss={dismissTilePopover}
-              onTextChange={updateTileText}
-            />
-          )}
-        </>
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+              />
+            )}
+          </div>
+        </Disabled>
       );
     }
   )
