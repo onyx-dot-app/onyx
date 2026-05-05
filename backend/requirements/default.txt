@@ -220,9 +220,7 @@ dropbox==12.0.2
 durationpy==0.10
     # via kubernetes
 email-validator==2.2.0
-    # via
-    #   fastapi-users
-    #   pydantic
+    # via fastapi-users
 emoji==2.15.0
     # via unstructured
 et-xmlfile==2.0.0
@@ -393,9 +391,15 @@ idna==3.11
 importlib-metadata==8.7.0
     # via
     #   dask
+    #   google-api-core
+    #   hubspot-api-client
     #   keyring
     #   litellm
     #   opentelemetry-api
+    #   pywikibot
+    #   redis
+    #   sqlalchemy
+    #   trafilatura
 inflection==0.5.1
     # via pyairtable
 iniconfig==2.3.0
@@ -435,10 +439,11 @@ jsonpointer==3.0.0
     # via jsonpatch
 jsonref==1.1.0
     # via fastmcp
-jsonschema==4.25.1
+jsonschema==4.23.0
     # via
     #   litellm
     #   mcp
+    #   onyx
 jsonschema-path==0.4.6
     # via fastmcp
 jsonschema-specifications==2025.9.1
@@ -458,7 +463,7 @@ langfuse==3.10.0
 langsmith==0.7.32
     # via langchain-core
 lazy-imports==1.0.1
-litellm==1.83.0
+litellm==1.83.14
     # via onyx
 locket==1.0.0
     # via

@@ -188,8 +188,12 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+h2==4.3.0
+    # via httpx
 hf-xet==1.4.3 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
+hpack==4.1.0
+    # via h2
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
@@ -209,6 +213,8 @@ huggingface-hub==0.36.2
     #   sentence-transformers
     #   tokenizers
     #   transformers
+hyperframe==6.1.0
+    # via h2
 idna==3.11
     # via
     #   anyio
@@ -216,7 +222,10 @@ idna==3.11
     #   requests
     #   yarl
 importlib-metadata==8.7.0
-    # via litellm
+    # via
+    #   google-api-core
+    #   litellm
+    #   triton
 jinja2==3.1.6
     # via
     #   litellm
@@ -230,17 +239,18 @@ jmespath==1.0.1
     #   botocore
 joblib==1.5.2
     # via scikit-learn
-jsonschema==4.25.1
+jsonschema==4.23.0
     # via
     #   litellm
     #   mcp
+    #   onyx
 jsonschema-specifications==2025.9.1
     # via jsonschema
 kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-litellm==1.83.0
+litellm==1.83.14
     # via onyx
 markupsafe==3.0.3
     # via jinja2

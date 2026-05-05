@@ -64,8 +64,18 @@ runs:
       env:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        # Build the uv pip install command with each requirement file as array elements
-        cmd=("uv" "pip" "install")
+        # NOTE: --require-hashes is intentionally omitted on this branch. The
+        # requirements files here are version-pinned but not hash-pinned, so
+        # --require-hashes would reject them (e.g. agent-client-protocol==0.7.1
+        # has no hash). We rely on the exact version pins instead.
+        # TODO: drop --no-config and --no-deps once litellm no longer requires
+        # [tool.uv].override-dependencies in pyproject.toml. The overrides
+        # exist to relax litellm's exact transitive pins (e.g. jsonschema,
+        # aiohttp); they're unpinned ranges. --no-config keeps uv from picking
+        # up the root pyproject.toml; --no-deps keeps uv from re-resolving
+        # transitive deps from package metadata (the requirements file is
+        # already a complete, pinned export of uv.lock).
+        cmd=("uv" "pip" "install" "--no-config" "--no-deps")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then
