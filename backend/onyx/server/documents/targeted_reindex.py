@@ -117,6 +117,7 @@ def submit_targeted_reindex(
             db_session=db_session,
             requested_by_user_id=user.id if user else None,
             targets=target_specs_in,
+            upstream_skipped_count=skipped_from_errors,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
@@ -151,7 +152,7 @@ def submit_targeted_reindex(
     return TargetedReindexResponse(
         targeted_reindex_job_id=result.targeted_reindex_job_id,
         queued_count=result.queued_count,
-        skipped_count=result.skipped_count + skipped_from_errors,
+        skipped_count=result.skipped_count,
     )
 
 

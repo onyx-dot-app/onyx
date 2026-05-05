@@ -118,6 +118,38 @@ def test_create_job_dedups_duplicate_targets(
     assert result.queued_count == 2
     assert result.skipped_count == 1
 
+    # GET endpoint reads from job row, so the create-time skip count must
+    # be persisted there too.
+    job = get_targeted_reindex_job(db_session, result.targeted_reindex_job_id)
+    assert job is not None
+    assert job.skipped_count == 1
+
+
+def test_create_job_persists_upstream_skipped_count(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """API layer counts errors that resolved to no-op (already resolved,
+    entity-level, invalid id) as skipped. That count is `upstream_skipped_count`
+    and must end up on the job row so GET returns it before the task runs."""
+    targets = [
+        TargetSpec(cc_pair_id=cc_pair.id, document_id="doc-1"),
+        TargetSpec(cc_pair_id=cc_pair.id, document_id="doc-1"),  # 1 dedup skip
+    ]
+
+    result = create_targeted_reindex_job(
+        db_session=db_session,
+        requested_by_user_id=None,
+        targets=targets,
+        upstream_skipped_count=3,  # e.g. 3 unresolvable error_ids
+    )
+
+    # 1 dedup + 3 upstream
+    assert result.skipped_count == 4
+
+    job = get_targeted_reindex_job(db_session, result.targeted_reindex_job_id)
+    assert job is not None
+    assert job.skipped_count == 4
+
 
 def test_create_job_rejects_too_many_targets(
     db_session: Session, cc_pair: ConnectorCredentialPair

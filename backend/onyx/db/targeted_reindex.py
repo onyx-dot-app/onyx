@@ -140,6 +140,7 @@ def create_targeted_reindex_job(
     db_session: Session,
     requested_by_user_id: UUID | None,
     targets: Sequence[TargetSpec],
+    upstream_skipped_count: int = 0,
 ) -> CreateTargetedReindexJobResult:
     """Persist a targeted reindex request.
 
@@ -147,6 +148,12 @@ def create_targeted_reindex_job(
     `(cc_pair_id, search_settings_id)` tuple. Pre-allocates the celery
     task UUID so the orphan-detector can clean up if `apply_async` fails
     after this returns.
+
+    `upstream_skipped_count` is added to the dedup-skipped count and
+    persisted on the job row so the GET status endpoint can return the
+    full at-create-time skip count (e.g. error_ids that resolved to
+    already-resolved or entity-level rows in the API layer). The task
+    later folds in any runtime skips.
 
     The caller (API endpoint) is responsible for enqueueing the celery
     task with the returned `celery_task_id` after this commits.
@@ -174,14 +181,6 @@ def create_targeted_reindex_job(
 
     celery_task_id = str(uuid4())
 
-    job = TargetedReindexJob(
-        requested_by_user_id=requested_by_user_id,
-        celery_task_id=celery_task_id,
-        status=IndexingStatus.NOT_STARTED,
-    )
-    db_session.add(job)
-    db_session.flush()
-
     # Dedup at the (cc_pair_id, document_id) level — composite PK on the
     # target table would catch this anyway, but better to error early.
     seen: set[tuple[int, str]] = set()
@@ -192,6 +191,18 @@ def create_targeted_reindex_job(
             continue
         seen.add(key)
         deduped.append(t)
+
+    dedup_skipped = len(targets) - len(deduped)
+    initial_skipped = dedup_skipped + upstream_skipped_count
+
+    job = TargetedReindexJob(
+        requested_by_user_id=requested_by_user_id,
+        celery_task_id=celery_task_id,
+        status=IndexingStatus.NOT_STARTED,
+        skipped_count=initial_skipped,
+    )
+    db_session.add(job)
+    db_session.flush()
 
     for t in deduped:
         db_session.add(
@@ -230,7 +241,7 @@ def create_targeted_reindex_job(
         targeted_reindex_job_id=job.id,
         celery_task_id=celery_task_id,
         queued_count=len(deduped),
-        skipped_count=len(targets) - len(deduped),
+        skipped_count=initial_skipped,
         cc_pair_search_settings_pairs=pairs,
         synthetic_attempt_ids=attempt_ids,
     )
