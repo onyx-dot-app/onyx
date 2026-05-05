@@ -16,7 +16,6 @@ from onyx.server.features.proposal_review.db.models import ProposalReviewRule
 from onyx.server.features.proposal_review.db.models import ProposalReviewRuleset
 from onyx.server.features.proposal_review.db.models import ProposalReviewRun
 
-
 # =============================================================================
 # Ruleset Schemas
 # =============================================================================
@@ -367,6 +366,7 @@ class ConfigUpdate(BaseModel):
     jira_project_key: str | None = None
     field_mapping: list[str] | None = None  # List of visible metadata keys
     jira_writeback: dict[str, Any] | None = None
+    jira_issue_types: list[str] | None = None
     # LLM configuration
     review_model: str | None = None  # model name for rule evaluation
     import_model: str | None = None  # model name for checklist import
@@ -379,6 +379,7 @@ class ConfigResponse(BaseModel):
     jira_project_key: str | None
     field_mapping: list[str] | None
     jira_writeback: dict[str, Any] | None
+    jira_issue_types: list[str] | None
     review_model: str | None
     import_model: str | None
     created_at: datetime
@@ -393,6 +394,7 @@ class ConfigResponse(BaseModel):
             jira_project_key=config.jira_project_key,
             field_mapping=config.field_mapping,
             jira_writeback=config.jira_writeback,
+            jira_issue_types=config.jira_issue_types,
             review_model=config.review_model,
             import_model=config.import_model,
             created_at=config.created_at,

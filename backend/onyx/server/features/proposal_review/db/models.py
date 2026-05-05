@@ -357,6 +357,7 @@ class ProposalReviewConfig(Base):
     jira_project_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_mapping: Mapped[list | None] = mapped_column(PGJSONB(), nullable=True)
     jira_writeback: Mapped[dict | None] = mapped_column(PGJSONB(), nullable=True)
+    jira_issue_types: Mapped[list | None] = mapped_column(PGJSONB(), nullable=True)
     review_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     import_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(

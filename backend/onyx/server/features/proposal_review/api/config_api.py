@@ -48,6 +48,7 @@ def update_config(
         jira_project_key=request.jira_project_key,
         field_mapping=request.field_mapping,
         jira_writeback=request.jira_writeback,
+        jira_issue_types=request.jira_issue_types,
         review_model=request.review_model,
         import_model=request.import_model,
         db_session=db_session,

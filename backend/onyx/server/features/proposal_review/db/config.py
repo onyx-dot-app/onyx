@@ -35,6 +35,7 @@ def upsert_config(
     jira_project_key: str | None = None,
     field_mapping: list[str] | None = None,
     jira_writeback: dict[str, Any] | None = None,
+    jira_issue_types: list[str] | None = None,
     review_model: str | None = None,
     import_model: str | None = None,
 ) -> ProposalReviewConfig:
@@ -50,13 +51,15 @@ def upsert_config(
             config.field_mapping = field_mapping
         if jira_writeback is not None:
             config.jira_writeback = jira_writeback
+        if jira_issue_types is not None:
+            config.jira_issue_types = jira_issue_types
         if review_model is not None:
             config.review_model = review_model
         if import_model is not None:
             config.import_model = import_model
         config.updated_at = datetime.now(timezone.utc)
         db_session.flush()
-        logger.info(f"Updated proposal review config for tenant {tenant_id}")
+        logger.info("Updated proposal review config for tenant %s", tenant_id)
         return config
 
     config = ProposalReviewConfig(
@@ -65,12 +68,13 @@ def upsert_config(
         jira_project_key=jira_project_key,
         field_mapping=field_mapping,
         jira_writeback=jira_writeback,
+        jira_issue_types=jira_issue_types,
         review_model=review_model,
         import_model=import_model,
     )
     db_session.add(config)
     db_session.flush()
-    logger.info(f"Created proposal review config for tenant {tenant_id}")
+    logger.info("Created proposal review config for tenant %s", tenant_id)
     return config
 
 

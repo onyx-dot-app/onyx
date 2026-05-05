@@ -10,6 +10,7 @@ from fastapi import Form
 from fastapi import UploadFile
 from sqlalchemy import func
 from sqlalchemy import or_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,9 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Connector
 from onyx.db.models import Document
+from onyx.db.models import Document__Tag
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import Tag
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -170,6 +173,18 @@ def list_proposals(
     # and have "/attachments/" in their document ID.
     query = query.filter(~Document.id.contains("/attachments/"))
 
+    if config and config.jira_issue_types:
+        query = query.filter(
+            Document.id.in_(
+                select(Document__Tag.document_id)
+                .join(Tag, Document__Tag.tag_id == Tag.id)
+                .where(
+                    Tag.tag_key == "Issue Type",
+                    Tag.tag_value.in_(config.jira_issue_types),
+                )
+            )
+        )
+
     # If status filter is specified, only show documents with matching proposal status.
     # PENDING is special: documents without a proposal record are implicitly pending.
     if status:
@@ -302,7 +317,9 @@ def upload_document(
             )
         except Exception as e:
             logger.warning(
-                f"Failed to extract text from uploaded file '{filename}': {e}"
+                "Failed to extract text from uploaded file '%s': %s",
+                filename,
+                e,
             )
 
     doc = ProposalReviewDocument(
