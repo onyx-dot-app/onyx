@@ -163,6 +163,10 @@ def get_jira_project_key_from_issue(issue: Issue) -> str | None:
 
 
 class CustomFieldExtractor:
+    _SENTINEL_VALUES: frozenset[str] = frozenset(
+        {"Please Select", "please select", "-- None --", "-- Select --"}
+    )
+
     @staticmethod
     def _process_custom_field_value(value: Any) -> str:
         """
@@ -179,6 +183,10 @@ class CustomFieldExtractor:
                 return " ".join(
                     [CustomFieldExtractor._process_custom_field_value(v) for v in value]
                 )
+            elif isinstance(value, dict):
+                if value.get("type") == "doc":
+                    return extract_text_from_adf(value)
+                return ""
             else:
                 return str(value)
         except Exception as e:
@@ -187,7 +195,7 @@ class CustomFieldExtractor:
 
     @staticmethod
     def get_issue_custom_fields(
-        jira: Issue, custom_fields: dict, max_value_length: int = 250
+        jira: Issue, custom_fields: dict, max_value_length: int = 2000
     ) -> dict:
         """
         Process all custom fields of an issue to a dictionary of strings
@@ -207,10 +215,9 @@ class CustomFieldExtractor:
         if issue_custom_fields:
             for key, value in issue_custom_fields.items():
                 processed = CustomFieldExtractor._process_custom_field_value(value)
-                # We need max length  parameter, because there are some plugins that often has very long description
-                # and there is just a technical information so we just avoid long values
-                if len(processed) < max_value_length:
-                    processed_fields[key] = processed
+                if processed.strip() in CustomFieldExtractor._SENTINEL_VALUES:
+                    continue
+                processed_fields[key] = processed[:max_value_length]
 
         return processed_fields
 
