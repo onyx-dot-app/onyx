@@ -531,8 +531,11 @@ def index_doc_batch_prepare(
     )
 
 
-def filter_documents(document_batch: list[Document]) -> list[Document]:
+def filter_documents(
+    document_batch: list[Document],
+) -> tuple[list[Document], list[ConnectorFailure]]:
     documents: list[Document] = []
+    failures: list[ConnectorFailure] = []
     total_chars_in_batch = 0
     skipped_too_long = []
 
@@ -591,6 +594,23 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
                 format(MAX_DOCUMENT_CHARS, ","),
             )
             skipped_too_long.append((document.id, doc_total_chars))
+            failures.append(
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=document.id,
+                        document_link=(
+                            document.sections[0].link if document.sections else None
+                        ),
+                    ),
+                    failure_message=(
+                        f"Document '{document.semantic_identifier}' is too large to index "
+                        f"({format(doc_total_chars, ',')} chars). "
+                        f"The limit is {format(MAX_DOCUMENT_CHARS, ',')} chars "
+                        f"(set by MAX_DOCUMENT_CHARS). "
+                        "Split the document into smaller parts to index it."
+                    ),
+                )
+            )
             continue
 
         total_chars_in_batch += doc_total_chars
@@ -614,7 +634,7 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
                 "Skipped oversized documents [%s]: %s", source, skipped_too_long[:5]
             )  # Log first 5
 
-    return documents
+    return documents, failures
 
 
 def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
@@ -1083,7 +1103,9 @@ def index_doc_batch(
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
-    filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
+    filter_fnc: Callable[
+        [list[Document]], tuple[list[Document], list[ConnectorFailure]]
+    ] = filter_documents,
 ) -> IndexingPipelineResult:
     """End-to-end indexing for a pre-batched set of documents."""
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -1114,12 +1136,14 @@ def index_doc_batch(
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )
 
-    filtered_documents = filter_fnc(document_batch)
+    filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
-        return IndexingPipelineResult.empty(len(filtered_documents))
+        result = IndexingPipelineResult.empty(len(filtered_documents))
+        result.failures.extend(filter_failures)
+        return result
 
     # Convert documents to IndexingDocument objects with processed section.
     # Only record IMAGE_PROCESSING when there's actually image work to do --
@@ -1282,7 +1306,8 @@ def index_doc_batch(
         total_docs=len(filtered_documents),
         total_chunks=len(embedding_result.successful_chunk_ids),
         failures=primary_doc_idx_vector_db_write_failures
-        + embedding_result.connector_failures,
+        + embedding_result.connector_failures
+        + filter_failures,
     )
 
 
