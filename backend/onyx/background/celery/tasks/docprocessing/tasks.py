@@ -108,6 +108,7 @@ from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
@@ -133,9 +134,8 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 logger = setup_logger()
 
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
-DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 48
-# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
-# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
+# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
+# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
@@ -229,14 +229,6 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if (
-                fresh_attempt.total_batches
-                and fresh_attempt.completed_batches < fresh_attempt.total_batches
-            ):
-                heartbeat_timeout_seconds = (
-                    HEARTBEAT_TIMEOUT_SECONDS
-                    * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
-                )
             cutoff_time = datetime.now(timezone.utc) - timedelta(
                 seconds=heartbeat_timeout_seconds
             )
@@ -248,13 +240,66 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            # No heartbeat for too long - mark as failed
-            failure_reason = (
-                f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
-            )
+            # Heartbeat is stale. If docfetching has finished (total_batches is
+            # set), use the Redis counters to decide whether to invalidate:
+            #
+            #   in_flight > 0               → workers crashed holding batches → invalidate
+            #   in_flight = 0, pending > 0  → batches in queue, no crash → wait
+            #   in_flight = 0, pending = 0  → no work anywhere, stuck → invalidate
+            #
+            # If total_batches is not set yet, docfetching is still running;
+            # fall through to immediate invalidation (base timeout elapsed).
+            if fresh_attempt.total_batches is not None:
+                try:
+                    r = get_redis_client()
+                    rd = RedisDocprocessing(fresh_attempt.id, r)
+                    in_flight = rd.in_flight()
+                    pending = rd.pending()
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to read batch counters for attempt {fresh_attempt.id}, "
+                        f"falling back to invalidation"
+                    )
+                    in_flight = 0
+                    pending = 0
+
+                task_logger.warning(
+                    f"Stale heartbeat for attempt {fresh_attempt.id}: "
+                    f"in_flight={in_flight} pending={pending} "
+                    f"completed={fresh_attempt.completed_batches}/{fresh_attempt.total_batches}"
+                )
+
+                if in_flight == 0 and pending > 0:
+                    # Batches are sitting in the queue waiting for workers —
+                    # no crash, just backlog. Do not invalidate.
+                    task_logger.info(
+                        f"Attempt {fresh_attempt.id} has {pending} batches in queue, "
+                        f"no workers crashed — waiting for workers to free up"
+                    )
+                    continue
+
+                if in_flight > 0:
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"{in_flight} in-flight batches — workers crashed holding batches"
+                    )
+                else:
+                    # in_flight == 0, pending == 0: no work anywhere, no forward
+                    # progress possible — all batches either failed or were lost.
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"no pending or in-flight batches — all batches failed or lost"
+                    )
+            else:
+                # total_batches is None: docfetching is still running but the
+                # worker process died. The heartbeat thread runs independently
+                # of rate limiting, so a stale heartbeat here means a real crash.
+                failure_reason = (
+                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
+                )
 
             task_logger.warning(
-                f"Heartbeat timeout for attempt {fresh_attempt.id}: "
+                f"Invalidating attempt {fresh_attempt.id}: "
                 f"last_heartbeat_time={last_check_time} "
                 f"cutoff_time={cutoff_time} "
                 f"counter={current_counter}"
