@@ -250,6 +250,8 @@ def validate_active_indexing_attempts(
             # If total_batches is not set yet, docfetching is still running;
             # fall through to immediate invalidation (base timeout elapsed).
             if fresh_attempt.total_batches is not None:
+                in_flight = 0
+                pending = 0
                 try:
                     r = get_redis_client()
                     rd = RedisDocprocessing(fresh_attempt.id, r)
@@ -260,8 +262,6 @@ def validate_active_indexing_attempts(
                         f"Failed to read batch counters for attempt {fresh_attempt.id}, "
                         f"falling back to invalidation"
                     )
-                    in_flight = 0
-                    pending = 0
 
                 task_logger.warning(
                     f"Stale heartbeat for attempt {fresh_attempt.id}: "
