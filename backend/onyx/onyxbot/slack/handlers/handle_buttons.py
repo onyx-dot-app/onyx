@@ -136,6 +136,7 @@ def handle_generate_answer_button(
 
     thread_messages = read_slack_thread(
         tenant_id=client._tenant_id,
+        slack_bot_id=client.slack_bot_id,
         channel=channel_id,
         thread=thread_ts,
         client=client.web_client,
