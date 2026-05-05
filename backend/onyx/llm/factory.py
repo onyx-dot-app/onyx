@@ -12,6 +12,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
@@ -95,19 +96,57 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    provider_name = provider_name_override or persona.llm_model_provider_override
-    if not provider_name:
+    # Resolve the provider and model.
+    # Priority: explicit runtime override by name > persona's model config FK >
+    # global default.
+    if not provider_name_override and not persona.default_model_configuration_id:
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
         )
 
     with get_session_with_current_tenant() as db_session:
-        provider_model = fetch_existing_llm_provider(provider_name, db_session)
+        model: str | None
+        if provider_name_override:
+            provider_model = fetch_existing_llm_provider(
+                provider_name_override, db_session
+            )
+            if model_version_override:
+                model = model_version_override
+            elif persona.default_model_configuration_id:
+                # Runtime provider swap but no explicit model — use the persona's
+                # configured model name with the overridden provider.
+                mc = db_session.get(
+                    ModelConfiguration, persona.default_model_configuration_id
+                )
+                model = mc.name if mc else None
+            else:
+                model = None
+        else:
+            # Canonical path: load provider and model name directly from the FK,
+            # avoiding any relationship access on a possibly-detached persona.
+            model_config = db_session.get(
+                ModelConfiguration, persona.default_model_configuration_id
+            )
+            if model_config is None:
+                logger.warning(
+                    "Persona %s has default_model_configuration_id=%s but config not found."
+                    " Falling back to default.",
+                    persona.id,
+                    persona.default_model_configuration_id,
+                )
+                return get_default_llm(
+                    temperature=temperature_override or GEN_AI_TEMPERATURE,
+                    additional_headers=additional_headers,
+                )
+            provider_model = model_config.llm_provider
+            model = model_version_override or model_config.name
+
         if not provider_model:
             raise ValueError("No LLM provider found")
+        if not model:
+            raise ValueError("No model name found")
 
-        # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
@@ -125,10 +164,6 @@ def get_llm_for_persona(
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
-
-    model = model_version_override or persona.llm_model_version_override
-    if not model:
-        raise ValueError("No model name found")
 
     return llm_from_provider(
         model_name=model,

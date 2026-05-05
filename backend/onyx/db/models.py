@@ -3665,19 +3665,18 @@ class Persona(Base):
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
 
-    # Allows the persona to specify a specific default LLM model
-    # NOTE: only is applied on the actual response generation - is not used for things like
-    # auto-detected time filters, relevance filters, etc.
-    llm_model_provider_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
-    llm_model_version_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
+    # Canonical FK encoding both provider and model for the persona's LLM override.
+    # NOTE: only applied on actual response generation — not used for auto-detected
+    # time filters, relevance filters, etc.
     default_model_configuration_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("model_configuration.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    default_model_configuration: Mapped["ModelConfiguration | None"] = relationship(
+        "ModelConfiguration",
+        foreign_keys=[default_model_configuration_id],
+        lazy="select",
     )
 
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(

@@ -140,8 +140,6 @@ def enable_or_disable_kg(
         is_public=False,
         document_set_ids=[],
         tool_ids=[search_tool.id, kg_tool.id],
-        llm_model_provider_override=None,
-        llm_model_version_override=None,
         starter_messages=None,
         users=[user.id],
         groups=[],
