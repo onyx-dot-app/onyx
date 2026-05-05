@@ -2,8 +2,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFormikContext } from "formik";
-import { SvgArrowUp, SvgOnyxOctagon } from "@opal/icons";
+import { SvgArrowUp } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SparklesIcon } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,7 +26,7 @@ interface AgentBuilderChatProps {
 const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   content:
-    "Let's build your agent together. Tell me what you'd like it to do — what's its purpose, who will use it, and what should it be great at? I'll fill in the form on the right as we talk.",
+    "Hi there! Let's build your AI Agent together. Tell me what you'd like it to do — what's its purpose, who will use it, and what should it be great at? I'll automatically fill in the configuration on the right as we talk.",
 };
 
 const FIELDS_START = "<<<FIELDS>>>";
@@ -45,7 +46,6 @@ const FORM_FIELDS = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Strip any <<<FIELDS>>>...<<<END>>> block from visible text. */
 function stripFieldsBlock(text: string): string {
   const startIdx = text.indexOf(FIELDS_START);
   if (startIdx === -1) return text;
@@ -58,7 +58,6 @@ function stripFieldsBlock(text: string): string {
   ).trimEnd();
 }
 
-/** Extract the JSON between <<<FIELDS>>> and <<<END>>>. */
 function extractFieldsJson(text: string): Record<string, unknown> | null {
   const startIdx = text.indexOf(FIELDS_START);
   if (startIdx === -1) return null;
@@ -78,10 +77,10 @@ function extractFieldsJson(text: string): Record<string, unknown> | null {
 
 function TypingDots() {
   return (
-    <div className="flex items-center gap-[3px] py-[2px]">
-      <span className="w-[5px] h-[5px] rounded-full bg-text-03 animate-bounce [animation-delay:0ms]" />
-      <span className="w-[5px] h-[5px] rounded-full bg-text-03 animate-bounce [animation-delay:150ms]" />
-      <span className="w-[5px] h-[5px] rounded-full bg-text-03 animate-bounce [animation-delay:300ms]" />
+    <div className="flex items-center gap-[4px] py-[4px] px-1">
+      <span className="w-[6px] h-[6px] rounded-full bg-blue-500/60 animate-bounce [animation-delay:0ms]" />
+      <span className="w-[6px] h-[6px] rounded-full bg-purple-500/60 animate-bounce [animation-delay:150ms]" />
+      <span className="w-[6px] h-[6px] rounded-full bg-pink-500/60 animate-bounce [animation-delay:300ms]" />
     </div>
   );
 }
@@ -95,8 +94,8 @@ interface MessageBubbleProps {
 function MessageBubble({ message, isLastMessage, isStreaming }: MessageBubbleProps) {
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] px-3 py-2 rounded-16 bg-background-tint-03 text-sm text-text-04 leading-relaxed whitespace-pre-wrap break-words">
+      <div className="flex justify-end mb-6 animate-in slide-in-from-bottom-2 fade-in duration-300">
+        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tr-sm bg-gradient-to-br from-indigo-500 to-purple-600 text-[14px] text-white leading-relaxed shadow-md whitespace-pre-wrap break-words">
           {message.content}
         </div>
       </div>
@@ -105,11 +104,11 @@ function MessageBubble({ message, isLastMessage, isStreaming }: MessageBubblePro
 
   // Assistant message
   return (
-    <div className="flex items-start gap-2">
-      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-background-tint-02 border border-border-01 flex items-center justify-center mt-0.5">
-        <SvgOnyxOctagon className="w-[14px] h-[14px] stroke-text-03" />
+    <div className="flex items-start gap-3 mb-6 animate-in slide-in-from-bottom-2 fade-in duration-300">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-tr from-blue-100 to-indigo-100 border border-indigo-200/50 flex items-center justify-center shadow-sm">
+        <SparklesIcon className="w-4 h-4 text-indigo-500" />
       </div>
-      <div className="flex-1 min-w-0 text-sm text-text-04 leading-relaxed whitespace-pre-wrap break-words pt-[2px]">
+      <div className="flex-1 min-w-0 text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words pt-[5px]">
         {message.content || (isStreaming && isLastMessage ? <TypingDots /> : null)}
       </div>
     </div>
@@ -123,21 +122,24 @@ function MessageBubble({ message, isLastMessage, isStreaming }: MessageBubblePro
 export default function AgentBuilderChat({
   onFieldsUpdated,
 }: AgentBuilderChatProps) {
-  const { values, setFieldValue } = useFormikContext<Record<string, unknown>>();
+  const { values, setFieldValue, setValues } = useFormikContext<Record<string, unknown>>();
 
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [noLlm, setNoLlm] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom without scrolling the whole page
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [messages, isStreaming]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -149,10 +151,7 @@ export default function AgentBuilderChat({
     wrapper.style.height = `${newH}px`;
   }, [input]);
 
-  // ------------------------------------------------------------------
   // Send message
-  // ------------------------------------------------------------------
-
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
@@ -163,13 +162,11 @@ export default function AgentBuilderChat({
     setInput("");
     setIsStreaming(true);
 
-    // Gather current form values to send along
     const currentValues: Record<string, unknown> = {};
     for (const field of FORM_FIELDS) {
       currentValues[field] = values[field];
     }
 
-    // Placeholder for assistant response
     const assistantIdx = updatedMessages.length;
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -201,7 +198,7 @@ export default function AgentBuilderChat({
             copy[assistantIdx] = {
               role: "assistant",
               content:
-                "No LLM provider is configured yet. You can still fill in the form on the right — it works independently of the chat.",
+                "No AI models are configured yet. You can still fill in the form on the right — it works perfectly without the chat.",
             };
             return copy;
           });
@@ -210,7 +207,7 @@ export default function AgentBuilderChat({
             const copy = [...prev];
             copy[assistantIdx] = {
               role: "assistant",
-              content: `Something went wrong (${response.status}). You can still fill in the form directly.`,
+              content: `Oops! Something went wrong (${response.status}). Feel free to adjust the form directly.`,
             };
             return copy;
           });
@@ -283,7 +280,7 @@ export default function AgentBuilderChat({
         }
       }
 
-      // Stream complete — final parse for fields
+      // Final parse
       const fieldsData = extractFieldsJson(fullText);
       const displayText = stripFieldsBlock(fullText);
 
@@ -295,13 +292,16 @@ export default function AgentBuilderChat({
 
       if (fieldsData) {
         const updatedFieldNames: string[] = [];
+        const newValues = { ...values };
+        
         for (const [key, val] of Object.entries(fieldsData)) {
           if (FORM_FIELDS.includes(key)) {
-            setFieldValue(key, val);
+            newValues[key] = val;
             updatedFieldNames.push(key);
           }
         }
         if (updatedFieldNames.length > 0) {
+          setValues(newValues, true);
           onFieldsUpdated?.(updatedFieldNames);
         }
       }
@@ -311,7 +311,7 @@ export default function AgentBuilderChat({
         copy[assistantIdx] = {
           role: "assistant",
           content:
-            "Couldn't connect to the AI. You can still fill in the form on the right directly.",
+            "I'm having trouble connecting to the backend. You can manually configure your agent on the right.",
         };
         return copy;
       });
@@ -319,10 +319,6 @@ export default function AgentBuilderChat({
       setIsStreaming(false);
     }
   }, [input, isStreaming, messages, values, setFieldValue, onFieldsUpdated]);
-
-  // ------------------------------------------------------------------
-  // Key handler
-  // ------------------------------------------------------------------
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -334,33 +330,37 @@ export default function AgentBuilderChat({
     [handleSend]
   );
 
-  // ------------------------------------------------------------------
-  // Render
-  // ------------------------------------------------------------------
-
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-[#FAFAFA] relative">
+      {/* Decorative background gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[40%] bg-gradient-to-br from-indigo-100/40 via-purple-100/30 to-transparent blur-3xl pointer-events-none" />
+      
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex-shrink-0 border-b border-border-01">
-        <p className="text-[13px] font-semibold text-text-04 leading-none">
-          Agent Builder
-        </p>
-        <p className="text-[12px] text-text-03 mt-1 leading-tight">
-          Describe your agent and I&apos;ll configure it for you
+      <div className="relative px-6 pt-6 pb-4 flex-shrink-0 border-b border-gray-200/50 bg-white/50 backdrop-blur-sm z-10">
+        <h2 className="text-[16px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 tracking-tight">
+          AI Co-Pilot
+        </h2>
+        <p className="text-[13px] text-gray-500 mt-1">
+          Chat with me to instantly configure your agent
         </p>
       </div>
 
-      {/* No LLM banner */}
-      {noLlm && (
-        <div className="mx-3 mt-3 px-3 py-2 rounded-12 bg-status-warning-00 border border-status-warning-02 flex-shrink-0">
-          <p className="text-[12px] text-text-03 leading-snug">
-            No LLM provider configured. The form on the right works independently — fill it in directly.
-          </p>
-        </div>
-      )}
+      {/* Messages Area */}
+      <div 
+        ref={scrollContainerRef}
+        className="relative flex-1 overflow-y-auto px-6 py-6 flex flex-col z-10 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent"
+      >
+        {noLlm && (
+          <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-200 shadow-sm animate-in fade-in">
+            <p className="text-[13px] text-orange-800 font-medium">
+              No AI models configured.
+            </p>
+            <p className="text-[12px] text-orange-600 mt-1">
+              The wizard is offline, but you can build your agent using the form on the right.
+            </p>
+          </div>
+        )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0">
         {messages.map((msg, idx) => (
           <MessageBubble
             key={idx}
@@ -369,44 +369,58 @@ export default function AgentBuilderChat({
             isStreaming={isStreaming}
           />
         ))}
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area — styled to match Onyx's AppInputBar */}
-      <div className="px-3 pb-3 flex-shrink-0">
-        <div className="flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
-          {/* Textarea row */}
-          <div className="px-3 py-2 flex items-center">
-            <div ref={textareaWrapperRef} className="flex-1 min-h-[1.75rem]" style={{ height: "1.75rem" }}>
+      {/* Input Area */}
+      <div className="relative p-4 pt-0 bg-gradient-to-t from-[#FAFAFA] via-[#FAFAFA] to-transparent z-20 flex-shrink-0">
+        <div 
+          className={`flex flex-col bg-white border rounded-2xl shadow-sm transition-all duration-300 ${
+            isFocused 
+              ? "border-indigo-300 ring-4 ring-indigo-50 shadow-indigo-100/50" 
+              : "border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          <div className="px-4 py-3 flex items-center">
+            <div ref={textareaWrapperRef} className="flex-1 min-h-[22px]" style={{ height: "22px" }}>
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Describe your agent…"
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Message Co-Pilot..."
                 disabled={isStreaming || noLlm}
                 rows={1}
-                className="w-full h-full outline-none bg-transparent resize-none placeholder:text-text-03 text-[13px] text-text-04 whitespace-pre-wrap break-words overflow-y-auto leading-relaxed disabled:opacity-50"
+                className="w-full h-full outline-none bg-transparent resize-none text-[14px] text-gray-800 placeholder:text-gray-400 whitespace-pre-wrap break-words overflow-y-auto leading-relaxed disabled:opacity-50"
                 style={{ scrollbarWidth: "thin" }}
               />
             </div>
           </div>
 
-          {/* Bottom bar with send button */}
-          <div className="flex justify-end items-center px-2 pb-2 pt-0">
+          <div className="flex justify-end px-3 pb-3">
             <button
               onClick={handleSend}
               disabled={isStreaming || !input.trim() || noLlm}
-              className="flex items-center justify-center w-[1.75rem] h-[1.75rem] rounded-full bg-text-04 text-background-neutral-00 disabled:opacity-30 hover:opacity-80 transition-opacity flex-shrink-0"
+              className={`flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 flex-shrink-0 ${
+                isStreaming || !input.trim() || noLlm
+                  ? "bg-gray-100 text-gray-400"
+                  : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg hover:-translate-y-[1px]"
+              }`}
               aria-label="Send message"
             >
               {isStreaming ? (
-                <SimpleLoader className="w-3 h-3 stroke-background-neutral-00" />
+                <SimpleLoader className="w-4 h-4 stroke-gray-400" />
               ) : (
-                <SvgArrowUp className="w-3 h-3" />
+                <SvgArrowUp className="w-4 h-4" />
               )}
             </button>
           </div>
+        </div>
+        <div className="text-center mt-2">
+          <p className="text-[11px] text-gray-400">
+            Co-Pilot can make mistakes. Verify the agent configuration.
+          </p>
         </div>
       </div>
     </div>

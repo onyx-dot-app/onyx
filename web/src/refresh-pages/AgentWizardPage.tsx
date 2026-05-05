@@ -612,7 +612,7 @@ export default function AgentWizardPage() {
   }
 
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div className="h-full w-full overflow-y-auto bg-background-neutral-00 font-sans">
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
@@ -721,94 +721,103 @@ export default function AgentWizardPage() {
                 />
               </shareAgentModal.Provider>
 
-              <Form className="flex flex-row h-full w-full overflow-hidden">
-                {/* Left panel: Chat — fixed width, scrolls internally */}
-                <div className="flex flex-col border-r border-border-01 flex-shrink-0 w-[380px] min-w-[320px] overflow-hidden">
-                  <AgentBuilderChat
-                    onFieldsUpdated={handleFieldsUpdated}
-                  />
-                </div>
-
-                {/* Right panel: Form — takes remaining space */}
-                <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-                  {/* Sticky header */}
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-border-01 flex-shrink-0">
-                    <div className="text-[13px] font-semibold text-text-04">
-                      Configure Agent
-                    </div>
-                    <div className="flex gap-2">
+              <div className="w-full max-w-5xl mx-auto py-10 px-6 flex flex-col gap-8 pb-20">
+                {/* Header Actions */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-text-04">Create Agent</h1>
+                    <p className="text-[14px] text-text-03 mt-1">
+                      Configure your AI agent using the Co-Pilot or manually below.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <OpalButton
+                      prominence="secondary"
+                      type="button"
+                      onClick={() => router.back()}
+                    >
+                      Cancel
+                    </OpalButton>
+                    <SimpleTooltip
+                      tooltip={
+                        isSubmitting
+                          ? "Creating agent..."
+                          : !isValid
+                            ? "Please fix the errors in the form before creating."
+                            : hasUploadingFiles
+                              ? "Please wait for files to finish uploading."
+                              : undefined
+                      }
+                      side="bottom"
+                    >
                       <OpalButton
-                        prominence="secondary"
+                        disabled={isSubmitting || !isValid || hasUploadingFiles}
                         type="button"
-                        onClick={() => router.back()}
-                      >
-                        Cancel
-                      </OpalButton>
-                      <SimpleTooltip
-                        tooltip={
-                          isSubmitting
-                            ? "Creating agent..."
-                            : !isValid
-                              ? "Please fix the errors in the form before creating."
-                              : hasUploadingFiles
-                                ? "Please wait for files to finish uploading."
-                                : undefined
-                        }
-                        side="bottom"
-                      >
-                        <OpalButton
-                          disabled={
-                            isSubmitting || !isValid || hasUploadingFiles
+                        onClick={() => {
+                          const formNode = document.getElementById("agent-wizard-form") as HTMLFormElement;
+                          if (formNode) {
+                            if (typeof formNode.requestSubmit === "function") {
+                              formNode.requestSubmit();
+                            } else {
+                              formNode.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+                            }
                           }
-                          type="submit"
-                        >
-                          Create Agent
-                        </OpalButton>
-                      </SimpleTooltip>
-                    </div>
-                  </div>
-
-                  {/* Scrollable form body — no max-width constraint */}
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="px-5 py-5 flex flex-col gap-5">
-                      <AgentFormBody
-                        avatarEditor={<AgentIconEditor />}
-                        allRecentFiles={allRecentFiles}
-                        documentSets={documentSets ?? []}
-                        onFileClick={handleFileClick}
-                        onUploadChange={(e) =>
-                          handleUploadChange(
-                            e,
-                            values.user_file_ids,
-                            setFieldValue
-                          )
-                        }
-                        hasProcessingFiles={hasProcessingFiles}
-                        vectorDbEnabled={vectorDbEnabled}
-                        mcpServersWithTools={mcpServersWithTools}
-                        mcpServers={mcpServers}
-                        openApiTools={openApiTools}
-                        isImageGenerationAvailable={isImageGenerationAvailable}
-                        imageGenerationDisabledTooltip={
-                          imageGenerationDisabledTooltip
-                        }
-                        webSearchTool={webSearchTool}
-                        openURLTool={openURLTool}
-                        codeInterpreterTool={codeInterpreterTool}
-                        llmProviders={llmProviders ?? []}
-                        getCurrentLlm={getCurrentLlm}
-                        onLlmSelect={onLlmSelect}
-                        canUpdateFeaturedStatus={canUpdateFeaturedStatus}
-                        onShareClick={() => shareAgentModal.toggle(true)}
-                        onDeleteClick={() => {
-                          /* No delete for create mode */
                         }}
-                        highlightedFields={highlightedFields}
-                      />
-                    </div>
+                      >
+                        Create Agent
+                      </OpalButton>
+                    </SimpleTooltip>
                   </div>
                 </div>
-              </Form>
+
+                <Form id="agent-wizard-form" className="flex flex-col gap-8">
+                  {/* Top section: Chat */}
+                  <div className="w-full flex flex-col max-h-[600px] bg-white rounded-2xl shadow-sm border border-border-01 overflow-hidden shrink-0 transition-all duration-300">
+                    <AgentBuilderChat
+                      onFieldsUpdated={handleFieldsUpdated}
+                    />
+                  </div>
+
+                  {/* Bottom section: Form body */}
+                  <div className="w-full bg-white rounded-2xl shadow-sm border border-border-01 p-8 shrink-0">
+                    <h2 className="text-[16px] font-bold text-text-04 mb-6">Manual Configuration</h2>
+                    <AgentFormBody
+                      avatarEditor={<AgentIconEditor />}
+                      allRecentFiles={allRecentFiles}
+                      documentSets={documentSets ?? []}
+                      onFileClick={handleFileClick}
+                      onUploadChange={(e) =>
+                        handleUploadChange(
+                          e,
+                          values.user_file_ids,
+                          setFieldValue
+                        )
+                      }
+                      hasProcessingFiles={hasProcessingFiles}
+                      vectorDbEnabled={vectorDbEnabled}
+                      mcpServersWithTools={mcpServersWithTools}
+                      mcpServers={mcpServers}
+                      openApiTools={openApiTools}
+                      isImageGenerationAvailable={isImageGenerationAvailable}
+                      imageGenerationDisabledTooltip={
+                        imageGenerationDisabledTooltip
+                      }
+                      webSearchTool={webSearchTool}
+                      openURLTool={openURLTool}
+                      codeInterpreterTool={codeInterpreterTool}
+                      llmProviders={llmProviders ?? []}
+                      getCurrentLlm={getCurrentLlm}
+                      onLlmSelect={onLlmSelect}
+                      canUpdateFeaturedStatus={canUpdateFeaturedStatus}
+                      onShareClick={() => shareAgentModal.toggle(true)}
+                      onDeleteClick={() => {
+                        /* No delete for create mode */
+                      }}
+                      highlightedFields={highlightedFields}
+                    />
+                  </div>
+                </Form>
+              </div>
             </>
           );
         }}
