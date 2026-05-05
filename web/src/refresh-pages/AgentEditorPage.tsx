@@ -495,40 +495,6 @@ export default function AgentEditorPage({
   const vectorDbEnabled = useVectorDbEnabled();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  // LLM Model Selection
-  const getCurrentLlm = useCallback(
-    (values: any, llmProviders: any) =>
-      values.llm_model_version_override && values.llm_model_provider_override
-        ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
-            );
-            return structureValue(
-              values.llm_model_provider_override,
-              provider?.provider || "",
-              values.llm_model_version_override
-            );
-          })()
-        : null,
-    []
-  );
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName && name) {
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
-        }
-      }
-    },
-    []
-  );
-
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
   const { data: documentSets } = useDocumentSets();
@@ -542,6 +508,62 @@ export default function AgentEditorPage({
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
+
+  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
+  const getCurrentLlm = useCallback((values: any, providers: any) => {
+    // Canonical path: resolve from model configuration ID.
+    if (values.default_model_configuration_id != null) {
+      for (const p of providers ?? []) {
+        const mc = p.model_configurations?.find(
+          (m: any) => m.id === values.default_model_configuration_id
+        );
+        if (mc) {
+          return structureValue(p.name ?? "", p.provider, mc.name);
+        }
+      }
+    }
+    // Legacy fallback for agents created before the FK migration.
+    if (
+      values.llm_model_version_override &&
+      values.llm_model_provider_override
+    ) {
+      const provider = providers?.find(
+        (p: any) => p.name === values.llm_model_provider_override
+      );
+      return structureValue(
+        values.llm_model_provider_override,
+        provider?.provider || "",
+        values.llm_model_version_override
+      );
+    }
+    return null;
+  }, []);
+
+  const onLlmSelect = useCallback(
+    (selected: string | null, setFieldValue: any) => {
+      if (selected === null) {
+        setFieldValue("default_model_configuration_id", null);
+        setFieldValue("llm_model_version_override", null);
+        setFieldValue("llm_model_provider_override", null);
+      } else {
+        const { modelName, name } = parseLlmDescriptor(selected);
+        if (modelName && name) {
+          const provider = llmProviders?.find((p: any) => p.name === name);
+          const modelConfig = provider?.model_configurations?.find(
+            (mc: any) => mc.name === modelName
+          );
+          setFieldValue(
+            "default_model_configuration_id",
+            modelConfig?.id ?? null
+          );
+          setFieldValue("llm_model_version_override", modelName);
+          setFieldValue("llm_model_provider_override", name);
+        }
+      }
+    },
+    [llmProviders]
+  );
+
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
@@ -625,6 +647,8 @@ export default function AgentEditorPage({
     selected_sources: [] as ValidSources[],
 
     // Advanced
+    default_model_configuration_id:
+      existingAgent?.default_model_configuration_id ?? null,
     llm_model_provider_override:
       existingAgent?.llm_model_provider_override ?? null,
     llm_model_version_override:
@@ -737,6 +761,7 @@ export default function AgentEditorPage({
     selected_sources: Yup.array().of(Yup.string()),
 
     // Advanced
+    default_model_configuration_id: Yup.number().nullable().optional(),
     llm_model_provider_override: Yup.string().nullable().optional(),
     llm_model_version_override: Yup.string().nullable().optional(),
     knowledge_cutoff_date: Yup.date()
@@ -841,6 +866,8 @@ export default function AgentEditorPage({
           ? values.document_set_ids
           : [],
         is_public: values.is_public,
+        default_model_configuration_id:
+          (values as any).default_model_configuration_id ?? null,
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,

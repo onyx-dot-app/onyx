@@ -25,15 +25,27 @@ export function getFinalLLM(
     "";
 
   if (persona) {
-    // Map "provider override" to actual LLLMProvider
-    if (persona.llm_model_provider_override) {
+    if (persona.default_model_configuration_id != null) {
+      // Canonical path: resolve provider and model from the model config ID.
+      for (const p of llmProviders) {
+        const mc = p.model_configurations.find(
+          (m) => m.id === persona.default_model_configuration_id
+        );
+        if (mc) {
+          provider = p.provider;
+          model = mc.name;
+          break;
+        }
+      }
+    } else if (persona.llm_model_provider_override) {
+      // Legacy fallback: string-based override from before the FK migration.
       const underlyingProvider = llmProviders.find(
         (item: LLMProviderDescriptor) =>
           item.name === persona.llm_model_provider_override
       );
       provider = underlyingProvider?.provider || provider;
+      model = persona.llm_model_version_override || model;
     }
-    model = persona.llm_model_version_override || model;
   }
 
   if (currentLlm) {
@@ -48,6 +60,23 @@ export function getProviderOverrideForPersona(
   liveAgent: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
+  // Canonical path: resolve from model configuration ID.
+  if (liveAgent.default_model_configuration_id != null) {
+    for (const provider of llmProviders) {
+      const mc = provider.model_configurations.find(
+        (m) => m.id === liveAgent.default_model_configuration_id
+      );
+      if (mc) {
+        return {
+          name: provider.name ?? "",
+          provider: provider.provider,
+          modelName: mc.name,
+        };
+      }
+    }
+  }
+
+  // Legacy fallback: string-based override from before the FK migration.
   const overrideProvider = liveAgent.llm_model_provider_override;
   const overrideModel = liveAgent.llm_model_version_override;
 
@@ -148,11 +177,13 @@ export function getDisplayName(
     agent,
     llmProviders ?? []
   );
+  if (!llmDescriptor) return undefined;
+
   const llmProvider = llmProviders?.find(
-    (llmProvider) => llmProvider.name === agent.llm_model_provider_override
+    (p) =>
+      p.provider === llmDescriptor.provider && p.name === llmDescriptor.name
   );
-  const modelConfig = llmProvider?.model_configurations.find(
-    (modelConfig) => modelConfig.name === llmDescriptor?.modelName
-  );
-  return modelConfig?.display_name;
+  return llmProvider?.model_configurations.find(
+    (mc) => mc.name === llmDescriptor.modelName
+  )?.display_name;
 }
