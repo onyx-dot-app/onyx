@@ -375,6 +375,12 @@ status code is dynamic (comes from the upstream response), use `status_code_over
 raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code)
 ```
 
+## Pull Requests
+
+When creating a pull request, follow the template at `.github/pull_request_template.md`.
+Fill out the `Description` and `How Has This Been Tested?` sections, and include the
+`Additional Options` checklist as-is.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
