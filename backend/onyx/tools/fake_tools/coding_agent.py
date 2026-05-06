@@ -10,6 +10,7 @@ from onyx.tools.tool_implementations.bash.bash_tool import BashToolOverrideKwarg
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
+from onyx.utils.github import download_github_repo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
