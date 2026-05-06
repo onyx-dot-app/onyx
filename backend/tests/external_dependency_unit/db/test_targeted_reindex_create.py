@@ -281,3 +281,32 @@ def test_create_job_preserves_source_error_id_on_target_row(
         .one()
     )
     assert target_row.source_error_id == err.id
+
+
+def test_create_job_dedup_keeps_source_error_id_when_overlapping(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """If the same (cc_pair, doc) appears in both the error-derived and
+    arbitrary buckets, the error-derived one (carrying source_error_id)
+    must win the dedup so the task can mark the error resolved."""
+    error_derived = TargetSpec(
+        cc_pair_id=cc_pair.id, document_id="dup-doc", source_error_id=42
+    )
+    manual_dup = TargetSpec(cc_pair_id=cc_pair.id, document_id="dup-doc")
+
+    # Pass derived first (matches API endpoint ordering after the fix).
+    result = create_targeted_reindex_job(
+        db_session=db_session,
+        requested_by_user_id=None,
+        targets=[error_derived, manual_dup],
+    )
+
+    target_row = (
+        db_session.query(TargetedReindexJobTarget)
+        .filter(
+            TargetedReindexJobTarget.targeted_reindex_job_id
+            == result.targeted_reindex_job_id
+        )
+        .one()
+    )
+    assert target_row.source_error_id == 42
