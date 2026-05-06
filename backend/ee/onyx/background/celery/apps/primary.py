@@ -10,6 +10,7 @@ celery_app.autodiscover_tasks(
             "ee.onyx.background.celery.tasks.cloud",
             "ee.onyx.background.celery.tasks.ttl_management",
             "ee.onyx.background.celery.tasks.usage_reporting",
+            "ee.onyx.background.celery.tasks.license_notifications",
         ]
     )
 )
