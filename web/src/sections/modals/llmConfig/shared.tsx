@@ -60,9 +60,10 @@ export function DisplayNameField() {
       <InputVertical
         withLabel="name"
         title="Display Name"
-        subDescription="Optional. Used to identify this provider in the app."
+        suffix="optional"
+        subDescription="Used to identify this provider in the app."
       >
-        <InputTypeInField name="name" placeholder="Display Name (optional)" />
+        <InputTypeInField name="name" placeholder="Display Name" />
       </InputVertical>
     </InputPadder>
   );
