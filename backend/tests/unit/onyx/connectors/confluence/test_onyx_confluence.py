@@ -1024,8 +1024,7 @@ def test_jsonrpc_websudo_html_response_raises_validation_error(
     confluence_server_client: OnyxConfluence,
 ) -> None:
     """
-    Regression test for the production failure on cc_pair=44 / cc_pair=50
-    against Confluence DC 10.2.10.
+    Regression test for the production failure against Confluence DC 10.2.10.
 
     When 'Secure Administrator Sessions' (WebSudo) intercepts a JSON-RPC
     call, the response body is HTML (login page / WebSudoRequiredException)
