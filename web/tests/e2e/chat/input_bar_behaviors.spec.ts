@@ -12,6 +12,29 @@ const SEND_BUTTON_SELECTOR = "#onyx-chat-input-send-button";
 const INPUT_CONTAINER_SELECTOR = "#onyx-chat-input";
 const HUMAN_MESSAGE_SELECTOR = "#onyx-human-message";
 
+const TILE_SELECTOR = "[data-rich-tile]";
+const TILE_REMOVE_SELECTOR = "[data-rich-tile-remove]";
+const TILE_POPOVER_SELECTOR = "[role='dialog'][aria-label='Edit pasted text']";
+const TILE_BACKDROP_SELECTOR = "[data-testid='paste-tile-backdrop']";
+
+const LARGE_TEXT = "line 1\nline 2\nline 3\nline 4";
+
+async function pasteText(page: import("@playwright/test").Page, text: string) {
+  await page.evaluate((t) => {
+    const el = document.getElementById("onyx-chat-input-textbox")!;
+    el.focus();
+    const dt = new DataTransfer();
+    dt.setData("text/plain", t);
+    el.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+  }, text);
+}
+
 test.describe("Core Text Input & Submission", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     resetTurnCounter();
@@ -146,19 +169,7 @@ test.describe("Paste Behavior", () => {
   });
 
   test("pasting plain text appears in the input", async ({ page }) => {
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, "hello world");
-
+    await pasteText(page, "hello world");
     const input = page.locator(INPUT_SELECTOR);
     await expect(input).toContainText("hello world");
   });
@@ -191,19 +202,7 @@ test.describe("Paste Behavior", () => {
     const input = page.locator(INPUT_SELECTOR);
     await input.fill("original text");
     await page.keyboard.press("ControlOrMeta+a");
-
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, "replacement");
-
+    await pasteText(page, "replacement");
     await expect(input).toContainText("replacement");
   });
 });
@@ -339,19 +338,7 @@ test.describe("Auto-Resize", () => {
   });
 
   test("grows taller when multiple lines are pasted", async ({ page }) => {
-    const multilineText = "line1\nline2\nline3\nline4";
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, multilineText);
+    await pasteText(page, LARGE_TEXT);
 
     await page.waitForTimeout(200);
     const height = await page.evaluate(() => {
@@ -363,19 +350,7 @@ test.describe("Auto-Resize", () => {
 
   test("shrinks back to baseline when content is deleted", async ({ page }) => {
     const input = page.locator(INPUT_SELECTOR);
-    const multilineText = "line1\nline2\nline3\nline4";
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, multilineText);
+    await pasteText(page, LARGE_TEXT);
 
     await page.waitForTimeout(200);
 
@@ -396,18 +371,7 @@ test.describe("Auto-Resize", () => {
       { length: 60 },
       (_, i) => `line ${i + 1}`
     ).join("\n");
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, manyLines);
+    await pasteText(page, manyLines);
 
     await page.waitForTimeout(200);
     const height = await page.evaluate(() => {
@@ -422,18 +386,7 @@ test.describe("Auto-Resize", () => {
       { length: 60 },
       (_, i) => `line ${i + 1}`
     ).join("\n");
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, manyLines);
+    await pasteText(page, manyLines);
 
     await page.waitForTimeout(200);
     const isScrollable = await page.evaluate(() => {
@@ -611,35 +564,6 @@ test.describe("Keyboard Edge Cases", () => {
   });
 });
 
-const TILE_SELECTOR = "[data-rich-tile]";
-const TILE_REMOVE_SELECTOR = "[data-rich-tile-remove]";
-const TILE_POPOVER_SELECTOR = "[role='dialog'][aria-label='Edit pasted text']";
-
-const LARGE_TEXT = `function fibonacci(n) {
-  if (n <= 1) return n;
-  return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-for (let i = 0; i < 10; i++) {
-  console.log(fibonacci(i));
-}`;
-
-async function pasteText(page: import("@playwright/test").Page, text: string) {
-  await page.evaluate((t) => {
-    const el = document.getElementById("onyx-chat-input-textbox")!;
-    el.focus();
-    const dt = new DataTransfer();
-    dt.setData("text/plain", t);
-    el.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      })
-    );
-  }, text);
-}
-
 test.describe("Paste Tiles", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     resetTurnCounter();
@@ -687,19 +611,7 @@ test.describe("Paste Tiles", () => {
   test("small text (<200 chars, <=3 lines) does not create a tile", async ({
     page,
   }) => {
-    await page.evaluate(() => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", "short text here");
-      el.dispatchEvent(
-        new ClipboardEvent("paste", {
-          clipboardData: dt,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-    });
+    await pasteText(page, "short text here");
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
     await expect(page.locator(INPUT_SELECTOR)).toContainText("short text here");
   });
@@ -721,8 +633,8 @@ test.describe("Paste Tiles", () => {
     await page.keyboard.press("Enter");
     const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
     await expect(msg).toContainText("Context:");
-    await expect(msg).toContainText("function fibonacci");
-    await expect(msg).toContainText("console.log");
+    await expect(msg).toContainText("line 1");
+    await expect(msg).toContainText("line 4");
   });
 
   test("clicking tile opens editable popover", async ({ page }) => {
@@ -752,10 +664,7 @@ test.describe("Paste Tiles", () => {
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
-    const focused = await page.evaluate(
-      () => document.activeElement?.id === "onyx-chat-input-textbox"
-    );
-    expect(focused).toBe(true);
+    await expect(page.locator(INPUT_SELECTOR)).toBeFocused();
   });
 
   test("ArrowLeft into tile highlights it", async ({ page }) => {
@@ -892,7 +801,7 @@ test.describe("Paste Tiles", () => {
     const dataText = await page
       .locator(TILE_SELECTOR)
       .getAttribute("data-text");
-    expect(dataText).toContain("function fibonacci");
+    expect(dataText).toContain("line 1");
   });
 
   test("Ctrl+X on tile cuts the full text and clears input", async ({
@@ -909,21 +818,7 @@ test.describe("Paste Tiles", () => {
   test("multiple tiles can coexist", async ({ page }) => {
     await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
-    await page.evaluate(() => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      const dt = new DataTransfer();
-      dt.setData(
-        "text/plain",
-        "const x = 1;\nconst y = 2;\nconst z = 3;\nconst w = 4;"
-      );
-      el.dispatchEvent(
-        new ClipboardEvent("paste", {
-          clipboardData: dt,
-          bubbles: true,
-          cancelable: true,
-        })
-      );
-    });
+    await pasteText(page, LARGE_TEXT);
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(2);
   });
 
@@ -947,10 +842,7 @@ test.describe("Paste Tiles", () => {
     await textarea.fill("   ");
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
-    const focused = await page.evaluate(
-      () => document.activeElement?.id === "onyx-chat-input-textbox"
-    );
-    expect(focused).toBe(true);
+    await expect(page.locator(INPUT_SELECTOR)).toBeFocused();
   });
 
   test("editing tile in popover then sending includes updated text", async ({
@@ -961,6 +853,7 @@ test.describe("Paste Tiles", () => {
     const textarea = page.locator(`${TILE_POPOVER_SELECTOR} textarea`);
     await textarea.fill("edited content\nline 2\nline 3\nline 4");
     await page.keyboard.press("Escape");
+    await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
     await page.keyboard.press("Enter");
     const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
     await expect(msg).toContainText("edited content");
@@ -976,7 +869,7 @@ test.describe("Paste Tiles", () => {
     await page.keyboard.press("Enter");
     const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
     await expect(msg).toContainText("before");
-    await expect(msg).toContainText("function fibonacci");
+    await expect(msg).toContainText("line 1");
     await expect(msg).toContainText("after");
   });
 
@@ -984,7 +877,7 @@ test.describe("Paste Tiles", () => {
     await pasteText(page, LARGE_TEXT);
     await page.locator(TILE_SELECTOR).click();
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toBeVisible();
-    await page.locator(".fixed.inset-0.z-40").click();
+    await page.locator(TILE_BACKDROP_SELECTOR).click();
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
   });
 });
@@ -1007,9 +900,7 @@ test.describe("Paste Tiles — User Setting", () => {
 
     await pasteText(page, LARGE_TEXT);
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
-    await expect(page.locator(INPUT_SELECTOR)).toContainText(
-      "function fibonacci"
-    );
+    await expect(page.locator(INPUT_SELECTOR)).toContainText("line 1");
   });
 
   test("paste tiles are created when user enables paste_as_tile", async ({

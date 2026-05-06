@@ -67,7 +67,12 @@ function PasteTilePopover({
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-40" aria-hidden onClick={onDismiss} />
+      <div
+        data-testid="paste-tile-backdrop"
+        className="fixed inset-0 z-40"
+        aria-hidden
+        onClick={onDismiss}
+      />
       <div
         role="dialog"
         aria-label="Edit pasted text"
