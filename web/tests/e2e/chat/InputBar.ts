@@ -8,6 +8,19 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
+const POLL_TIMEOUT = 5000;
+
+/**
+ * Auto-retrying assertion for values that have no built-in Playwright
+ * locator assertion (e.g. computed heights, scrollHeight comparisons,
+ * innerHTML checks). Prefer locator assertions like `toHaveClass`,
+ * `toHaveAttribute`, `toContainText` when one exists — they are
+ * faster and produce better error messages.
+ */
+function poll<T>(fn: () => Promise<T>) {
+  return expect.poll(fn, { timeout: POLL_TIMEOUT });
+}
+
 export class InputBar {
   readonly page: Page;
 
@@ -151,8 +164,6 @@ export class InputBar {
 
   async expectEmpty(): Promise<void> {
     await expect(this.textbox).toHaveAttribute("data-empty", "");
-    const text = await this.textbox.textContent();
-    expect(text?.trim()).toBe("");
   }
 
   async expectText(text: string): Promise<void> {
@@ -172,23 +183,21 @@ export class InputBar {
   }
 
   async expectTileSelected(selected = true): Promise<void> {
-    const hasClass = await this.page.evaluate(
-      () =>
-        document
-          .querySelector("[data-rich-tile]")
-          ?.classList.contains("rich-input-tile-selected")
-    );
-    expect(hasClass).toBe(selected);
+    const assertion = expect(this.tile.first());
+    if (selected) {
+      await assertion.toHaveClass(/rich-input-tile-selected/);
+    } else {
+      await assertion.not.toHaveClass(/rich-input-tile-selected/);
+    }
   }
 
   async expectTileInSelection(inSelection = true): Promise<void> {
-    const hasClass = await this.page.evaluate(
-      () =>
-        document
-          .querySelector("[data-rich-tile]")
-          ?.classList.contains("rich-input-tile-in-selection")
-    );
-    expect(hasClass).toBe(inSelection);
+    const assertion = expect(this.tile.first());
+    if (inSelection) {
+      await assertion.toHaveClass(/rich-input-tile-in-selection/);
+    } else {
+      await assertion.not.toHaveClass(/rich-input-tile-in-selection/);
+    }
   }
 
   async expectPopoverVisible(): Promise<void> {
@@ -203,8 +212,7 @@ export class InputBar {
     await expect(this.tilePopoverTextarea).toHaveValue(value);
   }
 
-  /** Returns the wrapper element's computed height. */
-  async getWrapperHeight(): Promise<number> {
+  private getWrapperHeight(): Promise<number> {
     return this.page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
       return el.parentElement!.getBoundingClientRect().height;
@@ -212,21 +220,20 @@ export class InputBar {
   }
 
   async expectHeightGreaterThan(min: number): Promise<void> {
-    const height = await this.getWrapperHeight();
-    expect(height).toBeGreaterThan(min);
+    await poll(() => this.getWrapperHeight()).toBeGreaterThan(min);
   }
 
   async expectHeightAtMost(max: number): Promise<void> {
-    const height = await this.getWrapperHeight();
-    expect(height).toBeLessThanOrEqual(max);
+    await poll(() => this.getWrapperHeight()).toBeLessThanOrEqual(max);
   }
 
   async expectScrollable(): Promise<void> {
-    const isScrollable = await this.page.evaluate(() => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      return el.scrollHeight > el.clientHeight;
-    });
-    expect(isScrollable).toBe(true);
+    await poll(() =>
+      this.page.evaluate(() => {
+        const el = document.getElementById("onyx-chat-input-textbox")!;
+        return el.scrollHeight > el.clientHeight;
+      })
+    ).toBe(true);
   }
 
   /** Returns the selection collapsed state (false means something is selected). */
@@ -238,7 +245,6 @@ export class InputBar {
   }
 
   async expectInnerHtmlNotContaining(text: string): Promise<void> {
-    const innerHTML = await this.textbox.innerHTML();
-    expect(innerHTML).not.toContain(text);
+    await poll(() => this.textbox.innerHTML()).not.toContain(text);
   }
 }

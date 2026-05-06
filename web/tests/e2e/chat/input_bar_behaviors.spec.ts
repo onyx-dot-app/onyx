@@ -194,7 +194,6 @@ test.describe("Auto-Resize", () => {
 
   test("grows taller when multiple lines are pasted", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.page.waitForTimeout(200);
     await chatPage.inputBar.expectHeightGreaterThan(44);
   });
 
@@ -202,9 +201,8 @@ test.describe("Auto-Resize", () => {
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.page.waitForTimeout(200);
+    await chatPage.inputBar.expectHeightGreaterThan(44);
     await chatPage.inputBar.clear();
-    await chatPage.page.waitForTimeout(200);
     await chatPage.inputBar.expectHeightAtMost(50);
   });
 
@@ -214,7 +212,6 @@ test.describe("Auto-Resize", () => {
       (_, i) => `line ${i + 1}`
     ).join("\n");
     await chatPage.inputBar.paste(manyLines);
-    await chatPage.page.waitForTimeout(200);
     await chatPage.inputBar.expectHeightAtMost(200);
   });
 
@@ -226,7 +223,6 @@ test.describe("Auto-Resize", () => {
       (_, i) => `line ${i + 1}`
     ).join("\n");
     await chatPage.inputBar.paste(manyLines);
-    await chatPage.page.waitForTimeout(200);
     await chatPage.inputBar.expectScrollable();
   });
 });
@@ -612,6 +608,10 @@ test.describe("Paste Tiles — User Setting", () => {
     resetTurnCounter();
   });
 
+  test.afterEach(async ({ api }) => {
+    await api.setPasteTileSetting(false);
+  });
+
   test("paste tiles are disabled by default (paste_as_tile = false)", async ({
     chatPage,
   }) => {
@@ -638,8 +638,6 @@ test.describe("Paste Tiles — User Setting", () => {
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(1);
     await chatPage.inputBar.expectTileData(LARGE_TEXT);
-
-    await api.setPasteTileSetting(false);
   });
 });
 
