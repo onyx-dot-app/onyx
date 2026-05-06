@@ -44,6 +44,7 @@ from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -62,6 +63,10 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
+# Separate cache from _USER_EMAIL_CACHE: the DC 9.1+ REST space-permissions
+# response only includes a user's userKey (CONFSERVER-100505), not their
+# username, so we have to resolve email by a different identifier.
+_USER_KEY_TO_EMAIL_CACHE: dict[str, str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -83,9 +88,23 @@ _WEBSUDO_KB_URL = (
 # in our logs and validation surface.
 _JSONRPC_ERROR_BODY_SNIPPET_CHARS = 1000
 
+# DC 9.1.0 is the first DC release with the REST API for space permissions
+# (CONFSERVER-78176). Older DC versions still need the legacy JSON-RPC
+# fallback. Server / Data Center only -- Cloud has its own permissions API
+# and is branched on `is_cloud` upstream of any version check.
+_MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS: tuple[int, int] = (9, 1)
+
 
 class ConfluenceRateLimitError(Exception):
     pass
+
+
+class ConfluenceRestSpacePermissionsNotAvailableError(Exception):
+    """Raised by REST-API space-permissions calls when the endpoint is missing
+    on the upstream Confluence DC instance (e.g. DC < 9.1.0 returning 404).
+
+    Callers use this as a signal to fall back to the legacy JSON-RPC path.
+    """
 
 
 class OnyxConfluence:
@@ -152,6 +171,13 @@ class OnyxConfluence:
             if confluence_user_profiles_override
             else None
         )
+
+        # Cached result of /rest/api/serverInfo, populated on first
+        # `get_server_version()` call. _server_version_probed=True with
+        # _server_version=None means "we tried and the probe failed", so
+        # we don't keep retrying every space-permissions sync.
+        self._server_version: tuple[int, int] | None = None
+        self._server_version_probed: bool = False
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
@@ -1037,6 +1063,157 @@ class OnyxConfluence:
 
         return payload.get("result", [])
 
+    def get_server_version(self) -> tuple[int, int] | None:
+        """Returns the (major, minor) version of the upstream Confluence
+        Data Center instance, or None for Cloud or when the probe fails.
+
+        Probed once per OnyxConfluence instance via /rest/api/serverInfo
+        (the result is cached on the instance, including the negative
+        result, so a one-off network blip doesn't cause us to re-probe on
+        every space-permissions sync).
+
+        Used to gate features that only exist on newer DC versions, such
+        as the REST space-permissions API introduced in DC 9.1.0
+        (CONFSERVER-78176). Most callers should prefer the higher-level
+        feature predicates (e.g. supports_rest_space_permissions) over
+        comparing the version tuple directly.
+        """
+        if self._is_cloud:
+            return None
+        if self._server_version_probed:
+            return self._server_version
+
+        self._server_version = self._probe_server_version()
+        self._server_version_probed = True
+        if self._server_version is not None:
+            logger.info(
+                "Detected Confluence Data Center version %s.%s",
+                self._server_version[0],
+                self._server_version[1],
+            )
+        return self._server_version
+
+    def _probe_server_version(self) -> tuple[int, int] | None:
+        try:
+            info = self.get("rest/api/serverInfo")
+        except Exception as e:
+            logger.warning("Failed to probe Confluence server version: %s", e)
+            return None
+        if not isinstance(info, dict):
+            return None
+        version_str = info.get("version") or ""
+        return _parse_dc_version(version_str)
+
+    def supports_rest_space_permissions(self) -> bool:
+        """Whether the upstream instance has the DC 9.1+ space-permissions
+        REST API (CONFSERVER-78176). Always False for Cloud (different API
+        surface, branched on `is_cloud` upstream of any version check) and
+        for DC instances older than 9.1.0 or where the version probe fails.
+        """
+        version = self.get_server_version()
+        return (
+            version is not None
+            and version >= _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS
+        )
+
+    def get_all_space_permissions_server_rest(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """Confluence DC 9.1+ REST API for space permissions.
+
+        GET /rest/api/space/{spaceKey}/permissions returns a flat list of
+        {operation, subject, spaceKey, spaceId} entries (CONFSERVER-78176).
+
+        Failure modes:
+
+        - 401: handled identically to the JSON-RPC path (token missing /
+          expired).
+        - 404: the endpoint isn't available on this Confluence DC version
+          (i.e. < 9.1.0). Surfaced as
+          ConfluenceRestSpacePermissionsNotAvailableError so the caller
+          can fall back to the legacy JSON-RPC path.
+        - 500: per CONFSERVER-99908, callers without
+          Confluence-admin/space-admin rights receive HTTP 500 (rather
+          than the more correct 403). Surfaced as
+          InsufficientPermissionsError with that ticket referenced so
+          the operator knows the actual remediation is "grant the bot
+          account admin", not "investigate a server-side bug".
+        """
+        path = f"rest/api/space/{quote(space_key, safe='')}/permissions"
+        response: requests.Response = self.get(path, advanced_mode=True)
+
+        if response.status_code == 404:
+            raise ConfluenceRestSpacePermissionsNotAvailableError(
+                f"REST space-permissions endpoint not available on this "
+                f"Confluence instance (HTTP 404 for space '{space_key}'). "
+                "The endpoint requires Confluence Data Center 9.1.0+."
+            )
+        if response.status_code == 401:
+            raise HTTPError(
+                "Unauthorized (401) when calling REST space-permissions API. "
+                "The credential is missing or expired.",
+                response=response,
+            )
+        if response.status_code == 500:
+            raise InsufficientPermissionsError(
+                f"Confluence returned HTTP 500 for "
+                f"GET /rest/api/space/{space_key}/permissions. Per "
+                "CONFSERVER-99908 this endpoint returns 500 (rather than "
+                "403) when the calling account lacks Confluence-admin or "
+                "space-admin rights. Grant the bot account admin "
+                "permissions on this space (or globally) and retry."
+            )
+        response.raise_for_status()
+
+        payload = response.json()
+        if not isinstance(payload, list):
+            logger.warning(
+                "Unexpected REST space-permissions payload shape for space "
+                "%s: expected list, got %s",
+                space_key,
+                type(payload).__name__,
+            )
+            return []
+        return payload
+
+    def get_anonymous_space_permissions_server_rest(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """Confluence DC 9.1+ anonymous space-permissions endpoint.
+
+        GET /rest/api/space/{spaceKey}/permissions/anonymous returns the
+        operations the anonymous role has on the space. Distinct from the
+        bulk endpoint, which on the JSON-RPC path used to return an
+        anonymous "row" inline.
+
+        404 is treated as "no anonymous access" rather than fatal; some
+        9.x patch versions had this endpoint missing or moved before it
+        stabilized, and "missing endpoint" should not be louder than
+        "no anonymous access" for our use case.
+        """
+        path = f"rest/api/space/{quote(space_key, safe='')}/permissions/anonymous"
+        response: requests.Response = self.get(path, advanced_mode=True)
+
+        if response.status_code == 404:
+            return []
+        if response.status_code == 500:
+            # CONFSERVER-99908 again -- same remediation, different endpoint.
+            raise InsufficientPermissionsError(
+                f"Confluence returned HTTP 500 for "
+                f"GET /rest/api/space/{space_key}/permissions/anonymous. "
+                "Per CONFSERVER-99908 this endpoint returns 500 (rather "
+                "than 403) when the calling account lacks "
+                "Confluence-admin or space-admin rights."
+            )
+        response.raise_for_status()
+
+        payload = response.json()
+        if not isinstance(payload, list):
+            return []
+        return payload
+
     def get_current_user(self, expand: str | None = None) -> Any:
         """
         Implements a method that isn't in the third party client.
@@ -1093,6 +1270,58 @@ def get_user_email_from_username__server(
             email = None
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
+
+
+def get_user_email_from_userkey__server(
+    confluence_client: OnyxConfluence, user_key: str
+) -> str | None:
+    """userKey -> email resolver for Confluence Data Center.
+
+    Parallels get_user_email_from_username__server but keyed on userKey
+    instead of username, because the DC 9.1+ space-permissions REST API
+    only exposes userKey on user subjects (CONFSERVER-100505 -- still
+    unresolved as of the 10.x line).
+
+    Cached separately from _USER_EMAIL_CACHE because the keyspaces are
+    different (userKey is opaque hex, username is human-readable).
+    """
+    global _USER_KEY_TO_EMAIL_CACHE
+    if user_key not in _USER_KEY_TO_EMAIL_CACHE:
+        try:
+            response = confluence_client.get_user_details_by_userkey(user_key)
+            email = response.get("email") if isinstance(response, dict) else None
+        except HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else "N/A"
+            logger.warning(
+                "Failed to get confluence email for userKey %s: HTTP %s - %s",
+                user_key,
+                status_code,
+                e,
+            )
+            email = None
+        except Exception as e:
+            logger.warning(
+                "Failed to get confluence email for userKey %s: %s - %s",
+                user_key,
+                type(e).__name__,
+                e,
+            )
+            email = None
+        _USER_KEY_TO_EMAIL_CACHE[user_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[user_key]
+
+
+def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
+    """Parse 'X.Y.Z[...]' into (X, Y); returns None on malformed input."""
+    if not version_str:
+        return None
+    parts = version_str.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]))
+    except ValueError:
+        return None
 
 
 def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:

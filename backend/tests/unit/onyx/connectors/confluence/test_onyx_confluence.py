@@ -6,10 +6,18 @@ import pytest
 import requests
 from requests import HTTPError
 
+from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
 from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
+from onyx.connectors.confluence.onyx_confluence import (
+    ConfluenceRestSpacePermissionsNotAvailableError,
+)
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_userkey__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 
@@ -1073,3 +1081,217 @@ def test_jsonrpc_websudo_html_response_raises_validation_error(
     # we're looking at really is WebSudo (vs e.g. a reverse-proxy error
     # page that happens to also be HTML).
     assert "WebSudoRequiredException" in msg
+
+
+# ---------------------------------------------------------------------------
+# DC 9.1+ REST space-permissions API: version detection, REST call, and
+# userKey -> email helper. See plans/confluence-dc-space-permissions-rest.md
+# for the broader rationale.
+# ---------------------------------------------------------------------------
+
+
+def _serverinfo_payload(version: str) -> dict[str, Any]:
+    """Minimal /rest/api/serverInfo payload; we only consume `version`."""
+    return {"version": version, "buildNumber": "0"}
+
+
+def test_supports_rest_space_permissions_true_for_dc_91_plus(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """DC 10.2.10 (the customer's actual deployed version) should report
+    support for the REST API. Cached after first probe, so a subsequent
+    call must not hit /rest/api/serverInfo a second time.
+    """
+    serverinfo_mock = mock.Mock(return_value=_serverinfo_payload("10.2.10"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        serverinfo_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert confluence_server_client.get_server_version() == (10, 2)
+    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert serverinfo_mock.call_count == 1
+
+
+def test_supports_rest_space_permissions_false_for_dc_pre_91(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    serverinfo_mock = mock.Mock(return_value=_serverinfo_payload("8.9.1"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        serverinfo_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert confluence_server_client.get_server_version() == (8, 9)
+
+
+def test_supports_rest_space_permissions_false_when_probe_fails(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Negative probe is cached: a flaky serverInfo call doesn't make us
+    re-probe on every space-permissions sync.
+    """
+    serverinfo_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        serverinfo_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert confluence_server_client.get_server_version() is None
+    confluence_server_client.supports_rest_space_permissions()
+    assert serverinfo_mock.call_count == 1
+
+
+def test_get_all_space_permissions_server_rest_404_raises_unavailable(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """A 404 from the REST endpoint means the upstream DC version is too
+    old for this API; surface as the typed signal so the dispatcher can
+    fall back to JSON-RPC instead of bubbling up an opaque HTTPError.
+    """
+    response = _create_mock_response(404, json_data={}, url="x")
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    with pytest.raises(ConfluenceRestSpacePermissionsNotAvailableError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
+
+    msg = str(exc_info.value)
+    assert "ENG" in msg
+    assert "9.1" in msg
+
+
+def test_get_all_space_permissions_server_rest_500_raises_insufficient_permissions(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """CONFSERVER-99908: the REST endpoint returns 500 (not 403) when the
+    bot account lacks Confluence/space-admin rights. Make sure we surface
+    this as InsufficientPermissionsError with the ticket reference rather
+    than a raw 5xx.
+    """
+    response = _create_mock_response(500, json_data={}, url="x")
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    with pytest.raises(InsufficientPermissionsError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
+
+    msg = str(exc_info.value)
+    assert "ENG" in msg
+    assert "CONFSERVER-99908" in msg
+    assert "admin" in msg.lower()
+
+
+def test_get_all_space_permissions_server_rest_happy_path(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Verifies advanced_mode is on (so non-200s reach our handlers) and
+    that the raw list shape from CONFSERVER-78176 is returned unchanged
+    so the dispatcher can do its own filtering.
+    """
+    permissions_payload: list[dict[str, Any]] = [
+        {
+            "operation": {"targetType": "space", "operationKey": "read"},
+            "subject": {"type": "group", "name": "confluence-users"},
+            "spaceKey": "ENG",
+            "spaceId": 131083,
+        },
+        {
+            "operation": {"targetType": "space", "operationKey": "read"},
+            "subject": {
+                "type": "user",
+                # Format is opaque hex in production; keep it human-readable
+                # here so secret-scanners don't flag it as a real credential.
+                "userKey": "fake-test-userkey-alice",
+            },
+            "spaceKey": "ENG",
+            "spaceId": 131083,
+        },
+    ]
+    # The REST endpoint returns a list, not a dict, so we hand-roll the
+    # mock response (the shared _create_mock_response helper is
+    # dict-only).
+    response = requests.Response()
+    response.status_code = 200
+    response.url = "x"
+    json_mock = mock.Mock(return_value=permissions_payload)
+    response.json = json_mock  # ty: ignore[invalid-assignment]
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    result = confluence_server_client.get_all_space_permissions_server_rest(
+        space_key="ENG"
+    )
+
+    assert result == permissions_payload
+    _, kwargs = get_mock.call_args
+    assert kwargs.get("advanced_mode") is True
+
+
+def test_get_user_email_from_userkey_caches_lookups(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Cache hit-rate is the only thing keeping per-space user resolution
+    from being O(N_users * N_spaces) network calls. Regression-guard the
+    cache.
+    """
+    user_key = "test_userkey_unique_to_this_case"
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+
+    user_details_mock = mock.Mock(
+        return_value={
+            "userKey": user_key,
+            "username": "alice",
+            "email": "alice@example.com",
+            "displayName": "Alice",
+        }
+    )
+    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
+        user_details_mock
+    )
+
+    first = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+    second = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+
+    assert first == "alice@example.com"
+    assert second == "alice@example.com"
+    assert user_details_mock.call_count == 1
+
+
+def test_get_user_email_from_userkey_caches_negative_result(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """A user we couldn't resolve (HTTPError, no email field, etc.) should
+    cache as None so we don't keep retrying every sync. This both saves
+    HTTP load and keeps the warning log from spamming.
+    """
+    user_key = "missing_userkey_unique_to_this_case"
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+
+    user_details_mock = mock.Mock(
+        side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))
+    )
+    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
+        user_details_mock
+    )
+
+    first = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+    second = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+
+    assert first is None
+    assert second is None
+    assert user_details_mock.call_count == 1
