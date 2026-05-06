@@ -21,6 +21,7 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
+from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -38,16 +39,6 @@ class LlmBashExecutionResult(BaseModel):
     exit_code: int | None
     timed_out: bool
     error: str | None = None
-
-
-def _truncate_output(output: str, max_length: int, label: str = "output") -> str:
-    truncated = output[:max_length]
-    if len(output) > max_length:
-        truncated += (
-            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
-        )
-        logger.debug("Truncated %s: %s", label, truncated)
-    return truncated
 
 
 class BashTool(Tool[BashToolOverrideKwargs]):

@@ -40,32 +40,12 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
+from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 CODE_FIELD = "code"
-
-
-def _truncate_output(output: str, max_length: int, label: str = "output") -> str:
-    """
-    Truncate output string to max_length and append truncation message if needed.
-
-    Args:
-        output: The original output string to truncate
-        max_length: Maximum length before truncation
-        label: Label for logging (e.g., "stdout", "stderr")
-
-    Returns:
-        Truncated string with truncation message appended if truncated
-    """
-    truncated = output[:max_length]
-    if len(output) > max_length:
-        truncated += (
-            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
-        )
-        logger.debug("Truncated %s: %s", label, truncated)
-    return truncated
 
 
 class PythonTool(Tool[PythonToolOverrideKwargs]):
