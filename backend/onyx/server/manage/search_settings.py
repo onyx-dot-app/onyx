@@ -26,6 +26,8 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -290,9 +292,9 @@ def validate_contextual_rag_model(
     from onyx.db.models import ModelConfiguration
 
     if not db_session.get(ModelConfiguration, model_configuration_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"model_configuration id={model_configuration_id} not found",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"model_configuration id={model_configuration_id} not found",
         )
 
 
