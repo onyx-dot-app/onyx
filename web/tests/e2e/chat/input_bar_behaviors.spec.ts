@@ -453,7 +453,8 @@ test.describe("Paste Tiles", () => {
 
   test("ArrowLeft into tile highlights it", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.inputBar.expectTileSelected();
   });
 
@@ -470,7 +471,8 @@ test.describe("Paste Tiles", () => {
 
   test("Enter on highlighted tile opens popover", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.page.keyboard.press("Enter");
     await chatPage.inputBar.expectPopoverVisible();
   });
@@ -479,7 +481,8 @@ test.describe("Paste Tiles", () => {
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.page.keyboard.press("Enter");
     await chatPage.page.waitForTimeout(500);
     await chatPage.expectNoHumanMessages();
@@ -487,7 +490,8 @@ test.describe("Paste Tiles", () => {
 
   test("typing deselects highlighted tile", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.inputBar.expectTileSelected();
     await chatPage.page.keyboard.type("x");
     await chatPage.inputBar.expectTileSelected(false);
@@ -496,7 +500,8 @@ test.describe("Paste Tiles", () => {
   test("second ArrowLeft moves cursor past the tile", async ({ chatPage }) => {
     await chatPage.inputBar.typeText("abc");
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.page.keyboard.press("ArrowLeft");
     await chatPage.inputBar.expectTileSelected(false);
   });
@@ -549,7 +554,8 @@ test.describe("Paste Tiles", () => {
 
   test("cursor is hidden when tile is highlighted", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.arrowLeftIntoTile();
+    await chatPage.page.keyboard.press("End");
+    await chatPage.page.keyboard.press("ArrowLeft");
     const collapsed = await chatPage.inputBar.isSelectionCollapsed();
     expect(collapsed).toBe(false);
   });
