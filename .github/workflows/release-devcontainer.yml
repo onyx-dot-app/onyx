@@ -56,6 +56,7 @@ jobs:
           targets: devcontainer
           set: |
             devcontainer.platform=linux/amd64
+            devcontainer.tags=
             devcontainer.output=type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Extract digest
@@ -114,6 +115,7 @@ jobs:
           targets: devcontainer
           set: |
             devcontainer.platform=linux/arm64
+            devcontainer.tags=
             devcontainer.output=type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Extract digest
