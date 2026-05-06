@@ -63,5 +63,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Clear the backfilled FK values; the string columns still hold the original data.
-    op.execute(sa.update(persona_table).values(default_model_configuration_id=None))
+    # Only clear FKs on rows that were candidates for the upgrade() backfill
+    # (both string columns non-null). Rows whose default_model_configuration_id
+    # was set before this migration ran are left untouched.
+    op.execute(
+        sa.update(persona_table)
+        .values(default_model_configuration_id=None)
+        .where(
+            persona_table.c.llm_model_provider_override.is_not(None),
+            persona_table.c.llm_model_version_override.is_not(None),
+        )
+    )
