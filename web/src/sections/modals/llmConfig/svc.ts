@@ -132,7 +132,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 }: SubmitProviderParams<T>): Promise<void> {
   setSubmitting(true);
 
-  const { test_model_name, api_key, ...rest } = values;
+  const { test_model_name, api_key, name: rawName, ...rest } = values;
   const testModelName =
     test_model_name ||
     values.model_configurations.find((m) => m.is_visible)?.name ||
@@ -149,9 +149,19 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       ? undefined
       : rest.api_base;
 
+  // Insert semantics:  undefined/null/""  → null  ("no name")
+  // Update semantics:  undefined          → omit  ("don't change")
+  //                    null/""            → null   ("clear")
+  //                    string             → string ("set")
+  const nameForRequest: string | null | undefined = existingLlmProvider
+    ? rawName !== undefined
+      ? rawName || null
+      : undefined
+    : rawName || null;
+
   const finalValues = {
     ...rest,
-    name: rest.name || null,
+    ...(nameForRequest !== undefined ? { name: nameForRequest } : {}),
     api_base: normalizedApiBase,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
