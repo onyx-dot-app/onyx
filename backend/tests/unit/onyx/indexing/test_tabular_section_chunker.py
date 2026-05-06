@@ -632,18 +632,35 @@ class TestTabularChunkerChunkSection:
 
 class TestTabularChunkerMalformedCsv:
     def test_unquoted_newline_does_not_raise(self) -> None:
-        """Google Sheets exports cells with embedded newlines without quoting them,
-        causing csv.reader to raise csv.Error. The chunker should handle this
-        gracefully rather than propagating the exception."""
-        # Simulates a Google Sheet CSV export where a cell value contains a
-        # newline that was not quoted: "col1,col2\nvalue1,line1\nline2"
-        malformed_csv = "col1,col2\nvalue1,line1\nline2"
+        """Google Sheets exports cells with embedded carriage returns without
+        quoting them, causing csv.reader to raise csv.Error. The chunker
+        should handle this gracefully rather than propagating the exception."""
+        # A bare \r inside a field (not followed by \n) causes
+        # csv.Error: "new-line character seen in unquoted field".
+        malformed_csv = "col1,col2\nvalue1,line1\rline2"
         section = _tabular_section(malformed_csv)
         chunker = _make_chunker_no_metadata()
         result = chunker.chunk_section(
             section, AccumulatorState(), content_token_limit=500
         )
-        assert result is not None
+        assert result.payloads == []
+
+    def test_unquoted_newline_with_metadata_chunker(self) -> None:
+        """When parse_csv_string fails but read_csv_header succeeds, the
+        metadata-chunker path (ignore_metadata_chunks=False) should still
+        produce descriptor chunks for the valid header without raising."""
+        # The header line is valid CSV; only the data rows trigger csv.Error.
+        malformed_csv = "col1,col2\nvalue1,line1\rline2"
+        section = _tabular_section(malformed_csv)
+        chunker = _make_chunker_with_metadata()
+        result = chunker.chunk_section(
+            section, AccumulatorState(), content_token_limit=500
+        )
+        # No row chunks (parse_csv_string failed), but descriptor chunks from
+        # the valid header should be present.
+        assert len(result.payloads) > 0
+        texts = [p.text for p in result.payloads]
+        assert any("col1" in t for t in texts)
 
 
 class TestBuildSheetDescriptorChunks:

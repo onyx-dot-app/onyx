@@ -251,7 +251,12 @@ class TabularChunker(SectionChunker):
         else:
             try:
                 headers = read_csv_header(text)
-            except csv.Error:
+            except csv.Error as e:
+                logger.warning(
+                    "TabularChunker: failed to read CSV header for section (link=%s): %s",
+                    section.link,
+                    e,
+                )
                 headers = []
         heading = section.heading or ""
 
