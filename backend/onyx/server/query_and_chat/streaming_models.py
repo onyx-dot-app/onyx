@@ -55,6 +55,9 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
+    BASH_TOOL_START = "bash_tool_start"
+    BASH_TOOL_DELTA = "bash_tool_delta"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -368,6 +371,22 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
+# Bash Tool Packets
+################################################
+class BashToolStart(BaseObj):
+    type: Literal["bash_tool_start"] = StreamingType.BASH_TOOL_START.value
+    cmd: str
+
+
+class BashToolDelta(BaseObj):
+    type: Literal["bash_tool_delta"] = StreamingType.BASH_TOOL_DELTA.value
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int | None = None
+    timed_out: bool = False
+
+
+################################################
 # Packet Object
 ################################################
 # Discriminated union of all possible packet object types
@@ -415,6 +434,9 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
+    # Bash Tool Packets
+    BashToolStart,
+    BashToolDelta,
 ]
 
 
