@@ -25,7 +25,7 @@ CODING_AGENT_TOOL = {
         "it via shell commands before returning a text answer."
     ),
     "in_code_tool_id": "CodingAgentTool",
-    "enabled": False,
+    "enabled": True,
 }
 
 
