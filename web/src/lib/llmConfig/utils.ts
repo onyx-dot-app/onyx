@@ -149,7 +149,8 @@ export function getDisplayName(
 
   const llmProvider = llmProviders?.find(
     (p) =>
-      p.provider === llmDescriptor.provider && p.name === llmDescriptor.name
+      p.provider === llmDescriptor.provider &&
+      (p.name ?? "") === (llmDescriptor.name ?? "")
   );
   return llmProvider?.model_configurations.find(
     (mc) => mc.name === llmDescriptor.modelName

@@ -518,7 +518,7 @@ export default function AgentEditorPage({
           (m: any) => m.id === values.default_model_configuration_id
         );
         if (mc) {
-          return structureValue(p.name ?? "", p.provider, mc.name);
+          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
         }
       }
     }
@@ -531,8 +531,12 @@ export default function AgentEditorPage({
         setFieldValue("default_model_configuration_id", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName && name) {
-          const provider = llmProviders?.find((p: any) => p.name === name);
+        if (modelName) {
+          // `name` is either the display name or String(provider.id) for nameless
+          // providers, so we match by both.
+          const provider = llmProviders?.find(
+            (p: any) => p.name === name || String(p.id) === name
+          );
           const modelConfig = provider?.model_configurations?.find(
             (mc: any) => mc.name === modelName
           );
