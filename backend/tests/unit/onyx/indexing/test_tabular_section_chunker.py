@@ -630,6 +630,22 @@ class TestTabularChunkerChunkSection:
         assert [p.is_continuation for p in out.payloads] == [False, True, True]
 
 
+class TestTabularChunkerMalformedCsv:
+    def test_unquoted_newline_does_not_raise(self) -> None:
+        """Google Sheets exports cells with embedded newlines without quoting them,
+        causing csv.reader to raise csv.Error. The chunker should handle this
+        gracefully rather than propagating the exception."""
+        # Simulates a Google Sheet CSV export where a cell value contains a
+        # newline that was not quoted: "col1,col2\nvalue1,line1\nline2"
+        malformed_csv = "col1,col2\nvalue1,line1\nline2"
+        section = _tabular_section(malformed_csv)
+        chunker = _make_chunker_no_metadata()
+        result = chunker.chunk_section(
+            section, AccumulatorState(), content_token_limit=500
+        )
+        assert result is not None
+
+
 class TestBuildSheetDescriptorChunks:
     """Direct tests of `build_sheet_descriptor_chunks` — the per-section
     descriptor builder that backs the metadata chunks emitted by
