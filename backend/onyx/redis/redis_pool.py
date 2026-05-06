@@ -125,6 +125,39 @@ class TenantRedis(redis.Redis):
 
         return wrapper
 
+    def _prefix_keys_arg(self, keys: Any) -> Any:
+        # BLPOP/BRPOP accept either a single key or an iterable of keys.
+        if isinstance(keys, (str, bytes, memoryview)):
+            return self._prefixed(keys)
+        return [self._prefixed(k) for k in keys]
+
+    def _prefix_blpop(self, method: Callable) -> Callable:
+        @functools.wraps(method)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if "keys" in kwargs:
+                kwargs["keys"] = self._prefix_keys_arg(kwargs["keys"])
+            elif len(args) > 0:
+                args = (self._prefix_keys_arg(args[0]),) + args[1:]
+            return method(*args, **kwargs)
+
+        return wrapper
+
+    def _prefix_eval(self, method: Callable) -> Callable:
+        # EVAL/EVALSHA signature: (script, numkeys, *keys_and_args). The next
+        # ``numkeys`` positional args after ``numkeys`` are keys; everything
+        # else (script, numkeys, trailing args) is left untouched.
+        @functools.wraps(method)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if len(args) < 2 or not isinstance(args[1], int) or args[1] <= 0:
+                return method(*args, **kwargs)
+            numkeys = args[1]
+            keys_end = 2 + numkeys
+            prefixed = tuple(self._prefixed(k) for k in args[2:keys_end])
+            new_args = args[:2] + prefixed + args[keys_end:]
+            return method(*new_args, **kwargs)
+
+        return wrapper
+
     def __getattribute__(self, item: str) -> Any:
         original_attr = super().__getattribute__(item)
         methods_to_wrap = [
@@ -170,6 +203,10 @@ class TenantRedis(redis.Redis):
 
         if item == "scan_iter" or item == "sscan_iter":
             return self._prefix_scan_iter(original_attr)
+        elif item in ("blpop", "brpop"):
+            return self._prefix_blpop(original_attr)
+        elif item in ("eval", "evalsha"):
+            return self._prefix_eval(original_attr)
         elif item in methods_to_wrap and callable(original_attr):
             return self._prefix_method(original_attr)
         return original_attr
