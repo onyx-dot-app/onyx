@@ -69,6 +69,24 @@ class StreamErrorEvent(BaseModel):
 
 StreamEvent = Union[StreamOutputEvent, StreamResultEvent, StreamErrorEvent]
 
+
+class CreateSessionResponse(BaseModel):
+    """Response from creating a long-lived execution session"""
+
+    session_id: str
+    expires_at: float
+
+
+class BashExecResponse(BaseModel):
+    """Response from executing a bash command in a session"""
+
+    stdout: str
+    stderr: str
+    exit_code: int | None
+    timed_out: bool
+    duration_ms: int
+
+
 _SSE_EVENT_MAP: dict[
     str, type[StreamOutputEvent | StreamResultEvent | StreamErrorEvent]
 ] = {
@@ -258,6 +276,53 @@ class CodeInterpreterClient:
             duration_ms=result.duration_ms,
             files=result.files,
         )
+
+    def create_session(
+        self,
+        ttl_seconds: int = 15 * 60,
+        files: list[FileInput] | None = None,
+    ) -> CreateSessionResponse:
+        """Create a long-lived code-executor session with the given TTL.
+
+        The pod is guaranteed to be torn down at or before the TTL expires,
+        even if the API service crashes and restarts.
+        """
+        url = f"{self.base_url}/v1/sessions"
+        payload: dict = {"ttl_seconds": ttl_seconds}
+        if files:
+            payload["files"] = files
+
+        response = self.session.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+
+        return CreateSessionResponse(**response.json())
+
+    def delete_session(self, session_id: str) -> None:
+        """Tear down a session pod by ID."""
+        url = f"{self.base_url}/v1/sessions/{session_id}"
+
+        response = self.session.delete(url, timeout=30)
+        response.raise_for_status()
+
+    def execute_bash_in_session(
+        self,
+        session_id: str,
+        cmd: str,
+        timeout_ms: int = 30000,
+    ) -> BashExecResponse:
+        """Run a bash command inside an existing session.
+
+        The session pod has no network access (enforced at session creation),
+        and that restriction continues to apply for every command run via
+        this route.
+        """
+        url = f"{self.base_url}/v1/sessions/{session_id}/bash"
+        payload = {"cmd": cmd, "timeout_ms": timeout_ms}
+
+        response = self.session.post(url, json=payload, timeout=timeout_ms / 1000 + 10)
+        response.raise_for_status()
+
+        return BashExecResponse(**response.json())
 
     def upload_file(self, file_content: bytes, filename: str) -> str:
         """Upload file to Code Interpreter and return file_id"""
