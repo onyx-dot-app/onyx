@@ -62,7 +62,7 @@ def delete_discord_bot_config(db_session: Session) -> bool:
     """Delete the Discord bot config. Returns True if deleted."""
     result = db_session.execute(delete(DiscordBotConfig))
     db_session.flush()
-    return result.rowcount > 0  # type: ignore[attr-defined]
+    return result.rowcount > 0  # ty: ignore[unresolved-attribute]
 
 
 # === Discord Service API Key ===
@@ -100,7 +100,8 @@ def get_or_create_discord_service_api_key(
         # Database only stores the hash, so we must regenerate to get the raw key.
         # This is safe since the Discord bot is the only consumer of this key.
         logger.debug(
-            f"Found existing Discord service API key for tenant {tenant_id} that isn't in cache, regenerating to update cache"
+            "Found existing Discord service API key for tenant %s that isn't in cache, regenerating to update cache",
+            tenant_id,
         )
         new_api_key = generate_api_key(tenant_id)
         existing.hashed_api_key = hash_api_key(new_api_key)
@@ -109,7 +110,7 @@ def get_or_create_discord_service_api_key(
         return new_api_key
 
     # Create new API key
-    logger.info(f"Creating Discord service API key for tenant {tenant_id}")
+    logger.info("Creating Discord service API key for tenant %s", tenant_id)
     api_key_args = APIKeyArgs(
         name=DISCORD_SERVICE_API_KEY_NAME,
         role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
@@ -147,7 +148,9 @@ def delete_discord_service_api_key(db_session: Session) -> bool:
 
     # Also delete the associated user
     api_key_user = db_session.scalar(
-        select(User).where(User.id == existing_key.user_id)  # type: ignore[arg-type]
+        select(User).where(
+            User.id == existing_key.user_id  # ty: ignore[invalid-argument-type]
+        )
     )
 
     db_session.delete(existing_key)
@@ -252,7 +255,7 @@ def delete_guild_config(
         delete(DiscordGuildConfig).where(DiscordGuildConfig.id == internal_id)
     )
     db_session.flush()
-    return result.rowcount > 0  # type: ignore[attr-defined]
+    return result.rowcount > 0  # ty: ignore[unresolved-attribute]
 
 
 # === DiscordChannelConfig ===
@@ -334,7 +337,7 @@ def delete_discord_channel_config(
         )
     )
     db_session.flush()
-    return result.rowcount > 0  # type: ignore[attr-defined]
+    return result.rowcount > 0  # ty: ignore[unresolved-attribute]
 
 
 def create_channel_config(

@@ -106,7 +106,7 @@ def log_generator_function_time(
             finally:
                 elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
                 log_name = func_name or func.__name__
-                logger.info(f"{log_name} took {elapsed_time_str} seconds")
+                logger.info("%s took %s seconds", log_name, elapsed_time_str)
                 if not print_only:
                     optional_telemetry(
                         record_type=RecordType.LATENCY,

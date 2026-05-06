@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { Message } from "@/app/app/interfaces";
 import { LlmManager } from "@/lib/hooks";
@@ -9,7 +16,7 @@ import MultiModelPanel from "@/app/app/message/MultiModelPanel";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
 import { setPreferredResponse } from "@/app/app/services/lib";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface MultiModelResponseViewProps {
   responses: MultiModelResponse[];
@@ -30,7 +37,7 @@ const SELECTION_PANEL_W = 400;
 // Compact width for hidden panels in the carousel track
 const HIDDEN_PANEL_W = 220;
 // Generation-mode panel widths (from Figma)
-const GEN_PANEL_W_2 = 640; // 2 panels side-by-side
+const GEN_PANEL_W_2 = 720; // 2 panels side-by-side
 const GEN_PANEL_W_3 = 436; // 3 panels side-by-side
 // Gap between panels — matches CSS gap-6 (24px)
 const PANEL_GAP = 24;
@@ -64,14 +71,31 @@ export default function MultiModelResponseView({
   onMessageSelection,
   onHiddenPanelsChange,
 }: MultiModelResponseViewProps) {
-  const [preferredIndex, setPreferredIndex] = useState<number | null>(null);
+  // Initialize preferredIndex from the backend's preferred_response_id when
+  // loading an existing conversation.
+  const [preferredIndex, setPreferredIndex] = useState<number | null>(() => {
+    if (!parentMessage?.preferredResponseId) return null;
+    const match = responses.find(
+      (r) => r.messageId === parentMessage.preferredResponseId
+    );
+    return match?.modelIndex ?? null;
+  });
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
-  const [selectionEntered, setSelectionEntered] = useState(false);
+  const [selectionEntered, setSelectionEntered] = useState(
+    () => preferredIndex !== null
+  );
+  // Tracks the deselect animation timeout so it can be cancelled if the user
+  // re-selects a panel during the 450ms animation window.
+  const deselectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while the reverse animation is playing (deselect → back to equal panels)
+  const [selectionExiting, setSelectionExiting] = useState(false);
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
+  const trackContainerElRef = useRef<HTMLDivElement | null>(null);
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
+    trackContainerElRef.current = el;
     if (roRef.current) {
       roRef.current.disconnect();
       roRef.current = null;
@@ -90,10 +114,29 @@ export default function MultiModelResponseView({
     number | null
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
-  // Tracks which non-preferred panels overflow the preferred height cap
+  // Refs to each panel wrapper for height animation on deselect
+  const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Tracks which non-preferred panels overflow the preferred height cap.
+  // Measured via useLayoutEffect after maxHeight is applied to the DOM —
+  // ref callbacks fire before layout and can't reliably detect overflow.
   const [overflowingPanels, setOverflowingPanels] = useState<Set<number>>(
     new Set()
   );
+
+  useLayoutEffect(() => {
+    if (preferredPanelHeight == null || preferredIndex === null) return;
+    const next = new Set<number>();
+    panelElsRef.current.forEach((el, idx) => {
+      if (idx === preferredIndex || hiddenPanels.has(idx)) return;
+      if (el.scrollHeight > el.clientHeight) next.add(idx);
+    });
+    setOverflowingPanels((prev) => {
+      if (prev.size === next.size && Array.from(prev).every((v) => next.has(v)))
+        return prev;
+      return next;
+    });
+  }, [preferredPanelHeight, preferredIndex, hiddenPanels, responses]);
 
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
@@ -152,15 +195,48 @@ export default function MultiModelResponseView({
   const handleSelectPreferred = useCallback(
     (modelIndex: number) => {
       if (isGenerating) return;
+
+      // Cancel any pending deselect animation so it doesn't overwrite this selection
+      if (deselectTimeoutRef.current !== null) {
+        clearTimeout(deselectTimeoutRef.current);
+        deselectTimeoutRef.current = null;
+        setSelectionExiting(false);
+      }
+
+      // Only freeze scroll when entering selection mode for the first time.
+      // When switching preferred within selection mode, panels are already
+      // capped and the track just slides — no height changes to worry about.
+      const alreadyInSelection = preferredIndex !== null;
+      if (!alreadyInSelection) {
+        const scrollContainer = trackContainerElRef.current?.closest(
+          "[data-chat-scroll]"
+        ) as HTMLElement | null;
+        const scrollTop = scrollContainer?.scrollTop ?? 0;
+        if (scrollContainer) scrollContainer.style.overflow = "hidden";
+
+        setTimeout(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (scrollContainer) {
+                  scrollContainer.scrollTop = scrollTop;
+                  scrollContainer.style.overflow = "";
+                }
+              });
+            });
+          }
+        }, 450);
+      }
+
       setPreferredIndex(modelIndex);
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
-      if (onMessageSelection) {
-        onMessageSelection(response.nodeId);
-      }
 
-      // Persist preferred response to backend + update local tree so the
-      // input bar unblocks (awaitingPreferredSelection clears).
+      // Persist preferred response + sync `latestChildNodeId`. Backend's
+      // `set_preferred_response` updates `latest_child_message_id`; if the
+      // frontend chain walk disagrees, the next follow-up fails with
+      // "not on the latest mainline".
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
         setPreferredResponse(parentMessage.messageId, response.messageId).catch(
           (err) => console.error("Failed to persist preferred response:", err)
@@ -176,6 +252,7 @@ export default function MultiModelResponseView({
             updated.set(parentMessage.nodeId, {
               ...userMsg,
               preferredResponseId: response.messageId,
+              latestChildNodeId: response.nodeId,
             });
             updateSessionMessageTree(currentSessionId, updated);
           }
@@ -185,17 +262,111 @@ export default function MultiModelResponseView({
     [
       isGenerating,
       responses,
-      onMessageSelection,
+      preferredIndex,
       parentMessage,
       currentSessionId,
       updateSessionMessageTree,
     ]
   );
 
+  // NOTE: Deselect only clears the local tree — no backend call to clear
+  // preferred_response_id. The SetPreferredResponseRequest model doesn't
+  // accept null. A backend endpoint for clearing preference would be needed
+  // if deselect should persist across reloads.
+  const handleDeselectPreferred = useCallback(() => {
+    const scrollContainer = trackContainerElRef.current?.closest(
+      "[data-chat-scroll]"
+    ) as HTMLElement | null;
+
+    // Animate panels back to equal positions, then clear preferred after transition
+    setSelectionExiting(true);
+    setSelectionEntered(false);
+    deselectTimeoutRef.current = setTimeout(() => {
+      deselectTimeoutRef.current = null;
+      const scrollTop = scrollContainer?.scrollTop ?? 0;
+      if (scrollContainer) scrollContainer.style.overflow = "hidden";
+
+      // Before clearing state, animate each capped panel's height from
+      // its current clientHeight to its natural scrollHeight.
+      const animations: Animation[] = [];
+      panelElsRef.current.forEach((el, modelIndex) => {
+        if (modelIndex === preferredIndex) return;
+        if (hiddenPanels.has(modelIndex)) return;
+        const from = el.clientHeight;
+        const to = el.scrollHeight;
+        if (to <= from) return;
+        // Lock current height, remove maxHeight cap, then animate
+        el.style.maxHeight = `${from}px`;
+        el.style.overflow = "hidden";
+        const anim = el.animate(
+          [{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }],
+          {
+            duration: 350,
+            easing: "cubic-bezier(0.2, 0, 0, 1)",
+            fill: "forwards",
+          }
+        );
+        animations.push(anim);
+        anim.onfinish = () => {
+          el.style.maxHeight = "";
+          el.style.overflow = "";
+        };
+      });
+
+      setSelectionExiting(false);
+      setPreferredIndex(null);
+
+      // Restore scroll after animations + React settle
+      const restoreScroll = () => {
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
+            scrollContainer.style.overflow = "";
+          }
+        });
+      };
+
+      if (animations.length > 0) {
+        Promise.all(animations.map((a) => a.finished))
+          .then(restoreScroll)
+          .catch(restoreScroll);
+      } else {
+        restoreScroll();
+      }
+
+      // Clear preferredResponseId in the local tree so input bar re-gates
+      if (parentMessage && currentSessionId) {
+        const tree = useChatSessionStore
+          .getState()
+          .sessions.get(currentSessionId)?.messageTree;
+        if (tree) {
+          const userMsg = tree.get(parentMessage.nodeId);
+          if (userMsg) {
+            const updated = new Map(tree);
+            updated.set(parentMessage.nodeId, {
+              ...userMsg,
+              preferredResponseId: undefined,
+            });
+            updateSessionMessageTree(currentSessionId, updated);
+          }
+        }
+      }
+    }, 450);
+  }, [
+    parentMessage,
+    currentSessionId,
+    updateSessionMessageTree,
+    preferredIndex,
+    hiddenPanels,
+  ]);
+
   // Clear preferred selection when generation starts
+  // Reset selection state when generation restarts
   useEffect(() => {
     if (isGenerating) {
       setPreferredIndex(null);
+      setHasEnteredSelection(false);
+      setSelectionExiting(false);
     }
   }, [isGenerating]);
 
@@ -204,22 +375,39 @@ export default function MultiModelResponseView({
     (r) => r.modelIndex === preferredIndex
   );
 
-  // Selection mode when preferred is set, found in responses, not generating, and at least 2 visible panels
-  const showSelectionMode =
+  // Track whether selection mode was ever entered — once it has been,
+  // we stay in the selection layout (even after deselect) to avoid a
+  // jarring DOM swap between the two layout strategies.
+  const [hasEnteredSelection, setHasEnteredSelection] = useState(
+    () => preferredIndex !== null
+  );
+
+  const isActivelySelected =
     preferredIndex !== null &&
     preferredIdx !== -1 &&
     !isGenerating &&
     visibleResponses.length > 1;
 
-  // Trigger the slide-out animation one frame after entering selection mode
   useEffect(() => {
-    if (!showSelectionMode) {
-      setSelectionEntered(false);
+    if (isActivelySelected) setHasEnteredSelection(true);
+  }, [isActivelySelected]);
+
+  // Use the selection layout once a preferred response has been chosen,
+  // even after deselect. Only fall through to generation layout before
+  // the first selection or during active streaming.
+  const showSelectionMode = isActivelySelected || hasEnteredSelection;
+
+  // Trigger the slide-out animation one frame after a preferred panel is selected.
+  // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
+  // deselect still triggers the animation.
+  useEffect(() => {
+    if (!isActivelySelected) {
+      // Don't reset selectionEntered here — handleDeselectPreferred manages it
       return;
     }
     const raf = requestAnimationFrame(() => setSelectionEntered(true));
     return () => cancelAnimationFrame(raf);
-  }, [showSelectionMode]);
+  }, [isActivelySelected]);
 
   // Build panel props — isHidden reflects actual hidden state
   const buildPanelProps = useCallback(
@@ -231,6 +419,7 @@ export default function MultiModelResponseView({
       isHidden: hiddenPanels.has(response.modelIndex),
       isNonPreferredInSelection: isNonPreferred,
       onSelect: () => handleSelectPreferred(response.modelIndex),
+      onDeselect: handleDeselectPreferred,
       onToggleVisibility: () => toggleVisibility(response.modelIndex),
       agentMessageProps: {
         rawPackets: response.packets,
@@ -250,11 +439,13 @@ export default function MultiModelResponseView({
       isRetryable: response.isRetryable,
       errorStackTrace: response.errorStackTrace,
       errorDetails: response.errorDetails,
+      isGenerating,
     }),
     [
       preferredIndex,
       hiddenPanels,
       handleSelectPreferred,
+      handleDeselectPreferred,
       toggleVisibility,
       chatState,
       llmManager,
@@ -262,6 +453,7 @@ export default function MultiModelResponseView({
       onMessageSelection,
       onRegenerate,
       parentMessage,
+      isGenerating,
     ]
   );
 
@@ -310,25 +502,30 @@ export default function MultiModelResponseView({
       <div
         ref={trackContainerRef}
         className="w-full overflow-hidden"
-        style={{
-          maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
-          WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
-        }}
+        style={
+          isActivelySelected
+            ? {
+                maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
+                WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
+              }
+            : undefined
+        }
       >
         <div
           className="flex items-start"
           style={{
             gap: `${PANEL_GAP}px`,
-            transition: selectionEntered
-              ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
-              : "none",
+            transition:
+              selectionEntered || selectionExiting
+                ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
+                : "none",
             transform: trackTransform,
           }}
         >
           {responses.map((r, i) => {
             const isHidden = hiddenPanels.has(r.modelIndex);
             const isPref = r.modelIndex === preferredIndex;
-            const isNonPref = !isHidden && !isPref;
+            const isNonPref = !isHidden && !isPref && preferredIndex !== null;
             const finalW = selectionWidths[i]!;
             const startW = isHidden ? HIDDEN_PANEL_W : SELECTION_PANEL_W;
             const capped = isNonPref && preferredPanelHeight != null;
@@ -337,42 +534,35 @@ export default function MultiModelResponseView({
               <div
                 key={r.modelIndex}
                 ref={(el) => {
-                  if (isPref) preferredPanelRef(el);
-                  if (capped && el) {
-                    const doesOverflow = el.scrollHeight > el.clientHeight;
-                    setOverflowingPanels((prev) => {
-                      const had = prev.has(r.modelIndex);
-                      if (doesOverflow === had) return prev;
-                      const next = new Set(prev);
-                      if (doesOverflow) next.add(r.modelIndex);
-                      else next.delete(r.modelIndex);
-                      return next;
-                    });
+                  if (el) {
+                    panelElsRef.current.set(r.modelIndex, el);
+                  } else {
+                    panelElsRef.current.delete(r.modelIndex);
                   }
+                  if (isPref) preferredPanelRef(el);
                 }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,
                   flexShrink: 0,
-                  transition: selectionEntered
-                    ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
-                    : "none",
+                  transition:
+                    selectionEntered || selectionExiting
+                      ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
+                      : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,
                   overflow: capped ? "hidden" : undefined,
-                  position: capped ? "relative" : undefined,
+                  ...(overflows
+                    ? {
+                        maskImage:
+                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
+                        WebkitMaskImage:
+                          "linear-gradient(to bottom, black calc(100% - 6rem), transparent 100%)",
+                      }
+                    : {}),
                 }}
               >
                 <div className={cn(isNonPref && "opacity-50")}>
                   <MultiModelPanel {...buildPanelProps(r, isNonPref)} />
                 </div>
-                {overflows && (
-                  <div
-                    className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
-                    style={{
-                      background:
-                        "linear-gradient(to top, var(--background-tint-01) 0%, transparent 100%)",
-                    }}
-                  />
-                )}
               </div>
             );
           })}
@@ -388,7 +578,7 @@ export default function MultiModelResponseView({
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex gap-6 items-start w-full">
+      <div className="flex gap-6 items-start justify-center w-full">
         {responses.map((r) => {
           const isHidden = hiddenPanels.has(r.modelIndex);
           return (

@@ -19,13 +19,15 @@ class MockCredentialsProvider(CredentialsProviderInterface):
     def get_credentials(self) -> dict[str, str]:
         return {"confluence_access_token": "test_token"}
 
-    def set_credentials(self, credentials: dict[str, str]) -> None:
+    def set_credentials(  # ty: ignore[invalid-method-override]
+        self, credentials: dict[str, str]
+    ) -> None:
         pass
 
     def __enter__(self) -> "MockCredentialsProvider":
         return self
 
-    def __exit__(
+    def __exit__(  # ty: ignore[invalid-method-override]
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,

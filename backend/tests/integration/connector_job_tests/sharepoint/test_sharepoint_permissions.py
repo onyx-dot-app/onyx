@@ -4,15 +4,9 @@ import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.document_acl import (
-    get_all_connector_documents,
-)
-from tests.integration.common_utils.document_acl import (
-    get_documents_by_permission_type,
-)
-from tests.integration.common_utils.document_acl import (
-    get_user_document_access_via_acl,
-)
+from tests.integration.common_utils.document_acl import get_all_connector_documents
+from tests.integration.common_utils.document_acl import get_documents_by_permission_type
+from tests.integration.common_utils.document_acl import get_user_document_access_via_acl
 from tests.integration.connector_job_tests.sharepoint.conftest import (
     SharepointTestEnvSetupTuple,
 )
@@ -55,8 +49,8 @@ def test_public_documents_accessible_by_all_users(
             db_session=db_session,
         )
 
-        logger.info(f"User 1 has access to {len(accessible_docs_user1)} documents")
-        logger.info(f"User 2 has access to {len(accessible_docs_user2)} documents")
+        logger.info("User 1 has access to %s documents", len(accessible_docs_user1))
+        logger.info("User 2 has access to %s documents", len(accessible_docs_user2))
 
         # For public documents, both users should have access to at least some docs
         assert len(accessible_docs_user1) == 8, (
@@ -112,8 +106,8 @@ def test_group_based_permissions(
             db_session=db_session,
         )
 
-        logger.info(f"User 1 has access to {len(accessible_docs_user1)} documents")
-        logger.info(f"User 2 has access to {len(accessible_docs_user2)} documents")
+        logger.info("User 1 has access to %s documents", len(accessible_docs_user1))
+        logger.info("User 2 has access to %s documents", len(accessible_docs_user2))
 
         public_docs = get_documents_by_permission_type(all_document_ids, db_session)
 

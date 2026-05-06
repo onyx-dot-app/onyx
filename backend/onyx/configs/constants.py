@@ -4,7 +4,6 @@ import socket
 from enum import auto
 from enum import Enum
 
-
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
 ONYX_UTM_SOURCE = "onyx_app"
@@ -138,6 +137,11 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 # to handle hung connectors
 CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 
+# how long the indexing watchdog waits for a spawned subprocess to exit after
+# SIGTERM before escalating to SIGKILL. Kept short because we only fall into this
+# code path once we have already decided the process needs to die.
+CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -204,7 +208,6 @@ class DocumentSource(str, Enum):
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
-    REQUESTTRACKER = "requesttracker"
     GITHUB = "github"
     GITBOOK = "gitbook"
     GITLAB = "gitlab"
@@ -284,6 +287,8 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
+    LICENSE_EXPIRY_WARNING = "license_expiry_warning"
 
 
 class BlobType(str, Enum):
@@ -369,9 +374,11 @@ class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
+    CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    INDEXING_STAGING = "indexing_staging"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -450,6 +457,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
+    OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
@@ -596,7 +604,7 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
-    VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
@@ -612,6 +620,9 @@ class OnyxCeleryTask:
 
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
+
+    # License expiry tiered warnings
+    CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
@@ -638,10 +649,15 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS = {}
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
+# TCP_KEEPALIVE only exists on Darwin and TCP_KEEPIDLE only exists on Linux/BSD.
+# getattr keeps both branches type-checkable on either platform; any per-line
+# ty suppression (scoped or bare) would itself be flagged as unused on the
+# platform where the attribute actually resolves, since ty analyzes one
+# platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore[attr-defined,unused-ignore]
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60
 
 
 class OnyxCallTypes(str, Enum):
@@ -661,7 +677,6 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.WEB: "indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
     DocumentSource.GMAIL: "email messages",
-    DocumentSource.REQUESTTRACKER: "requesttracker",
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",

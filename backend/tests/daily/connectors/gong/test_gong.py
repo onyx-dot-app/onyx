@@ -1,4 +1,3 @@
-import os
 import time
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -7,17 +6,24 @@ import pytest
 
 from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.GONG_ACCESS_KEY,
+    TestSecret.GONG_ACCESS_KEY_SECRET,
+)
 
 
 @pytest.fixture
-def gong_connector() -> GongConnector:
+def gong_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GongConnector:
     connector = GongConnector()
 
     connector.load_credentials(
         {
-            "gong_access_key": os.environ["GONG_ACCESS_KEY"],
-            "gong_access_key_secret": os.environ["GONG_ACCESS_KEY_SECRET"],
+            "gong_access_key": test_secrets[TestSecret.GONG_ACCESS_KEY],
+            "gong_access_key_secret": test_secrets[TestSecret.GONG_ACCESS_KEY_SECRET],
         }
     )
 
@@ -32,18 +38,20 @@ def test_gong_basic(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     gong_connector: GongConnector,
 ) -> None:
-    doc_batch_generator = gong_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
-
-    assert len(doc_batch) == 2
+    checkpoint = gong_connector.build_dummy_checkpoint()
 
     docs: list[Document] = []
-    for doc in doc_batch:
-        if not isinstance(doc, HierarchyNode):
-            docs.append(doc)
+    while checkpoint.has_more:
+        generator = gong_connector.load_from_checkpoint(0, time.time(), checkpoint)
+        try:
+            while True:
+                item = next(generator)
+                if isinstance(item, Document):
+                    docs.append(item)
+        except StopIteration as e:
+            checkpoint = e.value
+
+    assert len(docs) == 2
 
     assert docs[0].semantic_identifier == "test with chris"
     assert docs[1].semantic_identifier == "Testing Gong"

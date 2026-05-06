@@ -20,10 +20,10 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import is_limited_user
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -65,8 +65,11 @@ def update_user_role(
             )
         )
 
-        # Re-assign to the correct default group (skip for LIMITED).
-        if new_role != UserRole.LIMITED:
+        # Re-assign to the correct default group.
+        # assign_user_to_default_groups__no_commit internally skips
+        # ANONYMOUS, BOT, and EXT_PERM_USER account types.
+        # Also skip limited users (no group assignment).
+        if not is_limited_user(user):
             assign_user_to_default_groups__no_commit(
                 db_session,
                 user,
@@ -98,7 +101,10 @@ def activate_user(
     created while inactive or deactivated before the backfill migration.
     """
     user.is_active = True
-    if user.role != UserRole.LIMITED:
+    # assign_user_to_default_groups__no_commit internally skips
+    # ANONYMOUS, BOT, and EXT_PERM_USER account types.
+    # Also skip limited users (no group assignment).
+    if not is_limited_user(user):
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=(user.role == UserRole.ADMIN)
         )
@@ -114,13 +120,13 @@ def get_latest_access_token_for_user(
     try:
         result = db_session.execute(
             select(AccessToken)
-            .where(AccessToken.user_id == user_id)  # type: ignore
+            .where(AccessToken.user_id == user_id)  # ty: ignore[invalid-argument-type]
             .order_by(desc(Column("created_at")))
             .limit(1)
         )
         return result.scalar_one_or_none()
     except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
+        logger.error("Error fetching AccessToken: %s", e)
         return None
 
 
@@ -132,7 +138,7 @@ def update_user_temperature_override_enabled(
     """Update user's temperature override enabled setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(temperature_override_enabled=temperature_override_enabled)
     )
     db_session.commit()
@@ -146,8 +152,22 @@ def update_user_shortcut_enabled(
     """Update user's shortcut enabled setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(shortcut_enabled=shortcut_enabled)
+    )
+    db_session.commit()
+
+
+def update_user_paste_as_tile(
+    user_id: UUID,
+    paste_as_tile: bool,
+    db_session: Session,
+) -> None:
+    """Update user's paste-as-tile setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(paste_as_tile=paste_as_tile)
     )
     db_session.commit()
 
@@ -160,7 +180,7 @@ def update_user_auto_scroll(
     """Update user's auto scroll setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(auto_scroll=auto_scroll)
     )
     db_session.commit()
@@ -174,7 +194,7 @@ def update_user_default_model(
     """Update user's default model setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(default_model=default_model)
     )
     db_session.commit()
@@ -188,7 +208,7 @@ def update_user_theme_preference(
     """Update user's theme preference setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(theme_preference=theme_preference)
     )
     db_session.commit()
@@ -202,7 +222,7 @@ def update_user_chat_background(
     """Update user's chat background setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(chat_background=chat_background)
     )
     db_session.commit()
@@ -216,7 +236,7 @@ def update_user_default_app_mode(
     """Update user's default app mode setting."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(default_app_mode=default_app_mode)
     )
     db_session.commit()
@@ -235,7 +255,7 @@ def update_user_personalization(
 ) -> None:
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(
             personal_name=personal_name,
             personal_role=personal_role,
@@ -295,7 +315,7 @@ def update_user_pinned_assistants(
     """Update user's pinned assistants list."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(pinned_assistants=pinned_assistants)
     )
     db_session.commit()
@@ -311,7 +331,7 @@ def update_user_assistant_visibility(
     """Update user's assistant visibility settings."""
     db_session.execute(
         update(User)
-        .where(User.id == user_id)  # type: ignore
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(
             hidden_assistants=hidden_assistants,
             visible_assistants=visible_assistants,

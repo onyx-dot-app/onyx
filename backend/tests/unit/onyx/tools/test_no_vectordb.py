@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-
 # ------------------------------------------------------------------
 # SearchTool
 # ------------------------------------------------------------------

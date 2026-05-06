@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { ValidSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
-import Separator from "@/refresh-components/Separator";
 import {
   connectorConfigs,
   createConnectorInitialValues,
@@ -82,7 +81,7 @@ function ConnectorConfigForm({
               currentCredential={credential}
             />
           ))}
-        <Separator />
+        <Divider />
         {config?.advanced_values &&
           config.advanced_values.length > 0 &&
           config.advanced_values.map((field) => (

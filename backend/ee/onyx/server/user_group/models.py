@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.auth.permissions import Permission
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import ConnectorCredentialPairDescriptor
 from onyx.server.documents.models import ConnectorSnapshot
@@ -121,3 +122,13 @@ class SetCuratorRequest(BaseModel):
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
+
+
+class SetPermissionRequest(BaseModel):
+    permission: Permission
+    enabled: bool
+
+
+class SetPermissionResponse(BaseModel):
+    permission: Permission
+    enabled: bool

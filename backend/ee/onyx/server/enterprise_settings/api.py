@@ -27,11 +27,12 @@ from ee.onyx.server.scim.auth import generate_scim_token
 from ee.onyx.server.scim.models import ScimTokenCreate
 from ee.onyx.server.scim.models import ScimTokenCreatedResponse
 from ee.onyx.server.scim.models import ScimTokenResponse
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user_with_expired_token
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.utils import BasicAuthenticationError
@@ -69,7 +70,7 @@ async def refresh_access_token(
     user_manager: UserManager = Depends(get_user_manager),
 ) -> None:
     try:
-        logger.debug(f"Received response from Meechum auth URL for user {user.id}")
+        logger.debug("Received response from Meechum auth URL for user %s", user.id)
 
         # Extract new tokens
         new_access_token = refresh_token.access_token
@@ -80,7 +81,7 @@ async def refresh_access_token(
         )
         expires_at_timestamp = int(new_expiry.timestamp())
 
-        logger.debug(f"Access token has been refreshed for user {user.id}")
+        logger.debug("Access token has been refreshed for user %s", user.id)
 
         await user_manager.oauth_callback(
             oauth_name="custom",
@@ -92,17 +93,19 @@ async def refresh_access_token(
             associate_by_email=True,
         )
 
-        logger.info(f"Successfully refreshed tokens for user {user.id}")
+        logger.info("Successfully refreshed tokens for user %s", user.id)
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
-            logger.warning(f"Full authentication required for user {user.id}")
+            logger.warning("Full authentication required for user %s", user.id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Full authentication required",
             )
         logger.error(
-            f"HTTP error occurred while refreshing token for user {user.id}: {str(e)}"
+            "HTTP error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -110,7 +113,9 @@ async def refresh_access_token(
         )
     except Exception as e:
         logger.error(
-            f"Unexpected error occurred while refreshing token for user {user.id}: {str(e)}"
+            "Unexpected error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -120,7 +125,8 @@ async def refresh_access_token(
 
 @admin_router.put("")
 def admin_ee_put_settings(
-    settings: EnterpriseSettings, _: User = Depends(current_admin_user)
+    settings: EnterpriseSettings,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     store_settings(settings)
 
@@ -139,7 +145,7 @@ def ee_fetch_settings() -> EnterpriseSettings:
 def put_logo(
     file: UploadFile,
     is_logotype: bool = False,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     upload_logo(file=file, is_logotype=is_logotype)
 
@@ -196,7 +202,8 @@ def fetch_logo(
 
 @admin_router.put("/custom-analytics-script")
 def upload_custom_analytics_script(
-    script_upload: AnalyticsScriptUpload, _: User = Depends(current_admin_user)
+    script_upload: AnalyticsScriptUpload,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     try:
         store_analytics_script(script_upload)
@@ -220,7 +227,7 @@ def _get_scim_dal(db_session: Session = Depends(get_session)) -> ScimDAL:
 
 @admin_router.get("/scim/token")
 def get_active_scim_token(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     dal: ScimDAL = Depends(_get_scim_dal),
 ) -> ScimTokenResponse:
     """Return the currently active SCIM token's metadata, or 404 if none."""
@@ -250,7 +257,7 @@ def get_active_scim_token(
 @admin_router.post("/scim/token", status_code=201)
 def create_scim_token(
     body: ScimTokenCreate,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     dal: ScimDAL = Depends(_get_scim_dal),
 ) -> ScimTokenCreatedResponse:
     """Create a new SCIM bearer token.

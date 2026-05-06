@@ -1,7 +1,8 @@
 """Generic Celery task lifecycle Prometheus metrics.
 
 Provides signal handlers that track task started/completed/failed counts,
-active task gauge, task duration histograms, and retry/reject/revoke counts.
+active task gauge, task duration histograms, queue wait time histograms,
+and retry/reject/revoke counts.
 These fire for ALL tasks on the worker — no per-connector enrichment
 (see indexing_task_metrics.py for that).
 
@@ -71,6 +72,32 @@ TASK_REJECTED = Counter(
     ["task_name"],
 )
 
+TASK_QUEUE_WAIT = Histogram(
+    "onyx_celery_task_queue_wait_seconds",
+    "Time a Celery task spent waiting in the queue before execution started",
+    ["task_name", "queue"],
+    buckets=[
+        0.1,
+        0.5,
+        1,
+        5,
+        30,
+        60,
+        300,
+        600,
+        1800,
+        3600,
+        7200,
+        14400,
+        28800,
+        43200,
+        86400,
+        172800,
+        432000,
+        864000,
+    ],
+)
+
 # task_id → (monotonic start time, metric labels)
 _task_start_times: dict[str, tuple[float, dict[str, str]]] = {}
 
@@ -133,6 +160,13 @@ def on_celery_task_prerun(
         with _task_start_times_lock:
             _evict_stale_start_times()
             _task_start_times[task_id] = (time.monotonic(), labels)
+
+        headers = getattr(task.request, "headers", None) or {}
+        enqueued_at = headers.get("enqueued_at")
+        if isinstance(enqueued_at, (int, float)):
+            TASK_QUEUE_WAIT.labels(**labels).observe(
+                max(0.0, time.time() - enqueued_at)
+            )
     except Exception:
         logger.debug("Failed to record celery task prerun metrics", exc_info=True)
 

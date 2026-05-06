@@ -13,7 +13,7 @@ test.describe.configure({ mode: "parallel" });
  * user / feature-flag configuration.
  */
 async function discoverAdminPages(page: Page): Promise<string[]> {
-  await page.goto("/admin/configuration/llm");
+  await page.goto("/admin/configuration/language-models");
   await page.waitForLoadState("networkidle");
 
   return page.evaluate(() => {

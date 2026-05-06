@@ -126,7 +126,7 @@ def onyx_redis(
             return 1
 
         tenant_id = get_current_tenant_id()
-        logger.info(f"Purging locks associated with deleting cc_pair={cc_pair_id}.")
+        logger.info("Purging locks associated with deleting cc_pair=%s.", cc_pair_id)
         redis_connector = RedisConnector(tenant_id, cc_pair_id)
 
         redis_delete_if_exists_helper(
@@ -181,12 +181,12 @@ def onyx_redis(
         if user_email not in current_invited_users:
             current_invited_users.append(user_email)
             if dry_run:
-                logger.info(f"(DRY-RUN) Would add {user_email} to invited users")
+                logger.info("(DRY-RUN) Would add %s to invited users", user_email)
             else:
                 write_invited_users(current_invited_users)
-                logger.info(f"Added {user_email} to invited users")
+                logger.info("Added %s to invited users", user_email)
         else:
-            logger.info(f"{user_email} is already in the invited users list")
+            logger.info("%s is already in the invited users list", user_email)
         return 0
     else:
         pass
@@ -195,7 +195,7 @@ def onyx_redis(
 
 
 def flush_batch_delete(batch_keys: list[bytes], r: Redis) -> None:
-    logger.info(f"Flushing {len(batch_keys)} operations to Redis.")
+    logger.info("Flushing %s operations to Redis.", len(batch_keys))
     with r.pipeline() as pipe:
         for batch_key in batch_keys:
             pipe.delete(batch_key)
@@ -209,13 +209,13 @@ def redis_delete_if_exists_helper(key: str, dry_run: bool, r: Redis) -> bool:
     """
 
     if not r.exists(key):
-        logger.info(f"Did not find {key}.")
+        logger.info("Did not find %s.", key)
         return False
 
     if dry_run:
-        logger.info(f"(DRY-RUN) Deleting {key}.")
+        logger.info("(DRY-RUN) Deleting %s.", key)
     else:
-        logger.info(f"Deleting {key}.")
+        logger.info("Deleting %s.", key)
         r.delete(key)
 
     return True
@@ -229,7 +229,9 @@ def purge_by_match_and_type(
     """
 
     logger.info(
-        f"purge_by_match_and_type start: match_pattern={match_pattern} match_type={match_type}"
+        "purge_by_match_and_type start: match_pattern=%s match_type=%s",
+        match_pattern,
+        match_type,
     )
 
     # cursor = "0"
@@ -252,10 +254,10 @@ def purge_by_match_and_type(
 
         count += 1
         if dry_run:
-            logger.info(f"(DRY-RUN) Deleting item {count}: {key_str}")
+            logger.info("(DRY-RUN) Deleting item %s: %s", count, key_str)
             continue
 
-        logger.info(f"Deleting item {count}: {key_str}")
+        logger.info("Deleting item %s: %s", count, key_str)
 
         batch_keys.append(key)
 
@@ -268,10 +270,10 @@ def purge_by_match_and_type(
     flush_batch_delete(batch_keys, r)
     batch_keys.clear()
 
-    logger.info(f"Deleted {count} matches.")
+    logger.info("Deleted %s matches.", count)
 
     elapsed = time.monotonic() - start
-    logger.info(f"Time elapsed: {elapsed:.2f}s")
+    logger.info("Time elapsed: %ss", format(elapsed, ".2f"))
     return 0
 
 
@@ -311,9 +313,9 @@ def get_user_token_from_redis(r: Redis, user_email: str) -> str | None:
                 matching_key = key_str
                 break
         except json.JSONDecodeError:
-            logger.error(f"Failed to decode JSON for key: {key_str}")
+            logger.error("Failed to decode JSON for key: %s", key_str)
         except Exception as e:
-            logger.error(f"Error processing JWT for key: {key_str}. Error: {str(e)}")
+            logger.error("Error processing JWT for key: %s. Error: %s", key_str, str(e))
 
     if matching_key:
         return matching_key[len(REDIS_AUTH_KEY_PREFIX) :]
@@ -357,19 +359,19 @@ def delete_user_token_from_redis(
                 matching_key = key_str
                 break
         except json.JSONDecodeError:
-            logger.error(f"Failed to decode JSON for key: {key_str}")
+            logger.error("Failed to decode JSON for key: %s", key_str)
         except Exception as e:
-            logger.error(f"Error processing JWT for key: {key_str}. Error: {str(e)}")
+            logger.error("Error processing JWT for key: %s. Error: %s", key_str, str(e))
 
     if matching_key:
         if dry_run:
-            logger.info(f"(DRY-RUN) Would delete token key: {matching_key}")
+            logger.info("(DRY-RUN) Would delete token key: %s", matching_key)
         else:
             r.delete(matching_key)
-            logger.info(f"Deleted token for user: {user_email}")
+            logger.info("Deleted token for user: %s", user_email)
         return True
     else:
-        logger.info(f"No token found for user: {user_email}")
+        logger.info("No token found for user: %s", user_email)
         return False
 
 

@@ -1,172 +1,99 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
-import { LLMProviderFormProps } from "@/interfaces/llm";
-import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
-  buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
+  useInitialValues,
+  buildValidationSchema,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  FieldSeparator,
-  ModelsAccessField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-
-const OPENAI_PROVIDER_NAME = "openai";
-const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
+import { InputDivider } from "@opal/layouts";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { toast } from "@/hooks/useToast";
 
 export default function OpenAIModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
-  onboardingState,
-  onboardingActions,
-  llmDescriptor,
+  onSuccess,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } =
-    useWellKnownLLMProvider(OPENAI_PROVIDER_NAME);
 
   const onClose = () => onOpenChange?.(false);
 
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
+  const initialValues = useInitialValues(
+    isOnboarding,
+    LLMProviderName.OPENAI,
+    existingLlmProvider
   );
 
-  const initialValues = isOnboarding
-    ? {
-        ...buildOnboardingInitialValues(),
-        name: OPENAI_PROVIDER_NAME,
-        provider: OPENAI_PROVIDER_NAME,
-        api_key: "",
-        default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
-      }
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        default_model_name:
-          (defaultModelName &&
-          modelConfigurations.some((m) => m.name === defaultModelName)
-            ? defaultModelName
-            : undefined) ??
-          wellKnownLLMProvider?.recommended_default_model?.name ??
-          DEFAULT_DEFAULT_MODEL_NAME,
-        is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-      };
-
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_key: Yup.string().required("API Key is required"),
-        default_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildDefaultValidationSchema().shape({
-        api_key: Yup.string().required("API Key is required"),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
+  });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.OPENAI}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
-      onSubmit={async (values, { setSubmitting }) => {
-        if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
-
-          await submitOnboardingProvider({
-            providerName: OPENAI_PROVIDER_NAME,
-            payload: {
-              ...values,
-              model_configurations: modelConfigsToUse,
-              is_auto_mode:
-                values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: OPENAI_PROVIDER_NAME,
-            values,
-            initialValues,
-            modelConfigurations,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setIsTesting,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
+        await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          providerName: LLMProviderName.OPENAI,
+          values,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          onSuccess: async () => {
+            if (onSuccess) {
+              await onSuccess();
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              toast.success(
+                existingLlmProvider
+                  ? "Provider updated successfully!"
+                  : "Provider enabled successfully!"
+              );
+            }
+          },
+        });
       }}
     >
-      {(formikProps) => (
-        <LLMConfigurationModalWrapper
-          providerEndpoint={OPENAI_PROVIDER_NAME}
-          existingProviderName={existingLlmProvider?.name}
-          onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
-        >
-          <APIKeyField providerName="OpenAI" />
+      <APIKeyField providerName="OpenAI" />
 
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
-          <FieldSeparator />
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gpt-5.2" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={
-                wellKnownLLMProvider?.recommended_default_model ?? null
-              }
-              shouldShowAutoUpdateToggle={true}
-            />
-          )}
-
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
-            </>
-          )}
-        </LLMConfigurationModalWrapper>
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputDivider />
+      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
+
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

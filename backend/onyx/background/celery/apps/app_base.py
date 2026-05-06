@@ -6,15 +6,16 @@ from typing import Any
 from typing import cast
 
 import sentry_sdk
-from celery import bootsteps  # type: ignore
+from celery import bootsteps  # ty: ignore[unresolved-import]
 from celery import Task
-from celery.app import trace
+from celery.app import trace  # ty: ignore[unresolved-import]
 from celery.exceptions import WorkerShutdown
+from celery.signals import before_task_publish
 from celery.signals import task_postrun
 from celery.signals import task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
-from celery.worker import strategy  # type: ignore
+from celery.worker import strategy  # ty: ignore[unresolved-import]
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
@@ -29,12 +30,11 @@ from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFI
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.opensearch.client import (
-    wait_for_opensearch_with_timeout,
-)
+from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
@@ -53,6 +53,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -62,11 +63,14 @@ logger = setup_logger()
 task_logger = get_task_logger(__name__)
 
 if SENTRY_DSN:
+    from onyx.configs.sentry import _add_instance_tags
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
-        traces_sample_rate=0.1,
+        traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
         release=__version__,
+        before_send=_add_instance_tags,
     )
     logger.info("Sentry initialized")
 else:
@@ -92,6 +96,17 @@ class TenantAwareTask(Task):
             # Clear or reset after the task runs
             # so it does not leak into any subsequent tasks on the same worker process
             CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+
+
+@before_task_publish.connect
+def on_before_task_publish(
+    headers: dict[str, Any] | None = None,
+    **kwargs: Any,  # noqa: ARG001
+) -> None:
+    """Stamp the current wall-clock time into the task message headers so that
+    workers can compute queue wait time (time between publish and execution)."""
+    if headers is not None:
+        headers["enqueued_at"] = time.time()
 
 
 @task_prerun.connect
@@ -136,7 +151,9 @@ def on_task_postrun(
     if not task:
         return
 
-    task_logger.debug(f"Task {task.name} (ID: {task_id}) completed with state: {state}")
+    task_logger.debug(
+        "Task %s (ID: %s) completed with state: %s", task.name, task_id, state
+    )
 
     if state not in READY_STATES:
         return
@@ -150,13 +167,17 @@ def on_task_postrun(
 
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg
     if not kwargs:
-        logger.error(f"Task {task.name} (ID: {task_id}) is missing kwargs")
+        logger.error("Task %s (ID: %s) is missing kwargs", task.name, task_id)
         tenant_id = POSTGRES_DEFAULT_SCHEMA
     else:
         tenant_id = cast(str, kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     task_logger.debug(
-        f"Task {task.name} (ID: {task_id}) completed with state: {state} {f'for tenant_id={tenant_id}' if tenant_id else ''}"
+        "Task %s (ID: %s) completed with state: %s %s",
+        task.name,
+        task_id,
+        state,
+        f"for tenant_id={tenant_id}" if tenant_id else "",
     )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -223,7 +244,7 @@ def on_celeryd_init(
     # force=True. so we use force=True as a fallback.
 
     all_start_methods: list[str] = multiprocessing.get_all_start_methods()
-    logger.info(f"Multiprocessing all start methods: {all_start_methods}")
+    logger.info("Multiprocessing all start methods: %s", all_start_methods)
 
     try:
         multiprocessing.set_start_method("spawn")  # fork is unsafe, set to spawn
@@ -241,7 +262,7 @@ def on_celeryd_init(
             )
 
     logger.info(
-        f"Multiprocessing selected start method: {multiprocessing.get_start_method()}"
+        "Multiprocessing selected start method: %s", multiprocessing.get_start_method()
     )
 
     # Initialize tracing in workers if credentials are available.
@@ -274,7 +295,9 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
             break
 
         logger.info(
-            f"Redis: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Redis: Readiness probe ongoing. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
 
         time.sleep(WAIT_INTERVAL)
@@ -313,7 +336,9 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
             break
 
         logger.info(
-            f"Database: Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Database: Readiness probe ongoing. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
 
         time.sleep(WAIT_INTERVAL)
@@ -328,7 +353,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    logger.info(f"Running as a secondary celery worker: pid={os.getpid()}")
+    logger.info("Running as a secondary celery worker: pid=%s", os.getpid())
 
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
@@ -343,7 +368,9 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
         time_elapsed = time.monotonic() - time_start
         logger.info(
-            f"Primary worker is not ready yet. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
+            "Primary worker is not ready yet. elapsed=%s timeout=%s",
+            format(time_elapsed, ".1f"),
+            format(WAIT_LIMIT, ".1f"),
         )
         if time_elapsed > WAIT_LIMIT:
             msg = f"Primary worker was not ready within the timeout. ({WAIT_LIMIT} seconds). Exiting..."
@@ -366,7 +393,7 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.touch()
-    logger.info(f"Readiness signal touched at {path}.")
+    logger.info("Readiness signal touched at %s.", path)
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
@@ -516,23 +543,26 @@ def reset_tenant_id(
     CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
 
 
-def wait_for_vespa_or_shutdown(
-    sender: Any,  # noqa: ARG001
-    **kwargs: Any,  # noqa: ARG001
-) -> None:  # noqa: ARG001
-    """Waits for Vespa to become ready subject to a timeout.
-    Raises WorkerShutdown if the timeout is reached."""
+def wait_for_document_index_or_shutdown() -> None:
+    """
+    Waits for all configured document indices to become ready subject to a
+    timeout.
 
+    Raises WorkerShutdown if the timeout is reached.
+    """
     if DISABLE_VECTOR_DB:
         logger.info(
             "DISABLE_VECTOR_DB is set — skipping Vespa/OpenSearch readiness check."
         )
         return
 
-    if not wait_for_vespa_with_timeout():
-        msg = "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-        logger.error(msg)
-        raise WorkerShutdown(msg)
+    if not ONYX_DISABLE_VESPA:
+        if not wait_for_vespa_with_timeout():
+            msg = (
+                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
+            )
+            logger.error(msg)
+            raise WorkerShutdown(msg)
 
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         if not wait_for_opensearch_with_timeout():

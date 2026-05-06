@@ -20,7 +20,6 @@ from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
-
 logger = setup_logger()
 
 
@@ -41,7 +40,7 @@ async def fetch_user_for_pat(
         select(User)
         .join(PersonalAccessToken, PersonalAccessToken.user_id == User.id)
         .where(PersonalAccessToken.hashed_token == hashed_token)
-        .where(User.is_active)  # type: ignore
+        .where(User.is_active)  # ty: ignore[invalid-argument-type]
         .where(
             (PersonalAccessToken.expires_at.is_(None))
             | (PersonalAccessToken.expires_at > now)
@@ -80,7 +79,7 @@ def _schedule_pat_last_used_update(hashed_token: str, now: datetime) -> None:
                 )
                 await session.commit()
         except Exception as e:
-            logger.warning(f"Failed to update last_used_at for PAT: {e}")
+            logger.warning("Failed to update last_used_at for PAT: %s", e)
 
     asyncio.create_task(_update())
 
@@ -95,7 +94,9 @@ def create_pat(
 
     Raises ValueError if user is inactive or not found.
     """
-    user = db_session.scalar(select(User).where(User.id == user_id))  # type: ignore
+    user = db_session.scalar(
+        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+    )
     if not user or not user.is_active:
         raise ValueError("Cannot create PAT for inactive or non-existent user")
 

@@ -23,7 +23,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   return (
-    <Hoverable.Root group="stat" widthVariant="full">
+    <Hoverable.Root group="stat" width="full">
       <div
         className={`relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
           onFilter ? "cursor-pointer hover:bg-background-tint-02" : ""
@@ -38,13 +38,12 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         </Text>
         {onFilter && (
           <div className="absolute right-1 top-1">
-            <Hoverable.Item group="stat" variant="opacity-on-hover">
+            <Hoverable.Item group="stat" variant="appear-on-hover">
               <IconButton
                 tertiary
                 icon={SvgFilterPlus}
                 tooltip="Add Filter"
                 toolTipPosition="left"
-                tooltipSize="sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onFilter();
@@ -71,7 +70,7 @@ function ScimCard() {
         description="Users are synced from your identity provider."
         sizePreset="main-ui"
         variant="section"
-        paddingVariant="fit"
+        padding="fit"
         rightChildren={
           <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">

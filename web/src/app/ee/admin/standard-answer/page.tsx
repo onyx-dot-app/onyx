@@ -5,7 +5,7 @@ import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import {
   Table,
   TableHead,
@@ -29,8 +29,7 @@ import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import { TableHeader } from "@/components/ui/table";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgEdit, SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
@@ -403,11 +402,15 @@ function Main() {
       )}
       <div className="mb-2"></div>
 
-      <CreateButton href="/admin/standard-answer/new">
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        href="/admin/standard-answer/new"
+      >
         New Standard Answer
-      </CreateButton>
+      </Button>
 
-      <Separator />
+      <Divider />
 
       <div>
         <StandardAnswersTable
@@ -423,7 +426,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

@@ -17,10 +17,10 @@ from ee.onyx.db.analytics import fetch_persona_message_analytics
 from ee.onyx.db.analytics import fetch_persona_unique_users
 from ee.onyx.db.analytics import fetch_query_analytics
 from ee.onyx.db.analytics import user_can_view_assistant_stats
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 
 router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
@@ -40,15 +40,16 @@ class QueryAnalyticsResponse(BaseModel):
 def get_query_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[QueryAnalyticsResponse]:
     daily_query_usage_info = fetch_query_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
     return [
@@ -71,15 +72,16 @@ class UserAnalyticsResponse(BaseModel):
 def get_user_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserAnalyticsResponse]:
     daily_query_usage_info_per_user = fetch_per_user_query_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
 
@@ -105,15 +107,16 @@ class OnyxbotAnalyticsResponse(BaseModel):
 def get_onyxbot_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[OnyxbotAnalyticsResponse]:
     daily_onyxbot_info = fetch_onyxbot_analytics(
         start=start
         or (
-            datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
         ),  # default is 30d lookback
-        end=end or datetime.datetime.utcnow(),
+        end=end or datetime.datetime.now(tz=datetime.timezone.utc),
         db_session=db_session,
     )
 
@@ -141,14 +144,15 @@ def get_persona_messages(
     persona_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaMessageAnalyticsResponse]:
     """Fetch daily message counts for a single persona within the given time range."""
     start = start or (
-        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        datetime.datetime.now(tz=datetime.timezone.utc)
+        - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     )
-    end = end or datetime.datetime.utcnow()
+    end = end or datetime.datetime.now(tz=datetime.timezone.utc)
 
     persona_message_counts = []
     for count, date in fetch_persona_message_analytics(
@@ -179,7 +183,7 @@ def get_persona_unique_users(
     persona_id: int,
     start: datetime.datetime,
     end: datetime.datetime,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaUniqueUsersResponse]:
     """Get unique users per day for a single persona."""
@@ -218,7 +222,7 @@ def get_assistant_stats(
     assistant_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> AssistantStatsResponse:
     """
@@ -226,9 +230,10 @@ def get_assistant_stats(
     along with the overall total messages and total distinct users.
     """
     start = start or (
-        datetime.datetime.utcnow() - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+        datetime.datetime.now(tz=datetime.timezone.utc)
+        - datetime.timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     )
-    end = end or datetime.datetime.utcnow()
+    end = end or datetime.datetime.now(tz=datetime.timezone.utc)
 
     if not user_can_view_assistant_stats(db_session, user, assistant_id):
         raise HTTPException(

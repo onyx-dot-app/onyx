@@ -43,7 +43,7 @@ def github_doc_sync(
     This function checks each repository for visibility/team changes and updates
     document permissions accordingly without using checkpoints.
     """
-    logger.info(f"Starting GitHub document sync for CC pair ID: {cc_pair.id}")
+    logger.info("Starting GitHub document sync for CC pair ID: %s", cc_pair.id)
 
     # Initialize GitHub connector with credentials
     github_connector: GithubConnector = GithubConnector(
@@ -67,9 +67,9 @@ def github_doc_sync(
     try:
         repos = github_connector.fetch_configured_repos()
 
-        logger.info(f"Found {len(repos)} repositories to check")
+        logger.info("Found %s repositories to check", len(repos))
     except Exception as e:
-        logger.error(f"Failed to fetch repositories: {e}")
+        logger.error("Failed to fetch repositories: %s", e)
         raise
 
     repo_to_doc_list_map: dict[str, list[DocumentRow]] = {}
@@ -77,7 +77,7 @@ def github_doc_sync(
     existing_docs: list[DocumentRow] = fetch_all_existing_docs_fn(
         sort_order=SortOrder.ASC
     )
-    logger.info(f"Found {len(existing_docs)} documents to check")
+    logger.info("Found %s documents to check", len(existing_docs))
     for doc in existing_docs:
         try:
             doc_metadata = DocMetadata.model_validate_json(json.dumps(doc.doc_metadata))
@@ -85,19 +85,19 @@ def github_doc_sync(
                 repo_to_doc_list_map[doc_metadata.repo] = []
             repo_to_doc_list_map[doc_metadata.repo].append(doc)
         except Exception as e:
-            logger.error(f"Failed to parse doc metadata: {e} for doc {doc.id}")
+            logger.error("Failed to parse doc metadata: %s for doc %s", e, doc.id)
             continue
-    logger.info(f"Found {len(repo_to_doc_list_map)} documents to check")
+    logger.info("Found %s documents to check", len(repo_to_doc_list_map))
     # Process each repository individually
     for repo in repos:
         try:
-            logger.info(f"Processing repository: {repo.id} (name: {repo.name})")
+            logger.info("Processing repository: %s (name: %s)", repo.id, repo.name)
             repo_doc_list: list[DocumentRow] = repo_to_doc_list_map.get(
                 repo.full_name, []
             )
             if not repo_doc_list:
                 logger.warning(
-                    f"No documents found for repository {repo.id} ({repo.name})"
+                    "No documents found for repository %s (%s)", repo.id, repo.name
                 )
                 continue
 
@@ -111,7 +111,9 @@ def github_doc_sync(
 
             if has_changes:
                 logger.info(
-                    f"Repository {repo.id} ({repo.name}) has changes, updating documents"
+                    "Repository %s (%s) has changes, updating documents",
+                    repo.id,
+                    repo.name,
                 )
 
                 # Get new external access permissions for this repository
@@ -120,7 +122,9 @@ def github_doc_sync(
                 )
 
                 logger.info(
-                    f"Found {len(repo_doc_list)} documents for repository {repo.full_name}"
+                    "Found %s documents for repository %s",
+                    len(repo_doc_list),
+                    repo.full_name,
                 )
 
                 # Yield updated external access for each document
@@ -134,12 +138,14 @@ def github_doc_sync(
                     )
             else:
                 logger.info(
-                    f"Repository {repo.id} ({repo.name}) has no changes, skipping"
+                    "Repository %s (%s) has no changes, skipping", repo.id, repo.name
                 )
         except Exception as e:
-            logger.error(f"Error processing repository {repo.id} ({repo.name}): {e}")
+            logger.error(
+                "Error processing repository %s (%s): %s", repo.id, repo.name, e
+            )
 
-    logger.info(f"GitHub document sync completed for CC pair ID: {cc_pair.id}")
+    logger.info("GitHub document sync completed for CC pair ID: %s", cc_pair.id)
 
 
 def _check_repository_for_changes(
@@ -150,14 +156,14 @@ def _check_repository_for_changes(
     """
     Check if repository has any permission changes (visibility or team updates).
     """
-    logger.info(f"Checking repository {repo.id} ({repo.name}) for changes")
+    logger.info("Checking repository %s (%s) for changes", repo.id, repo.name)
 
     # Check for repository visibility changes using the sample document data
     if _is_repo_visibility_changed_from_groups(
         repo=repo,
         current_external_group_ids=current_external_group_ids,
     ):
-        logger.info(f"Repository {repo.id} ({repo.name}) has visibility changes")
+        logger.info("Repository %s (%s) has visibility changes", repo.id, repo.name)
         return True
 
     # Check for team membership changes if repository is private
@@ -168,10 +174,10 @@ def _check_repository_for_changes(
         github_client=github_client,
         current_external_group_ids=current_external_group_ids,
     ):
-        logger.info(f"Repository {repo.id} ({repo.name}) has team changes")
+        logger.info("Repository %s (%s) has team changes", repo.id, repo.name)
         return True
 
-    logger.info(f"Repository {repo.id} ({repo.name}) has no changes")
+    logger.info("Repository %s (%s) has no changes", repo.id, repo.name)
     return False
 
 
@@ -190,7 +196,7 @@ def _is_repo_visibility_changed_from_groups(
         True if visibility has changed
     """
     current_repo_visibility = get_repository_visibility(repo)
-    logger.info(f"Current repository visibility: {current_repo_visibility.value}")
+    logger.info("Current repository visibility: %s", current_repo_visibility.value)
 
     # Build expected group IDs for current visibility
     collaborators_group_id = build_ext_group_name_for_onyx(
@@ -216,13 +222,16 @@ def _is_repo_visibility_changed_from_groups(
     else:
         existing_repo_visibility = GitHubVisibility.PUBLIC
 
-    logger.info(f"Inferred existing visibility: {existing_repo_visibility.value}")
+    logger.info("Inferred existing visibility: %s", existing_repo_visibility.value)
 
     visibility_changed = existing_repo_visibility != current_repo_visibility
     if visibility_changed:
         logger.info(
-            f"Visibility changed for repo {repo.id} ({repo.name}): "
-            f"{existing_repo_visibility.value} -> {current_repo_visibility.value}"
+            "Visibility changed for repo %s (%s): %s -> %s",
+            repo.id,
+            repo.name,
+            existing_repo_visibility.value,
+            current_repo_visibility.value,
         )
 
     return visibility_changed
@@ -239,7 +248,10 @@ def _teams_updated_from_groups(
     # Fetch current team slugs for the repository
     current_teams = fetch_repository_team_slugs(repo=repo, github_client=github_client)
     logger.info(
-        f"Current teams for repository {repo.id} (name: {repo.name}): {current_teams}"
+        "Current teams for repository %s (name: %s): %s",
+        repo.id,
+        repo.name,
+        current_teams,
     )
 
     # Build group IDs to exclude from team comparison (non-team groups)
@@ -271,15 +283,20 @@ def _teams_updated_from_groups(
         current_team_ids.add(team_group_id)
 
     logger.info(
-        f"Existing team IDs: {existing_team_ids}, Current team IDs: {current_team_ids}"
+        "Existing team IDs: %s, Current team IDs: %s",
+        existing_team_ids,
+        current_team_ids,
     )
 
     # Compare actual team IDs to detect changes
     teams_changed = current_team_ids != existing_team_ids
     if teams_changed:
         logger.info(
-            f"Team changes detected for repo {repo.id} (name: {repo.name}): "
-            f"existing={existing_team_ids}, current={current_team_ids}"
+            "Team changes detected for repo %s (name: %s): existing=%s, current=%s",
+            repo.id,
+            repo.name,
+            existing_team_ids,
+            current_team_ids,
         )
 
     return teams_changed

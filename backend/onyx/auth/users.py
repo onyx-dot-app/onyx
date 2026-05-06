@@ -45,7 +45,9 @@ from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
-from fastapi_users.authentication import RedisStrategy
+from fastapi_users.authentication import (
+    RedisStrategy,  # ty: ignore[possibly-missing-import]
+)
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
@@ -80,6 +82,7 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -127,6 +130,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
+from onyx.db.users import is_limited_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
@@ -176,7 +180,7 @@ def verify_auth_setting() -> None:
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
 
-    logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
+    logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 
 
 def get_display_email(email: str | None, space_less: bool = False) -> str:
@@ -377,7 +381,30 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
+        # Check for disposable emails FIRST so obvious throwaway domains are
+        # rejected before hitting Google's siteverify API. Cheap local check.
+        try:
+            verify_email_domain(user_create.email, is_registration=True)
+        except OnyxError as e:
+            # Log blocked disposable email attempts
+            if "Disposable email" in e.detail:
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
+                logger.warning(
+                    "Blocked disposable email registration attempt: %s",
+                    domain,
+                    extra={"email_domain": domain},
+                )
+            raise
+
+        if request is not None:
+            await enforce_signup_rate_limit(request)
+
         # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaAction
         from onyx.auth.captcha import CaptchaVerificationError
         from onyx.auth.captcha import is_captcha_enabled
         from onyx.auth.captcha import verify_captcha_token
@@ -393,9 +420,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 captcha_token = request.headers.get("X-Captcha-Token")
 
             try:
-                await verify_captcha_token(
-                    captcha_token or "", expected_action="signup"
-                )
+                await verify_captcha_token(captcha_token or "", CaptchaAction.SIGNUP)
             except CaptchaVerificationError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
@@ -403,24 +428,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         await self.validate_password(
             user_create.password, cast(schemas.UC, user_create)
         )
-
-        # Check for disposable emails BEFORE provisioning tenant
-        # This prevents creating tenants for throwaway email addresses
-        try:
-            verify_email_domain(user_create.email, is_registration=True)
-        except OnyxError as e:
-            # Log blocked disposable email attempts
-            if "Disposable email" in e.detail:
-                domain = (
-                    user_create.email.split("@")[-1]
-                    if "@" in user_create.email
-                    else "unknown"
-                )
-                logger.warning(
-                    f"Blocked disposable email registration attempt: {domain}",
-                    extra={"email_domain": domain},
-                )
-            raise
 
         user_count: int | None = None
         referral_source = (
@@ -461,14 +468,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     self.user_db = tenant_user_db
 
                 if hasattr(user_create, "role"):
-                    user_create.role = UserRole.BASIC
+                    user_create.role = UserRole.BASIC  # ty: ignore[invalid-assignment]
 
                     user_count = await get_user_count()
                     if (
                         user_count == 0
                         or user_create.email in get_default_admin_user_emails()
                     ):
-                        user_create.role = UserRole.ADMIN
+                        user_create.role = (  # ty: ignore[invalid-assignment]
+                            UserRole.ADMIN
+                        )
 
                 # Check seat availability for new users (single-tenant only)
                 with get_session_with_current_tenant() as sync_db:
@@ -515,7 +524,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
-                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
+                    user = await self.user_db.get(  # ty: ignore[invalid-assignment]
+                        user_id
+                    )
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -543,7 +554,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
-                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
+                    user = await self.user_db.get(  # ty: ignore[invalid-assignment]
+                        user_id
+                    )
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -591,7 +604,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         update nor the group assignment is visible without the other.
         """
         with get_session_with_current_tenant() as sync_db:
-            sync_user = sync_db.query(User).filter(User.id == user_id).first()  # type: ignore[arg-type]
+            sync_user = (
+                sync_db.query(User)
+                .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
+                .first()
+            )
             if sync_user:
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
@@ -607,12 +624,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_db.commit()
             else:
                 logger.warning(
-                    "User %s not found in sync session during upgrade to standard; "
-                    "skipping upgrade",
+                    "User %s not found in sync session during upgrade to standard; skipping upgrade",
                     user_id,
                 )
 
-    async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
+    async def validate_password(  # ty: ignore[invalid-method-override]
+        self, password: str, _: schemas.UC | models.UP
+    ) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
         if len(password) < PASSWORD_MIN_LENGTH:
             raise exceptions.InvalidPasswordException(
@@ -643,7 +661,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return
 
     @log_function_time(print_only=True)
-    async def oauth_callback(
+    async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
         access_token: str,
@@ -753,7 +771,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 user,
                                 # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
                                 # but the type checker doesn't know that :(
-                                existing_oauth_account,  # type: ignore
+                                existing_oauth_account,  # ty: ignore[invalid-argument-type]
                                 oauth_account_dict,
                             )
 
@@ -787,7 +805,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # transaction so neither change is visible without the other.
                 was_inactive = not user.is_active
                 with get_session_with_current_tenant() as sync_db:
-                    sync_user = sync_db.query(User).filter(User.id == user.id).first()  # type: ignore[arg-type]
+                    sync_user = (
+                        sync_db.query(User)
+                        .filter(User.id == user.id)  # ty: ignore[invalid-argument-type]
+                        .first()
+                    )
                     if sync_user:
                         sync_user.is_verified = is_verified_by_default
                         sync_user.role = UserRole.BASIC
@@ -807,7 +829,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
             if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
                 await self.user_db.update(user, {"oidc_expiry": None})
-                user.oidc_expiry = None  # type: ignore
+                user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users(user.email)
             if token:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -829,7 +851,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     domain=None,
                     secure=WEB_DOMAIN.startswith("https"),
                 )
-                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+                logger.debug("Deleted anonymous user cookie for user %s", user.email)
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
@@ -861,7 +883,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
-            logger.debug(f"Current tenant user count: {user_count}")
+            logger.debug("Current tenant user count: %s", user_count)
 
             # Link the anonymous PostHog session to the identified user so
             # that pre-signup session recordings merge into one person profile.
@@ -924,7 +946,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
             and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
-            marketing_anonymous_id = parsed_cookie["distinct_id"]
+            marketing_anonymous_id = (
+                parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
+                    "distinct_id"
+                ]
+            )
 
             # Technically, USER_SIGNED_UP is only fired from the cloud site when
             # it is the first user in a tenant. However, it is semantically correct
@@ -941,7 +967,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             }
 
             # Add all other values from the marketing cookie (featureFlags, etc.)
-            for key, value in parsed_cookie.items():
+            for (
+                key,
+                value,
+            ) in parsed_cookie.items():  # ty: ignore[possibly-unresolved-reference]
                 if key != "distinct_id":
                     properties.setdefault(key, value)
 
@@ -951,7 +980,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 properties=properties,
             )
 
-        logger.debug(f"User {user.id} has registered.")
+        logger.debug("User %s has registered.", user.id)
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},
@@ -989,7 +1018,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         verify_email_domain(user.email)
 
         logger.notice(
-            f"Verification requested for user {user.id}. Verification token: {token}"
+            "Verification requested for user %s. Verification token: %s", user.id, token
         )
         user_count = await get_user_count()
         send_user_verification_email(
@@ -1013,7 +1042,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         except Exception as e:
             logger.warning(
-                f"User attempted to login with invalid credentials: {str(e)}"
+                "User attempted to login with invalid credentials: %s", str(e)
             )
 
         if not tenant_id:
@@ -1073,7 +1102,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
+            from fastapi import HTTPException
+            from fastapi import status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1407,7 +1437,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         ) -> Response:
             try:
                 user, token = user_token
-                logger.info(f"Processing token refresh request for user {user.email}")
+                logger.info("Processing token refresh request for user %s", user.email)
 
                 # Check if user has OAuth accounts that need refreshing
                 await check_and_refresh_oauth_tokens(
@@ -1426,11 +1456,12 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                         refresh_method = getattr(strategy, "refresh_token")
                         new_token = await refresh_method(token, user)
                         logger.info(
-                            f"Successfully refreshed session token for user {user.email}"
+                            "Successfully refreshed session token for user %s",
+                            user.email,
                         )
                         return await backend.transport.get_login_response(new_token)
                     except Exception as e:
-                        logger.error(f"Error refreshing session token: {str(e)}")
+                        logger.error("Error refreshing session token: %s", str(e))
                         # Fallback to logout and login if refresh fails
                         await backend.logout(strategy, user, token)
                         return await backend.login(strategy, user)
@@ -1442,7 +1473,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
             except Exception as e:
-                logger.error(f"Unexpected error in refresh endpoint: {str(e)}")
+                logger.error("Unexpected error in refresh endpoint: %s", str(e))
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Token refresh failed: {str(e)}",
@@ -1503,7 +1534,7 @@ async def _sync_jwt_oidc_expiry(
 
     if user.oidc_expiry is not None:
         await user_manager.user_db.update(user, {"oidc_expiry": None})
-        user.oidc_expiry = None  # type: ignore
+        user.oidc_expiry = None  # ty: ignore[invalid-assignment]
 
 
 async def _get_or_create_user_from_jwt(
@@ -1583,14 +1614,53 @@ async def _check_for_saml_and_jwt(
     return user
 
 
+async def _maybe_refresh_oauth_tokens(
+    user: User,
+    async_db_session: AsyncSession,
+    user_manager: BaseUserManager[User, uuid.UUID],
+) -> None:
+    """Best-effort refresh of any near-expiry OAuth access tokens.
+
+    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through
+    forward `user.oauth_accounts[0].access_token` directly to the upstream
+    service. The web client's /auth/refresh ticker is gated off for
+    OIDC/SAML (see `web/src/hooks/useTokenRefresh.ts`), so without this hook
+    the stored access_token would rot at the IdP's lifetime (~1 h on
+    Microsoft Entra default) and downstream calls would 401 until the user
+    signs out and back in.
+
+    Refreshing here on every authenticated request is cheap — the underlying
+    `check_and_refresh_oauth_tokens` short-circuits when no account is
+    within the 5-minute renewal buffer. Failures log and return, so a
+    misconfigured IdP can never break authentication of an otherwise-valid
+    request.
+    """
+    # Local import mirrors the pattern at `get_refresh_router` to keep the
+    # auth module's load order resilient.
+    from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
+
+    try:
+        await check_and_refresh_oauth_tokens(
+            user=user,
+            db_session=async_db_session,
+            user_manager=cast(Any, user_manager),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to opportunistically refresh OAuth tokens for %s",
+            user.email,
+        )
+
+
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
+    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> User | None:
-
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
+        await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
         return user
 
     try:
@@ -1602,6 +1672,8 @@ async def optional_user(
         logger.warning("Issue with validating authentication token")
         return None
 
+    if user is not None:
+        await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
     return user
 
 
@@ -1681,9 +1753,9 @@ async def current_user(
 ) -> User:
     user = await double_check_user(user)
 
-    if user.role == UserRole.LIMITED:
+    if is_limited_user(user):
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. User has limited permissions.",
         )
     return user
 
@@ -1695,15 +1767,6 @@ async def current_curator_or_admin_user(
     if user.role not in allowed_roles:
         raise BasicAuthenticationError(
             detail="Access denied. User is not a curator or admin.",
-        )
-
-    return user
-
-
-async def current_admin_user(user: User = Depends(current_user)) -> User:
-    if user.role != UserRole.ADMIN:
-        raise BasicAuthenticationError(
-            detail="Access denied. User must be an admin to perform this action.",
         )
 
     return user
@@ -1788,7 +1851,9 @@ async def current_user_from_websocket(
         raise BasicAuthenticationError(detail="Access denied. Missing origin.")
 
     if not _is_same_origin(origin, WEB_DOMAIN):
-        logger.warning(f"WS auth: origin mismatch. Expected {WEB_DOMAIN}, got {origin}")
+        logger.warning(
+            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
+        )
         raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
@@ -1801,7 +1866,7 @@ async def current_user_from_websocket(
     except BasicAuthenticationError:
         raise
     except Exception as e:
-        logger.error(f"WS auth: error during token validation: {e}")
+        logger.error("WS auth: error during token validation: %s", e)
         raise BasicAuthenticationError(
             detail="Authentication verification failed."
         ) from e
@@ -1809,7 +1874,7 @@ async def current_user_from_websocket(
     # Get user from token data
     user = await _get_user_from_token_data(token_data)
     if user is None:
-        logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
+        logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
         raise BasicAuthenticationError(
             detail="Access denied. User not found or inactive."
         )
@@ -1817,14 +1882,14 @@ async def current_user_from_websocket(
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
 
-    # Block LIMITED users (same as current_user)
-    if user.role == UserRole.LIMITED:
-        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+    # Block limited users (same as current_user)
+    if is_limited_user(user):
+        logger.warning("WS auth: user %s is limited", user.email)
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. User has limited permissions.",
         )
 
-    logger.debug(f"WS auth: authenticated {user.email}")
+    logger.debug("WS auth: authenticated %s", user.email)
     return user
 
 
@@ -2240,7 +2305,7 @@ def get_oauth_router(
 
             # Proceed to authenticate or create the user
             try:
-                user = await user_manager.oauth_callback(
+                user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]
                     oauth_client.name,
                     token["access_token"],
                     account_id,

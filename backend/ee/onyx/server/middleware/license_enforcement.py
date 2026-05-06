@@ -113,7 +113,8 @@ def add_license_enforcement_middleware(
                             )
                 except SQLAlchemyError as db_error:
                     logger.warning(
-                        f"[license_enforcement] Failed to check database for license: {db_error}"
+                        "[license_enforcement] Failed to check database for license: %s",
+                        db_error,
                     )
 
             if metadata:
@@ -129,8 +130,9 @@ def add_license_enforcement_middleware(
                     # when users are added/removed
                     if metadata.used_seats > metadata.seats:
                         logger.info(
-                            f"[license_enforcement] Blocking request: "
-                            f"seat limit exceeded ({metadata.used_seats}/{metadata.seats})"
+                            "[license_enforcement] Blocking request: seat limit exceeded (%s/%s)",
+                            metadata.used_seats,
+                            metadata.seats,
                         )
                         return JSONResponse(
                             status_code=402,
@@ -148,7 +150,8 @@ def add_license_enforcement_middleware(
                 # Allow community features, but block EE-only features
                 if _is_ee_only_path(path):
                     logger.info(
-                        f"[license_enforcement] Blocking EE-only path (no license): {path}"
+                        "[license_enforcement] Blocking EE-only path (no license): %s",
+                        path,
                     )
                     return JSONResponse(
                         status_code=402,
@@ -165,13 +168,13 @@ def add_license_enforcement_middleware(
                 )
                 is_gated = False
         except CACHE_TRANSIENT_ERRORS as e:
-            logger.warning(f"Failed to check license metadata: {e}")
+            logger.warning("Failed to check license metadata: %s", e)
             # Fail open - don't block users due to cache connectivity issues
             is_gated = False
 
         if is_gated:
             logger.info(
-                f"[license_enforcement] Blocking request (license expired): {path}"
+                "[license_enforcement] Blocking request (license expired): %s", path
             )
 
             return JSONResponse(

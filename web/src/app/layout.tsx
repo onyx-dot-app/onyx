@@ -12,10 +12,11 @@ import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
+import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
@@ -106,6 +107,7 @@ export default function RootLayout({
               <PHProvider>
                 <SWRConfigProvider>
                   <AppHealthBanner />
+                  <LicenseExpiryBanner />
                   <AppProvider>
                     <DynamicMetadata />
                     <CustomAnalyticsScript />

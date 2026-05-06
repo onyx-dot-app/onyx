@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
@@ -22,7 +23,7 @@ import {
   SvgImage,
   SvgLoader,
   SvgMoreHorizontal,
-  SvgPaperclip,
+  SvgUploadSquare,
 } from "@opal/icons";
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -125,7 +126,7 @@ function FilePickerPopoverContents({
         // Action button to upload more files
         <LineItem
           key="upload-files"
-          icon={SvgPaperclip}
+          icon={SvgUploadSquare}
           description="Upload a file from your device"
           onClick={triggerUploadPicker}
         >

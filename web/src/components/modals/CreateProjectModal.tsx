@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgFolderPlus } from "@opal/icons";
@@ -55,14 +55,14 @@ export default function CreateProjectModal({
             onClose={() => modal.toggle(false)}
           />
           <Modal.Body>
-            <InputLayouts.Vertical title="Project Name">
+            <InputVertical title="Project Name" withLabel>
               <InputTypeIn
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 placeholder="What are you working on?"
                 showClearButton
               />
-            </InputLayouts.Vertical>
+            </InputVertical>
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={() => modal.toggle(false)}>

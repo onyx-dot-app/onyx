@@ -39,18 +39,15 @@ def upgrade() -> None:
         col["name"] for col in inspector.get_columns("chat_session")
     ]
     if "folder_id" in chat_session_columns:
-        orphaned_count = bind.execute(
-            text(
-                """
+        orphaned_count = bind.execute(text("""
             SELECT COUNT(*) FROM chat_session
             WHERE folder_id IS NOT NULL AND project_id IS NULL
-        """
-            )
-        ).scalar_one()
+        """)).scalar_one()
 
         if orphaned_count > 0:
             logger.warning(
-                f"WARNING: {orphaned_count} chat_session records still have folder_id without project_id. Proceeding anyway."
+                "WARNING: %s chat_session records still have folder_id without project_id. Proceeding anyway.",
+                orphaned_count,
             )
 
     # === Step 2: Drop chat_session.folder_id ===
@@ -80,7 +77,7 @@ def upgrade() -> None:
 
         if remaining > 0:
             logger.warning(
-                f"WARNING: Dropping persona__user_folder with {remaining} records"
+                "WARNING: Dropping persona__user_folder with %s records", remaining
             )
 
         op.drop_table("persona__user_folder")
@@ -94,7 +91,7 @@ def upgrade() -> None:
         remaining = bind.execute(text("SELECT COUNT(*) FROM chat_folder")).scalar_one()
 
         if remaining > 0:
-            logger.warning(f"WARNING: Dropping chat_folder with {remaining} records")
+            logger.warning("WARNING: Dropping chat_folder with %s records", remaining)
 
         op.drop_table("chat_folder")
         logger.info("Dropped chat_folder table")
@@ -113,9 +110,7 @@ def upgrade() -> None:
         logger.info("Dropping user_file.cc_pair_id...")
 
         # Drop any remaining foreign key constraints
-        bind.execute(
-            text(
-                """
+        bind.execute(text("""
             DO $$
             DECLARE r RECORD;
             BEGIN
@@ -134,9 +129,7 @@ def upgrade() -> None:
                 EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
-        """
-            )
-        )
+        """))
 
         op.drop_column("user_file", "cc_pair_id")
         logger.info("Dropped user_file.cc_pair_id")

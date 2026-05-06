@@ -5,9 +5,10 @@ from types import SimpleNamespace
 
 import psycopg2
 import requests
-
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.orm import Session
+
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -48,8 +49,8 @@ def _run_migrations(
     alembic_cfg.attributes["configure_logger"] = False
     alembic_cfg.config_ini_section = config_name
 
-    alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
-    alembic_cfg.cmd_opts.x = [f"schema={schema}"]  # type: ignore
+    alembic_cfg.cmd_opts = SimpleNamespace()  # ty: ignore[invalid-assignment]
+    alembic_cfg.cmd_opts.x = [f"schema={schema}"]  # ty: ignore[invalid-assignment]
 
     # Set the SQLAlchemy URL in the Alembic configuration
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
@@ -91,15 +92,13 @@ def downgrade_postgres(
         cur = conn.cursor()
 
         # Close any existing connections to the schema before dropping
-        cur.execute(
-            f"""
+        cur.execute(f"""
             SELECT pg_terminate_backend(pg_stat_activity.pid)
             FROM pg_stat_activity
             WHERE pg_stat_activity.datname = '{database}'
             AND pg_stat_activity.state = 'idle in transaction'
             AND pid <> pg_backend_pid();
-        """
-        )
+        """)
 
         # Drop and recreate the public schema - this removes ALL objects
         cur.execute(f"DROP SCHEMA {schema} CASCADE;")
@@ -161,7 +160,9 @@ def drop_multitenant_postgres(
     TIMEOUT = 40
     success = False
     for _ in range(NUM_TRIES):
-        logger.info(f"drop_multitenant_postgres_task starting... ({_ + 1}/{NUM_TRIES})")
+        logger.info(
+            "drop_multitenant_postgres_task starting... (%s/%s)", _ + 1, NUM_TRIES
+        )
         try:
             run_with_timeout_multiproc(
                 drop_multitenant_postgres_task,
@@ -174,11 +175,15 @@ def drop_multitenant_postgres(
             break
         except TimeoutError:
             logger.warning(
-                f"drop_multitenant_postgres_task timed out, retrying... ({_ + 1}/{NUM_TRIES})"
+                "drop_multitenant_postgres_task timed out, retrying... (%s/%s)",
+                _ + 1,
+                NUM_TRIES,
             )
         except RuntimeError:
             logger.warning(
-                f"drop_multitenant_postgres_task exceptioned, retrying... ({_ + 1}/{NUM_TRIES})"
+                "drop_multitenant_postgres_task exceptioned, retrying... (%s/%s)",
+                _ + 1,
+                NUM_TRIES,
             )
 
     if not success:
@@ -201,40 +206,34 @@ def drop_multitenant_postgres_task(dbname: str) -> None:
 
     logger.info("Selecting tenant schemas.")
     # Get all tenant schemas
-    cur.execute(
-        """
+    cur.execute("""
         SELECT schema_name
         FROM information_schema.schemata
         WHERE schema_name LIKE 'tenant_%'
-        """
-    )
+        """)
     tenant_schemas = cur.fetchall()
 
     # Drop all tenant schemas
     logger.info("Dropping all tenant schemas.")
     for schema in tenant_schemas:
         # Close any existing connections to the schema before dropping
-        cur.execute(
-            """
+        cur.execute("""
             SELECT pg_terminate_backend(pg_stat_activity.pid)
             FROM pg_stat_activity
             WHERE pg_stat_activity.datname = 'postgres'
             AND pg_stat_activity.state = 'idle in transaction'
             AND pid <> pg_backend_pid();
-        """
-        )
+        """)
 
         schema_name = schema[0]
         cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
 
     # Drop tables in the public schema
     logger.info("Selecting public schema tables.")
-    cur.execute(
-        """
+    cur.execute("""
         SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-        """
-    )
+        """)
     public_tables = cur.fetchall()
 
     logger.info("Dropping public schema tables.")
@@ -257,7 +256,7 @@ def reset_postgres(
     TIMEOUT = 40
     success = False
     for _ in range(NUM_TRIES):
-        logger.info(f"Downgrading Postgres... ({_ + 1}/{NUM_TRIES})")
+        logger.info("Downgrading Postgres... (%s/%s)", _ + 1, NUM_TRIES)
         try:
             run_with_timeout_multiproc(
                 downgrade_postgres,
@@ -273,11 +272,11 @@ def reset_postgres(
             break
         except TimeoutError:
             logger.warning(
-                f"Postgres downgrade timed out, retrying... ({_ + 1}/{NUM_TRIES})"
+                "Postgres downgrade timed out, retrying... (%s/%s)", _ + 1, NUM_TRIES
             )
         except RuntimeError:
             logger.warning(
-                f"Postgres downgrade exceptioned, retrying... ({_ + 1}/{NUM_TRIES})"
+                "Postgres downgrade exceptioned, retrying... (%s/%s)", _ + 1, NUM_TRIES
             )
 
     if not success:
@@ -289,6 +288,33 @@ def reset_postgres(
         logger.info("Setting up Postgres...")
         with get_session_with_current_tenant() as db_session:
             setup_postgres(db_session)
+            _seed_dev_license_if_set(db_session)
+
+
+_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
+_PEM_END = "-----END ONYX LICENSE-----"
+
+
+def _seed_dev_license_if_set(db_session: Session) -> None:
+    """Seed the ONYX_DEV_LICENSE blob into the License table.
+
+    Called after every Postgres reset so EE-gated routes don't return 402
+    after the License row is wiped by alembic downgrade. No-ops when the
+    env var is unset.
+    """
+    blob = os.environ.get("ONYX_DEV_LICENSE", "").strip()
+    if not blob:
+        return
+
+    if blob.startswith(_PEM_BEGIN) and blob.endswith(_PEM_END):
+        blob = "\n".join(blob.split("\n")[1:-1]).strip()
+
+    from ee.onyx.db.license import upsert_license
+    from ee.onyx.utils.license import verify_license_signature
+
+    verify_license_signature(blob)
+    upsert_license(db_session, blob)
+    logger.info("Dev license seeded after Postgres reset")
 
 
 def reset_vespa() -> None:

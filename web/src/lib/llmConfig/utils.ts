@@ -44,7 +44,7 @@ export function getFinalLLM(
   return [provider, model];
 }
 
-export function getLLMProviderOverrideForPersona(
+export function getProviderOverrideForPersona(
   liveAgent: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
@@ -144,7 +144,7 @@ export function getDisplayName(
   agent: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): string | undefined {
-  const llmDescriptor = getLLMProviderOverrideForPersona(
+  const llmDescriptor = getProviderOverrideForPersona(
     agent,
     llmProviders ?? []
   );

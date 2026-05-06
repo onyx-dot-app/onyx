@@ -84,9 +84,9 @@ def expand_keywords(
                 seen_lower.add(query_lower)
                 expanded_queries.append(query)
 
-        logger.debug(f"Keyword expansion generated {len(expanded_queries)} queries")
+        logger.debug("Keyword expansion generated %s queries", len(expanded_queries))
         return expanded_queries
 
     except Exception as e:
-        logger.warning(f"Keyword expansion failed: {e}")
+        logger.warning("Keyword expansion failed: %s", e)
         return []

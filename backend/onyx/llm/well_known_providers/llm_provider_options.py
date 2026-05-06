@@ -138,6 +138,7 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import re
+
     import litellm
 
     # TODO: remove these lists once we have a comprehensive model configuration page
@@ -338,7 +339,7 @@ def get_provider_display_name(provider_name: str) -> str:
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
-        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI Compatible",
+        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

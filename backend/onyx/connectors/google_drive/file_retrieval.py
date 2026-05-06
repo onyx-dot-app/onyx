@@ -7,8 +7,10 @@ from typing import cast
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
-from googleapiclient.discovery import Resource  # type: ignore
-from googleapiclient.errors import HttpError  # type: ignore
+from google.auth.exceptions import RefreshError
+from googleapiclient.discovery import Resource
+from googleapiclient.errors import HttpError
+from googleapiclient.http import BatchHttpRequest
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -30,7 +32,6 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
 from onyx.utils.variable_functionality import noop_fallback
-
 
 logger = setup_logger()
 
@@ -59,6 +60,8 @@ SLIM_FILE_FIELDS = (
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+
+MAX_BATCH_SIZE = 100
 
 HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType, driveId"
 
@@ -112,7 +115,7 @@ def _get_folders_in_parent(
         query += f" and '{parent_id}' in parents"
 
     for file in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,
         corpora="allDrives",
@@ -133,7 +136,7 @@ def get_folder_metadata(
     fields = _get_hierarchy_fields_for_file_type(field_type)
     try:
         return (
-            service.files()
+            service.files()  # ty: ignore[unresolved-attribute]
             .get(
                 fileId=folder_id,
                 fields=fields,
@@ -143,9 +146,11 @@ def get_folder_metadata(
         )
     except HttpError as e:
         if e.resp.status in (403, 404):
-            logger.debug(f"Cannot access folder {folder_id}: {e}")
+            logger.debug("Cannot access folder %s: %s", folder_id, e)
         else:
             raise e
+    except RefreshError:
+        logger.debug("Cannot access folder %s: impersonation failed", folder_id)
     return None
 
 
@@ -166,13 +171,19 @@ def get_shared_drive_name(
     folders. Only drives().get() returns the real user-assigned name.
     """
     try:
-        drive = service.drives().get(driveId=drive_id, fields="name").execute()
+        drive = (
+            service.drives()  # ty: ignore[unresolved-attribute]
+            .get(driveId=drive_id, fields="name")
+            .execute()
+        )
         return drive.get("name")
     except HttpError as e:
         if e.resp.status in (403, 404):
-            logger.debug(f"Cannot access drive {drive_id}: {e}")
+            logger.debug("Cannot access drive %s: %s", drive_id, e)
         else:
             raise
+    except RefreshError:
+        logger.debug("Cannot access drive %s: impersonation failed", drive_id)
     return None
 
 
@@ -216,13 +227,32 @@ def get_external_access_for_folder(
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
-    """Get the appropriate fields string based on the field type enum"""
+    """Get the appropriate fields string for files().list() based on the field type enum."""
     if field_type == DriveFileFieldType.SLIM:
         return SLIM_FILE_FIELDS
     elif field_type == DriveFileFieldType.WITH_PERMISSIONS:
         return FILE_FIELDS_WITH_PERMISSIONS
     else:  # DriveFileFieldType.STANDARD
         return FILE_FIELDS
+
+
+def _extract_single_file_fields(list_fields: str) -> str:
+    """Convert a files().list() fields string to one suitable for files().get().
+
+    List fields look like "nextPageToken, files(field1, field2, ...)"
+    Single-file fields should be just "field1, field2, ..."
+    """
+    start = list_fields.find("files(")
+    if start == -1:
+        return list_fields
+    inner_start = start + len("files(")
+    inner_end = list_fields.rfind(")")
+    return list_fields[inner_start:inner_end]
+
+
+def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
+    """Get the appropriate fields string for files().get() based on the field type enum."""
+    return _extract_single_file_fields(_get_fields_for_file_type(field_type))
 
 
 def _get_files_in_parent(
@@ -239,7 +269,7 @@ def _get_files_in_parent(
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
 
     for file in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,
         corpora="allDrives",
@@ -278,7 +308,7 @@ def crawl_folders_for_files(
                 start=start,
                 end=end,
             ):
-                logger.info(f"Found file: {file['name']}, user email: {user_email}")
+                logger.info("Found file: %s, user email: %s", file["name"], user_email)
                 found_files = True
                 yield RetrievedDriveFile(
                     drive_file=file,
@@ -297,9 +327,9 @@ def crawl_folders_for_files(
             if isinstance(e, HttpError) and e.status_code == 403:
                 # don't yield an error here because this is expected behavior
                 # when a user doesn't have access to a folder
-                logger.debug(f"Error getting files in parent {parent_id}: {e}")
+                logger.debug("Error getting files in parent %s: %s", parent_id, e)
             else:
-                logger.error(f"Error getting files in parent {parent_id}: {e}")
+                logger.error("Error getting files in parent %s: %s", parent_id, e)
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,
@@ -308,7 +338,7 @@ def crawl_folders_for_files(
                     error=e,
                 )
     else:
-        logger.info(f"Skipping subfolder files since already traversed: {parent_id}")
+        logger.info("Skipping subfolder files since already traversed: %s", parent_id)
 
     for subfolder in _get_folders_in_parent(
         service=service,
@@ -340,7 +370,7 @@ def get_files_in_shared_drive(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
@@ -349,7 +379,7 @@ def get_files_in_shared_drive(
         folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
         folder_query += " and trashed = false"
         for folder in execute_paginated_retrieval(
-            retrieval_function=service.files().list,
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
             list_key="files",
             continue_on_404_or_403=True,
             corpora="drive",
@@ -367,7 +397,7 @@ def get_files_in_shared_drive(
     file_query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval_with_max_pages(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=True,
@@ -402,7 +432,7 @@ def get_all_files_in_my_drive_and_shared(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
@@ -414,7 +444,7 @@ def get_all_files_in_my_drive_and_shared(
             folder_query += " and 'me' in owners"
         found_folders = False
         for folder in execute_paginated_retrieval(
-            retrieval_function=service.files().list,
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
             list_key="files",
             corpora="user",
             fields=_get_fields_for_file_type(field_type),
@@ -432,7 +462,7 @@ def get_all_files_in_my_drive_and_shared(
         file_query += " and 'me' in owners"
     file_query += generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval_with_max_pages(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=False,
@@ -457,7 +487,7 @@ def get_all_files_for_oauth(
 ) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
-        logger.info(f"Using page token: {page_token}")
+        logger.info("Using page token: %s", page_token)
         kwargs[PAGE_TOKEN_KEY] = page_token
 
     should_get_all = (
@@ -477,7 +507,7 @@ def get_all_files_for_oauth(
 
     yield from execute_paginated_retrieval_with_max_pages(
         max_num_pages=max_num_pages,
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=False,
         corpora=corpora,
@@ -494,7 +524,7 @@ def get_root_folder_id(service: Resource) -> str:
     # we dont paginate here because there is only one root folder per user
     # https://developers.google.com/drive/api/guides/v2-to-v3-reference
     return (
-        service.files()
+        service.files()  # ty: ignore[unresolved-attribute]
         .get(fileId="root", fields=GoogleFields.ID.value)
         .execute()[GoogleFields.ID.value]
     )
@@ -528,7 +558,7 @@ def get_file_by_web_view_link(
     """Retrieve a Google Drive file using its webViewLink."""
     file_id = _extract_file_id_from_web_view_link(web_view_link)
     return (
-        service.files()
+        service.files()  # ty: ignore[unresolved-attribute]
         .get(
             fileId=file_id,
             supportsAllDrives=True,
@@ -536,3 +566,79 @@ def get_file_by_web_view_link(
         )
         .execute()
     )
+
+
+class BatchRetrievalResult:
+    """Result of a batch file retrieval, separating successes from errors."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, GoogleDriveFileType] = {}
+        self.errors: dict[str, Exception] = {}
+
+
+def get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    field_type: DriveFileFieldType,
+) -> BatchRetrievalResult:
+    """Retrieve multiple Google Drive files by webViewLink using the batch API.
+
+    Returns a BatchRetrievalResult containing successful file retrievals
+    and errors for any files that could not be fetched.
+    Automatically splits into chunks of MAX_BATCH_SIZE.
+    """
+    fields = _get_single_file_fields(field_type)
+    if len(web_view_links) <= MAX_BATCH_SIZE:
+        return _get_files_by_web_view_links_batch(service, web_view_links, fields)
+
+    combined = BatchRetrievalResult()
+    for i in range(0, len(web_view_links), MAX_BATCH_SIZE):
+        chunk = web_view_links[i : i + MAX_BATCH_SIZE]
+        chunk_result = _get_files_by_web_view_links_batch(service, chunk, fields)
+        combined.files.update(chunk_result.files)
+        combined.errors.update(chunk_result.errors)
+    return combined
+
+
+def _get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    fields: str,
+) -> BatchRetrievalResult:
+    """Single-batch implementation."""
+
+    result = BatchRetrievalResult()
+
+    def callback(
+        request_id: str,
+        response: GoogleDriveFileType,
+        exception: Exception | None,
+    ) -> None:
+        if exception:
+            logger.warning("Error retrieving file %s: %s", request_id, exception)
+            result.errors[request_id] = exception
+        else:
+            result.files[request_id] = response
+
+    batch = cast(
+        BatchHttpRequest,
+        service.new_batch_http_request(  # ty: ignore[unresolved-attribute]
+            callback=callback
+        ),
+    )
+
+    for web_view_link in web_view_links:
+        try:
+            file_id = _extract_file_id_from_web_view_link(web_view_link)
+            request = service.files().get(  # ty: ignore[unresolved-attribute]
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields=fields,
+            )
+            batch.add(request, request_id=web_view_link)
+        except ValueError as e:
+            logger.warning("Failed to extract file ID from %s: %s", web_view_link, e)
+            result.errors[web_view_link] = e
+
+    batch.execute()
+    return result

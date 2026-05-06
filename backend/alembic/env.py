@@ -25,8 +25,11 @@ from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA,
     TENANT_ID_PREFIX,
 )
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
+from celery.backends.database.session import (  # ty: ignore[unresolved-import]
+    ResultModelBase,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
@@ -158,7 +161,7 @@ def get_schema_options() -> (
                 name.strip() for name in schema_names_str.split(",") if name.strip()
             ]
             if schemas:
-                logger.info(f"Specific schema names specified: {schemas}")
+                logger.info("Specific schema names specified: %s", schemas)
 
     # Validate that only one method is used at a time
     range_filtering = tenant_range_start is not None or tenant_range_end is not None
@@ -208,7 +211,7 @@ def do_run_migrations(
 
     context.configure(
         connection=connection,
-        target_metadata=target_metadata,  # type: ignore
+        target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
         compare_type=True,
@@ -216,8 +219,15 @@ def do_run_migrations(
         script_location=config.get_main_option("script_location"),
     )
 
-    with context.begin_transaction():
-        context.run_migrations()
+    # Migrations may call into code that reads CURRENT_TENANT_ID_CONTEXTVAR
+    # (e.g. get_kv_store().load() in 4ee1287bd26a). search_path alone is not
+    # enough — set the Python contextvar to match.
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(schema_name)
+    try:
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def provide_iam_token_for_alembic(
@@ -272,14 +282,17 @@ async def run_async_migrations() -> None:
 
     if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
+        logger.info("Migrating specific schema names: %s", schemas)
 
         i_schema = 0
         num_schemas = len(schemas)
         for schema in schemas:
             i_schema += 1
             logger.info(
-                f"Migrating schema: index={i_schema} num_schemas={num_schemas} schema={schema}"
+                "Migrating schema: index=%s num_schemas=%s schema=%s",
+                i_schema,
+                num_schemas,
+                schema,
             )
             try:
                 async with engine.connect() as connection:
@@ -290,7 +303,7 @@ async def run_async_migrations() -> None:
                     )
                     await connection.commit()
             except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
+                logger.error("Error migrating schema %s: %s", schema, e)
                 if not continue_on_error:
                     logger.error("--continue=true is not set, raising exception!")
                     raise
@@ -306,10 +319,14 @@ async def run_async_migrations() -> None:
 
         if tenant_range_start is not None or tenant_range_end is not None:
             logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+                "Filtering tenants by range: start=%s, end=%s",
+                tenant_range_start,
+                tenant_range_end,
             )
             logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+                "Total tenants: %s, Filtered tenants: %s",
+                len(tenant_schemas),
+                len(filtered_tenant_schemas),
             )
 
         i_tenant = 0
@@ -317,7 +334,10 @@ async def run_async_migrations() -> None:
         for schema in filtered_tenant_schemas:
             i_tenant += 1
             logger.info(
-                f"Migrating schema: index={i_tenant} num_tenants={num_tenants} schema={schema}"
+                "Migrating schema: index=%s num_tenants=%s schema=%s",
+                i_tenant,
+                num_tenants,
+                schema,
             )
             try:
                 async with engine.connect() as connection:
@@ -328,7 +348,7 @@ async def run_async_migrations() -> None:
                     )
                     await connection.commit()
             except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
+                logger.error("Error migrating schema %s: %s", schema, e)
                 if not continue_on_error:
                     logger.error("--continue=true is not set, raising exception!")
                     raise
@@ -374,13 +394,13 @@ def run_migrations_offline() -> None:
 
     if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
+        logger.info("Migrating specific schema names: %s", schemas)
 
         for schema in schemas:
-            logger.info(f"Migrating schema: {schema}")
+            logger.info("Migrating schema: %s", schema)
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -411,17 +431,21 @@ def run_migrations_offline() -> None:
 
         if tenant_range_start is not None or tenant_range_end is not None:
             logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+                "Filtering tenants by range: start=%s, end=%s",
+                tenant_range_start,
+                tenant_range_end,
             )
             logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+                "Total tenants: %s, Filtered tenants: %s",
+                len(tenant_schemas),
+                len(filtered_tenant_schemas),
             )
 
         for schema in filtered_tenant_schemas:
-            logger.info(f"Migrating schema: {schema}")
+            logger.info("Migrating schema: %s", schema)
             context.configure(
                 url=url,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 literal_binds=True,
                 version_table_schema=schema,
                 include_schemas=True,
@@ -464,7 +488,7 @@ def run_migrations_online() -> None:
 
             context.configure(
                 connection=connection,
-                target_metadata=target_metadata,  # type: ignore
+                target_metadata=target_metadata,
                 version_table_schema=schema_name,
                 include_schemas=True,
                 compare_type=True,

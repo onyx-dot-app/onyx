@@ -725,7 +725,11 @@ export class OnyxApiClient {
     is_public: boolean;
     users: Array<{ id: string }>;
     groups: number[];
-    tools: Array<{ id: number; mcp_server_id?: number | null }>;
+    tools: Array<{
+      id: number;
+      in_code_tool_id?: string | null;
+      mcp_server_id?: number | null;
+    }>;
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(

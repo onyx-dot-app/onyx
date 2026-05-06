@@ -67,27 +67,29 @@ def get_user_document_access_via_acl(
     # Get the actual User object from the database
     user = fetch_user_by_id(db_session, UUID(test_user.id))
     if not user:
-        logger.error(f"Could not find user with ID {test_user.id}")
+        logger.error("Could not find user with ID %s", test_user.id)
         return []
 
     user_acl = get_user_acl(user, db_session)
-    logger.info(f"User {user.email} ACL entries: {user_acl}")
+    logger.info("User %s ACL entries: %s", user.email, user_acl)
 
     # Get document access information
     doc_access_map = _get_access_for_documents(document_ids, db_session)
-    logger.info(f"Found access info for {len(doc_access_map)} documents")
+    logger.info("Found access info for %s documents", len(doc_access_map))
 
     accessible_docs = []
     for doc_id, doc_access in doc_access_map.items():
         doc_acl = doc_access.to_acl()
-        logger.info(f"Document {doc_id} ACL: {doc_acl}")
+        logger.info("Document %s ACL: %s", doc_id, doc_acl)
 
         # Check if user has any matching ACL entry
         if user_acl.intersection(doc_acl):
             accessible_docs.append(doc_id)
-            logger.info(f"User {user.email} has access to document {doc_id}")
+            logger.info("User %s has access to document %s", user.email, doc_id)
         else:
-            logger.info(f"User {user.email} does NOT have access to document {doc_id}")
+            logger.info(
+                "User %s does NOT have access to document %s", user.email, doc_id
+            )
 
     return accessible_docs
 
@@ -113,7 +115,7 @@ def get_all_connector_documents(
     result = db_session.execute(stmt)
     document_ids = [row[0] for row in result.fetchall()]
     logger.info(
-        f"Found {len(document_ids)} documents for connector {cc_pair.connector_id}"
+        "Found %s documents for connector %s", len(document_ids), cc_pair.connector_id
     )
 
     return document_ids

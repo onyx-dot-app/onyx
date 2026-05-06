@@ -2,7 +2,6 @@
 
 from collections.abc import Callable
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
@@ -12,6 +11,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
@@ -255,11 +256,14 @@ def check_usage_and_raise(
                 "Please upgrade your plan or wait for the next billing period."
             )
         elif usage_type == UsageType.API_CALLS:
-            detail = (
-                f"API call limit exceeded for {user_type} account. "
-                f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
-                "Please upgrade your plan or wait for the next billing period."
-            )
+            if is_trial and e.limit == 0:
+                detail = "API access is not available on trial accounts. Please upgrade to a paid plan to use the API and chat widget."
+            else:
+                detail = (
+                    f"API call limit exceeded for {user_type} account. "
+                    f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
+                    "Please upgrade your plan or wait for the next billing period."
+                )
         else:
             detail = (
                 f"Non-streaming API call limit exceeded for {user_type} account. "
@@ -267,4 +271,4 @@ def check_usage_and_raise(
                 "Please upgrade your plan or wait for the next billing period."
             )
 
-        raise HTTPException(status_code=429, detail=detail)
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, detail)

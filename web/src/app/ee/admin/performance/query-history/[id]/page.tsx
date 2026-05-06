@@ -1,9 +1,8 @@
 "use client";
 import { use } from "react";
 
-import { Text } from "@opal/components";
+import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
@@ -61,7 +60,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
           </div>
         </div>
       )}
-      <Separator />
+      <Divider />
     </div>
   );
 }
@@ -112,7 +111,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
           }`}
         </Text>
 
-        <Separator />
+        <Divider />
 
         <div className="flex flex-col">
           {chatSessionSnapshot.messages.map((message) => {

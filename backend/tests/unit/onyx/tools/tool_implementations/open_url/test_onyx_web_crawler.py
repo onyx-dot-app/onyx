@@ -213,7 +213,7 @@ def _make_mock_response(
     if delay:
         original_content = content
 
-        @property  # type: ignore[misc]
+        @property
         def _delayed_content(_self: object) -> bytes:
             time.sleep(delay)
             return original_content

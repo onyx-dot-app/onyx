@@ -173,7 +173,9 @@ def search_chunks(
 
     if not top_chunks:
         logger.debug(
-            f"Search returned no results for query: {query_request.query} with filters: {query_request.filters}."
+            "Search returned no results for query: %s with filters: %s.",
+            query_request.query,
+            query_request.filters,
         )
 
     return top_chunks
@@ -208,7 +210,7 @@ def inference_sections_from_ids(
         chunks_by_doc_id.setdefault(chunk.document_id, []).append(chunk)
 
     inference_sections = [
-        section
+        section  # ty: ignore[possibly-unresolved-reference]
         for chunks in chunks_by_doc_id.values()
         if chunks
         and (

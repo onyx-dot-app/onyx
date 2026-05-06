@@ -8,14 +8,23 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.connector import _in_time_window
+from onyx.connectors.canvas.connector import _parse_canvas_dt
+from onyx.connectors.canvas.connector import _unix_to_canvas_time
 from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
+from onyx.connectors.canvas.connector import CanvasStage
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 # ---------------------------------------------------------------------------
@@ -109,6 +118,56 @@ def _mock_response(
     resp.json.return_value = json_data if json_data is not None else []
     resp.headers = {"Link": link_header}
     return resp
+
+
+def _make_url_dispatcher(
+    courses: list[dict[str, Any]] | None = None,
+    pages: list[dict[str, Any]] | None = None,
+    assignments: list[dict[str, Any]] | None = None,
+    announcements: list[dict[str, Any]] | None = None,
+    page_error: bool = False,
+) -> Any:
+    """Return a callable that dispatches mock responses based on the request URL.
+
+    Meant to be assigned to ``mock_requests.get.side_effect``.
+    """
+    api_prefix = f"{FAKE_BASE_URL}/api/v1"
+
+    def _dispatcher(url: str, **_kwargs: Any) -> MagicMock:
+        if page_error:
+            return _mock_response(500, {})
+        if url == f"{api_prefix}/courses":
+            return _mock_response(json_data=courses or [])
+        if "/pages" in url:
+            return _mock_response(json_data=pages or [])
+        if "/assignments" in url:
+            return _mock_response(json_data=assignments or [])
+        if "announcements" in url:
+            return _mock_response(json_data=announcements or [])
+        return _mock_response(json_data=[])
+
+    return _dispatcher
+
+
+def _run_checkpoint(
+    connector: CanvasConnector,
+    checkpoint: CanvasConnectorCheckpoint,
+    start: float = 0.0,
+    end: float = datetime(2099, 1, 1, tzinfo=timezone.utc).timestamp(),
+) -> tuple[
+    list[Document | HierarchyNode | ConnectorFailure], CanvasConnectorCheckpoint
+]:
+    """Run load_from_checkpoint once and collect yielded items + returned checkpoint."""
+    gen = connector.load_from_checkpoint(start, end, checkpoint)
+    items: list[Document | HierarchyNode | ConnectorFailure] = []
+    new_checkpoint: CanvasConnectorCheckpoint | None = None
+    try:
+        while True:
+            items.append(next(gen))
+    except StopIteration as e:
+        new_checkpoint = e.value
+    assert new_checkpoint is not None
+    return items, new_checkpoint
 
 
 # ---------------------------------------------------------------------------
@@ -268,15 +327,6 @@ class TestGet:
             self.client.get("courses")
 
         assert exc_info.value.status_code == 404
-
-    @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_raises_on_429(self, mock_requests: MagicMock) -> None:
-        mock_requests.get.return_value = _mock_response(429, {})
-
-        with pytest.raises(OnyxError) as exc_info:
-            self.client.get("courses")
-
-        assert exc_info.value.status_code == 429
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_skips_params_when_using_full_url(self, mock_requests: MagicMock) -> None:
@@ -454,6 +504,149 @@ class TestPaginate:
 
         assert pages == []
 
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_error_dict(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Shape 1: {"error": {"message": "Not authorized"}}"""
+        mock_requests.get.return_value = _mock_response(
+            403, {"error": {"message": "Not authorized"}}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Not authorized"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_error_string(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Shape 2: {"error": "Invalid access token"}"""
+        mock_requests.get.return_value = _mock_response(
+            401, {"error": "Invalid access token"}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Invalid access token"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_errors_list(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Shape 3: {"errors": [{"message": "Invalid query"}]}"""
+        mock_requests.get.return_value = _mock_response(
+            400, {"errors": [{"message": "Invalid query"}]}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Invalid query"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_dict_takes_priority_over_errors_list(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """When both error shapes are present, error dict wins."""
+        mock_requests.get.return_value = _mock_response(
+            403, {"error": "Specific error", "errors": [{"message": "Generic"}]}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Specific error"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_falls_back_to_reason_when_no_json_message(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Empty error body falls back to response.reason."""
+        mock_requests.get.return_value = _mock_response(500, {})
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Error"  # from _mock_response's reason for >= 300
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_invalid_json_on_success_raises(self, mock_requests: MagicMock) -> None:
+        """Invalid JSON on a 2xx response raises OnyxError."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("No JSON")
+        resp.headers = {"Link": ""}
+        mock_requests.get.return_value = resp
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError, match="Invalid JSON"):
+            client.get("courses")
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_invalid_json_on_error_falls_back_to_reason(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Invalid JSON on a 4xx response falls back to response.reason."""
+        resp = MagicMock()
+        resp.status_code = 500
+        resp.reason = "Internal Server Error"
+        resp.json.side_effect = ValueError("No JSON")
+        resp.headers = {"Link": ""}
+        mock_requests.get.return_value = resp
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Internal Server Error"
+
+        assert result == expected
+
 
 # ---------------------------------------------------------------------------
 # CanvasApiClient._parse_next_link tests
@@ -587,6 +780,16 @@ class TestConnectorUrlNormalization:
         expected = FAKE_BASE_URL
 
         assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_load_credentials_insufficient_permissions(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(403, {})
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+
+        with pytest.raises(InsufficientPermissionsError):
+            connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
 
 
 # ---------------------------------------------------------------------------
@@ -767,10 +970,6 @@ class TestValidateConnectorSettings:
         self._assert_validate_raises(403, InsufficientPermissionsError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_validate_rate_limited(self, mock_requests: MagicMock) -> None:
-        self._assert_validate_raises(429, ConnectorValidationError, mock_requests)
-
-    @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_unexpected_error(self, mock_requests: MagicMock) -> None:
         self._assert_validate_raises(500, UnexpectedValidationError, mock_requests)
 
@@ -874,3 +1073,652 @@ class TestListAnnouncements:
         result = connector._list_announcements(course_id=1)
 
         assert result == []
+
+
+class TestCheckpoint:
+    def test_build_dummy_checkpoint(self) -> None:
+        connector = _build_connector()
+
+        cp = connector.build_dummy_checkpoint()
+
+        assert cp.has_more is True
+        assert cp.course_ids == []
+        assert cp.current_course_index == 0
+        assert cp.stage == CanvasStage.PAGES
+
+    def test_validate_checkpoint_json(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=1,
+            stage=CanvasStage.ASSIGNMENTS,
+        )
+
+        json_str = cp.model_dump_json()
+        restored = connector.validate_checkpoint_json(json_str)
+
+        assert restored.course_ids == [1, 2]
+        assert restored.current_course_index == 1
+        assert restored.stage == CanvasStage.ASSIGNMENTS
+        assert restored.has_more is True
+
+
+# ---------------------------------------------------------------------------
+# load_from_checkpoint tests
+# ---------------------------------------------------------------------------
+
+
+class TestLoadFromCheckpoint:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_first_call_materializes_courses(self, mock_requests: MagicMock) -> None:
+        """First call should populate course_ids and yield no documents."""
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1), _mock_course(2, "Data Structures", "CS201")]
+        )
+        connector = _build_connector()
+        cp = connector.build_dummy_checkpoint()
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert items == []
+        assert new_cp.course_ids == [1, 2]
+        assert new_cp.current_course_index == 0
+        assert new_cp.stage == CanvasStage.PAGES
+        assert new_cp.has_more is True
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_processes_pages_stage(self, mock_requests: MagicMock) -> None:
+        """Pages stage yields page documents within the time window."""
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, "Syllabus", "2025-06-15T12:00:00Z")]
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+        start = datetime(2025, 6, 1, 0, 0, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, 0, 0, tzinfo=timezone.utc).timestamp()
+
+        items, new_cp = _run_checkpoint(connector, cp, start, end)
+
+        expected_count = 1
+        expected_id = "canvas-page-1-10"
+        assert len(items) == expected_count
+        assert isinstance(items[0], Document)
+        assert items[0].id == expected_id
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_advances_through_all_stages(self, mock_requests: MagicMock) -> None:
+        """Calling checkpoint 3 times advances pages -> assignments -> announcements -> next course."""
+        page = _mock_page(10, updated_at="2025-06-15T12:00:00Z")
+        assignment = _mock_assignment(20, updated_at="2025-06-15T12:00:00Z")
+        announcement = _mock_announcement(30, posted_at="2025-06-15T12:00:00Z")
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[page], assignments=[assignment], announcements=[announcement]
+        )
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        # Stage 1: pages
+        items1, cp = _run_checkpoint(connector, cp, start, end)
+
+        assert cp.stage == CanvasStage.ASSIGNMENTS
+        assert len(items1) == 1
+
+        # Stage 2: assignments
+        mock_requests.get.side_effect = _make_url_dispatcher(assignments=[assignment])
+
+        items2, cp = _run_checkpoint(connector, cp, start, end)
+
+        assert cp.stage == CanvasStage.ANNOUNCEMENTS
+        assert len(items2) == 1
+
+        # Stage 3: announcements -> advances course index
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            announcements=[announcement]
+        )
+
+        items3, cp = _run_checkpoint(connector, cp, start, end)
+
+        assert cp.current_course_index == 1
+        assert cp.stage == CanvasStage.PAGES
+        assert cp.has_more is False
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_filters_by_time_window(self, mock_requests: MagicMock) -> None:
+        """Only documents within (start, end] are yielded."""
+        old_page = _mock_page(10, updated_at="2025-01-01T00:00:00Z")
+        new_page = _mock_page(11, title="New Page", updated_at="2025-06-15T12:00:00Z")
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[new_page, old_page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        items, _ = _run_checkpoint(connector, cp, start, end)
+
+        expected_count = 1
+        expected_id = "canvas-page-1-11"
+
+        assert len(items) == expected_count
+        assert isinstance(items[0], Document)
+        assert items[0].id == expected_id
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_skips_announcement_without_posted_at(
+        self, mock_requests: MagicMock
+    ) -> None:
+        announcement = _mock_announcement()
+        announcement["posted_at"] = None
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            announcements=[announcement]
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.ANNOUNCEMENTS,
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert len(items) == 0
+
+    def test_stage_failure_advances_stage_and_yields_failure(self) -> None:
+        """A 500 on a stage fetch yields a stage-level ConnectorFailure and
+        advances to the next stage, so the framework doesn't loop on the
+        same failing state forever."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with patch.object(
+            connector,
+            "_fetch_stage_page",
+            side_effect=OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "boom",
+                status_code_override=500,
+            ),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        expected_entity_id = "canvas-pages-1"
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert items[0].failed_entity is not None
+        assert items[0].failed_entity.entity_id == expected_entity_id
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+        assert new_cp.current_course_index == 0
+        assert new_cp.next_url is None
+        assert new_cp.has_more is True
+
+    def test_course_404_advances_course_and_yields_failure(self) -> None:
+        """A 404 on a stage fetch means the whole course is inaccessible —
+        yield a course-level ConnectorFailure and skip to the next course
+        instead of burning API calls on every stage of a missing course."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with patch.object(
+            connector,
+            "_fetch_stage_page",
+            side_effect=OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "course gone",
+                status_code_override=404,
+            ),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        expected_entity_id = "canvas-course-1"
+        expected_next_course_index = 1
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert items[0].failed_entity is not None
+        assert items[0].failed_entity.entity_id == expected_entity_id
+        assert new_cp.current_course_index == expected_next_course_index
+        assert new_cp.stage == CanvasStage.PAGES
+        assert new_cp.next_url is None
+        assert new_cp.has_more is True
+
+    def test_fatal_auth_failure_during_stage_fetch_propagates(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with patch("onyx.connectors.canvas.client.rl_requests") as mock_requests:
+            mock_requests.get.return_value = _mock_response(401, {})
+            with pytest.raises(CredentialExpiredError):
+                _run_checkpoint(connector, cp)
+
+    def test_security_failure_during_stage_fetch_propagates(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with patch.object(
+            connector,
+            "_fetch_stage_page",
+            side_effect=OnyxError(OnyxErrorCode.BAD_GATEWAY, "bad next link"),
+        ):
+            with pytest.raises(OnyxError, match="bad next link"):
+                _run_checkpoint(connector, cp)
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_per_document_conversion_failure_yields_connector_failure(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Bad data for one page yields ConnectorFailure, doesn't stop processing."""
+        bad_page = {
+            "page_id": 10,
+            "url": "test",
+            "title": "Test",
+            "body": None,
+            "created_at": "2025-06-15T12:00:00Z",
+            "updated_at": "bad-date",
+        }
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[bad_page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_all_courses_done_sets_has_more_false(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher()
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=1
+        )
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert items == []
+        assert new_cp.has_more is False
+
+    def test_invalid_stage_raises_value_error(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+        cp.stage = "invalid"  # ty: ignore[invalid-assignment]
+
+        with pytest.raises(ValueError, match="Invalid checkpoint stage"):
+            _run_checkpoint(connector, cp)
+
+
+# ---------------------------------------------------------------------------
+# load_from_checkpoint_with_perm_sync tests
+# ---------------------------------------------------------------------------
+
+
+class TestLoadFromCheckpointWithPermSync:
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_documents_have_external_access(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        """load_from_checkpoint_with_perm_sync attaches ExternalAccess to documents."""
+        expected_access = ExternalAccess(
+            external_user_emails={"student@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_perms.return_value = expected_access
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, "Syllabus", "2025-06-15T12:00:00Z")]
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        gen = connector.load_from_checkpoint_with_perm_sync(start, end, cp)
+        items: list[Document | HierarchyNode | ConnectorFailure] = []
+        new_cp: CanvasConnectorCheckpoint | None = None
+        try:
+            while True:
+                items.append(next(gen))
+        except StopIteration as e:
+            new_cp = e.value
+        assert new_cp is not None
+
+        assert len(items) == 1
+        assert isinstance(items[0], Document)
+        assert items[0].external_access == expected_access
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+        mock_perms.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Helper function tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseCanvasDt:
+    def test_z_suffix_parsed_as_utc(self) -> None:
+        result = _parse_canvas_dt("2025-06-15T12:00:00Z")
+
+        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        assert result == expected
+
+    def test_plus_offset_parsed_as_utc(self) -> None:
+        result = _parse_canvas_dt("2025-06-15T12:00:00+00:00")
+
+        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        assert result == expected
+
+    def test_result_is_timezone_aware(self) -> None:
+        result = _parse_canvas_dt("2025-01-01T00:00:00Z")
+
+        assert result.tzinfo is not None
+
+
+class TestUnixToCanvasTime:
+    def test_known_epoch_produces_expected_string(self) -> None:
+        epoch = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+
+        result = _unix_to_canvas_time(epoch)
+
+        assert result == "2025-06-15T12:00:00Z"
+
+    def test_round_trips_with_parse_canvas_dt(self) -> None:
+        epoch = datetime(2025, 3, 10, 8, 30, 0, tzinfo=timezone.utc).timestamp()
+
+        result = _parse_canvas_dt(_unix_to_canvas_time(epoch))
+        expected = datetime(2025, 3, 10, 8, 30, 0, tzinfo=timezone.utc)
+
+        assert result == expected
+
+
+class TestInTimeWindow:
+    def test_inside_window(self) -> None:
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        result = _in_time_window("2025-06-15T12:00:00Z", start, end)
+
+        assert result is True
+
+    def test_before_window(self) -> None:
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        result = _in_time_window("2025-05-01T12:00:00Z", start, end)
+
+        assert result is False
+
+    def test_after_window(self) -> None:
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        result = _in_time_window("2025-07-15T12:00:00Z", start, end)
+
+        assert result is False
+
+    def test_start_boundary_is_exclusive(self) -> None:
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        result = _in_time_window("2025-06-01T00:00:00Z", start, end)
+
+        assert result is False
+
+    def test_end_boundary_is_inclusive(self) -> None:
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+
+        result = _in_time_window("2025-06-30T00:00:00Z", start, end)
+
+        assert result is True
+
+
+class TestFetchStagePage:
+    def test_uses_full_url_when_next_url_set(self) -> None:
+        connector = _build_connector()
+        with patch.object(
+            connector.canvas_client, "get", return_value=([{"id": 1}], None)
+        ) as mock_get:
+            result, next_url = connector._fetch_stage_page(
+                next_url="https://myschool.instructure.com/api/v1/courses?page=2",
+                endpoint="courses/1/pages",
+                params={"per_page": "100"},
+            )
+
+        mock_get.assert_called_once_with(
+            full_url="https://myschool.instructure.com/api/v1/courses?page=2"
+        )
+        assert result == [{"id": 1}]
+
+    def test_uses_endpoint_and_params_when_no_next_url(self) -> None:
+        connector = _build_connector()
+        with patch.object(
+            connector.canvas_client, "get", return_value=([{"id": 1}], None)
+        ) as mock_get:
+            result, next_url = connector._fetch_stage_page(
+                next_url=None,
+                endpoint="courses/1/pages",
+                params={"per_page": "100"},
+            )
+
+        mock_get.assert_called_once_with(
+            endpoint="courses/1/pages", params={"per_page": "100"}
+        )
+
+    def test_returns_empty_list_for_none_response(self) -> None:
+        connector = _build_connector()
+        with patch.object(connector.canvas_client, "get", return_value=(None, None)):
+            result, next_url = connector._fetch_stage_page(
+                next_url=None,
+                endpoint="courses/1/pages",
+                params={},
+            )
+
+        assert result == []
+        assert next_url is None
+
+
+class TestProcessItems:
+    def test_pages_in_window_converted(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        results, early_exit = connector._process_items(
+            response=[_mock_page(10, "Syllabus", "2025-06-15T12:00:00Z")],
+            stage=CanvasStage.PAGES,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert len(results) == 1
+        assert isinstance(results[0], Document)
+        assert early_exit is False
+
+    def test_pages_outside_window_skipped(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        results, early_exit = connector._process_items(
+            response=[_mock_page(10, "Old", "2025-01-01T12:00:00Z")],
+            stage=CanvasStage.PAGES,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert results == []
+        assert early_exit is True
+
+    def test_assignments_in_window_converted(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        results, early_exit = connector._process_items(
+            response=[_mock_assignment(20, "HW1", 1, "2025-06-15T12:00:00Z")],
+            stage=CanvasStage.ASSIGNMENTS,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert len(results) == 1
+        assert isinstance(results[0], Document)
+        assert early_exit is False
+
+    def test_announcements_in_window_converted(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        results, early_exit = connector._process_items(
+            response=[_mock_announcement(30, "News", 1, "2025-06-15T12:00:00Z")],
+            stage=CanvasStage.ANNOUNCEMENTS,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert len(results) == 1
+        assert isinstance(results[0], Document)
+        assert early_exit is False
+
+    def test_bad_item_yields_connector_failure(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+        bad_page = {
+            "page_id": 10,
+            "url": "test",
+            "title": "Test",
+            "body": None,
+            "created_at": "2025-06-15T12:00:00Z",
+            "updated_at": "bad-date",
+        }
+
+        results, early_exit = connector._process_items(
+            response=[bad_page],
+            stage=CanvasStage.PAGES,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert len(results) == 1
+        assert isinstance(results[0], ConnectorFailure)
+
+    def test_page_early_exit_on_old_item(self) -> None:
+        """Pages sorted desc — item before start triggers early exit."""
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        results, early_exit = connector._process_items(
+            response=[
+                _mock_page(10, "New", "2025-06-15T12:00:00Z"),
+                _mock_page(11, "Old", "2025-05-01T12:00:00Z"),
+                _mock_page(12, "Older", "2025-04-01T12:00:00Z"),
+            ],
+            stage=CanvasStage.PAGES,
+            course_id=1,
+            start=start,
+            end=end,
+            include_permissions=False,
+        )
+
+        assert len(results) == 1
+        assert early_exit is True
+
+
+class TestMaybeAttachPermissions:
+    def test_attaches_permissions_when_true(self) -> None:
+        connector = _build_connector()
+        doc = MagicMock(spec=Document)
+        doc.external_access = None
+        expected_access = ExternalAccess(
+            external_user_emails={"student@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        with patch.object(
+            connector, "_get_course_permissions", return_value=expected_access
+        ):
+            result = connector._maybe_attach_permissions(
+                doc, course_id=1, include_permissions=True
+            )
+
+        assert result.external_access == expected_access
+
+    def test_no_op_when_false(self) -> None:
+        connector = _build_connector()
+        doc = MagicMock(spec=Document)
+        doc.external_access = None
+
+        result = connector._maybe_attach_permissions(
+            doc, course_id=1, include_permissions=False
+        )
+
+        assert result.external_access is None

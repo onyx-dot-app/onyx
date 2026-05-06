@@ -6,6 +6,7 @@ from itertools import chain
 from itertools import groupby
 
 import httpx
+import sentry_sdk
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import DocumentFailure
@@ -14,7 +15,6 @@ from onyx.document_index.interfaces import DocumentInsertionRecord
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -53,8 +53,20 @@ def write_chunks_to_vector_db_with_backoff(
             [],
         )
     except Exception as e:
-        logger.exception(
-            "Failed to write chunk batch to vector db. Trying individual docs."
+        # The batch write failing just means we fall back to the per-doc
+        # retry loop below. It's only a real failure if the per-doc retry
+        # also fails — that path already logs/captures to Sentry per doc.
+        # Use warning here so a transient OpenSearch response timeout on
+        # the bulk write doesn't ship an event for every indexing batch.
+        # (urllib3 surfaces this as ReadTimeoutError because it has no
+        # separate write-timeout class; the client has already sent the
+        # bulk request and is waiting on OpenSearch's response, which is
+        # where the 60s read timeout fires when the server is slow to
+        # finish the bulk index.)
+        logger.warning(
+            "Failed to write chunk batch to vector db. Trying individual docs. Batch error: %s: %s",
+            type(e).__name__,
+            e,
         )
 
         # give some specific logging on this common failure case.
@@ -88,8 +100,14 @@ def write_chunks_to_vector_db_with_backoff(
                 )
             )
         except Exception as e:
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("stage", "vector_db_write")
+                scope.set_tag("doc_id", doc_id)
+                scope.set_tag("tenant_id", index_batch_params.tenant_id)
+                scope.fingerprint = ["vector-db-write-failure", type(e).__name__]
+                sentry_sdk.capture_exception(e)
             logger.exception(
-                f"Failed to write document chunks for '{doc_id}' to vector db"
+                "Failed to write document chunks for '%s' to vector db", doc_id
             )
 
             # give some specific logging on this common failure case.

@@ -9,7 +9,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ChatSessionSkeleton from "@/refresh-components/skeletons/ChatSessionSkeleton";
 import { SvgBubbleText } from "@opal/icons";

@@ -25,7 +25,7 @@ def upgrade() -> None:
 
     # Use batch mode to modify the enum type
     with op.batch_alter_table("user", schema=None) as batch_op:
-        batch_op.alter_column(  # type: ignore[attr-defined]
+        batch_op.alter_column(
             "role",
             type_=sa.Enum(
                 "BASIC",
@@ -71,7 +71,7 @@ def downgrade() -> None:
     op.drop_column("user__user_group", "is_curator")
 
     with op.batch_alter_table("user", schema=None) as batch_op:
-        batch_op.alter_column(  # type: ignore[attr-defined]
+        batch_op.alter_column(
             "role",
             type_=sa.Enum(
                 "BASIC", "ADMIN", name="userrole", native_enum=False, length=20

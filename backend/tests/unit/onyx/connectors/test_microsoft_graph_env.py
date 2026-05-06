@@ -1,5 +1,5 @@
 import pytest
-from office365.graph_client import AzureEnvironment  # type: ignore[import-untyped]
+from office365.graph_client import AzureEnvironment
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment

@@ -22,6 +22,10 @@ variable "CLI_REPOSITORY" {
   default = "onyxdotapp/onyx-cli"
 }
 
+variable "DEVCONTAINER_REPOSITORY" {
+  default = "onyxdotapp/onyx-devcontainer"
+}
+
 variable "TAG" {
   default = "latest"
 }
@@ -89,4 +93,17 @@ target "cli" {
   cache-to   = ["type=inline"]
 
   tags      = ["${CLI_REPOSITORY}:${TAG}"]
+}
+
+target "devcontainer" {
+  context    = ".devcontainer"
+  dockerfile = "Dockerfile"
+
+  cache-from = [
+    "type=registry,ref=${DEVCONTAINER_REPOSITORY}:latest",
+    "type=registry,ref=${DEVCONTAINER_REPOSITORY}:edge",
+  ]
+  cache-to   = ["type=inline"]
+
+  tags      = ["${DEVCONTAINER_REPOSITORY}:${TAG}"]
 }

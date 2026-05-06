@@ -1,9 +1,9 @@
 import base64
 from enum import Enum
 from typing import NotRequired
-from typing_extensions import TypedDict  # noreorder
 
 from pydantic import BaseModel
+from typing_extensions import TypedDict  # noreorder
 
 
 class ChatFileType(str, Enum):

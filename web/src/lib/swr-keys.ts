@@ -10,8 +10,9 @@ export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
 
-  // ── Health ────────────────────────────────────────────────────────────────
+  // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
@@ -32,9 +33,11 @@ export const SWR_KEYS = {
     `/api/llm/persona/${personaId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
+  customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
+  llmContextualCost: "/api/admin/llm/provider-contextual-cost",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
@@ -67,6 +70,7 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
@@ -125,11 +129,6 @@ export const SWR_KEYS = {
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
 
-  // ── Knowledge Graph ───────────────────────────────────────────────────────
-  kgConfig: "/api/admin/kg/config",
-  kgEntityTypes: "/api/admin/kg/entity-types",
-  kgExposed: "/api/admin/kg/exposed",
-
   // ── OpenSearch Migration ──────────────────────────────────────────────────
   opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
   opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
@@ -183,4 +182,21 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+
+  // ── Index Attempts ────────────────────────────────────────────────────────
+  indexAttemptStageMetrics: (indexAttemptId: number) =>
+    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
+
+  // ── CC-Pair Sync Attempts ─────────────────────────────────────────────────
+  // The `*Probe` variants are single-row reads used to surface the
+  // `applicable` flag without paying for a full page; see
+  // `useSyncAttemptsPaginatedFetch`.
+  ccPairPermissionSyncAttempts: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
+  ccPairPermissionSyncAttemptsProbe: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
+  ccPairExternalGroupSyncAttempts: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
+  ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
 } as const;

@@ -5,12 +5,12 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgEyeOff, SvgX } from "@opal/icons";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { getModelIcon } from "@/lib/llmConfig";
 import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 
 export interface MultiModelPanelProps {
@@ -28,6 +28,8 @@ export interface MultiModelPanelProps {
   isNonPreferredInSelection: boolean;
   /** Callback when user clicks this panel to select as preferred */
   onSelect: () => void;
+  /** Callback to deselect this panel as preferred */
+  onDeselect?: () => void;
   /** Callback to hide/show this panel */
   onToggleVisibility: () => void;
   /** Props to pass through to AgentMessage */
@@ -42,6 +44,8 @@ export interface MultiModelPanelProps {
   errorStackTrace?: string | null;
   /** Additional error details */
   errorDetails?: Record<string, any> | null;
+  /** Whether any model is still streaming — disables preferred selection */
+  isGenerating?: boolean;
 }
 
 /**
@@ -63,6 +67,7 @@ export default function MultiModelPanel({
   isHidden,
   isNonPreferredInSelection,
   onSelect,
+  onDeselect,
   onToggleVisibility,
   agentMessageProps,
   errorMessage,
@@ -70,34 +75,53 @@ export default function MultiModelPanel({
   isRetryable,
   errorStackTrace,
   errorDetails,
+  isGenerating,
 }: MultiModelPanelProps) {
-  const ProviderIcon = getProviderIcon(provider, modelName);
+  const ModelIcon = getModelIcon(provider, modelName);
+
+  const canSelect = !isHidden && !isPreferred && !isGenerating;
 
   const handlePanelClick = useCallback(() => {
-    if (!isHidden && !isPreferred) onSelect();
-  }, [isHidden, isPreferred, onSelect]);
+    if (canSelect) onSelect();
+  }, [canSelect, onSelect]);
 
   const header = (
     <div
       className={cn(
-        "rounded-12",
-        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00"
+        "rounded-12 transition-colors",
+        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
+        canSelect && "cursor-pointer hover:bg-background-tint-02"
       )}
+      onClick={handlePanelClick}
     >
       <ContentAction
         sizePreset="main-ui"
         variant="body"
-        paddingVariant="lg"
-        icon={ProviderIcon}
+        padding="lg"
+        icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
           <div className="flex items-center gap-1 px-2">
             {isPreferred && (
-              <span className="text-action-link-05 shrink-0">
-                <Text font="secondary-body" color="inherit" nowrap>
-                  Preferred Response
-                </Text>
-              </span>
+              <>
+                <span className="text-action-link-05 shrink-0">
+                  <Text font="secondary-body" color="inherit" nowrap>
+                    Preferred Response
+                  </Text>
+                </span>
+                {onDeselect && (
+                  <Button
+                    prominence="tertiary"
+                    icon={SvgX}
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeselect();
+                    }}
+                    tooltip="Deselect preferred response"
+                  />
+                )}
+              </>
             )}
             {!isPreferred && (
               <Button
@@ -123,13 +147,7 @@ export default function MultiModelPanel({
   }
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
-        !isPreferred && "cursor-pointer hover:bg-background-tint-02"
-      )}
-      onClick={handlePanelClick}
-    >
+    <div className="flex flex-col gap-3 min-w-0 rounded-16">
       {header}
       {errorMessage ? (
         <div className="p-4">
@@ -146,6 +164,7 @@ export default function MultiModelPanel({
           <AgentMessage
             {...agentMessageProps}
             hideFooter={isNonPreferredInSelection}
+            disableTTS
           />
         </div>
       )}

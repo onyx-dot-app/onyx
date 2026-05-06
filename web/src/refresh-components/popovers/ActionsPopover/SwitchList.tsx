@@ -6,7 +6,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import type { IconProps } from "@opal/types";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
 
@@ -91,11 +91,7 @@ export default function SwitchList({
             ? item.disabledTooltip
             : item.description;
           return (
-            <SimpleTooltip
-              key={item.id}
-              tooltip={tooltip}
-              className="max-w-[30rem]"
-            >
+            <Tooltip key={item.id} tooltip={tooltip}>
               <LineItem
                 icon={
                   item.leading
@@ -103,6 +99,7 @@ export default function SwitchList({
                         item.leading) as React.FunctionComponent<IconProps>)
                     : undefined
                 }
+                strokeIcon={false}
                 rightChildren={
                   <Switch
                     checked={item.isEnabled}
@@ -114,7 +111,7 @@ export default function SwitchList({
               >
                 {item.label}
               </LineItem>
-            </SimpleTooltip>
+            </Tooltip>
           );
         }),
       ]}

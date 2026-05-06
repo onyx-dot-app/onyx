@@ -7,6 +7,12 @@ import {
 import { Packet } from "./services/streamingModels";
 
 export type FeedbackType = "like" | "dislike";
+
+export interface QueuedMessage {
+  id: number;
+  text: string;
+}
+
 export type ChatState =
   | "input"
   | "loading"

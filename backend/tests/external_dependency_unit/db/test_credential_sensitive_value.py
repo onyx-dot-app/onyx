@@ -65,7 +65,7 @@ def test_reassign_same_nested_json_not_dirty(db_session: Session) -> None:
     _ = credential.credential_json  # force reload
 
     # Re-assign identical value
-    credential.credential_json = _NESTED_CRED_JSON  # type: ignore[assignment]
+    credential.credential_json = _NESTED_CRED_JSON  # ty: ignore[invalid-assignment]
     assert not db_session.is_modified(credential)
 
     db_session.rollback()
@@ -84,7 +84,7 @@ def test_assign_different_nested_json_is_dirty(db_session: Session) -> None:
     _ = credential.credential_json  # force reload
 
     modified_cred = {**_NESTED_CRED_JSON, "scopes": ["read"]}
-    credential.credential_json = modified_cred  # type: ignore[assignment]
+    credential.credential_json = modified_cred  # ty: ignore[invalid-assignment]
     assert db_session.is_modified(credential)
 
     db_session.rollback()

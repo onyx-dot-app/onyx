@@ -1,45 +1,35 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
+import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
-  buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
+  useInitialValues,
+  buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   DisplayNameField,
-  FieldSeparator,
-  FieldWrapper,
-  ModelsAccessField,
-  ModelsField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModelSelectionField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import { toast } from "@/hooks/useToast";
-
-const AZURE_PROVIDER_NAME = "azure";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -47,6 +37,33 @@ interface AzureModalValues extends BaseLLMFormValues {
   api_base?: string;
   api_version?: string;
   deployment_name?: string;
+}
+
+function AzureModelSelection() {
+  const formikProps = useFormikContext<AzureModalValues>();
+  return (
+    <ModelSelectionField
+      shouldShowAutoUpdateToggle={false}
+      onAddModel={(modelName) => {
+        const current = formikProps.values.model_configurations;
+        if (current.some((m) => m.name === modelName)) return;
+        const updated = [
+          ...current,
+          {
+            name: modelName,
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+          },
+        ];
+        formikProps.setFieldValue("model_configurations", updated);
+        if (!formikProps.values.test_model_name) {
+          formikProps.setFieldValue("test_model_name", modelName);
+        }
+      }}
+    />
+  );
 }
 
 function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
@@ -84,189 +101,103 @@ export default function AzureModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
-  onboardingState,
-  onboardingActions,
-  llmDescriptor,
+  onSuccess,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(AZURE_PROVIDER_NAME);
 
-  const [addedModels, setAddedModels] = useState<ModelConfiguration[]>([]);
+  const onClose = () => onOpenChange?.(false);
 
-  const onClose = () => {
-    setAddedModels([]);
-    onOpenChange?.(false);
-  };
+  const initialValues: AzureModalValues = {
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.AZURE,
+      existingLlmProvider
+    ),
+    target_uri: buildTargetUri(existingLlmProvider),
+  } as AzureModalValues;
 
-  const baseModelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
-
-  // Merge base models with any user-added models (dedup by name)
-  const existingNames = new Set(baseModelConfigurations.map((m) => m.name));
-  const modelConfigurations = [
-    ...baseModelConfigurations,
-    ...addedModels.filter((m) => !existingNames.has(m.name)),
-  ];
-
-  const initialValues: AzureModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: AZURE_PROVIDER_NAME,
-        provider: AZURE_PROVIDER_NAME,
-        api_key: "",
-        target_uri: "",
-        default_model_name: "",
-      } as AzureModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
+    extra: {
+      target_uri: Yup.string()
+        .required("Target URI is required")
+        .test(
+          "valid-target-uri",
+          "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+          (value) => (value ? isValidAzureTargetUri(value) : false)
         ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        target_uri: buildTargetUri(existingLlmProvider),
-      };
-
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_key: Yup.string().required("API Key is required"),
-        target_uri: Yup.string()
-          .required("Target URI is required")
-          .test(
-            "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-            (value) => (value ? isValidAzureTargetUri(value) : false)
-          ),
-        default_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildDefaultValidationSchema().shape({
-        api_key: Yup.string().required("API Key is required"),
-        target_uri: Yup.string()
-          .required("Target URI is required")
-          .test(
-            "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-            (value) => (value ? isValidAzureTargetUri(value) : false)
-          ),
-      });
+    },
+  });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.AZURE}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const processedValues = processValues(values);
 
-        if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
-
-          await submitOnboardingProvider({
-            providerName: AZURE_PROVIDER_NAME,
-            payload: {
-              ...processedValues,
-              model_configurations: modelConfigsToUse,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: AZURE_PROVIDER_NAME,
-            values: processedValues,
-            initialValues,
-            modelConfigurations,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setIsTesting,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          providerName: LLMProviderName.AZURE,
+          values: processedValues,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          onSuccess: async () => {
+            if (onSuccess) {
+              await onSuccess();
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              toast.success(
+                existingLlmProvider
+                  ? "Provider updated successfully!"
+                  : "Provider enabled successfully!"
+              );
+            }
+          },
+        });
       }}
     >
-      {(formikProps) => (
-        <LLMConfigurationModalWrapper
-          providerEndpoint={AZURE_PROVIDER_NAME}
-          existingProviderName={existingLlmProvider?.name}
-          onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
+      <InputPadder>
+        <InputVertical
+          withLabel="target_uri"
+          title="Target URI"
+          subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
         >
-          <FieldWrapper>
-            <InputLayouts.Vertical
-              name="target_uri"
-              title="Target URI"
-              subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
-            >
-              <InputTypeInField
-                name="target_uri"
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-              />
-            </InputLayouts.Vertical>
-          </FieldWrapper>
+          <InputTypeInField
+            name="target_uri"
+            placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+          />
+        </InputVertical>
+      </InputPadder>
 
-          <APIKeyField providerName="Azure" />
+      <APIKeyField providerName="Azure" />
 
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
-          <FieldSeparator />
-
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={null}
-              shouldShowAutoUpdateToggle={false}
-              onAddModel={(modelName) => {
-                const newModel: ModelConfiguration = {
-                  name: modelName,
-                  is_visible: true,
-                  max_input_tokens: null,
-                  supports_image_input: false,
-                  supports_reasoning: false,
-                };
-                setAddedModels((prev) => [...prev, newModel]);
-                const currentSelected =
-                  formikProps.values.selected_model_names ?? [];
-                formikProps.setFieldValue("selected_model_names", [
-                  ...currentSelected,
-                  modelName,
-                ]);
-                if (!formikProps.values.default_model_name) {
-                  formikProps.setFieldValue("default_model_name", modelName);
-                }
-              }}
-            />
-          )}
-
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
-            </>
-          )}
-        </LLMConfigurationModalWrapper>
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputDivider />
+      <AzureModelSelection />
+
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

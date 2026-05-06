@@ -2,10 +2,11 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.db.code_interpreter import update_code_interpreter_server_enabled
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.manage.code_interpreter.models import CodeInterpreterServer
 from onyx.server.manage.code_interpreter.models import CodeInterpreterServerHealth
@@ -18,7 +19,7 @@ admin_router = APIRouter(prefix="/admin/code-interpreter")
 
 @admin_router.get("/health")
 def get_code_interpreter_health(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> CodeInterpreterServerHealth:
     try:
         client = CodeInterpreterClient()
@@ -29,7 +30,8 @@ def get_code_interpreter_health(
 
 @admin_router.get("")
 def get_code_interpreter(
-    _: User = Depends(current_admin_user), db_session: Session = Depends(get_session)
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> CodeInterpreterServer:
     ci_server = fetch_code_interpreter_server(db_session)
     return CodeInterpreterServer(enabled=ci_server.server_enabled)
@@ -38,7 +40,7 @@ def get_code_interpreter(
 @admin_router.put("")
 def update_code_interpreter(
     update: CodeInterpreterServer,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_code_interpreter_server_enabled(

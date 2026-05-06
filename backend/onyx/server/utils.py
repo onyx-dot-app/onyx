@@ -17,7 +17,7 @@ class BasicAuthenticationError(HTTPException):
 class OnyxJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder that converts datetime and UUID objects to strings."""
 
-    def default(self, obj: Any) -> Any:
+    def default(self, obj: Any) -> Any:  # ty: ignore[invalid-method-override]
         if isinstance(obj, datetime):
             return obj.isoformat()
         if isinstance(obj, UUID):

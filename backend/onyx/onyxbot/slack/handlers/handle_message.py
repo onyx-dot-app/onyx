@@ -12,12 +12,8 @@ from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
-from onyx.onyxbot.slack.handlers.handle_regular_answer import (
-    handle_regular_answer,
-)
-from onyx.onyxbot.slack.handlers.handle_standard_answers import (
-    handle_standard_answers,
-)
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
+from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
 from onyx.onyxbot.slack.utils import fetch_user_ids_from_groups
@@ -63,10 +59,10 @@ def schedule_feedback_reminder(
     try:
         permalink = client.chat_getPermalink(
             channel=details.channel_to_respond,
-            message_ts=details.msg_to_respond,  # type:ignore
+            message_ts=details.msg_to_respond,  # ty: ignore[invalid-argument-type]
         )
     except SlackApiError as e:
-        logger.error(f"Unable to generate the feedback reminder permalink: {e}")
+        logger.error("Unable to generate the feedback reminder permalink: %s", e)
         return None
 
     now = datetime.datetime.now()
@@ -74,20 +70,24 @@ def schedule_feedback_reminder(
 
     try:
         response = client.chat_scheduleMessage(
-            channel=details.sender_id,  # type:ignore
+            channel=details.sender_id,  # ty: ignore[invalid-argument-type]
             post_at=int(future.timestamp()),
             blocks=[
                 get_feedback_reminder_blocks(
-                    thread_link=permalink.data["permalink"],  # type:ignore
+                    thread_link=permalink.data[  # ty: ignore[invalid-argument-type]
+                        "permalink"
+                    ],
                     include_followup=include_followup,
                 )
             ],
             text="",
         )
         logger.info("Scheduled feedback reminder configured")
-        return response.data["scheduled_message_id"]  # type:ignore
+        return response.data[  # ty: ignore[invalid-argument-type]
+            "scheduled_message_id"
+        ]
     except SlackApiError as e:
-        logger.error(f"Unable to generate the feedback reminder message: {e}")
+        logger.error("Unable to generate the feedback reminder message: %s", e)
         return None
 
 
@@ -98,7 +98,7 @@ def remove_scheduled_feedback_reminder(
 
     try:
         client.chat_deleteScheduledMessage(
-            channel=channel,  # type:ignore
+            channel=channel,  # ty: ignore[invalid-argument-type]
             scheduled_message_id=msg_id,
         )
         logger.info("Scheduled feedback reminder deleted")
@@ -165,9 +165,9 @@ def handle_message(
                 return False
 
         logger.info(
-            "Found slack bot config for channel. Restricting bot to use document "
-            f"sets: {document_set_names}, "
-            f"validity checks enabled: {channel_conf.get('answer_filters', 'NA')}"
+            "Found slack bot config for channel. Restricting bot to use document sets: %s, validity checks enabled: %s",
+            document_set_names,
+            channel_conf.get("answer_filters", "NA"),
         )
 
         respond_tag_only = channel_conf.get("respond_tag_only") or False
@@ -196,7 +196,7 @@ def handle_message(
         send_to = list(set(send_to + user_ids)) if send_to else user_ids
 
         if missing_users:
-            logger.warning(f"Failed to find these users/groups: {missing_users}")
+            logger.warning("Failed to find these users/groups: %s", missing_users)
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
@@ -213,7 +213,7 @@ def handle_message(
     try:
         send_msg_ack_to_user(message_info, client)
     except SlackApiError as e:
-        logger.error(f"Was not able to react to user message due to: {e}")
+        logger.error("Was not able to react to user message due to: %s", e)
 
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
@@ -229,7 +229,9 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked new Slack user {message_info.email}: {seat_result.error_message}"
+                        "Blocked new Slack user %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
                     )
                     respond_in_thread_or_channel(
                         client=client,
@@ -257,7 +259,9 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked inactive Slack user {message_info.email}: {seat_result.error_message}"
+                        "Blocked inactive Slack user %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
                     )
                     respond_in_thread_or_channel(
                         client=client,
@@ -280,7 +284,7 @@ def handle_message(
                     None,
                 )
                 invalidate_license_cache_fn()
-                logger.info(f"Reactivated inactive Slack user {message_info.email}")
+                logger.info("Reactivated inactive Slack user %s", message_info.email)
 
             add_slack_user_if_not_exists(db_session, message_info.email)
 

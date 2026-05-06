@@ -158,7 +158,7 @@
       "pluginVersion": "10.4.1",
       "targets": [
         {
-          "expr": "sum(onyx_connectors_in_error_total{tenant_id=~\"$tenant_id\"})",
+          "expr": "count(max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_in_error_state{tenant_id=~\"$tenant_id\"}) == 1)",
           "legendFormat": "Connectors in error",
           "refId": "A"
         }
@@ -462,7 +462,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Current indexing attempts by status and connector.",
+      "description": "Rate of index attempt status transitions per minute, grouped by status.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -516,12 +516,12 @@
       },
       "targets": [
         {
-          "expr": "onyx_index_attempts_active{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
-          "legendFormat": "{{status}} / {{source}} / {{connector_name}}",
+          "expr": "sum by (status) (rate(onyx_index_attempt_transitions_total{tenant_id=~\"$tenant_id\", source=~\"$source\"}[5m])) * 60",
+          "legendFormat": "{{status}}",
           "refId": "A"
         }
       ],
-      "title": "Active Index Attempts",
+      "title": "Index attempt transitions / min",
       "type": "timeseries"
     },
     {
@@ -529,7 +529,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Distribution of all connectors by their current status.",
+      "description": "Distribution of index attempt transitions by status over the last hour.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -567,12 +567,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (status) (onyx_connectors_by_status{tenant_id=~\"$tenant_id\"})",
+          "expr": "sum by (status) (increase(onyx_index_attempt_transitions_total{tenant_id=~\"$tenant_id\", source=~\"$source\"}[1h]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
       ],
-      "title": "Connectors by Status",
+      "title": "Attempt transitions by status (1h)",
       "type": "piechart"
     },
     {
@@ -699,19 +699,19 @@
       },
       "targets": [
         {
-          "expr": "topk(20, onyx_connector_last_success_age_seconds{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"})",
+          "expr": "topk(20, time() - max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_last_success_timestamp_seconds{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}))",
           "format": "table",
           "instant": true,
           "refId": "A"
         },
         {
-          "expr": "onyx_connector_error_count{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
+          "expr": "onyx_connector_indexing_errors_total{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
         },
         {
-          "expr": "onyx_connector_docs_indexed{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
+          "expr": "onyx_connector_docs_indexed_total{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -809,7 +809,7 @@
       },
       "targets": [
         {
-          "expr": "onyx_connector_in_error_state{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"} == 1",
+          "expr": "max by (cc_pair_id, connector_name, source, tenant_id) (onyx_connector_in_error_state{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}) == 1",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -921,13 +921,13 @@
       },
       "targets": [
         {
-          "expr": "onyx_connector_docs_indexed{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
+          "expr": "onyx_connector_docs_indexed_total{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
         },
         {
-          "expr": "onyx_connector_error_count{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
+          "expr": "onyx_connector_indexing_errors_total{tenant_id=~\"$tenant_id\", source=~\"$source\", connector_name=~\"$connector_name\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -1203,8 +1203,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (source, connector_name, outcome) (rate(onyx_indexing_task_completed_total{source=~\"$source\", tenant_id=~\"$tenant_id\", connector_name=~\"$connector_name\"}[5m])) * 60",
-          "legendFormat": "{{source}} / {{connector_name}} ({{outcome}})",
+          "expr": "sum by (source, cc_pair_id, outcome) (rate(onyx_indexing_task_completed_total{source=~\"$source\", tenant_id=~\"$tenant_id\", cc_pair_id=~\"$cc_pair_id\"}[5m])) * 60",
+          "legendFormat": "{{source}} / {{cc_pair_id}} ({{outcome}})",
           "refId": "A"
         }
       ],
@@ -1216,7 +1216,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "95th percentile indexing task duration per individual connector.",
+      "description": "95th percentile indexing task duration per source type.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1267,12 +1267,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (source, connector_name, le) (rate(onyx_indexing_task_duration_seconds_bucket{source=~\"$source\", tenant_id=~\"$tenant_id\", connector_name=~\"$connector_name\"}[5m])))",
-          "legendFormat": "p95 {{source}} / {{connector_name}}",
+          "expr": "histogram_quantile(0.95, sum by (source, le) (rate(onyx_indexing_task_duration_seconds_bucket{source=~\"$source\", tenant_id=~\"$tenant_id\"}[5m])))",
+          "legendFormat": "p95 {{source}}",
           "refId": "A"
         }
       ],
-      "title": "p95 duration by connector",
+      "title": "p95 duration by source",
       "type": "timeseries"
     },
     {
@@ -1980,13 +1980,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_age_seconds, source)",
+        "definition": "label_values(onyx_index_attempt_transitions_total, source)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "source",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_age_seconds, source)",
+        "query": "label_values(onyx_index_attempt_transitions_total, source)",
         "refresh": 1,
         "type": "query"
       },
@@ -1996,13 +1996,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_age_seconds, connector_name)",
+        "definition": "label_values(onyx_index_attempt_transitions_total, connector_name)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "connector_name",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_age_seconds, connector_name)",
+        "query": "label_values(onyx_index_attempt_transitions_total, connector_name)",
         "refresh": 1,
         "type": "query"
       },
@@ -2012,13 +2012,29 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(onyx_connector_last_success_age_seconds, tenant_id)",
+        "definition": "label_values(onyx_indexing_task_completed_total, cc_pair_id)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "cc_pair_id",
+        "options": [],
+        "query": "label_values(onyx_indexing_task_completed_total, cc_pair_id)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(onyx_index_attempt_transitions_total, tenant_id)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "tenant_id",
         "options": [],
-        "query": "label_values(onyx_connector_last_success_age_seconds, tenant_id)",
+        "query": "label_values(onyx_index_attempt_transitions_total, tenant_id)",
         "refresh": 1,
         "type": "query"
       }

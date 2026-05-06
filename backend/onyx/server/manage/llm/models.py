@@ -18,14 +18,18 @@ from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
 
-
 if TYPE_CHECKING:
-    from onyx.db.models import (
-        LLMProvider as LLMProviderModel,
-        ModelConfiguration as ModelConfigurationModel,
-    )
+    from onyx.db.models import LLMProvider as LLMProviderModel
+    from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
+
+
+class CustomProviderOption(BaseModel):
+    """A provider slug + human-friendly label for the custom-provider picker."""
+
+    value: str
+    label: str
 
 
 class TestLLMRequest(BaseModel):

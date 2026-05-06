@@ -9,15 +9,30 @@ import pytest
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS,
+    TestSecret.AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS,
+    TestSecret.R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS,
+    TestSecret.R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS,
+    TestSecret.GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS,
+    TestSecret.GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS,
+)
 
 
 @pytest.fixture
-def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
+def blob_connector(
+    request: pytest.FixtureRequest,
+    test_secrets: dict[TestSecret, str],
+) -> BlobStorageConnector:
     """Fixture requires (BlobType, bucket_name) and optional init kwargs.
 
     Param format: (BlobType, bucket_name, {optional init kwargs})
@@ -51,24 +66,30 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
 
     if bucket_type == BlobType.S3:
         creds = {
-            "aws_access_key_id": os.environ["AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS"],
-            "aws_secret_access_key": os.environ[
-                "AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
+            "aws_access_key_id": test_secrets[
+                TestSecret.AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS
+            ],
+            "aws_secret_access_key": test_secrets[
+                TestSecret.AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS
             ],
         }
     elif bucket_type == BlobType.R2:
         creds = {
             "account_id": os.environ["R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS"],
-            "r2_access_key_id": os.environ["R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS"],
-            "r2_secret_access_key": os.environ[
-                "R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
+            "r2_access_key_id": test_secrets[
+                TestSecret.R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS
+            ],
+            "r2_secret_access_key": test_secrets[
+                TestSecret.R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS
             ],
         }
     elif bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
         creds = {
-            "access_key_id": os.environ["GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS"],
-            "secret_access_key": os.environ[
-                "GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS"
+            "access_key_id": test_secrets[
+                TestSecret.GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS
+            ],
+            "secret_access_key": test_secrets[
+                TestSecret.GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS
             ],
         }
     else:
@@ -111,15 +132,18 @@ def test_blob_s3_connector(
 
     for doc in all_docs:
         section = doc.sections[0]
-        assert isinstance(section, TextSection)
 
-        file_extension = get_file_ext(doc.semantic_identifier)
-        if file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+        if is_tabular_file(doc.semantic_identifier):
+            assert isinstance(section, TabularSection)
             assert len(section.text) > 0
             continue
 
-        # unknown extension
-        assert len(section.text) == 0
+        assert isinstance(section, TextSection)
+        file_extension = get_file_ext(doc.semantic_identifier)
+        if file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+            assert len(section.text) > 0
+        else:
+            assert len(section.text) == 0
 
 
 @patch(

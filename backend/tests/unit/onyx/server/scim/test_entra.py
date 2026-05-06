@@ -74,7 +74,7 @@ class TestEntraServiceDiscovery:
     def test_resource_types_include_enterprise_extension(self) -> None:
         result = get_resource_types()
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert "Resources" in parsed
         user_type = next(rt for rt in parsed["Resources"] if rt["id"] == "User")
         extension_schemas = [ext["schema"] for ext in user_type["schemaExtensions"]]
@@ -83,14 +83,14 @@ class TestEntraServiceDiscovery:
     def test_schemas_include_enterprise_user(self) -> None:
         result = get_schemas()
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         schema_ids = [s["id"] for s in parsed["Resources"]]
         assert SCIM_ENTERPRISE_USER_SCHEMA in schema_ids
 
     def test_enterprise_schema_has_expected_attributes(self) -> None:
         result = get_schemas()
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         enterprise = next(
             s for s in parsed["Resources"] if s["id"] == SCIM_ENTERPRISE_USER_SCHEMA
         )
@@ -264,7 +264,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Replace",  # type: ignore[arg-type]
+                    op="Replace",  # ty: ignore[invalid-argument-type]
                     path="active",
                     value=False,
                 )
@@ -298,7 +298,7 @@ class TestEntraUserLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # type: ignore[arg-type]
+                    op="Add",  # ty: ignore[invalid-argument-type]
                     path="externalId",
                     value="entra-ext-999",
                 )
@@ -675,7 +675,7 @@ class TestEntraGroupLifecycle:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert parsed["totalResults"] == 1
         resource = parsed["Resources"][0]
         assert "members" not in resource
@@ -703,7 +703,7 @@ class TestEntraGroupLifecycle:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert "members" not in parsed
         assert parsed["displayName"] == "Engineering"
 
@@ -733,7 +733,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Add",  # type: ignore[arg-type]
+                    op="Add",  # ty: ignore[invalid-argument-type]
                     path="members",
                     value=[ScimGroupMember(value=uid)],
                 )
@@ -772,7 +772,7 @@ class TestEntraGroupLifecycle:
         patch_req = ScimPatchRequest(
             Operations=[
                 ScimPatchOperation(
-                    op="Remove",  # type: ignore[arg-type]
+                    op="Remove",  # ty: ignore[invalid-argument-type]
                     path=f'members[value eq "{uid}"]',
                 )
             ]
@@ -821,7 +821,7 @@ class TestExcludedAttributes:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         resource = parsed["Resources"][0]
         assert "members" not in resource
         assert "displayName" in resource
@@ -847,7 +847,7 @@ class TestExcludedAttributes:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert "members" not in parsed
         assert "displayName" in parsed
 
@@ -874,7 +874,7 @@ class TestExcludedAttributes:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         resource = parsed["Resources"][0]
         assert "groups" not in resource
         assert "userName" in resource
@@ -899,7 +899,7 @@ class TestExcludedAttributes:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert "groups" not in parsed
         assert "userName" in parsed
 
@@ -923,7 +923,7 @@ class TestExcludedAttributes:
         )
 
         assert isinstance(result, ScimJSONResponse)
-        parsed = json.loads(result.body)
+        parsed = json.loads(result.body)  # ty: ignore[invalid-argument-type]
         assert "members" not in parsed
         assert "externalId" not in parsed
         assert "displayName" in parsed

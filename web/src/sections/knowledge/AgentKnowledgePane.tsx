@@ -9,16 +9,14 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import { Content, InputHorizontal } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import {
   SvgPlusCircle,
@@ -116,7 +114,7 @@ function KnowledgeSidebar({
             Document Set
           </LineItem>
 
-          <Separator noPadding />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);
@@ -131,6 +129,7 @@ function KnowledgeSidebar({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 selected={isActive}
                 emphasized={isActive || isSelected || selectionCount > 0}
@@ -241,7 +240,7 @@ function KnowledgeTable<T>({
         ))}
       </TableLayouts.TableRow>
 
-      <Separator noPadding />
+      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
       {/* Table body */}
       {items.length === 0 ? (
@@ -720,6 +719,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 emphasized={isSelected || selectionCount > 0}
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
@@ -1146,16 +1146,17 @@ export default function AgentKnowledgePane({
 
       <Card>
         <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Use Knowledge"
             description="Let this agent reference these documents to inform its responses."
+            withLabel
           >
             <Switch
               name="enable_knowledge"
               checked={enableKnowledge}
               onCheckedChange={onEnableKnowledgeChange}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           <Disabled disabled={!enableKnowledge}>
             <GeneralLayouts.Section alignItems="stretch" height="auto">

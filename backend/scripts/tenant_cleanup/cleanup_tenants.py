@@ -27,6 +27,7 @@ import signal
 import subprocess
 import sys
 from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 
 from scripts.tenant_cleanup.cleanup_utils import confirm_step
@@ -704,7 +705,7 @@ def main() -> None:
                     successful_tenants.append(tenant_id)
 
                     # Write to CSV immediately after successful cleanup
-                    timestamp = datetime.utcnow().isoformat()
+                    timestamp = datetime.now(timezone.utc).isoformat()
                     csv_writer.writerow([tenant_id, timestamp])
                     csv_file.flush()  # Ensure real-time write
                     print(f"✓ Recorded cleanup in {csv_output_path}")

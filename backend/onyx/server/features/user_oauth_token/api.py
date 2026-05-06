@@ -6,8 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.oauth_config import get_all_user_oauth_tokens
 
@@ -23,7 +24,7 @@ class OAuthTokenStatus(BaseModel):
 @router.get("/status")
 def get_user_oauth_token_status(
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[OAuthTokenStatus]:
     """
     Get the OAuth token status for the current user across all OAuth configs.

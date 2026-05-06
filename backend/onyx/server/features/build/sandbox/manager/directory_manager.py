@@ -142,7 +142,7 @@ class DirectoryManager:
         session_path = sandbox_path / "sessions" / session_id
         if session_path.exists():
             shutil.rmtree(session_path)
-            logger.info(f"Cleaned up session directory: {session_path}")
+            logger.info("Cleaned up session directory: %s", session_path)
 
     def get_session_path(self, sandbox_path: Path, session_id: str) -> Path:
         """Get path to session workspace.
@@ -195,7 +195,9 @@ class DirectoryManager:
         persona = get_persona_info(user_work_area, user_level)
         if not persona:
             logger.debug(
-                f"No persona found for work_area={user_work_area}, level={user_level}, skipping org_info setup"
+                "No persona found for work_area=%s, level=%s, skipping org_info setup",
+                user_work_area,
+                user_level,
             )
             return
 
@@ -218,11 +220,13 @@ class DirectoryManager:
             )
 
             logger.info(
-                f"Created org_info with identity: {persona['name']} <{persona['email']}>"
+                "Created org_info with identity: %s <%s>",
+                persona["name"],
+                persona["email"],
             )
         except Exception as e:
             # Don't fail provisioning if org_info setup fails
-            logger.warning(f"Failed to setup org_info: {e}")
+            logger.warning("Failed to setup org_info: %s", e)
 
     def setup_outputs_directory(self, sandbox_path: Path) -> None:
         """Copy outputs template and create additional directories.
@@ -316,7 +320,7 @@ class DirectoryManager:
 
         # Write the generated content
         agent_md_path.write_text(content)
-        logger.debug(f"Generated AGENTS.md at {agent_md_path}")
+        logger.debug("Generated AGENTS.md at %s", agent_md_path)
 
     def setup_skills(self, sandbox_path: Path, overwrite: bool = True) -> None:
         """Copy skills directory to .opencode/skills.
@@ -333,13 +337,15 @@ class DirectoryManager:
 
         if not self._skills_path.exists():
             logger.warning(
-                f"Skills path {self._skills_path} does not exist, skipping skills setup"
+                "Skills path %s does not exist, skipping skills setup",
+                self._skills_path,
             )
             return
 
         if not overwrite and skills_dest.exists():
             logger.debug(
-                f"Skills directory already exists at {skills_dest}, skipping skills setup"
+                "Skills directory already exists at %s, skipping skills setup",
+                skills_dest,
             )
             return
 
@@ -355,11 +361,15 @@ class DirectoryManager:
             # Verify the copy succeeded
             if not skills_dest.exists():
                 logger.error(
-                    f"Skills copy failed: destination {skills_dest} does not exist after copy"
+                    "Skills copy failed: destination %s does not exist after copy",
+                    skills_dest,
                 )
         except Exception as e:
             logger.error(
-                f"Failed to copy skills from {self._skills_path} to {skills_dest}: {e}",
+                "Failed to copy skills from %s to %s: %s",
+                self._skills_path,
+                skills_dest,
+                e,
                 exc_info=True,
             )
             raise
@@ -394,7 +404,7 @@ class DirectoryManager:
         config_path = sandbox_path / "opencode.json"
         if not overwrite and config_path.exists():
             logger.debug(
-                f"opencode.json already exists at {config_path}, skipping config setup"
+                "opencode.json already exists at %s, skipping config setup", config_path
             )
             return
 

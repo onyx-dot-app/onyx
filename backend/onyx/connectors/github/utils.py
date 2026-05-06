@@ -57,7 +57,7 @@ def deserialize_repository(
     except Exception as e:
         # If all else fails, re-fetch the repo directly
         logger.warning(
-            f"Failed to deserialize repository: {e}. Attempting to re-fetch."
+            "Failed to deserialize repository: %s. Attempting to re-fetch.", e
         )
         repo_id = cached_repo.id
         return github_client.get_repo(repo_id)

@@ -1,9 +1,19 @@
 """Pydantic models for the billing API."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel
+
+
+class StripePortalFlowType(str, Enum):
+    """Stripe billing portal `flow_data.type` values supported by the API.
+
+    Mirrors `shared.enums.StripePortalFlowType` on the control plane.
+    """
+
+    PAYMENT_METHOD_UPDATE = "payment_method_update"
 
 
 class CreateCheckoutSessionRequest(BaseModel):
@@ -24,6 +34,7 @@ class CreateCustomerPortalSessionRequest(BaseModel):
     """Request to create a Stripe customer portal session."""
 
     return_url: str | None = None
+    flow_type: StripePortalFlowType | None = None
 
 
 class CreateCustomerPortalSessionResponse(BaseModel):
@@ -75,3 +86,11 @@ class StripePublishableKeyResponse(BaseModel):
     """Response containing the Stripe publishable key."""
 
     publishable_key: str
+
+
+class EndTrialResponse(BaseModel):
+    """Response from ending a trial early."""
+
+    success: bool
+    stripe_subscription_id: str
+    status: str

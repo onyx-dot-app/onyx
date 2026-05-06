@@ -16,10 +16,10 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from kubernetes import client  # type: ignore[import-untyped]
+from kubernetes import client
 from kubernetes import config
-from kubernetes.client.rest import ApiException  # type: ignore[import-untyped]
-from kubernetes.stream import stream as k8s_stream  # type: ignore[import-untyped]
+from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import SandboxStatus

@@ -18,7 +18,6 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import urlparse
 
-import pytz
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
@@ -64,7 +63,7 @@ def get_pages(soup: BeautifulSoup, url: str) -> list[str]:
 def parse_post_date(post_element: BeautifulSoup) -> datetime:
     el = post_element.find("time")
     if not isinstance(el, Tag) or "datetime" not in el.attrs:
-        return datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
+        return datetime.fromtimestamp(0, tz=timezone.utc)
 
     date_value = el["datetime"]
 
@@ -130,7 +129,7 @@ class XenforoConnector(LoadConnector):
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url
         self.initial_run = not XenforoConnector.has_been_run_before
-        self.start = datetime.utcnow().replace(tzinfo=pytz.utc) - timedelta(days=1)
+        self.start = datetime.now(tz=timezone.utc) - timedelta(days=1)
         self.cookies: dict[str, str] = {}
         # mimic user browser to avoid being blocked by the website (see: https://www.useragents.me/)
         self.headers = {
@@ -173,7 +172,9 @@ class XenforoConnector(LoadConnector):
             # Get all pages on thread_list_page
             for pre_count, thread_list_page in enumerate(pages, start=1):
                 logger.info(
-                    f"Getting pages from thread_list_page.. Current: {pre_count}/{len(pages)}\r"
+                    "Getting pages from thread_list_page.. Current: %s/%s\r",
+                    pre_count,
+                    len(pages),
                 )
                 all_threads += self.get_threads(thread_list_page)
         # If the URL contains "threads/", add the thread to the list.
@@ -184,13 +185,17 @@ class XenforoConnector(LoadConnector):
         for thread_count, thread_url in enumerate(all_threads, start=1):
             soup = self.requestsite(thread_url)
             if soup is None:
-                logger.error(f"Failed to load page: {self.base_url}")
+                logger.error("Failed to load page: %s", self.base_url)
                 continue
             pages = get_pages(soup, thread_url)
             # Getting all pages for all threads
             for page_index, page in enumerate(pages, start=1):
                 logger.info(
-                    f"Progress: Page {page_index}/{len(pages)} - Thread {thread_count}/{len(all_threads)}\r"
+                    "Progress: Page %s/%s - Thread %s/%s\r",
+                    page_index,
+                    len(pages),
+                    thread_count,
+                    len(all_threads),
                 )
                 soup_page = self.requestsite(page)
                 doc_batch.extend(
@@ -226,13 +231,16 @@ class XenforoConnector(LoadConnector):
             )
             if response.status_code != 200:
                 logger.error(
-                    f"<{url}> Request Error: {response.status_code} - {response.reason}"
+                    "<%s> Request Error: %s - %s",
+                    url,
+                    response.status_code,
+                    response.reason,
                 )
             return BeautifulSoup(response.text, "html.parser")
         except TimeoutError:
             logger.error("Timed out Error.")
         except Exception as e:
-            logger.error(f"Error on {url}")
+            logger.error("Error on %s", url)
             logger.exception(e)
         return BeautifulSoup("", "html.parser")
 

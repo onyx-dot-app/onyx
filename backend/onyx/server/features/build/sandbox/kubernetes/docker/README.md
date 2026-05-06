@@ -58,7 +58,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 1. **Build and push** the new image (see above)
 
-2. **Update the ConfigMap** in `cloud-deployment-yamls/danswer/configmap/env-configmap.yaml`:
+2. **Update the ConfigMap** in in the internal repo
    ```yaml
    SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.x"
    ```

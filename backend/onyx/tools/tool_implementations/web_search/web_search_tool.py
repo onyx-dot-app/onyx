@@ -192,7 +192,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             return (results, None)
         except Exception as e:
             error_msg = str(e)
-            logger.warning(f"Web search query '{query}' failed: {error_msg}")
+            logger.warning("Web search query '%s' failed: %s", query, error_msg)
             return (None, error_msg)
 
     def run(
@@ -256,8 +256,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Log partial failures but continue if we have at least one success
         if failed_queries and valid_results:
             logger.warning(
-                f"Web search partial failure: {len(failed_queries)}/{len(queries)} "
-                f"queries failed. Failed queries: {json.dumps(failed_queries)}"
+                "Web search partial failure: %s/%s queries failed. Failed queries: %s",
+                len(failed_queries),
+                len(queries),
+                json.dumps(failed_queries),
             )
 
         # If all queries failed, raise ToolCallException with details

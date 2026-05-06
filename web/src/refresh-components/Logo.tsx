@@ -5,11 +5,11 @@ import {
   DEFAULT_LOGO_SIZE_PX,
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
 } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/icons";
+import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 
 export interface LogoProps {
   folded?: boolean;

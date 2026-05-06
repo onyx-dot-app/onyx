@@ -23,6 +23,8 @@ class IndexAttemptErrorPydantic(BaseModel):
 
     index_attempt_id: int
 
+    error_type: str | None = None
+
     @classmethod
     def from_model(cls, model: IndexAttemptError) -> "IndexAttemptErrorPydantic":
         return cls(
@@ -37,4 +39,5 @@ class IndexAttemptErrorPydantic(BaseModel):
             is_resolved=model.is_resolved,
             time_created=model.time_created,
             index_attempt_id=model.index_attempt_id,
+            error_type=model.error_type,
         )

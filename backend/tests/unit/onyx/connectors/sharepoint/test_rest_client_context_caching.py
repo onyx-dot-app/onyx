@@ -30,7 +30,7 @@ def _noop_load_credentials(connector: SharepointConnector) -> MagicMock:
         connector.msal_app = MagicMock()
 
     mock = MagicMock(side_effect=_fake_load)
-    connector.load_credentials = mock  # type: ignore[method-assign]
+    connector.load_credentials = mock  # ty: ignore[invalid-assignment]
     return mock
 
 

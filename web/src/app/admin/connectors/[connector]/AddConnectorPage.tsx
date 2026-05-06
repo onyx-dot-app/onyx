@@ -27,12 +27,12 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  defaultPruneFreqHours,
   defaultRefreshFreqMinutes,
   isLoadState,
   Connector,
   ConnectorBase,
 } from "@/lib/connectors/connectors";
+import { useSettings } from "@/hooks/useSettings";
 import Modal from "@/refresh-components/Modal";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import {
@@ -60,7 +60,7 @@ import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import Link from "next/link";
 
 export interface AdvancedConfig {
@@ -149,6 +149,10 @@ export default function AddConnector({
   }, []);
 
   const router = useRouter();
+  const { settings } = useSettings();
+  const defaultPruneFreqHours = settings.default_pruning_freq
+    ? settings.default_pruning_freq / 3600
+    : 600; // 25 days fallback until settings load
 
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
@@ -495,7 +499,7 @@ export default function AddConnector({
               hasFederatedOption ? (
                 <span className="inline-flex items-center gap-1.5">
                   {displayName}
-                  <SimpleTooltip
+                  <Tooltip
                     tooltip={
                       <div className="flex flex-col gap-2">
                         <Text as="p" textLight05>
@@ -515,7 +519,7 @@ export default function AddConnector({
                     delayDuration={0}
                   >
                     <SvgAlertCircle size={20} />
-                  </SimpleTooltip>
+                  </Tooltip>
                 </span>
               ) : (
                 displayName
@@ -662,7 +666,7 @@ export default function AddConnector({
 
           {formStep === 2 && (
             <CardSection>
-              <AdvancedFormPage />
+              <AdvancedFormPage defaultPruneFreqHours={defaultPruneFreqHours} />
             </CardSection>
           )}
 

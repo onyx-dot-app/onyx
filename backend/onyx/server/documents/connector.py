@@ -22,13 +22,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_email
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
-from onyx.background.celery.tasks.pruning.tasks import (
-    try_creating_prune_generator_task,
-)
+from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
@@ -42,34 +39,16 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.connectors.google_utils.google_auth import (
-    get_google_oauth_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    build_service_account_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_service_account_key,
-)
+from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_kv import build_service_account_creds
+from onyx.connectors.google_utils.google_kv import delete_google_app_cred
+from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import (
-    get_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    get_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import (
-    update_credential_access_tokens,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_service_account_key,
-)
+from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.google_kv import get_service_account_key
+from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
+from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
+from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -105,14 +84,13 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.enums import Permission
 from onyx.db.enums import ProcessingMode
 from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
-from onyx.db.index_attempt import (
-    get_latest_successful_index_attempts_parallel,
-)
+from onyx.db.index_attempt import get_latest_successful_index_attempts_parallel
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
@@ -125,6 +103,7 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorBase
@@ -189,7 +168,8 @@ def check_google_app_gmail_credentials_exist(
 
 @router.put("/admin/connector/gmail/app-credential")
 def upsert_google_app_gmail_credentials(
-    app_credentials: GoogleAppCredentials, _: User = Depends(current_admin_user)
+    app_credentials: GoogleAppCredentials,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StatusResponse:
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
@@ -203,7 +183,7 @@ def upsert_google_app_gmail_credentials(
 
 @router.delete("/admin/connector/gmail/app-credential")
 def delete_google_app_gmail_credentials(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -231,7 +211,8 @@ def check_google_app_credentials_exist(
 
 @router.put("/admin/connector/google-drive/app-credential")
 def upsert_google_app_credentials(
-    app_credentials: GoogleAppCredentials, _: User = Depends(current_admin_user)
+    app_credentials: GoogleAppCredentials,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StatusResponse:
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GOOGLE_DRIVE)
@@ -245,7 +226,7 @@ def upsert_google_app_credentials(
 
 @router.delete("/admin/connector/google-drive/app-credential")
 def delete_google_app_credentials(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -277,7 +258,8 @@ def check_google_service_gmail_account_key_exist(
 
 @router.put("/admin/connector/gmail/service-account-key")
 def upsert_google_service_gmail_account_key(
-    service_account_key: GoogleServiceAccountKey, _: User = Depends(current_admin_user)
+    service_account_key: GoogleServiceAccountKey,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StatusResponse:
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GMAIL)
@@ -291,7 +273,7 @@ def upsert_google_service_gmail_account_key(
 
 @router.delete("/admin/connector/gmail/service-account-key")
 def delete_google_service_gmail_account_key(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -323,7 +305,8 @@ def check_google_service_account_key_exist(
 
 @router.put("/admin/connector/google-drive/service-account-key")
 def upsert_google_service_account_key(
-    service_account_key: GoogleServiceAccountKey, _: User = Depends(current_admin_user)
+    service_account_key: GoogleServiceAccountKey,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StatusResponse:
     try:
         upsert_service_account_key(service_account_key, DocumentSource.GOOGLE_DRIVE)
@@ -337,7 +320,7 @@ def upsert_google_service_account_key(
 
 @router.delete("/admin/connector/google-drive/service-account-key")
 def delete_google_service_account_key(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     try:
@@ -407,7 +390,7 @@ def upsert_gmail_service_account_credential(
 @router.get("/admin/connector/google-drive/check-auth/{credential_id}")
 def check_drive_tokens(
     credential_id: int,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> AuthStatus:
     db_credentials = fetch_credential_by_id_for_user(credential_id, user, db_session)
@@ -443,7 +426,7 @@ def save_zip_metadata_to_file_store(
             try:
                 json.loads(metadata_bytes)
             except json.JSONDecodeError as e:
-                logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
+                logger.warning("Unable to load %s: %s", ONYX_METADATA_FILENAME, e)
                 raise HTTPException(
                     status_code=400,
                     detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
@@ -458,7 +441,7 @@ def save_zip_metadata_to_file_store(
             )
             return file_id
     except KeyError:
-        logger.info(f"No {ONYX_METADATA_FILENAME} file")
+        logger.info("No %s file", ONYX_METADATA_FILENAME)
         return None
 
 
@@ -637,7 +620,7 @@ def upload_files_api(
     unzip: bool = True,
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files, FileOrigin.OTHER, unzip=unzip)
+    return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
@@ -695,7 +678,7 @@ def list_connector_files(
                 )
             )
         except Exception as e:
-            logger.warning(f"Error reading file record for {file_id}: {e}")
+            logger.warning("Error reading file record for %s: %s", file_id, e)
             # Include file with basic info even if record fetch fails
             files.append(
                 ConnectorFileInfo(
@@ -771,7 +754,7 @@ def update_connector_files(
             else:
                 current_zip_metadata = loaded_metadata
         except Exception as e:
-            logger.warning(f"Failed to load existing metadata file: {e}")
+            logger.warning("Failed to load existing metadata file: %s", e)
             raise HTTPException(
                 status_code=500,
                 detail="Failed to load existing connector metadata file",
@@ -802,7 +785,7 @@ def update_connector_files(
                 else:
                     new_zip_metadata = loaded_metadata
             except Exception as e:
-                logger.warning(f"Failed to load new metadata file: {e}")
+                logger.warning("Failed to load new metadata file: %s", e)
 
     # Remove specified files
     files_to_remove_set = set(file_ids_list)
@@ -895,7 +878,9 @@ def update_connector_files(
                 priority=OnyxCeleryPriority.HIGH,
             )
             logger.info(
-                f"Marked cc_pair {cc_pair.id} for UPDATE indexing (new files) for connector {connector_id}"
+                "Marked cc_pair %s for UPDATE indexing (new files) for connector %s",
+                cc_pair.id,
+                connector_id,
             )
 
         # If files were removed, trigger pruning immediately
@@ -906,15 +891,19 @@ def update_connector_files(
             )
             if payload_id:
                 logger.info(
-                    f"Triggered pruning for cc_pair {cc_pair.id} (removed files) for connector "
-                    f"{connector_id}, payload_id={payload_id}"
+                    "Triggered pruning for cc_pair %s (removed files) for connector %s, payload_id=%s",
+                    cc_pair.id,
+                    connector_id,
+                    payload_id,
                 )
             else:
                 logger.warning(
-                    f"Failed to trigger pruning for cc_pair {cc_pair.id} (removed files) for connector {connector_id}"
+                    "Failed to trigger pruning for cc_pair %s (removed files) for connector %s",
+                    cc_pair.id,
+                    connector_id,
                 )
     except Exception as e:
-        logger.error(f"Failed to trigger re-indexing after file update: {e}")
+        logger.error("Failed to trigger re-indexing after file update: %s", e)
 
     return FileUploadResponse(
         file_paths=final_file_locations,
@@ -1151,14 +1140,14 @@ def get_connector_indexing_status(
         # Get most recent index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, False
+                request.secondary_index, False, False
             ),
             (),
         ),
         # Get most recent finished index attempts
         (
             lambda: get_latest_index_attempts_parallel(
-                request.secondary_index, True, True
+                request.secondary_index, False, True
             ),
             (),
         ),
@@ -1577,7 +1566,7 @@ def create_connector_from_model(
 
         return connector_response
     except ValueError as e:
-        logger.error(f"Error creating connector: {e}")
+        logger.error("Error creating connector: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1617,7 +1606,7 @@ def create_connector_with_mock_credential(
         )
 
         # Store the created connector and credential IDs
-        connector_id = cast(int, connector_response.id)
+        connector_id = connector_response.id
         credential_id = credential.id
 
         validate_ccpair_for_user(
@@ -1636,6 +1625,10 @@ def create_connector_with_mock_credential(
             groups=connector_data.groups,
         )
 
+        # Tenant-work-gating lifecycle hook: keep new-tenant latency to
+        # seconds instead of one full-fanout interval.
+        maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
+
         # trigger indexing immediately
         client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -1644,7 +1637,8 @@ def create_connector_with_mock_credential(
         )
 
         logger.info(
-            f"create_connector_with_mock_credential - running check_for_indexing: cc_pair={response.data}"
+            "create_connector_with_mock_credential - running check_for_indexing: cc_pair=%s",
+            response.data,
         )
 
         mt_cloud_telemetry(
@@ -1794,7 +1788,9 @@ def connector_run_once(
 
 @router.get("/connector/gmail/authorize/{credential_id}")
 def gmail_auth(
-    response: Response, credential_id: str, _: User = Depends(current_user)
+    response: Response,
+    credential_id: str,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1808,7 +1804,9 @@ def gmail_auth(
 
 @router.get("/connector/google-drive/authorize/{credential_id}")
 def google_drive_auth(
-    response: Response, credential_id: str, _: User = Depends(current_user)
+    response: Response,
+    credential_id: str,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1826,7 +1824,7 @@ def google_drive_auth(
 def gmail_callback(
     request: Request,
     callback: GmailCallback = Depends(),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GMAIL_CREDENTIAL_ID_COOKIE_NAME)
@@ -1856,7 +1854,7 @@ def gmail_callback(
 def google_drive_callback(
     request: Request,
     callback: GDriveCallback = Depends(),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME)
@@ -1885,7 +1883,7 @@ def google_drive_callback(
 
 @router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorSnapshot]:
     connectors = fetch_connectors(db_session)
@@ -1900,7 +1898,7 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(
@@ -1912,7 +1910,7 @@ def get_indexed_sources(
 @router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
@@ -1941,7 +1939,7 @@ def get_connector_by_id(
 @router.post("/connector-request")
 def submit_connector_request(
     request_data: ConnectorRequestSubmission,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> StatusResponse:
     """
     Submit a connector request for Cloud deployments.
@@ -1997,16 +1995,20 @@ Tenant ID: {tenant_id}
                 text_body=email_body_text,
             )
             logger.info(
-                f"Connector request email sent to hello@onyx.app for connector: {connector_name}"
+                "Connector request email sent to hello@onyx.app for connector: %s",
+                connector_name,
             )
         except Exception as e:
             # Log error but don't fail the request if email fails
             logger.error(
-                f"Failed to send connector request email for {connector_name}: {e}"
+                "Failed to send connector request email for %s: %s", connector_name, e
             )
 
     logger.info(
-        f"Connector request submitted: {connector_name} by user {user_email or 'anonymous'} (tenant: {tenant_id})"
+        "Connector request submitted: %s by user %s (tenant: %s)",
+        connector_name,
+        user_email or "anonymous",
+        tenant_id,
     )
 
     return StatusResponse(
@@ -2109,16 +2111,16 @@ def trigger_indexing_for_cc_pair(
             num_triggers += 1
 
             logger.info(
-                f"connector_run_once - marking cc_pair with indexing trigger: "
-                f"connector={connector_id} "
-                f"cc_pair={cc_pair.id} "
-                f"indexing_trigger={indexing_mode}"
+                "connector_run_once - marking cc_pair with indexing trigger: connector=%s cc_pair=%s indexing_trigger=%s",
+                connector_id,
+                cc_pair.id,
+                indexing_mode,
             )
 
     priority = OnyxCeleryPriority.HIGH
 
     # run the beat task to pick up the triggers immediately
-    logger.info(f"Sending indexing check task with priority {priority}")
+    logger.info("Sending indexing check task with priority %s", priority)
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         priority=priority,

@@ -9,9 +9,10 @@ from ee.onyx.server.oauth.api_router import router
 from ee.onyx.server.oauth.confluence_cloud import ConfluenceCloudOAuth
 from ee.onyx.server.oauth.google_drive import GoogleDriveOAuth
 from ee.onyx.server.oauth.slack import SlackOAuth
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -24,7 +25,7 @@ logger = setup_logger()
 def prepare_authorization_request(
     connector: DocumentSource,
     redirect_on_success: str | None,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     """Used by the frontend to generate the url for the user's browser during auth request.

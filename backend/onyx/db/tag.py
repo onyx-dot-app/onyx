@@ -23,7 +23,9 @@ def check_tag_validity(tag_key: str, tag_value: str) -> bool:
     Additionally, extremely long tags are not really usable / useful."""
     if len(tag_key) + len(tag_value) > 255:
         logger.error(
-            f"Tag with key '{tag_key}' and value '{tag_value}' is too long, cannot be used"
+            "Tag with key '%s' and value '%s' is too long, cannot be used",
+            tag_key,
+            tag_value,
         )
         return False
 

@@ -301,7 +301,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_stop),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -332,7 +331,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -363,7 +361,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=emit_one),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -391,7 +388,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -423,7 +419,6 @@ class TestRunModels:
             ),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -456,7 +451,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -497,7 +491,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=slow_llm),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
@@ -519,7 +512,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop"),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
@@ -542,7 +534,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=always_fail),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
@@ -596,7 +587,6 @@ class TestRunModels:
             ),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle",
                 side_effect=lambda *_, **__: completion_called.set(),
@@ -653,7 +643,6 @@ class TestRunModels:
             ),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle",
                 side_effect=lambda *_, **__: completion_called.set(),
@@ -706,7 +695,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
                 "onyx.chat.process_message.llm_loop_completion_handle"
             ) as mock_handle,
@@ -736,7 +724,6 @@ class TestRunModels:
             patch("onyx.chat.process_message.run_llm_loop") as mock_llm,
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
-            patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch("onyx.chat.process_message.llm_loop_completion_handle"),
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",

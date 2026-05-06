@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
   anonymous_user_enabled: false,
   invite_only_enabled: false,
   deep_research_enabled: true,
+  multi_model_chat_enabled: true,
   temperature_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
 } satisfies Settings;

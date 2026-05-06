@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from onyx.auth.schemas import UserRole
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -11,7 +13,9 @@ from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
@@ -81,12 +85,61 @@ def _build_model_kwargs(
     return model_kwargs
 
 
+def _resolve_provider_and_model(
+    persona: Persona,
+    provider_name_override: str | None,
+    model_version_override: str | None,
+    db_session: Session,
+) -> tuple[LLMProviderModel, str] | None:
+    """Resolve the (provider, model_name) pair for get_llm_for_persona.
+
+    Returns None when the override provider doesn't exist or the persona's
+    configured model config is missing; the caller falls back to the default.
+    """
+    if provider_name_override:
+        provider_model = fetch_existing_llm_provider(provider_name_override, db_session)
+        if not provider_model:
+            return None
+        if model_version_override:
+            model_name: str | None = model_version_override
+        elif persona.default_model_configuration_id:
+            mc = fetch_model_configuration_by_id(
+                db_session, persona.default_model_configuration_id
+            )
+            model_name = mc.name if mc else None
+        else:
+            model_name = None
+    else:
+        model_config = fetch_model_configuration_by_id(
+            db_session, persona.default_model_configuration_id
+        )
+        if model_config is None:
+            logger.warning(
+                "Persona %s has default_model_configuration_id=%s but config not found."
+                " Falling back to default.",
+                persona.id,
+                persona.default_model_configuration_id,
+            )
+            return None
+        provider_model = model_config.llm_provider
+        model_name = model_version_override or model_config.name
+
+    if not provider_model or not model_name:
+        return None
+    return provider_model, model_name
+
+
 def get_llm_for_persona(
     persona: Persona | None,
     user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
 ) -> LLM:
+    """Get the appropriate LLM for a persona, with the following priority:
+    1. LLM override (provider + model version)
+    2. Persona's model configuration override
+    3. Default LLM
+    """
     if persona is None:
         logger.warning("No persona provided, using default LLM")
         return get_default_llm()
@@ -95,19 +148,27 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    provider_name = provider_name_override or persona.llm_model_provider_override
-    if not provider_name:
+    if not provider_name_override and not persona.default_model_configuration_id:
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
         )
 
     with get_session_with_current_tenant() as db_session:
-        provider_model = fetch_existing_llm_provider(provider_name, db_session)
-        if not provider_model:
-            raise ValueError("No LLM provider found")
+        resolved = _resolve_provider_and_model(
+            persona, provider_name_override, model_version_override, db_session
+        )
+        if resolved is None:
+            return get_default_llm(
+                temperature=(
+                    temperature_override
+                    if temperature_override is not None
+                    else GEN_AI_TEMPERATURE
+                ),
+                additional_headers=additional_headers,
+            )
+        provider_model, model = resolved
 
-        # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
@@ -125,10 +186,6 @@ def get_llm_for_persona(
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
-
-    model = model_version_override or persona.llm_model_version_override
-    if not model:
-        raise ValueError("No model name found")
 
     return llm_from_provider(
         model_name=model,

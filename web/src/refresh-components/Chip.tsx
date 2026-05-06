@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX } from "@opal/icons";
 import { Button } from "@opal/components";

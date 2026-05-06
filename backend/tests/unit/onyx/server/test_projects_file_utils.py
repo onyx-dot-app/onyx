@@ -12,13 +12,13 @@ from onyx.server.settings.models import Settings
 
 
 class _Tokenizer(BaseTokenizer):
-    def encode(self, text: str) -> list[int]:
+    def encode(self, text: str) -> list[int]:  # ty: ignore[invalid-method-override]
         return [1] * len(text)
 
-    def tokenize(self, text: str) -> list[str]:
+    def tokenize(self, text: str) -> list[str]:  # ty: ignore[invalid-method-override]
         return list(text)
 
-    def decode(self, _tokens: list[int]) -> str:
+    def decode(self, _tokens: list[int]) -> str:  # ty: ignore[invalid-method-override]
         return ""
 
 
@@ -317,15 +317,19 @@ def test_count_tokens_with_token_limit_exits_early(
     original_tokenizer = _Tokenizer()
 
     class _CountingTokenizer(BaseTokenizer):
-        def encode(self, text: str) -> list[int]:
+        def encode(self, text: str) -> list[int]:  # ty: ignore[invalid-method-override]
             nonlocal encode_call_count
             encode_call_count += 1
             return original_tokenizer.encode(text)
 
-        def tokenize(self, text: str) -> list[str]:
+        def tokenize(  # ty: ignore[invalid-method-override]
+            self, text: str
+        ) -> list[str]:
             return list(text)
 
-        def decode(self, _tokens: list[int]) -> str:
+        def decode(  # ty: ignore[invalid-method-override]
+            self, _tokens: list[int]
+        ) -> str:
             return ""
 
     tokenizer = _CountingTokenizer()
@@ -380,15 +384,19 @@ def test_categorize_early_exits_tokenization_for_large_text(
     original_tokenizer = _Tokenizer()
 
     class _CountingTokenizer(BaseTokenizer):
-        def encode(self, text: str) -> list[int]:
+        def encode(self, text: str) -> list[int]:  # ty: ignore[invalid-method-override]
             nonlocal encode_call_count
             encode_call_count += 1
             return original_tokenizer.encode(text)
 
-        def tokenize(self, text: str) -> list[str]:
+        def tokenize(  # ty: ignore[invalid-method-override]
+            self, text: str
+        ) -> list[str]:
             return list(text)
 
-        def decode(self, _tokens: list[int]) -> str:
+        def decode(  # ty: ignore[invalid-method-override]
+            self, _tokens: list[int]
+        ) -> str:
             return ""
 
     monkeypatch.setattr(utils, "get_tokenizer", lambda **_kwargs: _CountingTokenizer())

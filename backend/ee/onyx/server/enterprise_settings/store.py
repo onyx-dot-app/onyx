@@ -18,7 +18,6 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 _LOGO_FILENAME = "__logo__"
@@ -102,7 +101,7 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
     content: IO[Any]
 
     if isinstance(file, str):
-        logger.notice(f"Uploading logo from local path {file}")
+        logger.notice("Uploading logo from local path %s", file)
         if not os.path.isfile(file) or not is_valid_file_type(file):
             logger.error(
                 "Invalid file type- only .png, .jpg, and .jpeg files are allowed"

@@ -10,9 +10,8 @@ import {
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
-import Separator from "@/refresh-components/Separator";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -60,7 +59,7 @@ function Header({ children, onClose }: HeaderProps) {
           tooltip="Close Sidebar"
         />
       </div>
-      <Separator noPadding />
+      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
     </div>
   );
 }

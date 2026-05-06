@@ -15,6 +15,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.document import construct_document_id_select_by_needs_sync
 from onyx.db.document import count_documents_by_needs_sync
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.utils.logger import setup_logger
 
 # Redis keys for document sync tracking
@@ -116,7 +117,7 @@ def generate_document_sync_tasks(
 
         # Create the Celery task
         celery_app.send_task(
-            OnyxCeleryTask.VESPA_METADATA_SYNC_TASK,
+            OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
             kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
             queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
             task_id=custom_task_id,
@@ -150,8 +151,13 @@ def try_generate_stale_document_sync_tasks(
         logger.info("No stale documents found. Skipping sync tasks generation.")
         return None
 
+    # Tenant-work-gating hook: refresh this tenant's active-set membership
+    # whenever vespa sync actually has stale docs to dispatch.
+    maybe_mark_tenant_active(tenant_id, caller="vespa_sync")
+
     logger.info(
-        f"Stale documents found (at least {stale_doc_count}). Generating sync tasks in one batch."
+        "Stale documents found (at least %s). Generating sync tasks in one batch.",
+        stale_doc_count,
     )
 
     logger.info("generate_document_sync_tasks starting for all documents.")
@@ -168,13 +174,15 @@ def try_generate_stale_document_sync_tasks(
 
     if tasks_generated >= max_tasks:
         logger.info(
-            f"generate_document_sync_tasks reached the task generation limit: "
-            f"tasks_generated={tasks_generated} max_tasks={max_tasks}"
+            "generate_document_sync_tasks reached the task generation limit: tasks_generated=%s max_tasks=%s",
+            tasks_generated,
+            max_tasks,
         )
     else:
         logger.info(
-            f"generate_document_sync_tasks finished for all documents. "
-            f"tasks_generated={tasks_generated} total_docs_found={total_docs}"
+            "generate_document_sync_tasks finished for all documents. tasks_generated=%s total_docs_found=%s",
+            tasks_generated,
+            total_docs,
         )
 
     set_document_sync_fence(r, tasks_generated)

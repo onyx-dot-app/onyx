@@ -30,7 +30,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning] test-only workflow; no deploy artifacts
           cache-dependency-path: ./web/package-lock.json
 
@@ -44,7 +44,7 @@ jobs:
 
       - name: Upload coverage reports
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: jest-coverage-${{ github.run_id }}
           path: ./web/coverage

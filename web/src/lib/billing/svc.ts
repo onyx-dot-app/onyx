@@ -20,6 +20,8 @@ import {
   CreateCheckoutSessionResponse,
   CreateCustomerPortalSessionRequest,
   CreateCustomerPortalSessionResponse,
+  EndTrialResponse,
+  PaymentMethodRequiredError,
   SeatUpdateRequest,
   SeatUpdateResponse,
 } from "@/lib/billing/interfaces";
@@ -59,6 +61,35 @@ export const createCustomerPortalSession = (
 
 export const updateSeatCount = (request: SeatUpdateRequest) =>
   billingPost<SeatUpdateResponse>("/seats/update", request);
+
+/**
+ * End the current trial immediately and charge the customer's card.
+ *
+ * Cloud-only. Always hits the unified /admin/billing route since this is a
+ * brand-new endpoint without a legacy /tenants alias.
+ *
+ * Throws `PaymentMethodRequiredError` when the tenant has no card on file
+ * (HTTP 402). The caller should route the user to the customer portal to
+ * add a payment method, then retry.
+ */
+export async function endTrial(): Promise<EndTrialResponse> {
+  const response = await fetch("/api/admin/billing/end-trial", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const detail = error.detail || "Failed to end trial";
+    if (response.status === 402) {
+      throw new PaymentMethodRequiredError(detail);
+    }
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
 
 /**
  * Reset the Stripe connection circuit breaker (self-hosted only).

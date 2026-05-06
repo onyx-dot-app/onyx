@@ -13,6 +13,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
+import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import useCCPairs from "@/hooks/useCCPairs";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -20,7 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import {
@@ -44,8 +45,8 @@ import {
   SvgGlobe,
   SvgHourglass,
   SvgMicrophone,
+  SvgPaperclip,
   SvgPlus,
-  SvgPlusCircle,
   SvgSearch,
   SvgStop,
   SvgX,
@@ -60,9 +61,11 @@ import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
-
-const MIN_INPUT_HEIGHT = 44;
-const MAX_INPUT_HEIGHT = 200;
+import {
+  useCurrentQueuedMessages,
+  useChatSessionStore,
+} from "@/app/app/stores/useChatSessionStore";
+import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -86,7 +89,9 @@ export interface AppInputBarProps {
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
+  isMultiModelActive?: boolean;
   disabled: boolean;
+  awaitingPreferredSelection?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -109,15 +114,15 @@ const AppInputBar = React.memo(
     llmManager,
     deepResearchEnabled,
     toggleDeepResearch,
+    isMultiModelActive,
     setPresentingDocument,
     disabled,
+    awaitingPreferredSelection = false,
     ref,
     tabReadingEnabled,
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
-    // Internal message state - kept local to avoid parent re-renders on every keystroke
-    const [message, setMessage] = useState(initialMessage);
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -126,8 +131,33 @@ const AppInputBar = React.memo(
       null
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
-    const textAreaRef = useRef<HTMLTextAreaElement>(null);
-    const textAreaWrapperRef = useRef<HTMLDivElement>(null);
+    const queuedMessages = useCurrentQueuedMessages();
+    const enqueueCurrentMessage = useChatSessionStore(
+      (state) => state.enqueueCurrentMessage
+    );
+    const removeCurrentQueuedMessage = useChatSessionStore(
+      (state) => state.removeCurrentQueuedMessage
+    );
+    const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
+      number | null
+    >(null);
+    const isAutoSending = useRef(false);
+    const inputWrapperRef = useRef<HTMLDivElement>(null);
+    const {
+      ref: inputRef,
+      message,
+      setMessage,
+      clearMessage,
+      handleInput,
+      handleCompositionStart,
+      handleCompositionEnd,
+      insertTextAtCursor,
+      setCursorToEnd,
+    } = useContentEditable({
+      initialContent: initialMessage,
+      wrapperRef: inputWrapperRef,
+    });
+
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -188,10 +218,13 @@ const AppInputBar = React.memo(
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
-        setMessage("");
+        if (!isAutoSending.current) {
+          clearMessage();
+        }
       },
       focus: () => {
-        textAreaRef.current?.focus();
+        inputRef.current?.focus();
+        setCursorToEnd();
       },
     }));
 
@@ -202,7 +235,7 @@ const AppInputBar = React.memo(
       if (initialMessage) {
         setMessage(initialMessage);
       }
-    }, [initialMessage]);
+    }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
@@ -210,9 +243,9 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       if (isNewSession && !initialMessage) {
-        setMessage("");
+        clearMessage();
       }
-    }, [isNewSession, initialMessage]);
+    }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
@@ -257,30 +290,41 @@ const AppInputBar = React.memo(
 
     const combinedSettings = useContext(SettingsContext);
 
-    // TODO(@raunakab): Replace this useEffect with CSS `field-sizing: content` once
-    // Firefox ships it unflagged (currently behind `layout.css.field-sizing.enabled`).
-    // Auto-resize textarea based on content (chat mode only).
-    // Reset to min-height first so scrollHeight reflects actual content size,
-    // then clamp between min and max. This handles both growing and shrinking.
+    const prevChatStateRef = useRef(chatState);
+    const prevAwaitingRef = useRef(awaitingPreferredSelection);
+
     useEffect(() => {
-      const wrapper = textAreaWrapperRef.current;
-      const textarea = textAreaRef.current;
-      if (!wrapper || !textarea) return;
+      const wasReady =
+        prevChatStateRef.current === "input" && !prevAwaitingRef.current;
+      const isReady = chatState === "input" && !awaitingPreferredSelection;
 
-      // Reset so scrollHeight reflects actual content size
-      wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
+      prevChatStateRef.current = chatState;
+      prevAwaitingRef.current = awaitingPreferredSelection;
 
-      // scrollHeight doesn't include the wrapper's padding, so add it back
-      const wrapperStyle = getComputedStyle(wrapper);
-      const paddingTop = parseFloat(wrapperStyle.paddingTop);
-      const paddingBottom = parseFloat(wrapperStyle.paddingBottom);
-      const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
+      if (!wasReady && isReady && queuedMessages.length > 0) {
+        const nextMessage = queuedMessages[0]!.text;
+        isAutoSending.current = true;
+        stopTTS();
+        onSubmit(nextMessage);
+        isAutoSending.current = false;
+        removeCurrentQueuedMessage(0);
+      }
+    }, [
+      chatState,
+      awaitingPreferredSelection,
+      queuedMessages,
+      removeCurrentQueuedMessage,
+      stopTTS,
+      onSubmit,
+    ]);
 
-      wrapper.style.height = `${Math.min(
-        Math.max(contentHeight, MIN_INPUT_HEIGHT),
-        MAX_INPUT_HEIGHT
-      )}px`;
-    }, [message, isSearchMode]);
+    useEffect(() => {
+      setHighlightedQueueIndex((prev) => {
+        if (prev === null) return null;
+        if (queuedMessages.length === 0) return null;
+        return Math.min(prev, queuedMessages.length - 1);
+      });
+    }, [queuedMessages]);
 
     // Animate attached files wrapper to its content height so CSS transitions
     // can interpolate between concrete pixel values (0px ↔ Npx).
@@ -300,11 +344,18 @@ const AppInputBar = React.memo(
     }, [showFiles, currentMessageFiles]);
 
     function handlePaste(event: React.ClipboardEvent) {
+      if (disabled) return;
       const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
       if (pastedFiles.length > 0) {
         event.preventDefault();
         handleFileUpload(pastedFiles);
+        return;
       }
+
+      event.preventDefault();
+      const text = event.clipboardData.getData("text/plain");
+      if (!text) return;
+      insertTextAtCursor(text);
     }
 
     const handleRemoveMessageFile = useCallback(
@@ -349,7 +400,7 @@ const AppInputBar = React.memo(
 
     function updateInputPrompt(prompt: InputPrompt) {
       hidePrompts();
-      setMessage(`${prompt.content}`);
+      setMessage(prompt.content);
     }
 
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
@@ -366,27 +417,18 @@ const AppInputBar = React.memo(
       setTabbingIconIndex(0);
     }, [filteredPrompts]);
 
-    const handlePromptInput = useCallback(
-      (text: string) => {
+    const handleContentEditableInput = useCallback(
+      (event: React.SyntheticEvent<HTMLDivElement>) => {
+        const text = handleInput(event);
         if (text.startsWith("/")) {
           setShowPrompts(true);
+          setPromptFilterQuery(text.slice(1));
         } else {
           hidePrompts();
+          setPromptFilterQuery("");
         }
       },
-      [hidePrompts]
-    );
-
-    const handleInputChange = useCallback(
-      (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const text = event.target.value;
-        setMessage(text);
-        handlePromptInput(text);
-
-        const promptFilterQuery = text.startsWith("/") ? text.slice(1) : "";
-        setPromptFilterQuery(promptFilterQuery);
-      },
-      [setMessage, handlePromptInput, setPromptFilterQuery]
+      [handleInput, hidePrompts, setPromptFilterQuery]
     );
 
     // Determine if we should hide processing state based on context limits
@@ -434,7 +476,7 @@ const AppInputBar = React.memo(
     ]);
 
     function handleKeyDownForPromptShortcuts(
-      e: React.KeyboardEvent<HTMLTextAreaElement>
+      e: React.KeyboardEvent<HTMLDivElement>
     ) {
       if (!user?.preferences?.shortcut_enabled || !showPrompts) return;
 
@@ -507,7 +549,7 @@ const AppInputBar = React.memo(
             trigger={(open) => (
               <Button
                 disabled={disabled}
-                icon={SvgPlusCircle}
+                icon={SvgPaperclip}
                 tooltip="Attach Files"
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
@@ -554,12 +596,17 @@ const AppInputBar = React.memo(
             ) : (
               showDeepResearch && (
                 <SelectButton
-                  disabled={disabled}
+                  disabled={disabled || isMultiModelActive}
                   variant="select-light"
                   icon={SvgHourglass}
                   onClick={toggleDeepResearch}
                   state={deepResearchEnabled ? "selected" : "empty"}
                   foldable={!deepResearchEnabled}
+                  tooltip={
+                    isMultiModelActive
+                      ? "Deep Research is disabled in multi-model mode"
+                      : undefined
+                  }
                 >
                   Deep Research
                 </SelectButton>
@@ -639,12 +686,22 @@ const AppInputBar = React.memo(
             icon={
               isClassifying
                 ? SimpleLoader
-                : chatState === "streaming" || isVoicePlaybackControllable
-                  ? SvgStop
-                  : SvgArrowUp
+                : (chatState !== "input" || awaitingPreferredSelection) &&
+                    message.trim()
+                  ? SvgArrowUp
+                  : chatState === "streaming" || isVoicePlaybackControllable
+                    ? SvgStop
+                    : SvgArrowUp
             }
             onClick={() => {
-              if (chatState == "streaming") {
+              const canSubmitNormally =
+                chatState === "input" && !awaitingPreferredSelection;
+              if (!canSubmitNormally && message.trim()) {
+                if (queuedMessages.length < 5) {
+                  enqueueCurrentMessage(message.trim());
+                  clearMessage();
+                }
+              } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {
@@ -659,216 +716,313 @@ const AppInputBar = React.memo(
     );
 
     return (
-      <Disabled disabled={disabled} allowClick>
-        <div
-          ref={containerRef}
-          id="onyx-chat-input"
-          className={cn(
-            "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
-            // # Note (from @raunakab):
-            //
-            // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
-            // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
-            // shadows that exceed the container bounds are clipped.
-            //
-            // The 14px breathing room is now applied externally via animated spacer
-            // divs in `AppPage.tsx` (above and below the AppInputBar) so that the
-            // spacing can transition smoothly when switching between search and chat
-            // modes. See the corresponding note there for details.
-          )}
-        >
-          {/* Voice waveform overlay (positioned outside normal flow to avoid resizing input) */}
-          {isTTSActuallySpeaking ? (
-            <div className="absolute bottom-full mb-1 left-1 z-10">
-              <Waveform
-                variant="speaking"
-                isActive={isTTSActuallySpeaking}
-                isMuted={isTTSMuted}
-                onMuteToggle={toggleTTSMute}
-              />
-            </div>
-          ) : isRecording &&
-            !isVoicePlaybackActive &&
-            !shouldShowRecordingWaveformBelow ? (
-            <div className="absolute bottom-full mb-1 left-1 right-1 z-10">
-              <Waveform
-                variant="recording"
-                isActive={isRecording}
-                isMuted={isMuted}
-                audioLevel={audioLevel}
-                onMuteToggle={() => {
-                  setMutedRef.current?.(!isMuted);
-                }}
-              />
-            </div>
-          ) : null}
-
-          {/* Attached Files */}
+      <>
+        <QueuedMessageBar
+          messages={queuedMessages}
+          highlightedIndex={highlightedQueueIndex}
+          awaitingPreferredSelection={awaitingPreferredSelection}
+          onDiscard={removeCurrentQueuedMessage}
+          onHighlight={setHighlightedQueueIndex}
+        />
+        <Disabled disabled={disabled} allowClick>
           <div
-            ref={filesWrapperRef}
-            {...(!showFiles ? { inert: true } : {})}
+            ref={containerRef}
+            id="onyx-chat-input"
             className={cn(
-              "transition-all duration-150",
-              showFiles
-                ? "opacity-100 p-1"
-                : "opacity-0 p-0 overflow-hidden pointer-events-none"
+              "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+              // # Note (from @raunakab):
+              //
+              // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
+              // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
+              // shadows that exceed the container bounds are clipped.
+              //
+              // The 14px breathing room is now applied externally via animated spacer
+              // divs in `AppPage.tsx` (above and below the AppInputBar) so that the
+              // spacing can transition smoothly when switching between search and chat
+              // modes. See the corresponding note there for details.
             )}
           >
-            <div ref={filesContentRef} className="flex flex-wrap gap-1">
-              {currentMessageFiles.map((file) => (
-                <FileCard
-                  key={file.id}
-                  file={file}
-                  removeFile={handleRemoveMessageFile}
-                  hideProcessingState={hideProcessingState}
-                  onFileClick={handleFileClick}
-                  compactImages={shouldCompactImages}
+            {/* Voice waveform overlay (positioned outside normal flow to avoid resizing input) */}
+            {isTTSActuallySpeaking ? (
+              <div className="absolute bottom-full mb-1 left-1 z-10">
+                <Waveform
+                  variant="speaking"
+                  isActive={isTTSActuallySpeaking}
+                  isMuted={isTTSMuted}
+                  onMuteToggle={toggleTTSMute}
                 />
-              ))}
-            </div>
-          </div>
+              </div>
+            ) : isRecording &&
+              !isVoicePlaybackActive &&
+              !shouldShowRecordingWaveformBelow ? (
+              <div className="absolute bottom-full mb-1 left-1 right-1 z-10">
+                <Waveform
+                  variant="recording"
+                  isActive={isRecording}
+                  isMuted={isMuted}
+                  audioLevel={audioLevel}
+                  onMuteToggle={() => {
+                    setMutedRef.current?.(!isMuted);
+                  }}
+                />
+              </div>
+            ) : null}
 
-          <div className="flex flex-row items-center w-full">
-            <Popover
-              open={user?.preferences?.shortcut_enabled && showPrompts}
-              onOpenChange={setShowPrompts}
+            {/* Attached Files */}
+            <div
+              ref={filesWrapperRef}
+              {...(!showFiles ? { inert: true } : {})}
+              className={cn(
+                "transition-all duration-150",
+                showFiles
+                  ? "opacity-100 p-1"
+                  : "opacity-0 p-0 overflow-hidden pointer-events-none"
+              )}
             >
-              <Popover.Anchor asChild>
-                <div
-                  ref={textAreaWrapperRef}
-                  className="px-3 py-2 flex-1 flex h-[2.75rem]"
-                >
-                  <textarea
-                    id="onyx-chat-input-textarea"
-                    role="textarea"
-                    ref={textAreaRef}
-                    onPaste={handlePaste}
-                    onKeyDownCapture={handleKeyDownForPromptShortcuts}
-                    onChange={handleInputChange}
-                    className={cn(
-                      "p-[2px] w-full h-full outline-none bg-transparent resize-none placeholder:text-text-03 whitespace-pre-wrap break-words",
-                      "overflow-y-auto"
-                    )}
-                    autoFocus
-                    rows={1}
-                    style={{ scrollbarWidth: "thin" }}
-                    aria-multiline={true}
-                    placeholder={
-                      isRecording
-                        ? "Listening..."
-                        : isVoicePlaybackActive
-                          ? "Onyx is speaking..."
-                          : isSearchMode
-                            ? "Search connected sources"
-                            : "How can I help you today?"
-                    }
-                    value={message}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        !showPrompts &&
-                        !event.shiftKey &&
-                        !(event.nativeEvent as any).isComposing
-                      ) {
-                        event.preventDefault();
-                        if (
-                          message &&
-                          !disabled &&
-                          !isClassifying &&
-                          !hasUploadingFiles
-                        ) {
-                          submitMessage(message);
+              <div ref={filesContentRef} className="flex flex-wrap gap-1">
+                {currentMessageFiles.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    removeFile={handleRemoveMessageFile}
+                    hideProcessingState={hideProcessingState}
+                    onFileClick={handleFileClick}
+                    compactImages={shouldCompactImages}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-row items-center w-full">
+              <Popover
+                open={user?.preferences?.shortcut_enabled && showPrompts}
+                onOpenChange={setShowPrompts}
+              >
+                <Popover.Anchor asChild>
+                  <div
+                    ref={inputWrapperRef}
+                    className="px-3 py-2 flex-1 flex h-[2.75rem] overflow-hidden"
+                  >
+                    <div
+                      ref={inputRef}
+                      id="onyx-chat-input-textbox"
+                      role="textbox"
+                      aria-label="Message input"
+                      contentEditable={!disabled}
+                      suppressContentEditableWarning
+                      onPaste={handlePaste}
+                      onBlur={() => setHighlightedQueueIndex(null)}
+                      onKeyDownCapture={handleKeyDownForPromptShortcuts}
+                      onInput={handleContentEditableInput}
+                      onCompositionStart={handleCompositionStart}
+                      onCompositionEnd={handleCompositionEnd}
+                      className="p-[2px] w-full h-full outline-none bg-transparent whitespace-pre-wrap break-words overflow-y-auto"
+                      tabIndex={disabled ? -1 : 0}
+                      style={{
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "var(--border-02) transparent",
+                      }}
+                      aria-multiline={true}
+                      aria-disabled={disabled}
+                      aria-placeholder="How can I help you today?"
+                      data-placeholder={
+                        queuedMessages.length > 0 && !message
+                          ? "Press up to edit queued messages"
+                          : isRecording
+                            ? "Listening..."
+                            : isVoicePlaybackActive
+                              ? "Onyx is speaking..."
+                              : isSearchMode
+                                ? "Search connected sources"
+                                : "How can I help you today?"
+                      }
+                      data-empty={!message ? "" : undefined}
+                      onKeyDown={(event) => {
+                        // Queue navigation mode
+                        if (highlightedQueueIndex !== null) {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            const text =
+                              queuedMessages[highlightedQueueIndex]!.text;
+                            removeCurrentQueuedMessage(highlightedQueueIndex);
+                            setMessage(text);
+                            setHighlightedQueueIndex(null);
+                            return;
+                          }
+                          if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            setHighlightedQueueIndex((prev) =>
+                              Math.max((prev ?? 0) - 1, 0)
+                            );
+                            return;
+                          }
+                          if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            setHighlightedQueueIndex((prev) => {
+                              const next = (prev ?? 0) + 1;
+                              if (next >= queuedMessages.length) {
+                                return null; // exit navigation mode
+                              }
+                              return next;
+                            });
+                            return;
+                          }
+                          if (
+                            event.key === "Delete" ||
+                            event.key === "Backspace"
+                          ) {
+                            event.preventDefault();
+                            removeCurrentQueuedMessage(highlightedQueueIndex);
+                            return;
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setHighlightedQueueIndex(null);
+                            return;
+                          }
+                          if (
+                            event.key === "Shift" ||
+                            event.key === "Alt" ||
+                            event.key === "Control" ||
+                            event.key === "Meta" ||
+                            event.key === "Tab"
+                          ) {
+                            return;
+                          }
+                          // Any other key: exit navigation mode, let keypress proceed
+                          setHighlightedQueueIndex(null);
                         }
+
+                        // Up arrow to enter navigation mode
+                        if (
+                          event.key === "ArrowUp" &&
+                          !message &&
+                          queuedMessages.length > 0
+                        ) {
+                          event.preventDefault();
+                          setHighlightedQueueIndex(queuedMessages.length - 1);
+                          return;
+                        }
+
+                        // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
+                        if (
+                          event.key === "Enter" &&
+                          !showPrompts &&
+                          !event.shiftKey &&
+                          !(event.nativeEvent as any).isComposing
+                        ) {
+                          event.preventDefault();
+                          const canSubmitNormally =
+                            chatState === "input" &&
+                            !awaitingPreferredSelection;
+                          if (canSubmitNormally) {
+                            if (
+                              message &&
+                              !disabled &&
+                              !isClassifying &&
+                              !hasUploadingFiles
+                            ) {
+                              submitMessage(message);
+                            }
+                          } else if (
+                            message.trim() &&
+                            !disabled &&
+                            !isClassifying &&
+                            !hasUploadingFiles &&
+                            queuedMessages.length < 5
+                          ) {
+                            enqueueCurrentMessage(message.trim());
+                            clearMessage();
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </Popover.Anchor>
+
+                <Popover.Content
+                  side="top"
+                  align="start"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                  width="xl"
+                >
+                  <Popover.Menu>
+                    {[
+                      ...sortedFilteredPrompts.map((prompt, index) => (
+                        <LineItem
+                          key={prompt.id}
+                          selected={tabbingIconIndex === index}
+                          emphasized={tabbingIconIndex === index}
+                          description={prompt.content?.trim()}
+                          onClick={() => updateInputPrompt(prompt)}
+                        >
+                          {prompt.prompt}
+                        </LineItem>
+                      )),
+                      sortedFilteredPrompts.length > 0 ? null : undefined,
+                      <LineItem
+                        key="create-new"
+                        href="/app/settings/chat-preferences"
+                        icon={SvgPlus}
+                        selected={
+                          tabbingIconIndex === sortedFilteredPrompts.length
+                        }
+                        emphasized={
+                          tabbingIconIndex === sortedFilteredPrompts.length
+                        }
+                      >
+                        Create New Prompt
+                      </LineItem>,
+                    ]}
+                  </Popover.Menu>
+                </Popover.Content>
+              </Popover>
+
+              {isSearchMode && (
+                <Section flexDirection="row" width="fit" gap={0}>
+                  <Button
+                    disabled={!message || isClassifying}
+                    icon={SvgX}
+                    onClick={() => clearMessage()}
+                    prominence="tertiary"
+                  />
+                  <Button
+                    disabled={!message || isClassifying || hasUploadingFiles}
+                    id="onyx-chat-input-send-button"
+                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    onClick={() => {
+                      if (chatState == "streaming") {
+                        stopGenerating();
+                      } else if (message) {
+                        submitMessage(message);
                       }
                     }}
-                    suppressContentEditableWarning={true}
-                    disabled={disabled}
+                    prominence="tertiary"
                   />
-                </div>
-              </Popover.Anchor>
+                  <Spacer horizontal rem={0.25} />
+                </Section>
+              )}
+            </div>
 
-              <Popover.Content
-                side="top"
-                align="start"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-                width="xl"
-              >
-                <Popover.Menu>
-                  {[
-                    ...sortedFilteredPrompts.map((prompt, index) => (
-                      <LineItem
-                        key={prompt.id}
-                        selected={tabbingIconIndex === index}
-                        emphasized={tabbingIconIndex === index}
-                        description={prompt.content?.trim()}
-                        onClick={() => updateInputPrompt(prompt)}
-                      >
-                        {prompt.prompt}
-                      </LineItem>
-                    )),
-                    sortedFilteredPrompts.length > 0 ? null : undefined,
-                    <LineItem
-                      key="create-new"
-                      href="/app/settings/chat-preferences"
-                      icon={SvgPlus}
-                      selected={
-                        tabbingIconIndex === sortedFilteredPrompts.length
-                      }
-                      emphasized={
-                        tabbingIconIndex === sortedFilteredPrompts.length
-                      }
-                    >
-                      Create New Prompt
-                    </LineItem>,
-                  ]}
-                </Popover.Menu>
-              </Popover.Content>
-            </Popover>
+            {chatControls}
 
-            {isSearchMode && (
-              <Section flexDirection="row" width="fit" gap={0}>
-                <Button
-                  disabled={!message || isClassifying}
-                  icon={SvgX}
-                  onClick={() => setMessage("")}
-                  prominence="tertiary"
-                />
-                <Button
-                  disabled={!message || isClassifying || hasUploadingFiles}
-                  id="onyx-chat-input-send-button"
-                  icon={isClassifying ? SimpleLoader : SvgSearch}
-                  onClick={() => {
-                    if (chatState == "streaming") {
-                      stopGenerating();
-                    } else if (message) {
-                      submitMessage(message);
-                    }
+            {/* First recording cycle waveform below input */}
+            {shouldShowRecordingWaveformBelow && (
+              <div className="absolute top-full mt-1 left-1 right-1 z-10">
+                <Waveform
+                  variant="recording"
+                  isActive={isRecording}
+                  isMuted={isMuted}
+                  audioLevel={audioLevel}
+                  onMuteToggle={() => {
+                    setMutedRef.current?.(!isMuted);
                   }}
-                  prominence="tertiary"
                 />
-                <Spacer horizontal rem={0.25} />
-              </Section>
+              </div>
             )}
           </div>
-
-          {chatControls}
-
-          {/* First recording cycle waveform below input */}
-          {shouldShowRecordingWaveformBelow && (
-            <div className="absolute top-full mt-1 left-1 right-1 z-10">
-              <Waveform
-                variant="recording"
-                isActive={isRecording}
-                isMuted={isMuted}
-                audioLevel={audioLevel}
-                onMuteToggle={() => {
-                  setMutedRef.current?.(!isMuted);
-                }}
-              />
-            </div>
-          )}
-        </div>
-      </Disabled>
+        </Disabled>
+      </>
     );
   }
 );

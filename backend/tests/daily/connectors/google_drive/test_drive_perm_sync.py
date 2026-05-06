@@ -6,6 +6,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from onyx.access.models import DocExternalAccess
@@ -24,9 +26,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    FOLDER_3_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     get_expected_hierarchy_for_shared_drives,
 )
@@ -43,9 +43,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    PILL_FOLDER_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_ID,
@@ -53,9 +51,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_DRIVE_B_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
 )
@@ -68,15 +64,10 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_MY_DRIVE_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_2_MY_DRIVE,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_3_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
+from tests.utils.secret_names import TestSecret
 
 
 def _build_connector(
@@ -92,10 +83,11 @@ def _build_connector(
         my_drive_emails=None,
     )
     # don't need this anymore, it's been called in the factory
-    connector.load_credentials = MagicMock()  # type: ignore
+    connector.load_credentials = MagicMock()  # ty: ignore[invalid-assignment]
     return connector
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 def test_gdrive_perm_sync_with_real_data(
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
     enable_ee: None,  # noqa: ARG001

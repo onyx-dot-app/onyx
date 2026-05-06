@@ -71,7 +71,7 @@ export function AnnouncementBanner() {
                   Your index is out of date - we strongly recommend updating
                   your search settings.{" "}
                   <Link
-                    href={"/admin/configuration/search"}
+                    href="/admin/configuration/index-settings"
                     className="ml-2 underline cursor-pointer"
                   >
                     Update here

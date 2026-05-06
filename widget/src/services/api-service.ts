@@ -37,9 +37,16 @@ export class ApiService {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to create session: ${response.status} ${response.statusText}`,
-      );
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (body.detail) {
+          detail = body.detail;
+        }
+      } catch {
+        // Fall back to statusText if body isn't JSON
+      }
+      throw new Error(detail);
     }
 
     const data = (await response.json()) as CreateSessionResponse;
@@ -76,9 +83,16 @@ export class ApiService {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to send message: ${response.status} ${response.statusText}`,
-      );
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (body.detail) {
+          detail = body.detail;
+        }
+      } catch {
+        // Fall back to statusText if body isn't JSON
+      }
+      throw new Error(detail);
     }
 
     // Parse SSE stream
@@ -178,9 +192,9 @@ export class ApiService {
     try {
       const response = await fetch(url, options);
 
-      // Retry on 5xx or 429 errors
+      // Retry on 5xx errors only (not 4xx — those are permanent)
       if (!response.ok && retries < this.maxRetries) {
-        if (response.status >= 500 || response.status === 429) {
+        if (response.status >= 500) {
           const delay = this.retryDelay * Math.pow(2, retries);
           await new Promise((resolve) => setTimeout(resolve, delay));
           return this.fetchWithRetry(url, options, retries + 1);

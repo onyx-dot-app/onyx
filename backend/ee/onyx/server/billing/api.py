@@ -29,7 +29,6 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.auth.users import current_admin_user
 from ee.onyx.db.license import get_license
 from ee.onyx.db.license import get_used_seats
 from ee.onyx.server.billing.models import BillingInformationResponse
@@ -37,6 +36,7 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
+from ee.onyx.server.billing.models import EndTrialResponse
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import StripePublishableKeyResponse
@@ -47,15 +47,18 @@ from ee.onyx.server.billing.service import (
 from ee.onyx.server.billing.service import (
     create_customer_portal_session as create_portal_service,
 )
+from ee.onyx.server.billing.service import end_trial as end_trial_service
 from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_shared_redis_client
@@ -86,11 +89,13 @@ def _is_billing_circuit_open() -> bool:
         redis_client = get_shared_redis_client()
         is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
         logger.debug(
-            f"Circuit breaker check: key={BILLING_CIRCUIT_BREAKER_KEY}, is_open={is_open}"
+            "Circuit breaker check: key=%s, is_open=%s",
+            BILLING_CIRCUIT_BREAKER_KEY,
+            is_open,
         )
         return is_open
     except Exception as e:
-        logger.error(f"Failed to check circuit breaker: {e}")
+        logger.error("Failed to check circuit breaker: %s", e)
         return False
 
 
@@ -108,11 +113,12 @@ def _open_billing_circuit() -> None:
         # Verify it was set
         exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
         logger.warning(
-            f"Billing circuit breaker opened (TTL={BILLING_CIRCUIT_BREAKER_TTL_SECONDS}s, "
-            f"verified={exists}). Stripe billing requests are disabled until manually reset."
+            "Billing circuit breaker opened (TTL=%ss, verified=%s). Stripe billing requests are disabled until manually reset.",
+            BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
+            exists,
         )
     except Exception as e:
-        logger.error(f"Failed to open circuit breaker: {e}")
+        logger.error("Failed to open circuit breaker: %s", e)
 
 
 def _close_billing_circuit() -> None:
@@ -126,7 +132,7 @@ def _close_billing_circuit() -> None:
             "Billing circuit breaker closed. Stripe billing requests re-enabled."
         )
     except Exception as e:
-        logger.error(f"Failed to close circuit breaker: {e}")
+        logger.error("Failed to close circuit breaker: %s", e)
 
 
 def _get_license_data(db_session: Session) -> str | None:
@@ -147,7 +153,7 @@ def _get_tenant_id() -> str | None:
 @router.post("/create-checkout-session")
 async def create_checkout_session(
     request: CreateCheckoutSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CreateCheckoutSessionResponse:
     """Create a Stripe checkout session for new subscription or renewal.
@@ -191,7 +197,7 @@ async def create_checkout_session(
 @router.post("/create-customer-portal-session")
 async def create_customer_portal_session(
     request: CreateCustomerPortalSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CreateCustomerPortalSessionResponse:
     """Create a Stripe customer portal session for managing subscription.
@@ -211,12 +217,13 @@ async def create_customer_portal_session(
         license_data=license_data,
         return_url=return_url,
         tenant_id=tenant_id,
+        flow_type=request.flow_type if request else None,
     )
 
 
 @router.get("/billing-information")
 async def get_billing_information(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> BillingInformationResponse | SubscriptionStatusResponse:
     """Get billing information for the current subscription.
@@ -258,7 +265,7 @@ async def get_billing_information(
 @router.post("/seats/update")
 async def update_seats(
     request: SeatUpdateRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeatUpdateResponse:
     """Update the seat count for the current subscription.
@@ -291,6 +298,29 @@ async def update_seats(
         license_data=license_data,
         tenant_id=tenant_id,
     )
+
+
+@router.post("/end-trial")
+async def end_trial(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> EndTrialResponse:
+    """End the current trial immediately and charge the customer's card.
+
+    Cloud-only. The control plane sets `trial_end="now"` on the Stripe
+    subscription; Stripe attempts to charge the attached payment method, and
+    the resulting webhook transitions the subscription to active.
+
+    Returns 402 (forwarded from the control plane) when no payment method is
+    attached. The frontend handles that by routing to the customer portal.
+    """
+    if not MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "End-trial is only available for cloud deployments",
+        )
+
+    tenant_id = _get_tenant_id()
+    return await end_trial_service(tenant_id=tenant_id)
 
 
 @router.get("/stripe-publishable-key")
@@ -364,7 +394,7 @@ class ResetConnectionResponse(BaseModel):
 
 @router.post("/reset-connection")
 async def reset_stripe_connection(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> ResetConnectionResponse:
     """Reset the Stripe connection circuit breaker.
 

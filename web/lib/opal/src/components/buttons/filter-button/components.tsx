@@ -3,14 +3,11 @@ import {
   type InteractiveStatefulInteraction,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type { TooltipSide } from "@opal/components";
+import { Text, Tooltip, Button, type TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
-import { Button } from "@opal/components/buttons/button/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,21 +97,10 @@ function FilterButton({
     </div>
   );
 
-  if (!tooltip) return button;
-
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          {tooltip}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
   );
 }
 

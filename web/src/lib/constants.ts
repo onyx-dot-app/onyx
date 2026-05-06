@@ -81,6 +81,10 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
+// Cookie controlling the per-character typewriter reveal in chat.
+// "false" disables smooth streaming — chunks render as they arrive.
+export const SMOOTH_STREAMING_COOKIE_NAME = "smoothStreamingEnabled";
+
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
@@ -133,3 +137,5 @@ export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
 
 export const APP_SLOGAN = "Open Source AI Platform";
+
+export const DEFAULT_PAGE_SIZE = 10;

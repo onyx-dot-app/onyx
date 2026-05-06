@@ -19,7 +19,6 @@ from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger
 from shared_configs.utils import batch_list
 
-
 logger = setup_logger()
 
 
@@ -73,7 +72,9 @@ class OnyxSalesforceSQLite:
 
         conn = sqlite3.connect(self.filename, timeout=60.0)
         if self.isolation_level is not None:
-            conn.isolation_level = self.isolation_level
+            conn.isolation_level = (  # ty: ignore[invalid-assignment]
+                self.isolation_level
+            )
 
         self._conn = conn
 
@@ -113,13 +114,13 @@ class OnyxSalesforceSQLite:
             if SQLITE_DISK_IO_ERROR not in str(e):
                 raise
 
-            logger.warning(f"SQLite disk I/O error detected, attempting recovery: {e}")
+            logger.warning("SQLite disk I/O error detected, attempting recovery: %s", e)
             self._recover_from_corruption()
             self._apply_schema_impl()
 
     def _recover_from_corruption(self) -> None:
         """Recover from SQLite corruption by removing all database files and reconnecting."""
-        logger.info(f"Removing corrupted SQLite files: {self.filename}")
+        logger.info("Removing corrupted SQLite files: %s", self.filename)
 
         # Close existing connection
         self.close()
@@ -145,7 +146,7 @@ class OnyxSalesforceSQLite:
             if self._existing_db:
                 file_path = Path(self.filename)
                 file_size = file_path.stat().st_size
-                logger.info(f"init_db - found existing sqlite db: len={file_size}")
+                logger.info("init_db - found existing sqlite db: len=%s", file_size)
             else:
                 # NOTE(rkuo): why is this only if the db doesn't exist?
 
@@ -156,51 +157,43 @@ class OnyxSalesforceSQLite:
                 cursor.execute("PRAGMA cache_size=-2000000")  # Use 2GB memory for cache
 
             # Main table for storing Salesforce objects
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS salesforce_objects (
                     id TEXT PRIMARY KEY,
                     object_type TEXT NOT NULL,
                     data TEXT NOT NULL,  -- JSON serialized data
                     last_modified INTEGER DEFAULT (strftime('%s', 'now'))  -- Add timestamp for better cache management
                 ) WITHOUT ROWID  -- Optimize for primary key lookups
-            """
-            )
+            """)
 
             # NOTE(rkuo): this seems completely redundant with relationship_types
             # Table for parent-child relationships with covering index
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS relationships (
                     child_id TEXT NOT NULL,
                     parent_id TEXT NOT NULL,
                     PRIMARY KEY (child_id, parent_id)
                 ) WITHOUT ROWID  -- Optimize for primary key lookups
-            """
-            )
+            """)
 
             # New table for caching parent-child relationships with object types
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS relationship_types (
                     child_id TEXT NOT NULL,
                     parent_id TEXT NOT NULL,
                     parent_type TEXT NOT NULL,
                     PRIMARY KEY (child_id, parent_id, parent_type)
                 ) WITHOUT ROWID
-            """
-            )
+            """)
 
             # Create a table for User email to ID mapping if it doesn't exist
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_email_map (
                     email TEXT PRIMARY KEY,
                     user_id TEXT,  -- Nullable to allow for users without IDs
                     FOREIGN KEY (user_id) REFERENCES salesforce_objects(id)
                 ) WITHOUT ROWID
-            """
-            )
+            """)
 
             # Create indexes if they don't exist (SQLite ignores IF NOT EXISTS for indexes)
             def create_index_if_not_exists(
@@ -247,7 +240,10 @@ class OnyxSalesforceSQLite:
             )
 
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - create tables and indices: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - create tables and indices: elapsed=%s",
+                format(elapsed, ".2f"),
+            )
 
             # Analyze tables to help query planner
             # NOTE(rkuo): skip ANALYZE - it takes too long and we likely don't have
@@ -264,13 +260,17 @@ class OnyxSalesforceSQLite:
             start = time.monotonic()
             cursor.execute("SELECT COUNT(*) FROM user_email_map")
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - count user_email_map: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - count user_email_map: elapsed=%s", format(elapsed, ".2f")
+            )
 
             start = time.monotonic()
             if cursor.fetchone()[0] == 0:
                 OnyxSalesforceSQLite._update_user_email_map(cursor)
             elapsed = time.monotonic() - start
-            logger.info(f"init_db - update_user_email_map: elapsed={elapsed:.2f}")
+            logger.info(
+                "init_db - update_user_email_map: elapsed=%s", format(elapsed, ".2f")
+            )
 
     def get_user_id_by_email(self, email: str) -> str | None:
         """Get the Salesforce User ID for a given email address.
@@ -321,10 +321,11 @@ class OnyxSalesforceSQLite:
             else:
                 cache_bytes = abs(cache_pages * 1024)
             logger.info(
-                f"SQLite stats: sqlite_version={sqlite3.sqlite_version} "
-                f"cache_pages={cache_pages} "
-                f"page_size={page_size} "
-                f"cache_bytes={cache_bytes}"
+                "SQLite stats: sqlite_version=%s cache_pages=%s page_size=%s cache_bytes=%s",
+                sqlite3.sqlite_version,
+                cache_pages,
+                page_size,
+                cache_bytes,
             )
 
     # get_changed_parent_ids_by_type_2 replaces this
@@ -463,7 +464,11 @@ class OnyxSalesforceSQLite:
             ]
             for field_name, _ in parent_relationship_fields.items():
                 if field_name not in sf_object.data:
-                    logger.warning(f"{field_name=} not in data for {changed_type=}!")
+                    logger.warning(
+                        "field_name=%r not in data for changed_type=%r!",
+                        field_name,
+                        changed_type,
+                    )
                     continue
 
                 parent_id = cast(str, sf_object.data[field_name])
@@ -471,7 +476,8 @@ class OnyxSalesforceSQLite:
 
                 if parent_id_prefix not in prefix_to_type:
                     logger.warning(
-                        f"Could not lookup type for prefix: {parent_id_prefix=}"
+                        "Could not lookup type for prefix: parent_id_prefix=%r",
+                        parent_id_prefix,
                     )
                     continue
 
@@ -572,7 +578,10 @@ class OnyxSalesforceSQLite:
                 for row in reader:
                     if ID_FIELD not in row:
                         logger.warning(
-                            f"Row {row} does not have an {ID_FIELD} field in {csv_download_path}"
+                            "Row %s does not have an %s field in %s",
+                            row,
+                            ID_FIELD,
+                            csv_download_path,
                         )
                         continue
 
@@ -639,7 +648,7 @@ class OnyxSalesforceSQLite:
             )
             result = cursor.fetchone()
             if not result:
-                logger.warning(f"Object ID {object_id} not found")
+                logger.warning("Object ID %s not found", object_id)
                 return None
             return result[0]
 
@@ -672,7 +681,7 @@ class OnyxSalesforceSQLite:
                 )
             result = cursor.fetchall()
             if not result:
-                logger.warning(f"Object ID {object_id} not found")
+                logger.warning("Object ID %s not found", object_id)
                 return None
 
             data = json.loads(result[0][0])
@@ -771,7 +780,9 @@ class OnyxSalesforceSQLite:
 
         except Exception:
             logger.exception(
-                f"Error updating relationship tables: child_id={child_id} parent_ids={parent_ids}"
+                "Error updating relationship tables: child_id=%s parent_ids=%s",
+                child_id,
+                parent_ids,
             )
             raise
 
@@ -781,15 +792,13 @@ class OnyxSalesforceSQLite:
         Called internally by update_sf_db_with_csv when User objects are updated.
         """
 
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT OR REPLACE INTO user_email_map (email, user_id)
             SELECT json_extract(data, '$.Email'), id
             FROM salesforce_objects
             WHERE object_type = 'User'
             AND json_extract(data, '$.Email') IS NOT NULL
-            """
-        )
+            """)
 
     def make_basic_expert_info_from_record(
         self,
@@ -799,10 +808,10 @@ class OnyxSalesforceSQLite:
         of the user if possible."""
         object_dict: dict[str, Any] = sf_object.data
         if not (last_modified_by_id := object_dict.get("LastModifiedById")):
-            logger.warning(f"No LastModifiedById found for {sf_object.id}")
+            logger.warning("No LastModifiedById found for %s", sf_object.id)
             return None
         if not (last_modified_by := self.get_record(last_modified_by_id)):
-            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+            logger.warning("No LastModifiedBy found for %s", last_modified_by_id)
             return None
 
         try:

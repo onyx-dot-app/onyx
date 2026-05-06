@@ -1,0 +1,31 @@
+/* ============================================================================
+   LinkButton — a bare anchor-style link with a trailing external-link icon.
+
+   Intentionally does NOT use `Interactive.Stateless` / `Interactive.Container`.
+   Styling is minimal: inline-flex, underlined label, subtle color shift on
+   hover, disabled opacity. The icon inherits the parent's text color via
+   `currentColor` so `text-text-03` on the root cascades through.
+============================================================================ */
+
+.opal-link-button {
+  @apply inline-flex flex-row items-center gap-0.5 text-text-03;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  transition: color 150ms ease-out;
+}
+
+.opal-link-button:hover:not([data-disabled]) {
+  @apply text-text-05;
+}
+
+.opal-link-button[data-disabled] {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* `font-secondary-body` is a plain CSS class defined in globals.css (not a
+   Tailwind utility), so `@apply` can't consume it — other Opal components
+   attach it via `className` on the JSX element, and we do the same here. */
+.opal-link-button-label {
+  @apply underline;
+}

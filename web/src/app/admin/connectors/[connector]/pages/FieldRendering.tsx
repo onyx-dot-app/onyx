@@ -11,8 +11,7 @@ import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
-import { Content } from "@opal/layouts";
+import { Content, InputVertical } from "@opal/layouts";
 import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Text from "@/refresh-components/texts/Text";
@@ -225,8 +224,8 @@ export const RenderField: FC<RenderFieldProps> = ({
         </GeneralLayouts.Section>
       ) : field.type === "text" ? (
         field.isTextArea ? (
-          <InputLayouts.Vertical
-            name={field.name}
+          <InputVertical
+            withLabel={field.name}
             title={label}
             description={description}
             suffix={field.optional ? "optional" : undefined}
@@ -237,7 +236,7 @@ export const RenderField: FC<RenderFieldProps> = ({
               variant={disabled ? "disabled" : undefined}
               rows={1}
             />
-          </InputLayouts.Vertical>
+          </InputVertical>
         ) : (
           <TextFormField
             subtext={description}

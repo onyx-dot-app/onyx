@@ -3,14 +3,18 @@
   transition: opacity 150ms ease-in-out;
 }
 
-.hoverable-item[data-hoverable-variant="opacity-on-hover"] {
+.hoverable-item[data-hoverable-variant="appear-on-hover"] {
   opacity: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   appear-on-hover — hidden at rest, visible on hover
+   --------------------------------------------------------------------------- */
 
 /* Group mode — Root :hover controls descendant item visibility via CSS.
    Exclude local-mode items so they aren't revealed by an ancestor root. */
 [data-hover-group]:hover
-  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+  .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
     [data-hoverable-local]
   ) {
   opacity: 1;
@@ -18,29 +22,131 @@
 
 /* Interaction override — force items visible via JS */
 [data-hover-group][data-interaction="hover"]
-  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+  .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
     [data-hoverable-local]
   ) {
   opacity: 1;
 }
 
 /* Local mode — item handles its own :hover */
-.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-local="true"]:hover {
+.hoverable-item[data-hoverable-variant="appear-on-hover"][data-hoverable-local="true"]:hover {
   opacity: 1;
 }
 
 /* Group focus — any focusable descendant of the Root receives keyboard focus,
    revealing all group items (same behavior as hover). */
 [data-hover-group]:focus-within
-  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+  .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
     [data-hoverable-local]
   ) {
   opacity: 1;
 }
 
 /* Local focus — item (or a focusable descendant) receives keyboard focus */
-.hoverable-item[data-hoverable-variant="opacity-on-hover"]:has(:focus-visible) {
+.hoverable-item[data-hoverable-variant="appear-on-hover"]:has(:focus-visible) {
   opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   appear-on-rest — visible at rest, hidden on hover (inverse of above)
+   --------------------------------------------------------------------------- */
+
+.hoverable-item[data-hoverable-variant="appear-on-rest"] {
+  opacity: 1;
+}
+
+/* Group mode */
+[data-hover-group]:hover
+  .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
+    [data-hoverable-local]
+  ) {
+  opacity: 0;
+}
+
+/* Interaction override */
+[data-hover-group][data-interaction="hover"]
+  .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
+    [data-hoverable-local]
+  ) {
+  opacity: 0;
+}
+
+/* Local mode */
+.hoverable-item[data-hoverable-variant="appear-on-rest"][data-hoverable-local="true"]:hover {
+  opacity: 0;
+}
+
+/* Group focus */
+[data-hover-group]:focus-within
+  .hoverable-item[data-hoverable-variant="appear-on-rest"]:not(
+    [data-hoverable-local]
+  ) {
+  opacity: 0;
+}
+
+/* Local focus */
+.hoverable-item[data-hoverable-variant="appear-on-rest"]:has(:focus-visible) {
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   replace-on-hover — swaps resting content for hover content via display toggle
+   --------------------------------------------------------------------------- */
+
+/* Rest: show resting, hide hover */
+.hoverable-replace-rest {
+  display: contents;
+}
+.hoverable-replace-hover {
+  display: none;
+}
+
+/* Group mode */
+[data-hover-group]:hover .hoverable-replace-rest:not([data-hoverable-local]) {
+  display: none;
+}
+[data-hover-group]:hover .hoverable-replace-hover:not([data-hoverable-local]) {
+  display: contents;
+}
+
+/* Interaction override */
+[data-hover-group][data-interaction="hover"]
+  .hoverable-replace-rest:not([data-hoverable-local]) {
+  display: none;
+}
+[data-hover-group][data-interaction="hover"]
+  .hoverable-replace-hover:not([data-hoverable-local]) {
+  display: contents;
+}
+
+/* Local mode */
+.hoverable-replace:hover
+  > .hoverable-replace-rest[data-hoverable-local="true"] {
+  display: none;
+}
+.hoverable-replace:hover
+  > .hoverable-replace-hover[data-hoverable-local="true"] {
+  display: contents;
+}
+
+/* Group focus */
+[data-hover-group]:focus-within
+  .hoverable-replace-rest:not([data-hoverable-local]) {
+  display: none;
+}
+[data-hover-group]:focus-within
+  .hoverable-replace-hover:not([data-hoverable-local]) {
+  display: contents;
+}
+
+/* Local focus */
+.hoverable-replace:focus-within
+  > .hoverable-replace-rest[data-hoverable-local="true"] {
+  display: none;
+}
+.hoverable-replace:focus-within
+  > .hoverable-replace-hover[data-hoverable-local="true"] {
+  display: contents;
 }
 
 /* Focus ring on keyboard focus */

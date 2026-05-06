@@ -15,11 +15,12 @@ from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
@@ -27,6 +28,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -35,15 +37,19 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
+from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -59,6 +65,7 @@ from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
+from onyx.server.manage.llm.models import CustomProviderOption
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
 from onyx.server.manage.llm.models import LitellmModelDetails
@@ -107,6 +114,43 @@ def _mask_string(value: str) -> str:
     return value[:4] + "****" + value[-4:]
 
 
+def _resolve_api_key(
+    api_key: str | None,
+    provider_name: str | None,
+    api_base: str | None,
+    db_session: Session,
+) -> str | None:
+    """Return the real API key for model-fetch endpoints.
+
+    When editing an existing provider the form value is masked (e.g.
+    ``sk-a****b1c2``).  If *provider_name* is supplied we can look up
+    the unmasked key from the database so the external request succeeds.
+
+    The stored key is only returned when the request's *api_base*
+    matches the value stored in the database.
+    """
+    if not provider_name:
+        return api_key
+
+    existing_provider = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
+    if existing_provider and existing_provider.api_key:
+        # Normalise both URLs before comparing so trailing-slash
+        # differences don't cause a false mismatch.
+        stored_base = (existing_provider.api_base or "").strip().rstrip("/")
+        request_base = (api_base or "").strip().rstrip("/")
+        if stored_base != request_base:
+            return api_key
+
+        stored_key = existing_provider.api_key.get_value(apply_mask=False)
+        # Only resolve when the incoming value is the masked form of the
+        # stored key — i.e. the user hasn't typed a new key.
+        if api_key and api_key == _mask_string(stored_key):
+            return stored_key
+    return api_key
+
+
 def _sync_fetched_models(
     db_session: Session,
     provider_name: str,
@@ -129,25 +173,13 @@ def _sync_fetched_models(
         )
         if new_count > 0:
             logger.info(
-                f"Added {new_count} new {source_label} models to provider '{provider_name}'"
+                "Added %s new %s models to provider '%s'",
+                new_count,
+                source_label,
+                provider_name,
             )
     except ValueError as e:
-        logger.warning(f"Failed to sync {source_label} models to DB: {e}")
-
-
-# Keys in custom_config that contain sensitive credentials
-_SENSITIVE_CONFIG_KEYS = {
-    "vertex_credentials",
-    "aws_secret_access_key",
-    "aws_access_key_id",
-    "aws_bearer_token_bedrock",
-    "private_key",
-    "api_key",
-    "secret",
-    "password",
-    "token",
-    "credential",
-}
+        logger.warning("Failed to sync %s models to DB: %s", source_label, e)
 
 
 def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
@@ -160,28 +192,18 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
     if provider_view.custom_config:
         masked_config: dict[str, Any] = {}
         for key, value in provider_view.custom_config.items():
-            # Check if key matches any sensitive pattern (case-insensitive)
-            key_lower = key.lower()
-            is_sensitive = any(
-                sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS
-            )
-            if is_sensitive and isinstance(value, str) and value:
+            if is_sensitive_custom_config_key(key) and isinstance(value, str) and value:
                 masked_config[key] = _mask_string(value)
             else:
                 masked_config[key] = value
         provider_view.custom_config = masked_config
 
 
-def _is_sensitive_custom_config_key(key: str) -> bool:
-    key_lower = key.lower()
-    return any(sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS)
-
-
 def _is_masked_value_for_existing(
     incoming_value: str, existing_value: str, key: str
 ) -> bool:
     """Return True when incoming_value is a masked round-trip of existing_value."""
-    if not _is_sensitive_custom_config_key(key):
+    if not is_sensitive_custom_config_key(key):
         return False
 
     masked_candidates = {
@@ -249,9 +271,32 @@ def _validate_llm_provider_change(
         )
 
 
+@admin_router.get("/custom-provider-names")
+def fetch_custom_provider_names(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[CustomProviderOption]:
+    """Returns the sorted list of LiteLLM provider names that can be used
+    with the custom provider modal (i.e. everything that is not already
+    covered by a well-known provider modal)."""
+    import litellm
+
+    well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
+    return sorted(
+        (
+            CustomProviderOption(
+                value=name,
+                label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
+            )
+            for name in litellm.models_by_provider.keys()
+            if name not in well_known
+        ),
+        key=lambda o: o.label.lower(),
+    )
+
+
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
 
@@ -259,7 +304,7 @@ def fetch_llm_options(
 @admin_router.get("/built-in/options/{provider_name}")
 def fetch_llm_provider_options(
     provider_name: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> WellKnownLLMProviderDescriptor:
     well_known_llms = fetch_available_well_known_llms()
     for well_known_llm in well_known_llms:
@@ -271,7 +316,7 @@ def fetch_llm_provider_options(
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -329,7 +374,7 @@ def test_llm_configuration(
 
 @admin_router.post("/test/default")
 def test_default_provider(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     try:
         llm = get_default_llm()
@@ -345,7 +390,7 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
@@ -362,7 +407,8 @@ def list_llm_providers(
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
-            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
+            "LLMProviderView.from_model took %s seconds",
+            format(from_model_duration, ".2f"),
         )
 
         _mask_provider_credentials(full_llm_provider)
@@ -370,7 +416,9 @@ def list_llm_providers(
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
-    logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
+    logger.debug(
+        "Completed fetching LLM providers in %s seconds", format(duration, ".2f")
+    )
 
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
@@ -390,7 +438,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -528,7 +576,7 @@ def put_llm_provider(
 def delete_llm_provider(
     provider_id: int,
     force: bool = Query(False),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not force:
@@ -549,7 +597,7 @@ def delete_llm_provider(
 @admin_router.post("/default")
 def set_provider_as_default(
     default_model_request: DefaultModel,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_provider(
@@ -562,7 +610,7 @@ def set_provider_as_default(
 @admin_router.post("/default-vision")
 def set_provider_as_default_vision(
     default_model: DefaultModel,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
@@ -574,7 +622,7 @@ def set_provider_as_default_vision(
 
 @admin_router.get("/auto-config")
 def get_auto_config(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> dict:
     """Get the current Auto mode configuration from GitHub.
 
@@ -592,7 +640,7 @@ def get_auto_config(
 
 @admin_router.get("/vision-providers")
 def get_vision_capable_providers(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
@@ -622,7 +670,7 @@ def get_vision_capable_providers(
         for provider_id, model_names in provider_models.items()
     ]
 
-    logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
+    logger.debug("Found %s vision-capable providers", len(vision_provider_response))
 
     return LLMProviderResponse[VisionProviderResponse].from_models(
         providers=vision_provider_response,
@@ -673,7 +721,9 @@ def list_llm_provider_basics(
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     logger.debug(
-        f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
+        "Completed fetching %s user-accessible providers in %s seconds",
+        len(accessible_providers),
+        format(duration, ".2f"),
     )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
@@ -722,6 +772,33 @@ def get_valid_model_names_for_persona(
     return valid_models
 
 
+def get_valid_model_configuration_ids_for_persona(
+    persona: Persona,
+    user: User,
+    db_session: Session,
+) -> set[int]:
+    """Get the set of ModelConfiguration IDs that a user can access for this persona.
+
+    Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
+    multiple providers expose a model with the same name.
+    """
+    is_admin = user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    valid_ids: set[int] = set()
+    for llm_provider_model in all_providers:
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            for model_config in llm_provider_model.model_configurations:
+                if model_config.is_visible and model_config.id is not None:
+                    valid_ids.add(model_config.id)
+    return valid_ids
+
+
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,
@@ -738,7 +815,7 @@ def list_llm_providers_for_persona(
     and should NOT block the UI.
     """
     start_time = datetime.now(timezone.utc)
-    logger.debug(f"Starting to fetch LLM providers for persona {persona_id}")
+    logger.debug("Starting to fetch LLM providers for persona %s", persona_id)
 
     persona = fetch_persona_with_groups(db_session, persona_id)
     if not persona:
@@ -771,48 +848,31 @@ def list_llm_providers_for_persona(
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     logger.debug(
-        f"Completed fetching {len(llm_provider_list)} LLM providers for persona {persona_id} in {duration:.2f} seconds"
+        "Completed fetching %s LLM providers for persona %s in %s seconds",
+        len(llm_provider_list),
+        persona_id,
+        format(duration, ".2f"),
     )
-
-    # Get the default model and vision model for the persona
-    # TODO: Port persona's over to use ID
-    persona_default_provider = persona.llm_model_provider_override
-    persona_default_model = persona.llm_model_version_override
 
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
 
-    # Build default_text and default_vision using persona overrides when available,
-    # falling back to the global defaults.
+    # Build default_text and default_vision using the persona's model config FK when
+    # available, falling back to the global defaults.
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
-    if persona_default_provider:
-        provider = fetch_existing_llm_provider(persona_default_provider, db_session)
-        if provider and can_user_access_llm_provider(
-            provider, user_group_ids, persona, is_admin=is_admin
+    if persona.default_model_configuration_id:
+        model_config = fetch_model_configuration_by_id(
+            db_session, persona.default_model_configuration_id
+        )
+        if model_config and can_user_access_llm_provider(
+            model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
         ):
-            if persona_default_model:
-                # Persona specifies both provider and model — use them directly
-                default_text = DefaultModel(
-                    provider_id=provider.id,
-                    model_name=persona_default_model,
-                )
-            else:
-                # Persona specifies only the provider — pick a visible (public) model,
-                # falling back to any model on this provider
-                visible_model = next(
-                    (mc for mc in provider.model_configurations if mc.is_visible),
-                    None,
-                )
-                fallback_model = visible_model or next(
-                    iter(provider.model_configurations), None
-                )
-                if fallback_model:
-                    default_text = DefaultModel(
-                        provider_id=provider.id,
-                        model_name=fallback_model.name,
-                    )
+            default_text = DefaultModel(
+                provider_id=model_config.llm_provider_id,
+                model_name=model_config.name,
+            )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
@@ -823,7 +883,7 @@ def list_llm_providers_for_persona(
 
 @admin_router.get("/provider-contextual-cost")
 def get_provider_contextual_cost(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[LLMCost]:
     """
@@ -872,7 +932,7 @@ def get_provider_contextual_cost(
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[BedrockFinalModelResponse]:
     """Fetch available Bedrock models for a specific region and credentials.
@@ -970,7 +1030,7 @@ def get_bedrock_available_models(
                             "supports_image_input": infer_vision_support(profile_id),
                         }
         except Exception as e:
-            logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
+            logger.warning("Couldn't fetch inference profiles for Bedrock: %s", e)
 
         # Prefer profiles: de-dupe available models, then add profile IDs
         candidates = (available_models - cross_region_models) | profile_ids
@@ -1047,7 +1107,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 @admin_router.post("/ollama/available-models")
 def get_ollama_available_models(
     request: OllamaModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
@@ -1147,16 +1207,17 @@ def get_ollama_available_models(
     return sorted_results
 
 
-def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
+def _get_openrouter_models_response(api_base: str, api_key: str | None) -> dict:
     """Perform GET to OpenRouter /models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/models"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
+    headers: dict[str, str] = {
         # Optional headers recommended by OpenRouter for attribution
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "Onyx",
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
         response.raise_for_status()
@@ -1171,7 +1232,7 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
 @admin_router.post("/openrouter/available-models")
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[OpenRouterFinalModelResponse]:
     """Fetch available models from OpenRouter `/models` endpoint.
@@ -1179,8 +1240,12 @@ def get_openrouter_available_models(
     Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_openrouter_models_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     data = response_json.get("data", [])
@@ -1252,7 +1317,7 @@ def get_openrouter_available_models(
 @admin_router.post("/lm-studio/available-models")
 def get_lm_studio_available_models(
     request: LMStudioModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[LMStudioFinalModelResponse]:
     """Fetch available models from an LM Studio server.
@@ -1273,13 +1338,18 @@ def get_lm_studio_available_models(
 
     # If provider_name is given and the api_key hasn't been changed by the user,
     # fall back to the stored API key from the database (the form value is masked).
+    # Only do so when the api_base matches what is stored.
     api_key = request.api_key
     if request.provider_name and not request.api_key_changed:
         existing_provider = fetch_existing_llm_provider(
             name=request.provider_name, db_session=db_session
         )
         if existing_provider and existing_provider.custom_config:
-            api_key = existing_provider.custom_config.get(LM_STUDIO_API_KEY_CONFIG_KEY)
+            stored_base = (existing_provider.api_base or "").strip().rstrip("/")
+            if stored_base == cleaned_api_base:
+                api_key = existing_provider.custom_config.get(
+                    LM_STUDIO_API_KEY_CONFIG_KEY
+                )
 
     url = f"{cleaned_api_base}/api/v1/models"
     headers: dict[str, str] = {}
@@ -1359,12 +1429,16 @@ def get_lm_studio_available_models(
 @admin_router.post("/litellm/available-models")
 def get_litellm_available_models(
     request: LitellmModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from Litellm proxy /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_litellm_models_response(
-        api_key=request.api_key, api_base=request.api_base
+        api_key=api_key, api_base=request.api_base
     )
 
     models = response_json.get("data", [])
@@ -1421,7 +1495,7 @@ def get_litellm_available_models(
     return sorted_results
 
 
-def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
+def _get_litellm_models_response(api_key: str | None, api_base: str) -> dict:
     """Perform GET to Litellm proxy /api/v1/models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/v1/models"
@@ -1492,12 +1566,16 @@ def _get_openai_compatible_models_response(
 @admin_router.post("/bifrost/available-models")
 def get_bifrost_available_models(
     request: BifrostModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_bifrost_models_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     models = response_json.get("data", [])
@@ -1582,12 +1660,16 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
 @admin_router.post("/openai-compatible/available-models")
 def get_openai_compatible_server_available_models(
     request: OpenAICompatibleModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_openai_compatible_server_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     models = response_json.get("data", [])
@@ -1647,7 +1729,7 @@ def get_openai_compatible_server_available_models(
                 )
                 for r in sorted_results
             ],
-            source_label="OpenAI Compatible",
+            source_label="OpenAI-Compatible",
         )
 
     return sorted_results
@@ -1666,6 +1748,6 @@ def _get_openai_compatible_server_response(
 
     return _get_openai_compatible_models_response(
         url=url,
-        source_name="OpenAI Compatible",
+        source_name="OpenAI-Compatible",
         api_key=api_key,
     )

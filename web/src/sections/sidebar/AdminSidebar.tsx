@@ -1,27 +1,18 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
 import { useSidebarFolded } from "@/layouts/sidebar-layouts";
-import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { CombinedSettings } from "@/interfaces/settings";
-import { SidebarTab } from "@opal/components";
+import { Divider, SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
@@ -30,9 +21,12 @@ import {
   hasActiveSubscription,
 } from "@/lib/billing";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { markdown } from "@opal/utils";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -58,7 +52,6 @@ function buildItems(
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
-  kgExposed: boolean,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
   hooksEnabled: boolean
@@ -87,10 +80,6 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
-    if (vectorDbEnabled && kgExposed) {
-      add(SECTIONS.UNLABELED, ADMIN_ROUTES.KNOWLEDGE_GRAPH);
-    }
-
     if (!enableCloud && customAnalyticsEnabled) {
       addDisabled(
         SECTIONS.UNLABELED,
@@ -110,7 +99,7 @@ function buildItems(
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator && !enableCloud) {
+    if (!isCurator) {
       items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
@@ -193,21 +182,8 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
-interface AdminSidebarProps {
-  enableCloudSS: boolean;
-  folded: boolean;
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-interface AdminSidebarInnerProps {
-  enableCloudSS: boolean;
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-function AdminSidebarInner({
-  enableCloudSS,
-  onFoldChange,
-}: AdminSidebarInnerProps) {
+function AdminSidebarInner() {
+  const { setFolded } = useSidebarState();
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -218,7 +194,6 @@ function AdminSidebarInner({
       setFocusSearch(false);
     }
   }, [focusSearch, folded]);
-  const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
@@ -242,10 +217,9 @@ function AdminSidebarInner({
 
   const allItems = buildItems(
     isCurator,
-    enableCloudSS,
+    NEXT_PUBLIC_CLOUD_ENABLED,
     enableEnterprise,
     settings,
-    kgExposed,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
     hooksEnabled
@@ -268,7 +242,7 @@ function AdminSidebarInner({
             icon={SvgSearch}
             folded
             onClick={() => {
-              onFoldChange(false);
+              setFolded(false);
               setFocusSearch(true);
             }}
           >
@@ -310,7 +284,7 @@ function AdminSidebarInner({
           );
         })}
 
-        {disabledGroups.length > 0 && <Separator noPadding className="px-2" />}
+        {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
 
         {disabledGroups.map((group, groupIndex) => (
           <SidebarSection
@@ -319,7 +293,14 @@ function AdminSidebarInner({
             disabled
           >
             {group.items.map(({ link, icon, name }) => (
-              <SidebarTab key={link} disabled icon={icon}>
+              <SidebarTab
+                key={link}
+                disabled
+                icon={icon}
+                tooltip={markdown(
+                  "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                )}
+              >
                 {name}
               </SidebarTab>
             ))}
@@ -330,7 +311,7 @@ function AdminSidebarInner({
       <SidebarLayouts.Footer>
         {!folded && (
           <>
-            <Separator noPadding className="px-2" />
+            <Divider paddingPerpendicular="fit" />
             <Spacer rem={0.5} />
           </>
         )}
@@ -348,17 +329,10 @@ function AdminSidebarInner({
   );
 }
 
-export default function AdminSidebar({
-  enableCloudSS,
-  folded,
-  onFoldChange,
-}: AdminSidebarProps) {
+export default function AdminSidebar() {
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
-      <AdminSidebarInner
-        enableCloudSS={enableCloudSS}
-        onFoldChange={onFoldChange}
-      />
+    <SidebarLayouts.Root>
+      <AdminSidebarInner />
     </SidebarLayouts.Root>
   );
 }

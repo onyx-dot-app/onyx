@@ -92,16 +92,12 @@ def test_tool_seeding_migration() -> None:
 
     # Verify tools were created
     with get_session_with_current_tenant() as db_session:
-        result = db_session.execute(
-            text(
-                """
+        result = db_session.execute(text("""
                 SELECT id, name, display_name, description, in_code_tool_id,
                        user_id
                 FROM tool
                 ORDER BY id
-                """
-            )
-        )
+                """))
         tools = result.fetchall()
 
         # Should have all 9 builtin tools

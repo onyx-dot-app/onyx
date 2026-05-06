@@ -42,7 +42,7 @@ test.describe("LLM Ordering", () => {
     await ensureImageGenerationEnabled(page);
 
     await page.goto("/app");
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
+    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
     const trigger = page.getByTestId("model-selector").locator("button").last();
     const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
@@ -51,14 +51,16 @@ test.describe("LLM Ordering", () => {
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
     const dialog = page.locator('[role="dialog"]');
-    const allModelItems = dialog.locator("[data-selected]");
+    const allModelItems = dialog.locator("[data-interactive-state]");
     await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
 
     const count = await allModelItems.count();
     expect(count).toBeGreaterThan(0);
 
     // Pick the first non-selected model so the trigger text changes after click
-    const nonSelectedItem = dialog.locator('[data-selected="false"]').first();
+    const nonSelectedItem = dialog
+      .locator('[data-interactive-state="empty"]')
+      .first();
     const hasNonSelected = (await nonSelectedItem.count()) > 0;
     const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
 
