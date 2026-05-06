@@ -182,7 +182,9 @@ export default function MessageToolbar({
     const modelName =
       currentModelName?.trim() || llmManager?.currentLlm.modelName;
     if (!modelName || !llmManager?.llmProviders) return null;
+    const currentProvider = llmManager.currentLlm.provider;
     for (const p of llmManager.llmProviders) {
+      if (p.provider !== currentProvider) continue;
       const mc = p.model_configurations.find((m) => m.name === modelName);
       if (mc?.id != null) return mc.id;
     }

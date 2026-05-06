@@ -783,9 +783,9 @@ function ChatPreferencesSettings() {
 
   // Convert the active LlmDescriptor to a model_configuration_id for ModelPickerPopover.
   const currentModelConfigId = useMemo((): number | null => {
-    const { provider, modelName } = llmManager.currentLlm;
+    const { provider, modelName, name } = llmManager.currentLlm;
     for (const p of llmManager.llmProviders ?? []) {
-      if (p.provider !== provider) continue;
+      if (p.provider !== provider || p.name !== name) continue;
       const mc = p.model_configurations.find((m) => m.name === modelName);
       if (mc?.id != null) return mc.id;
     }
