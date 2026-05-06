@@ -17,7 +17,15 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _HEALTH_CACHE_TTL_SECONDS = 30
-_health_cache: dict[str, tuple[float, bool]] = {}
+_DEFAULT_SERVER_VERSION = "0.0.0"
+_health_cache: dict[str, tuple[float, "HealthResponse"]] = {}
+
+
+class HealthResponse(BaseModel):
+    """Result of a Code Interpreter health check"""
+
+    healthy: bool
+    version: str = _DEFAULT_SERVER_VERSION
 
 
 class FileInput(TypedDict):
@@ -136,8 +144,13 @@ class CodeInterpreterClient:
             payload["files"] = files
         return payload
 
-    def health(self, use_cache: bool = False) -> bool:
+    def health(self, use_cache: bool = False) -> HealthResponse:
         """Check if the Code Interpreter service is healthy
+
+        Returns a ``HealthResponse`` containing both the health status and the
+        server version (defaults to ``"0.0.0"`` when the server is unhealthy
+        or the response does not include a version field — e.g. older
+        code-interpreter releases that pre-date version reporting).
 
         Args:
             use_cache: When True, return a cached result if available and
@@ -155,10 +168,13 @@ class CodeInterpreterClient:
         try:
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            result = response.json().get("status") == "ok"
+            body = response.json()
+            healthy = body.get("status") == "ok"
+            version = body.get("version") or _DEFAULT_SERVER_VERSION
+            result = HealthResponse(healthy=healthy, version=version)
         except Exception as e:
             logger.warning("Exception caught when checking health, e=%s", e)
-            result = False
+            result = HealthResponse(healthy=False, version=_DEFAULT_SERVER_VERSION)
 
         _health_cache[self.base_url] = (time.monotonic(), result)
         return result
