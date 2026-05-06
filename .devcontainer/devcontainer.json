@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:e663b2bfed88cfc9fd7c86cae25885816692a1e19d9e88110a97ff8d4f700a25",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:b5b6e7a3c66085b65dc3aec5af7da879ab4dd6e5c36cfccb7f3b4e9b1e970d5a",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
