@@ -251,10 +251,13 @@ def test_task_marks_job_failed_on_mid_task_exception(
     )
 
     # Force the resolution-tracking helper to blow up after the
-    # IN_PROGRESS commit but before the SUCCESS commit.
+    # IN_PROGRESS commit but before the SUCCESS commit. Patch where
+    # the symbol is *imported* (the celery task module), not where it
+    # lives (onyx.db.targeted_reindex), so the local binding is the
+    # one replaced.
     with patch(
         "onyx.background.celery.tasks.docprocessing."
-        "targeted_reindex_task._resolve_failure_derived_targets",
+        "targeted_reindex_task.resolve_failure_derived_targets",
         side_effect=RuntimeError("simulated mid-task crash"),
     ):
         with pytest.raises(RuntimeError, match="simulated mid-task crash"):

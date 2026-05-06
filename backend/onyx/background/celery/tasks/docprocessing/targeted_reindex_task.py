@@ -28,74 +28,21 @@ loop and pipes yielded `Document` objects through
 import datetime
 import logging
 from collections import defaultdict
-from typing import Any
 
 from celery import shared_task
 from celery import Task
-from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.targeted_reindex import get_index_attempts_for_targeted_reindex_job
 from onyx.db.targeted_reindex import get_targeted_reindex_job
+from onyx.db.targeted_reindex import get_targets_for_job
+from onyx.db.targeted_reindex import resolve_failure_derived_targets
 
 _TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes
 _TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
-
-
-def _resolve_failure_derived_targets(
-    db_session: Session, job_id: int
-) -> tuple[int, list[dict[str, Any]]]:
-    """Mark `IndexAttemptError` rows resolved for every target whose
-    `source_error_id` is set. Returns `(resolved_count, summary)`.
-
-    `summary` is a snapshot of the cleared error rows captured before
-    we update them, so it survives the eventual retention cleanup of
-    `index_attempt_errors`.
-    """
-    target_rows = (
-        db_session.query(TargetedReindexJobTarget)
-        .filter(
-            TargetedReindexJobTarget.targeted_reindex_job_id == job_id,
-            TargetedReindexJobTarget.source_error_id.isnot(None),
-        )
-        .all()
-    )
-    if not target_rows:
-        return 0, []
-
-    error_ids = [
-        t.source_error_id for t in target_rows if t.source_error_id is not None
-    ]
-    error_rows = (
-        db_session.query(IndexAttemptError)
-        .filter(
-            IndexAttemptError.id.in_(error_ids),
-            IndexAttemptError.is_resolved.is_(False),
-        )
-        .all()
-    )
-
-    summary = [
-        {
-            "id": e.id,
-            "document_id": e.document_id,
-            "failure_message": e.failure_message,
-            "error_type": e.error_type,
-            "connector_credential_pair_id": e.connector_credential_pair_id,
-            "index_attempt_id": e.index_attempt_id,
-        }
-        for e in error_rows
-    ]
-
-    for e in error_rows:
-        e.is_resolved = True
-
-    return len(error_rows), summary
 
 
 def run_targeted_reindex(
@@ -123,10 +70,8 @@ def run_targeted_reindex(
             return
 
         # 1. transition synthetic IndexAttempts + job to IN_PROGRESS.
-        attempts = (
-            db_session.query(IndexAttempt)
-            .filter(IndexAttempt.targeted_reindex_job_id == targeted_reindex_job_id)
-            .all()
+        attempts = get_index_attempts_for_targeted_reindex_job(
+            db_session, targeted_reindex_job_id
         )
         for attempt in attempts:
             attempt.status = IndexingStatus.IN_PROGRESS
@@ -139,15 +84,8 @@ def run_targeted_reindex(
         runtime_skipped = 0
         try:
             # 2. group targets by cc_pair (the unit of connector invocation).
-            target_rows = (
-                db_session.query(TargetedReindexJobTarget)
-                .filter(
-                    TargetedReindexJobTarget.targeted_reindex_job_id
-                    == targeted_reindex_job_id
-                )
-                .all()
-            )
-            by_cc_pair: dict[int, list[TargetedReindexJobTarget]] = defaultdict(list)
+            target_rows = get_targets_for_job(db_session, targeted_reindex_job_id)
+            by_cc_pair: dict[int, list] = defaultdict(list)
             for t in target_rows:
                 by_cc_pair[t.cc_pair_id].append(t)
 
@@ -164,7 +102,7 @@ def run_targeted_reindex(
 
             # 4. resolution tracking: walk failure-derived targets and clear
             #    their error rows.
-            resolved_count, summary = _resolve_failure_derived_targets(
+            resolved_count, summary = resolve_failure_derived_targets(
                 db_session, targeted_reindex_job_id
             )
 
@@ -207,13 +145,8 @@ def run_targeted_reindex(
                 db_session.rollback()
                 job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
                 if job is not None and not job.status.is_terminal():
-                    attempts = (
-                        db_session.query(IndexAttempt)
-                        .filter(
-                            IndexAttempt.targeted_reindex_job_id
-                            == targeted_reindex_job_id
-                        )
-                        .all()
+                    attempts = get_index_attempts_for_targeted_reindex_job(
+                        db_session, targeted_reindex_job_id
                     )
                     now = datetime.datetime.now(datetime.timezone.utc)
                     for attempt in attempts:

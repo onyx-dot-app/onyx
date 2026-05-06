@@ -17,6 +17,7 @@ return the job_id + per-request counts for the API response.
 """
 
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
@@ -258,3 +259,77 @@ def count_targets_for_job(db_session: Session, job_id: int) -> int:
         .filter(TargetedReindexJobTarget.targeted_reindex_job_id == job_id)
         .count()
     )
+
+
+def get_targets_for_job(
+    db_session: Session, job_id: int
+) -> list[TargetedReindexJobTarget]:
+    """All target rows for a targeted-reindex job, in insertion order."""
+    return (
+        db_session.query(TargetedReindexJobTarget)
+        .filter(TargetedReindexJobTarget.targeted_reindex_job_id == job_id)
+        .all()
+    )
+
+
+def get_index_attempts_for_targeted_reindex_job(
+    db_session: Session, job_id: int
+) -> list[IndexAttempt]:
+    """All synthetic IndexAttempts spawned for a targeted-reindex job."""
+    return (
+        db_session.query(IndexAttempt)
+        .filter(IndexAttempt.targeted_reindex_job_id == job_id)
+        .all()
+    )
+
+
+def resolve_failure_derived_targets(
+    db_session: Session,
+    job_id: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Mark `IndexAttemptError` rows resolved for every target whose
+    `source_error_id` is set. Returns `(resolved_count, summary)`.
+
+    `summary` is a snapshot of the cleared error rows captured before
+    we update them, so it survives the eventual retention cleanup of
+    `index_attempt_errors`.
+    """
+    target_rows = (
+        db_session.query(TargetedReindexJobTarget)
+        .filter(
+            TargetedReindexJobTarget.targeted_reindex_job_id == job_id,
+            TargetedReindexJobTarget.source_error_id.isnot(None),
+        )
+        .all()
+    )
+    if not target_rows:
+        return 0, []
+
+    error_ids = [
+        t.source_error_id for t in target_rows if t.source_error_id is not None
+    ]
+    error_rows = (
+        db_session.query(IndexAttemptError)
+        .filter(
+            IndexAttemptError.id.in_(error_ids),
+            IndexAttemptError.is_resolved.is_(False),
+        )
+        .all()
+    )
+
+    summary = [
+        {
+            "id": e.id,
+            "document_id": e.document_id,
+            "failure_message": e.failure_message,
+            "error_type": e.error_type,
+            "connector_credential_pair_id": e.connector_credential_pair_id,
+            "index_attempt_id": e.index_attempt_id,
+        }
+        for e in error_rows
+    ]
+
+    for e in error_rows:
+        e.is_resolved = True
+
+    return len(error_rows), summary
