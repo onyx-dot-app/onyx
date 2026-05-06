@@ -631,36 +631,47 @@ class TestTabularChunkerChunkSection:
 
 
 class TestTabularChunkerMalformedCsv:
-    def test_unquoted_newline_does_not_raise(self) -> None:
-        """Google Sheets exports cells with embedded carriage returns without
-        quoting them, causing csv.reader to raise csv.Error. The chunker
-        should handle this gracefully rather than propagating the exception."""
-        # A bare \r inside a field (not followed by \n) causes
-        # csv.Error: "new-line character seen in unquoted field".
-        malformed_csv = "col1,col2\nvalue1,line1\rline2"
-        section = _tabular_section(malformed_csv)
+    def test_bare_cr_normalized_and_parsed(self) -> None:
+        """A bare \\r (old Mac line ending) is normalized to \\n before
+        parsing, so the rows are recovered instead of dropped."""
+        # "value1,line1\rline2" normalizes to two rows:
+        #   row 2: col1=value1, col2=line1
+        #   row 3: col1=line2  (short row — col2 absent, skipped by zip)
+        csv_with_bare_cr = "col1,col2\nvalue1,line1\rline2"
+        section = _tabular_section(csv_with_bare_cr)
         chunker = _make_chunker_no_metadata()
         result = chunker.chunk_section(
             section, AccumulatorState(), content_token_limit=500
         )
-        assert result.payloads == []
+        assert len(result.payloads) > 0
+        texts = [p.text for p in result.payloads]
+        assert any("col1=value1" in t for t in texts)
 
-    def test_unquoted_newline_with_metadata_chunker(self) -> None:
-        """When parse_csv_string fails but read_csv_header succeeds, the
-        metadata-chunker path (ignore_metadata_chunks=False) should still
-        produce descriptor chunks for the valid header without raising."""
-        # The header line is valid CSV; only the data rows trigger csv.Error.
-        malformed_csv = "col1,col2\nvalue1,line1\rline2"
-        section = _tabular_section(malformed_csv)
+    def test_bare_cr_with_metadata_chunker(self) -> None:
+        """With ignore_metadata_chunks=False, bare-\\r CSVs produce both
+        row chunks and descriptor chunks after normalization."""
+        csv_with_bare_cr = "col1,col2\nvalue1,line1\rline2"
+        section = _tabular_section(csv_with_bare_cr)
         chunker = _make_chunker_with_metadata()
         result = chunker.chunk_section(
             section, AccumulatorState(), content_token_limit=500
         )
-        # No row chunks (parse_csv_string failed), but descriptor chunks from
-        # the valid header should be present.
         assert len(result.payloads) > 0
         texts = [p.text for p in result.payloads]
         assert any("col1" in t for t in texts)
+
+    def test_header_only_csv_falls_back_to_plain_text(self) -> None:
+        """A header-only CSV (no data rows) with ignore_metadata_chunks=True
+        produces no tabular chunks. The section falls back to plain text so
+        the content is still indexed rather than silently dropped."""
+        header_only = "col1,col2,col3"
+        section = _tabular_section(header_only)
+        chunker = _make_chunker_no_metadata()
+        result = chunker.chunk_section(
+            section, AccumulatorState(), content_token_limit=500
+        )
+        assert len(result.payloads) > 0
+        assert any("col1" in p.text for p in result.payloads)
 
 
 class TestBuildSheetDescriptorChunks:

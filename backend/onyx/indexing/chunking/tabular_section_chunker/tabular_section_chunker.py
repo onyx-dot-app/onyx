@@ -18,6 +18,7 @@ from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens
+from onyx.utils.csv_utils import normalize_csv_newlines
 from onyx.utils.csv_utils import parse_csv_string
 from onyx.utils.csv_utils import ParsedRow
 from onyx.utils.csv_utils import read_csv_header
@@ -237,22 +238,30 @@ class TabularChunker(SectionChunker):
         payloads = accumulator.flush_to_list()
 
         text = section.text or ""
+        # csv_text may be replaced with a normalized copy on first parse error
+        csv_text = text
+        parse_error = False
         try:
-            parsed_rows = list(parse_csv_string(text))
-        except csv.Error as e:
-            logger.warning(
-                "TabularChunker: failed to parse CSV for section (link=%s): %s",
-                section.link,
-                e,
-            )
-            parsed_rows = []
+            parsed_rows = list(parse_csv_string(csv_text))
+        except csv.Error:
+            csv_text = normalize_csv_newlines(text)
+            try:
+                parsed_rows = list(parse_csv_string(csv_text))
+            except csv.Error as e:
+                logger.error(
+                    "TabularChunker: failed to parse CSV for section (link=%s): %s",
+                    section.link,
+                    e,
+                )
+                parsed_rows = []
+                parse_error = True
         if parsed_rows:
             headers = parsed_rows[0].header
         else:
             try:
-                headers = read_csv_header(text)
+                headers = read_csv_header(csv_text)
             except csv.Error as e:
-                logger.warning(
+                logger.error(
                     "TabularChunker: failed to read CSV header for section (link=%s): %s",
                     section.link,
                     e,
@@ -293,12 +302,19 @@ class TabularChunker(SectionChunker):
             )
 
         if not chunk_texts:
-            logger.warning(
-                "TabularChunker: skipping unparseable section (link=%s)", section.link
-            )
-            return SectionChunkerOutput(
-                payloads=payloads, accumulator=AccumulatorState()
-            )
+            if csv_text.strip():
+                if parse_error:
+                    logger.error(
+                        "TabularChunker: CSV parse failed, falling back to plain text (link=%s)",
+                        section.link,
+                    )
+                chunk_texts = split_text_by_tokens(
+                    csv_text, self.tokenizer, content_token_limit
+                )
+            else:
+                return SectionChunkerOutput(
+                    payloads=payloads, accumulator=AccumulatorState()
+                )
 
         for i, text in enumerate(chunk_texts):
             payloads.append(
