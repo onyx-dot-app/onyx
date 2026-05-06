@@ -28,6 +28,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -36,7 +37,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
-from onyx.db.models import ModelConfiguration
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -755,7 +756,7 @@ def get_valid_model_names_for_persona(
 
 
 def get_valid_model_configuration_ids_for_persona(
-    persona_id: int,
+    persona: Persona,
     user: User,
     db_session: Session,
 ) -> set[int]:
@@ -764,10 +765,6 @@ def get_valid_model_configuration_ids_for_persona(
     Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
     multiple providers expose a model with the same name.
     """
-    persona = fetch_persona_with_groups(db_session, persona_id)
-    if not persona:
-        return set()
-
     is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
@@ -849,8 +846,8 @@ def list_llm_providers_for_persona(
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
     if persona.default_model_configuration_id:
-        model_config = db_session.get(
-            ModelConfiguration, persona.default_model_configuration_id
+        model_config = fetch_model_configuration_by_id(
+            db_session, persona.default_model_configuration_id
         )
         if model_config and can_user_access_llm_provider(
             model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
