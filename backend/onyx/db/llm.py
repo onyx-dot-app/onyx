@@ -239,6 +239,7 @@ def upsert_llm_provider(
         }
 
     api_base = llm_provider_upsert_request.api_base or None
+    existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
