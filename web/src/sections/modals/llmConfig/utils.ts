@@ -6,6 +6,7 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLanguageModels";
+import { getProvider } from "@/lib/llmConfig";
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 
@@ -43,7 +44,9 @@ export function useInitialValues(
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
-    name: isOnboarding ? providerName : existingLlmProvider?.name ?? undefined,
+    name: isOnboarding
+      ? providerName
+      : existingLlmProvider?.name ?? getProvider(providerName).productName,
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
