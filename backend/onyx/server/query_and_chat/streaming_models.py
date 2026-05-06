@@ -459,6 +459,9 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
+    # Coding Agent Packets
+    CodingAgentStart,
+    CodingAgentFinal,
     # Bash Tool Packets
     BashToolStart,
     BashToolDelta,
