@@ -234,16 +234,18 @@ test.describe("Placeholder", () => {
   });
 
   test("shows placeholder text on load", async ({ chatPage }) => {
-    const placeholder =
-      await chatPage.inputBar.textbox.getAttribute("data-placeholder");
-    expect(placeholder).toContain("How can I help you today?");
+    await expect(chatPage.inputBar.textbox).toHaveAttribute(
+      "data-placeholder",
+      /How can I help you today\?/
+    );
   });
 
   test("hides placeholder when text is entered", async ({ chatPage }) => {
     await chatPage.inputBar.fill("a");
-    const dataEmpty =
-      await chatPage.inputBar.textbox.getAttribute("data-empty");
-    expect(dataEmpty).toBeNull();
+    await expect(chatPage.inputBar.textbox).not.toHaveAttribute(
+      "data-empty",
+      ""
+    );
   });
 
   test("restores placeholder when text is deleted", async ({ chatPage }) => {
@@ -336,9 +338,7 @@ test.describe("Keyboard Edge Cases", () => {
     await chatPage.inputBar.typeText("abc");
     await chatPage.page.keyboard.press("ControlOrMeta+a");
     await chatPage.page.keyboard.type("x");
-    await chatPage.inputBar.expectText("x");
-    const text = await chatPage.inputBar.textbox.textContent();
-    expect(text?.trim()).toBe("x");
+    await expect(chatPage.inputBar.textbox).toHaveText("x");
   });
 
   test("inline spans do not produce spurious newlines", async ({
@@ -537,8 +537,7 @@ test.describe("Paste Tiles", () => {
     await chatPage.page.keyboard.press("ControlOrMeta+a");
     await chatPage.page.keyboard.press("ControlOrMeta+x");
     await chatPage.inputBar.expectTileCount(0);
-    const text = await chatPage.inputBar.textbox.textContent();
-    expect(text?.trim()).toBe("");
+    await chatPage.inputBar.expectEmpty();
   });
 
   test("multiple tiles can coexist", async ({ chatPage }) => {
