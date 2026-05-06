@@ -1,83 +1,21 @@
-"use client";
-
-import { useCallback, useMemo, useRef } from "react";
-import { createTableColumns, Pagination, Table, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@/lib/time";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
+import { PageSelector } from "@/components/PageSelector";
+import { useCallback, useMemo, useRef } from "react";
 import { SvgAlertTriangle } from "@opal/icons";
 
 const ROW_HEIGHT = 65; // 4rem + 1px for border
-
-const tc = createTableColumns<IndexAttemptError>();
-
-const columns = [
-  tc.column("time_created", {
-    header: "Time",
-    weight: 18,
-    enableSorting: false,
-    cell: (value) => (
-      <Text as="span" font="main-ui-body" color="text-04">
-        {localizeAndPrettify(value)}
-      </Text>
-    ),
-  }),
-  tc.column("document_id", {
-    header: "Document ID",
-    weight: 25,
-    enableSorting: false,
-    cell: (value, row) => {
-      const label = value ?? row.entity_id ?? "Unknown";
-      if (row.document_link) {
-        return (
-          <a
-            href={row.document_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-link hover:underline"
-          >
-            <Text as="span" font="main-ui-body" color="text-04">
-              {label}
-            </Text>
-          </a>
-        );
-      }
-      return (
-        <Text as="span" font="main-ui-body" color="text-04">
-          {label}
-        </Text>
-      );
-    },
-  }),
-  tc.column("failure_message", {
-    header: "Error Message",
-    weight: 42,
-    enableSorting: false,
-    cell: (value) => (
-      <Text as="span" font="main-ui-body" color="text-04">
-        {value}
-      </Text>
-    ),
-  }),
-  tc.column("is_resolved", {
-    header: "Status",
-    weight: 15,
-    enableSorting: false,
-    cell: (value) => (
-      <span
-        className={`px-2 py-1 rounded text-xs ${
-          value
-            ? "bg-status-success-02 text-status-success-05"
-            : "bg-status-error-02 text-status-error-05"
-        }`}
-      >
-        {value ? "Resolved" : "Unresolved"}
-      </span>
-    ),
-  }),
-];
 
 export interface IndexAttemptErrorsModalProps {
   errors: {
@@ -138,6 +76,12 @@ export default function IndexAttemptErrorsModal({
     [errors.items]
   );
 
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      onPageChange(page);
+    }
+  };
+
   return (
     <Modal open onOpenChange={onClose}>
       <Modal.Content width="full" height="full">
@@ -154,36 +98,93 @@ export default function IndexAttemptErrorsModal({
         />
         <Modal.Body height="full">
           {!isResolvingErrors && (
-            <Section flexDirection="column" height="fit" gap={0.5}>
-              <Text as="p" font="main-ui-body" color="text-03">
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <Text as="p">
                 Below are the errors encountered during indexing. Each row
                 represents a failed document or entity.
               </Text>
-              <Text as="p" font="main-ui-body" color="text-03">
+              <Text as="p">
                 Click the button below to kick off a full re-index to try and
                 resolve these errors. This full re-index may take much longer
                 than a normal update.
               </Text>
-            </Section>
+            </div>
           )}
 
-          <Section ref={tableContainerRef} alignItems="stretch" height="full">
-            <Table
-              data={errors.items}
-              columns={columns}
-              getRowId={(row) => String(row.id)}
-            />
-          </Section>
+          <div
+            ref={tableContainerRef}
+            className="flex-1 w-full overflow-hidden min-h-0"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Document ID</TableHead>
+                  <TableHead className="w-1/2">Error Message</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {errors.items.length > 0 ? (
+                  errors.items.map((error) => (
+                    <TableRow key={error.id} className="h-[4rem]">
+                      <TableCell>
+                        {localizeAndPrettify(error.time_created)}
+                      </TableCell>
+                      <TableCell>
+                        {error.document_link ? (
+                          <a
+                            href={error.document_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-link hover:underline"
+                          >
+                            {error.document_id || error.entity_id || "Unknown"}
+                          </a>
+                        ) : (
+                          error.document_id || error.entity_id || "Unknown"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center h-[2rem] overflow-y-auto whitespace-normal">
+                          {error.failure_message}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2 py-1 rounded text-xs ${
+                            error.is_resolved
+                              ? "bg-status-success-02 text-status-success-05"
+                              : "bg-status-error-02 text-status-error-05"
+                          }`}
+                        >
+                          {error.is_resolved ? "Resolved" : "Unresolved"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow className="h-[4rem]">
+                    <TableCell
+                      colSpan={4}
+                      className="text-center py-8 text-text-03"
+                    >
+                      No errors found on this page
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
           {totalPages > 1 && (
-            <Section flexDirection="row" height="fit">
-              <Pagination
-                variant="list"
-                currentPage={currentPage}
+            <div className="flex w-full justify-center">
+              <PageSelector
                 totalPages={totalPages}
-                onChange={onPageChange}
+                currentPage={currentPage}
+                onPageChange={handlePageChange}
               />
-            </Section>
+            </div>
           )}
         </Modal.Body>
         <Modal.Footer>
