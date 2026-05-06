@@ -751,13 +751,7 @@ function ModalWrapperInner({
               icon={busy ? SimpleLoader : undefined}
               tooltip={disabledTooltip}
             >
-              {llmProvider?.name
-                ? busy
-                  ? "Updating"
-                  : "Update"
-                : busy
-                  ? "Connecting"
-                  : "Connect"}
+              {llmProvider ? "Update" : "Connect"}
             </Button>
           </Modal.Footer>
         </Form>

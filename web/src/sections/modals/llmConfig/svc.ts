@@ -159,16 +159,27 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       : undefined
     : rawName || null;
 
+  // For updates: omit api_key when unchanged — signals "not changing credentials"
+  // to both the test-skip logic below and the backend's api_key_changed flag.
+  const apiKeyUnchanged =
+    !!existingLlmProvider &&
+    api_key === (initialValues.api_key as string | undefined);
+  const apiKeyForRequest = apiKeyUnchanged ? undefined : api_key;
+
   const finalValues = {
     ...rest,
     ...(nameForRequest !== undefined ? { name: nameForRequest } : {}),
     api_base: normalizedApiBase,
-    api_key,
-    api_key_changed: api_key !== (initialValues.api_key as string | undefined),
+    ...(apiKeyForRequest !== undefined ? { api_key: apiKeyForRequest } : {}),
+    api_key_changed: apiKeyForRequest !== undefined,
     custom_config_changed: customConfigChanged,
   };
 
-  if (!isEqual(finalValues, initialValues)) {
+  // Skip test on updates where api_key is absent (credentials not changing)
+  if (
+    (!existingLlmProvider || apiKeyForRequest !== undefined) &&
+    !isEqual(finalValues, initialValues)
+  ) {
     setStatus({ isTesting: true });
 
     const testResult = await submitLlmTestRequest(
