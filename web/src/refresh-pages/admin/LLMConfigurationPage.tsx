@@ -32,7 +32,7 @@ import { markdown } from "@opal/utils";
 const route = ADMIN_ROUTES.LLM_MODELS;
 
 function providerDisplayName(provider: LLMProviderView): string {
-  return provider.name || getProvider(provider.provider, provider).companyName;
+  return provider.name || getProvider(provider.provider, provider).productName;
 }
 
 // ============================================================================

@@ -81,7 +81,7 @@ export default function LLMSelector({
         // For nameless providers, fall back to the provider ID so the
         // structured value is always unique and non-empty.
         const providerLabel =
-          provider.name ?? getProvider(provider.provider).companyName;
+          provider.name ?? getProvider(provider.provider).productName;
         const option: LLMOption = {
           name: displayName,
           value: structureValue(
