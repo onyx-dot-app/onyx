@@ -162,7 +162,7 @@ def create_targeted_reindex_job(
         raise ValueError("at least one target required")
     if len(targets) > MAX_TARGETS_PER_REQUEST:
         raise ValueError(
-            f"too many targets: {len(targets)} > {MAX_TARGETS_PER_REQUEST}"
+            "too many targets: %s > %s" % (len(targets), MAX_TARGETS_PER_REQUEST)
         )
 
     # Validate cc_pair_ids exist before writing anything.
@@ -177,7 +177,7 @@ def create_targeted_reindex_job(
     }
     missing = cc_pair_ids - existing_pairs
     if missing:
-        raise ValueError(f"unknown cc_pair_ids: {sorted(missing)}")
+        raise ValueError("unknown cc_pair_ids: %s" % sorted(missing))
 
     celery_task_id = str(uuid4())
 

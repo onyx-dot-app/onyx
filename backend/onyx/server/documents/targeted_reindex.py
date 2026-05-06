@@ -109,7 +109,8 @@ def submit_targeted_reindex(
     if len(target_specs_in) > MAX_TARGETS_PER_REQUEST:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            f"Too many targets: {len(target_specs_in)} > {MAX_TARGETS_PER_REQUEST}.",
+            "Too many targets: %s > %s."
+            % (len(target_specs_in), MAX_TARGETS_PER_REQUEST),
         )
 
     try:
