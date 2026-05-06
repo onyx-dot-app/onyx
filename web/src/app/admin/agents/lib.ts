@@ -53,6 +53,7 @@ export interface PersonaUpsertParameters {
   uploaded_image_id: string | null;
   icon_name: string | null;
   is_featured: boolean;
+  is_visible: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
   // Hierarchy nodes (folders, spaces, channels) for scoped search
@@ -80,6 +81,7 @@ function buildPersonaUpsertRequest({
   icon_name,
   uploaded_image_id,
   is_featured,
+  is_visible,
   llm_model_provider_override,
   llm_model_version_override,
   starter_messages,
@@ -102,6 +104,7 @@ function buildPersonaUpsertRequest({
     search_start_date,
     datetime_aware,
     is_featured: is_featured ?? false,
+    is_visible: is_visible ?? true,
     llm_model_provider_override: llm_model_provider_override ?? null,
     llm_model_version_override: llm_model_version_override ?? null,
     starter_messages: starter_messages ?? null,
