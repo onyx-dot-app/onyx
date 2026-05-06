@@ -121,7 +121,11 @@ def _seed_llms(
 
     logger.notice("Seeding LLMs")
     for request in llm_upsert_requests:
-        existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
+        existing = (
+            fetch_existing_llm_provider(name=request.name, db_session=db_session)
+            if request.name
+            else None
+        )
         if existing:
             request.id = existing.id
     seeded_providers: list[LLMProviderView] = []

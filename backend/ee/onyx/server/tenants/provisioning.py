@@ -329,8 +329,10 @@ def configure_default_api_keys(db_session: Session) -> None:
     def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
         nonlocal has_set_default_provider
         try:
-            existing = fetch_existing_llm_provider(
-                name=request.name, db_session=db_session
+            existing = (
+                fetch_existing_llm_provider(name=request.name, db_session=db_session)
+                if request.name
+                else None
             )
             if existing:
                 request.id = existing.id

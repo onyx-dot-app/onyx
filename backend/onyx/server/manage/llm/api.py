@@ -449,23 +449,6 @@ def put_llm_provider(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
-    # Check name constraints
-    # TODO: Once port from name to id is complete, unique name will no longer be required
-    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Renaming providers is not currently supported",
-        )
-
-    found_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
-    if found_provider is not None and found_provider is not existing_provider:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"Provider with name={llm_provider_upsert_request.name} already exists",
-        )
-
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
@@ -892,7 +875,7 @@ def get_provider_contextual_cost(
             cost = get_llm_contextual_cost(llm)
             costs.append(
                 LLMCost(
-                    provider=provider.name,
+                    provider=provider.name or provider.provider,
                     model_name=model_configuration.name,
                     cost=cost,
                 )

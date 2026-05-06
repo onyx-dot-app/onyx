@@ -61,7 +61,7 @@ class LLMProviderDescriptor(BaseModel):
     non-admin users. Used when giving a list of available LLMs."""
 
     id: int
-    name: str
+    name: str | None
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
@@ -91,7 +91,7 @@ class LLMProviderDescriptor(BaseModel):
 
 
 class LLMProvider(BaseModel):
-    name: str
+    name: str | None = None
     provider: str
     api_key: str | None = None
     api_base: str | None = None
