@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import threading
 import time
 
@@ -135,45 +136,53 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
     return False
 
 
+# TODO: remove these lists once we have a comprehensive model configuration page
+# The ideal flow should be: fetch all available models --> filter by type
+# --> allow user to modify filters and select models based on current context
+_OPENAI_NON_CHAT_MODEL_TERMS = {
+    "embed",
+    "audio",
+    "tts",
+    "whisper",
+    "dall-e",
+    "image",
+    "moderation",
+    "sora",
+    "container",
+}
+_OPENAI_DEPRECATED_MODEL_TERMS = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
+_OPENAI_EXCLUDED_TERMS = _OPENAI_NON_CHAT_MODEL_TERMS | _OPENAI_DEPRECATED_MODEL_TERMS
+
+# NOTE: We are explicitly excluding all "timestamped" models because they are
+# mostly just noise in the admin configuration panel
+# e.g. gpt-4o-2025-07-16, gpt-3.5-turbo-0613, etc.
+_OPENAI_DATE_PATTERN = re.compile(r"-\d{4}")
+
+
+def is_valid_openai_chat_model(model_name: str) -> bool:
+    """Whether a model id from OpenAI should appear in admin model pickers.
+
+    Filters out non-chat (embeddings, audio, image, etc.), deprecated families,
+    and date-stamped snapshots. Shared by the static well-known list and the
+    live `/admin/llm/openai/available-models` fetch.
+    """
+    model_lower = model_name.lower()
+    if any(ex in model_lower for ex in _OPENAI_EXCLUDED_TERMS):
+        return False
+    if _OPENAI_DATE_PATTERN.search(model_name):
+        return False
+    return True
+
+
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
-    import re
-
     import litellm
-
-    # TODO: remove these lists once we have a comprehensive model configuration page
-    # The ideal flow should be: fetch all available models --> filter by type
-    # --> allow user to modify filters and select models based on current context
-    non_chat_model_terms = {
-        "embed",
-        "audio",
-        "tts",
-        "whisper",
-        "dall-e",
-        "image",
-        "moderation",
-        "sora",
-        "container",
-    }
-    deprecated_model_terms = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
-    excluded_terms = non_chat_model_terms | deprecated_model_terms
-
-    # NOTE: We are explicitly excluding all "timestamped" models
-    # because they are mostly just noise in the admin configuration panel
-    # e.g. gpt-4o-2025-07-16, gpt-3.5-turbo-0613, etc.
-    date_pattern = re.compile(r"-\d{4}")
-
-    def is_valid_model(model: str) -> bool:
-        model_lower = model.lower()
-        return not any(
-            ex in model_lower for ex in excluded_terms
-        ) and not date_pattern.search(model)
 
     return sorted(
         (
             model.removeprefix("openai/")
             for model in litellm.open_ai_chat_completion_models
-            if is_valid_model(model)
+            if is_valid_openai_chat_model(model)
         ),
         reverse=True,
     )

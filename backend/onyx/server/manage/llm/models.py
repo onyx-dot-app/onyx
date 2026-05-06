@@ -490,3 +490,29 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+# OpenAI dynamic models fetch
+class OpenAIModelsRequest(BaseModel):
+    api_key: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class OpenAIFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o")
+    display_name: str  # Human-readable name (defaults to model ID for OpenAI)
+    max_input_tokens: int | None
+    supports_image_input: bool
+
+
+# Anthropic dynamic models fetch
+class AnthropicModelsRequest(BaseModel):
+    api_key: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class AnthropicFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "claude-3-5-sonnet-20241022")
+    display_name: str  # Human-readable name from Anthropic API
+    max_input_tokens: int | None
+    supports_image_input: bool
