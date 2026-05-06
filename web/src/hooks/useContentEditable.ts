@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   setCursorToEnd as setCursorToEndUtil,
   setCursorAfterNode,
+  setCursorBeforeNode,
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
   getTextContent,
@@ -311,6 +312,7 @@ export function useContentEditable({
 
   const dismissTilePopover = useCallback(() => {
     setTilePopover(null);
+    syncFromDOM();
     ref.current?.focus();
     if (
       selectedTileRef.current &&
@@ -324,7 +326,7 @@ export function useContentEditable({
         s.addRange(r);
       }
     }
-  }, []);
+  }, [syncFromDOM]);
 
   const updateTileText = useCallback(
     (newText: string) => {
@@ -333,14 +335,21 @@ export function useContentEditable({
       const { tile } = tilePopover;
 
       if (!newText.trim()) {
-        const marker = document.createTextNode("");
-        tile.replaceWith(marker);
+        const next = tile.nextSibling;
+        const prev = tile.previousSibling;
+        tile.remove();
         selectedTileRef.current = null;
         syncFromDOM();
         resize();
         setTilePopover(null);
         ref.current?.focus();
-        setCursorAfterNode(marker);
+        if (next) {
+          setCursorBeforeNode(next);
+        } else if (prev) {
+          setCursorAfterNode(prev);
+        } else {
+          setCursorToEndUtil(ref.current!);
+        }
         ref.current?.normalize();
         return;
       }
@@ -356,8 +365,6 @@ export function useContentEditable({
       if (meta) {
         meta.textContent = getPasteTileMeta(newText);
       }
-
-      syncFromDOM();
     },
     [tilePopover, syncFromDOM, resize]
   );
@@ -472,10 +479,13 @@ export function useContentEditable({
       const range = sel.getRangeAt(0);
       if (!ref.current?.contains(range.commonAncestorContainer)) return;
 
-      event.preventDefault();
       const fragment = range.cloneContents();
       const temp = document.createElement("div");
       temp.appendChild(fragment);
+
+      if (!temp.querySelector("[data-rich-tile]")) return;
+
+      event.preventDefault();
       event.clipboardData.setData("text/plain", getTextContent(temp));
     },
     []
@@ -489,10 +499,13 @@ export function useContentEditable({
       const range = sel.getRangeAt(0);
       if (!ref.current?.contains(range.commonAncestorContainer)) return;
 
-      event.preventDefault();
       const fragment = range.cloneContents();
       const temp = document.createElement("div");
       temp.appendChild(fragment);
+
+      if (!temp.querySelector("[data-rich-tile]")) return;
+
+      event.preventDefault();
       event.clipboardData.setData("text/plain", getTextContent(temp));
 
       range.deleteContents();

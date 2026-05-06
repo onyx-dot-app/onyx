@@ -20,6 +20,16 @@ export function setCursorAfterNode(node: Node): void {
   selection.addRange(range);
 }
 
+export function setCursorBeforeNode(node: Node): void {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.setStartBefore(node);
+  range.setEndBefore(node);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 // ─── Text Insertion ─────────────────────────────────────────────────────────
 
 export function insertTextAtCursor(element: HTMLElement, text: string): string {

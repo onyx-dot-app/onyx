@@ -10,6 +10,10 @@ interface PasteTilePopoverProps {
   onTextChange: (newText: string) => void;
 }
 
+// Popover anchored to a paste tile that lets the user view/edit the full
+// pasted text. Rendered via portal so it floats above the contentEditable.
+// Uses raw HTML elements because it sits outside the opal/refresh component
+// tree (the tile itself is a raw DOM node inside contentEditable).
 function PasteTilePopover({
   text,
   tileElement,
@@ -18,9 +22,14 @@ function PasteTilePopover({
 }: PasteTilePopoverProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
+  const rafId = useRef<number | null>(null);
 
   const updateRect = useCallback(() => {
-    setRect(tileElement.getBoundingClientRect());
+    if (rafId.current !== null) return;
+    rafId.current = requestAnimationFrame(() => {
+      rafId.current = null;
+      setRect(tileElement.getBoundingClientRect());
+    });
   }, [tileElement]);
 
   useEffect(() => {
@@ -44,6 +53,9 @@ function PasteTilePopover({
     return () => {
       window.removeEventListener("resize", updateRect);
       document.removeEventListener("scroll", updateRect, true);
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current);
+      }
     };
   }, [updateRect]);
 
