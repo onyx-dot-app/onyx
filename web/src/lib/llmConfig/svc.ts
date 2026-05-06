@@ -510,8 +510,8 @@ export const fetchLiteLLMProxyModels = async (
       name: modelData.model_name,
       display_name: modelData.model_name,
       is_visible: true,
-      max_input_tokens: null,
-      supports_image_input: false,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
     }));
 

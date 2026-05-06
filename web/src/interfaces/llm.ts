@@ -159,6 +159,8 @@ export interface LiteLLMProxyFetchParams {
 export interface LiteLLMProxyModelResponse {
   provider_name: string;
   model_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
 }
 
 export interface BifrostFetchParams {

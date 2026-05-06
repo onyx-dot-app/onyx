@@ -5,6 +5,8 @@ from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
+from typing import Any
+from typing import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -15,6 +17,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
+from onyx.server.manage.llm.models import LitellmModelDetails
 from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
@@ -842,9 +845,10 @@ class TestGetLitellmAvailableModels:
             )
             get_litellm_available_models(request, MagicMock(), mock_session)
 
-            # Should call /v1/models without double slashes
-            call_args = mock_get.call_args
-            assert call_args[0][0] == "http://localhost:4000/v1/models"
+            # Should call /v1/models and /v1/model/info without double slashes.
+            called_urls = [call.args[0] for call in mock_get.call_args_list]
+            assert "http://localhost:4000/v1/models" in called_urls
+            assert "http://localhost:4000/v1/model/info" in called_urls
 
     def test_connection_failure_raises_onyx_error(self) -> None:
         """Test that connection failures are wrapped in OnyxError."""
@@ -903,6 +907,394 @@ class TestGetLitellmAvailableModels:
             )
             with pytest.raises(OnyxError, match="endpoint not found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
+
+    @staticmethod
+    def _make_litellm_dispatcher(
+        models_payload: dict | Exception,
+        model_info_payload: dict | Exception,
+    ) -> Callable[..., MagicMock]:
+        """Build an ``httpx.get`` side-effect that routes by URL.
+
+        Pass a dict to deliver as JSON, or an Exception to raise.
+        """
+
+        def side_effect(url: str, *_args: Any, **_kwargs: Any) -> MagicMock:
+            if "/v1/model/info" in url:
+                payload: dict | Exception = model_info_payload
+            elif "/v1/models" in url:
+                payload = models_payload
+            else:
+                raise AssertionError(f"Unexpected URL in test: {url}")
+            if isinstance(payload, Exception):
+                raise payload
+            mock = MagicMock()
+            mock.json.return_value = payload
+            mock.raise_for_status = MagicMock()
+            return mock
+
+        return side_effect
+
+    @staticmethod
+    def _model_info_payload(entries: list[dict[str, Any]]) -> dict[str, Any]:
+        """Build a ``/v1/model/info``-shaped payload."""
+        return {"data": entries}
+
+    def test_enriches_max_input_tokens_and_vision_from_model_info(self) -> None:
+        """/v1/model/info enrichment lands on the response."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        model_info_payload = self._model_info_payload(
+            [
+                {
+                    "model_name": "gpt-4o",
+                    "litellm_params": {
+                        "model": "gpt-4o",
+                        "custom_llm_provider": "openai",
+                    },
+                    "model_info": {
+                        "max_input_tokens": 128000,
+                        "max_tokens": 4096,
+                        "supports_vision": True,
+                    },
+                }
+            ]
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            # Avoid triggering an unrelated LiteLLM library init issue that
+            # breaks is_embedding_model() in this environment.
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, model_info_payload
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens == 128000
+            assert results[0].supports_image_input is True
+
+    def test_falls_back_when_model_info_returns_403(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A virtual key without /v1/model/info access must not break the sync."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        forbidden_response = MagicMock()
+        forbidden_response.status_code = 403
+        forbidden = httpx.HTTPStatusError(
+            "Forbidden", request=MagicMock(), response=forbidden_response
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+            caplog.at_level("WARNING"),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, forbidden
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+            assert results[0].supports_image_input is False
+            assert any(
+                "/v1/model/info" in record.message and "403" in record.message
+                for record in caplog.records
+            )
+
+    def test_falls_back_when_model_info_returns_401(self) -> None:
+        """A 401 on /v1/model/info should be soft-failed, not surfaced."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        unauthorized_response = MagicMock()
+        unauthorized_response.status_code = 401
+        unauthorized = httpx.HTTPStatusError(
+            "Unauthorized", request=MagicMock(), response=unauthorized_response
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, unauthorized
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+            assert results[0].supports_image_input is False
+
+    def test_falls_back_when_model_info_returns_404(self) -> None:
+        """Older LiteLLM versions or alternate routing may 404 on /v1/model/info."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        not_found_response = MagicMock()
+        not_found_response.status_code = 404
+        not_found = httpx.HTTPStatusError(
+            "Not Found", request=MagicMock(), response=not_found_response
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, not_found
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+            assert results[0].supports_image_input is False
+
+    def test_falls_back_when_model_info_connect_error(self) -> None:
+        """A transient network failure on /v1/model/info must not break the sync."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        connect_error = httpx.ConnectError("Connection refused", request=MagicMock())
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, connect_error
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+            assert results[0].supports_image_input is False
+
+    def test_join_uses_litellm_params_model_when_id_matches_underlying_model(
+        self,
+    ) -> None:
+        """Some proxies expose the underlying model id in /v1/models even though
+        /v1/model/info keys it under model_name. Enrichment must still land."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        model_info_payload = self._model_info_payload(
+            [
+                {
+                    "model_name": "gpt-4o-prod-alias",
+                    "litellm_params": {
+                        "model": "gpt-4o",
+                        "custom_llm_provider": "openai",
+                    },
+                    "model_info": {
+                        "max_input_tokens": 200000,
+                        "supports_vision": True,
+                    },
+                }
+            ]
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, model_info_payload
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens == 200000
+            assert results[0].supports_image_input is True
+
+    def test_no_match_in_model_info_leaves_defaults(self) -> None:
+        """If /v1/model/info entries don't match any /v1/models id, defaults persist."""
+        from onyx.server.manage.llm.api import get_litellm_available_models
+
+        mock_session = MagicMock()
+        models_payload = {
+            "data": [
+                {
+                    "id": "gpt-4o",
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": "openai",
+                }
+            ]
+        }
+        model_info_payload = self._model_info_payload(
+            [
+                {
+                    "model_name": "claude-3-5-sonnet",
+                    "litellm_params": {
+                        "model": "claude-3-5-sonnet",
+                        "custom_llm_provider": "anthropic",
+                    },
+                    "model_info": {
+                        "max_input_tokens": 200000,
+                        "supports_vision": False,
+                    },
+                }
+            ]
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.is_embedding_model", return_value=False),
+        ):
+            mock_get.side_effect = self._make_litellm_dispatcher(
+                models_payload, model_info_payload
+            )
+
+            request = LitellmModelsRequest(
+                api_base="http://localhost:4000", api_key="test-key"
+            )
+            results = get_litellm_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 1
+            assert results[0].max_input_tokens is None
+            assert results[0].supports_image_input is False
+
+
+class TestLitellmModelDetailsModelInfo:
+    """Unit tests for LitellmModelDetails model_info parsing (#9959)."""
+
+    @staticmethod
+    def _details(model_info: dict[str, Any] | None) -> LitellmModelDetails:
+        return LitellmModelDetails(
+            id="m",
+            object="model",
+            created=0,
+            owned_by="openai",
+            model_info=model_info,
+        )
+
+    def test_prefers_max_input_tokens_field(self) -> None:
+        assert (
+            self._details(
+                {"max_input_tokens": 128000, "max_tokens": 100}
+            ).get_max_input_tokens()
+            == 128000
+        )
+
+    def test_falls_back_to_max_tokens(self) -> None:
+        assert self._details({"max_tokens": 128000}).get_max_input_tokens() == 128000
+
+    def test_absent_returns_none(self) -> None:
+        assert self._details({}).get_max_input_tokens() is None
+        assert self._details(None).get_max_input_tokens() is None
+
+    def test_zero_or_negative_returns_none(self) -> None:
+        assert self._details({"max_input_tokens": 0}).get_max_input_tokens() is None
+        assert self._details({"max_input_tokens": -1}).get_max_input_tokens() is None
+
+    def test_non_int_falls_through(self) -> None:
+        # String at the preferred key falls through to max_tokens.
+        assert (
+            self._details(
+                {"max_input_tokens": "abc", "max_tokens": 4096}
+            ).get_max_input_tokens()
+            == 4096
+        )
+
+    def test_bool_not_treated_as_int(self) -> None:
+        # True would pass `isinstance(v, int)` without the explicit bool guard.
+        assert self._details({"max_input_tokens": True}).get_max_input_tokens() is None
+
+    def test_supports_image_input_reads_supports_vision(self) -> None:
+        assert self._details({"supports_vision": True}).supports_image_input() is True
+        assert self._details({"supports_vision": False}).supports_image_input() is False
+        assert self._details({}).supports_image_input() is False
+        assert self._details(None).supports_image_input() is False
 
 
 class TestGetBifrostAvailableModels:
