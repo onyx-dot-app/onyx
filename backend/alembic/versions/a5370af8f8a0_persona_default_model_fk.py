@@ -42,12 +42,11 @@ model_configuration_table = sa.table(
 
 
 def upgrade() -> None:
-    # 1. Backfill default_model_configuration_id from the existing string pair.
-    #    Rows with no match (provider/model deleted, names mismatched, or already
-    #    NULL) are left NULL and will fall back to the global default at runtime.
-    #
-    #    Referencing llm_provider_table and model_configuration_table in the WHERE
-    #    clause causes the PostgreSQL dialect to emit UPDATE … FROM.
+    # Backfill default_model_configuration_id from the existing string pair.
+    # Rows with no match (provider/model deleted, names mismatched, or already
+    # NULL) are left NULL and will fall back to the global default at runtime.
+    # The string columns are intentionally kept — they will be dropped in a
+    # follow-up migration once this change has been stable in production.
     op.execute(
         sa.update(persona_table)
         .values(default_model_configuration_id=model_configuration_table.c.id)
@@ -62,35 +61,7 @@ def upgrade() -> None:
         )
     )
 
-    # 2. Drop the now-redundant string columns.
-    op.drop_column("persona", "llm_model_provider_override")
-    op.drop_column("persona", "llm_model_version_override")
-
 
 def downgrade() -> None:
-    # Re-add the string columns (nullable — old values are gone).
-    op.add_column(
-        "persona",
-        sa.Column("llm_model_provider_override", sa.String(), nullable=True),
-    )
-    op.add_column(
-        "persona",
-        sa.Column("llm_model_version_override", sa.String(), nullable=True),
-    )
-
-    # Best-effort backfill: restore provider name + model name from the FK.
-    # Referencing llm_provider_table and model_configuration_table in the WHERE
-    # clause causes the PostgreSQL dialect to emit UPDATE … FROM.
-    op.execute(
-        sa.update(persona_table)
-        .values(
-            llm_model_provider_override=llm_provider_table.c.name,
-            llm_model_version_override=model_configuration_table.c.name,
-        )
-        .where(
-            persona_table.c.default_model_configuration_id
-            == model_configuration_table.c.id,
-            model_configuration_table.c.llm_provider_id == llm_provider_table.c.id,
-            persona_table.c.default_model_configuration_id.is_not(None),
-        )
-    )
+    # Clear the backfilled FK values; the string columns still hold the original data.
+    op.execute(sa.update(persona_table).values(default_model_configuration_id=None))

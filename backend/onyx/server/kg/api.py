@@ -147,6 +147,7 @@ def enable_or_disable_kg(
         is_featured=False,
         display_priority=0,
         user_file_ids=[],
+        default_model_configuration_id=None,
     )
 
     persona_snapshot = create_update_persona(
