@@ -1,0 +1,108 @@
+import { Button } from "@opal/components";
+import { Text } from "@opal/components";
+
+import { FaNewspaper, FaTrash } from "react-icons/fa";
+import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
+import { Form, Formik, FormikHelpers } from "formik";
+import { toast } from "@/hooks/useToast";
+import {
+  Credential,
+  getDisplayNameForCredentialKey,
+} from "@/lib/connectors/credentials";
+import { createEditingValidationSchema, createInitialValues } from "../lib";
+import { dictionaryType, formType } from "../types";
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import { SvgTrash } from "@opal/icons";
+export interface EditCredentialProps {
+  credential: Credential<dictionaryType>;
+  onClose: () => void;
+  onUpdate: (
+    selectedCredentialId: Credential<any>,
+    details: any,
+    onSuccess: () => void
+  ) => Promise<void>;
+}
+
+export default function EditCredential({
+  credential,
+  onClose,
+  onUpdate,
+}: EditCredentialProps) {
+  const validationSchema = createEditingValidationSchema(
+    credential.credential_json
+  );
+  const initialValues = createInitialValues(credential);
+
+  const handleSubmit = async (
+    values: formType,
+    formikHelpers: FormikHelpers<formType>
+  ) => {
+    formikHelpers.setSubmitting(true);
+    try {
+      await onUpdate(credential, values, onClose);
+    } catch (error) {
+      console.error("Error updating credential:", error);
+      toast.error("Error updating credential");
+    } finally {
+      formikHelpers.setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-y-6">
+      <Text as="p">
+        Ensure that you update to a credential with the proper permissions!
+      </Text>
+
+      <Formik
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ isSubmitting, resetForm }) => (
+          <Form>
+            <TextFormField
+              includeRevert
+              name="name"
+              placeholder={credential.name || ""}
+              label="Name (optional):"
+            />
+
+            {Object.entries(credential.credential_json).map(([key, value]) =>
+              isTypedFileField(key) ? (
+                <TypedFileUploadFormField
+                  key={key}
+                  name={key}
+                  label={getDisplayNameForCredentialKey(key)}
+                />
+              ) : (
+                <TextFormField
+                  includeRevert
+                  key={key}
+                  name={key}
+                  placeholder={value as string}
+                  label={getDisplayNameForCredentialKey(key)}
+                  type={
+                    key.toLowerCase().includes("token") ||
+                    key.toLowerCase().includes("password")
+                      ? "password"
+                      : "text"
+                  }
+                  disabled={key === "authentication_method"}
+                />
+              )
+            )}
+            <div className="flex justify-between w-full">
+              <Button onClick={() => resetForm()} icon={SvgTrash}>
+                Reset Changes
+              </Button>
+              <Button disabled={isSubmitting} type="submit" icon={FaNewspaper}>
+                Update
+              </Button>
+            </div>
+          </Form>
+        )}
+      </Formik>
+    </div>
+  );
+}
