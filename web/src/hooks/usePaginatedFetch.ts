@@ -24,6 +24,7 @@ interface PaginationConfig {
   query?: string;
   filter?: Record<string, string | boolean | number | string[] | Date>;
   refreshIntervalInMs?: number;
+  disableUrlSync?: boolean;
 }
 
 interface PaginatedHookReturnData<T extends PaginatedType> {
@@ -44,6 +45,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   query,
   filter,
   refreshIntervalInMs = 5000,
+  disableUrlSync = false,
 }: PaginationConfig): PaginatedHookReturnData<T> {
   const router = useRouter();
   const currentPath = usePathname();
@@ -146,15 +148,14 @@ function usePaginatedFetch<T extends PaginatedType>({
   // Updates the URL with the current page number
   const updatePageUrl = useCallback(
     (page: number) => {
-      if (currentPath && searchParams) {
-        const params = new URLSearchParams(searchParams);
-        params.set("page", page.toString());
-        router.replace(`${currentPath}?${params.toString()}` as Route, {
-          scroll: false,
-        });
-      }
+      if (disableUrlSync || !currentPath || !searchParams) return;
+      const params = new URLSearchParams(searchParams);
+      params.set("page", page.toString());
+      router.replace(`${currentPath}?${params.toString()}` as Route, {
+        scroll: false,
+      });
     },
-    [currentPath, router, searchParams]
+    [disableUrlSync, currentPath, router, searchParams]
   );
 
   // Updates the current page

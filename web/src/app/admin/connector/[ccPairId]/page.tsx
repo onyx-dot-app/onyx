@@ -127,6 +127,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     itemsPerPage: 10,
     pagesPerBatch: 1,
     endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    disableUrlSync: true,
   });
 
   // Initialize hooks at top level to avoid conditional hook calls
