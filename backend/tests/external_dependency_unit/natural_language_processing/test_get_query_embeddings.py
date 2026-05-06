@@ -46,7 +46,7 @@ class TestWiring:
         assert first == emb
         assert encode.call_count == 1
 
-        # Same query, fresh model → cache hit, encode must NOT be invoked. This
+        # Same query, fresh model -> cache hit, encode must NOT be invoked. This
         # is because SearchSettings ID is used for the cache key, not the model.
         model2, encode2 = _make_fake_embedding_model([[0.0, 0.0, 0.0]])
 
