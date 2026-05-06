@@ -272,35 +272,6 @@
       "justMyCode": false
     },
     {
-      "name": "Celery kg_processing",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "celery",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "LOG_LEVEL": "INFO",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
-      },
-      "args": [
-        "-A",
-        "onyx.background.celery.versioned_apps.kg_processing",
-        "worker",
-        "--pool=threads",
-        "--concurrency=2",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=kg_processing@%n",
-        "-Q",
-        "kg_processing"
-      ],
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Celery kg_processing Console"
-    },
-    {
       "name": "Celery monitoring",
       "type": "debugpy",
       "request": "launch",
