@@ -67,8 +67,15 @@ runs:
         # --require-hashes refuses to install any artifact whose hash isn't
         # listed in the requirements file, so installs can only land on the
         # versions resolved into uv.lock.
-        # TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
-        cmd=("uv" "pip" "install" "--no-deps" "--require-hashes")
+        # TODO: drop --no-config and --no-deps once litellm no longer requires
+        # [tool.uv].override-dependencies in pyproject.toml. The overrides
+        # exist to relax litellm's exact transitive pins (e.g. jsonschema,
+        # aiohttp); they're unpinned ranges, which --require-hashes rejects
+        # if uv reads pyproject.toml. --no-config keeps uv from picking up
+        # the root pyproject.toml; --no-deps keeps uv from re-resolving
+        # transitive deps from package metadata (the requirements file is
+        # already a complete, pinned export of uv.lock).
+        cmd=("uv" "pip" "install" "--no-config" "--no-deps" "--require-hashes")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then
