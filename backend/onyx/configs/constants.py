@@ -265,6 +265,9 @@ class DocumentSource(str, Enum):
     # Raw files for Craft sandbox access (xlsx, pptx, docx, etc.)
     # Uses RAW_BINARY processing mode - no text extraction
     CRAFT_FILE = "craft_file"
+    # Operator Brain: per-operator markdown brain pages pushed via the Ingestion
+    # API. See operator-brain repo for the page model and indexer.
+    BRAIN_PAGE = "brain_page"
 
 
 class FederatedConnectorSource(str, Enum):
@@ -724,4 +727,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.BRAIN_PAGE: "operator brain pages - per-operator markdown corpus (compiled truth + timeline)",
 }
