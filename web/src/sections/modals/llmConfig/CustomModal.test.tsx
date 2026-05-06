@@ -277,12 +277,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     const submitButton = screen.getByRole("button", { name: /update/i });
     await user.click(submitButton);
 
-    // Credential test should NOT be called when only model name changed
-    expect(fetchSpy).not.toHaveBeenCalledWith(
-      "/api/admin/llm/test",
-      expect.any(Object)
-    );
-
     // Verify update API was called (without is_creation param)
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -292,6 +286,12 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         })
       );
     });
+
+    // Credential test should NOT have been called when only model name changed
+    expect(fetchSpy).not.toHaveBeenCalledWith(
+      "/api/admin/llm/test",
+      expect.any(Object)
+    );
 
     // Verify success message says "updated"
     await waitFor(() => {
