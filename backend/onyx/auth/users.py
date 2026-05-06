@@ -437,6 +437,64 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         return user
 
+    async def verify(self, token: str, request: Optional[Request] = None) -> User:
+        # The injected `self.user_db` session is bound to the default schema
+        # because the verify request has no auth cookie yet. Re-resolve the
+        # tenant from the JWT email and run the update against a tenant-bound
+        # session, mirroring oauth_callback / get_by_email.
+        try:
+            data = decode_jwt(
+                token,
+                self.verification_token_secret,
+                [self.verification_token_audience],
+            )
+        except jwt.PyJWTError:
+            raise exceptions.InvalidVerifyToken()
+
+        try:
+            user_id = data["sub"]
+            email = data["email"]
+        except KeyError:
+            raise exceptions.InvalidVerifyToken()
+
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping",
+                "get_tenant_id_for_email",
+                None,
+            )(email)
+        except exceptions.UserNotExists:
+            raise exceptions.InvalidVerifyToken()
+
+        contextvar_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+
+                user = await tenant_user_db.get_by_email(email)
+                if user is None:
+                    raise exceptions.InvalidVerifyToken()
+
+                try:
+                    parsed_id = self.parse_id(user_id)
+                except exceptions.InvalidID:
+                    raise exceptions.InvalidVerifyToken()
+
+                if parsed_id != user.id:
+                    raise exceptions.InvalidVerifyToken()
+
+                if user.is_verified:
+                    raise exceptions.UserAlreadyVerified()
+
+                verified_user = await tenant_user_db.update(user, {"is_verified": True})
+
+            await self.on_after_verify(verified_user, request)
+            return verified_user
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
+
     async def create(
         self,
         user_create: schemas.UC | UserCreate,
