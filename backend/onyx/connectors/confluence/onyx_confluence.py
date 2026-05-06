@@ -26,6 +26,7 @@ from typing import TypeVar
 from urllib.parse import quote
 
 import bs4
+import requests
 from atlassian import Confluence
 from redis import Redis
 from requests import HTTPError
@@ -42,6 +43,7 @@ from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -67,6 +69,19 @@ _SERVER_ERROR_CODES = {500, 502, 503, 504}
 
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
 _CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
+
+# Atlassian KB documenting how Secure Administrator Sessions (WebSudo) breaks
+# admin JSON-RPC calls. Surfaced in the validation error so admins can act on
+# it without our help.
+_WEBSUDO_KB_URL = (
+    "https://support.atlassian.com/confluence/kb/"
+    "json-rpc-api-request-returns-websudorequiredexception-on-confluence/"
+)
+# Cap how much of an unparseable JSON-RPC response body we put in the error
+# message. WebSudo / login HTML pages are well under this; the cap is a
+# defense against a runaway response (e.g. a multi-MB error page) ending up
+# in our logs and validation surface.
+_JSONRPC_ERROR_BODY_SNIPPET_CHARS = 1000
 
 
 class ConfluenceRateLimitError(Exception):
@@ -943,16 +958,35 @@ class OnyxConfluence:
         space_key: str,
     ) -> list[dict[str, Any]]:
         """
-        This is a confluence server/data center specific method that can be used to
-        fetch the permissions of a space.
+        Fetches a space's permissions via the legacy JSON-RPC API.
 
-        NOTE: This uses the JSON-RPC API which is the ONLY way to get space permissions
-        on Confluence Server/Data Center. The REST API equivalent (expand=permissions)
-        is Cloud-only and not available on Data Center as of version 8.9.x.
+        This is the only space-permissions API available on Confluence Data
+        Center < 9.1.0. DC 9.1.0+ ships a proper REST API at
+        /rest/api/space/{spaceKey}/permissions (CONFSERVER-78176) which is
+        preferred wherever available; this method is the fallback for older
+        Server / Data Center deployments.
 
-        If this fails with 401 Unauthorized, the customer needs to enable JSON-RPC:
-        Confluence Admin -> General Configuration -> Further Configuration
-        -> Enable "Remote API (XML-RPC & SOAP)"
+        Failure modes handled here:
+
+        - HTTP 401: the JSON-RPC plugin is disabled. Confluence Admin ->
+          General Configuration -> Further Configuration -> Enable
+          "Remote API (XML-RPC & SOAP)".
+        - HTTP 200 with a non-JSON body (Confluence 7.7+): "Secure
+          Administrator Sessions" / WebSudo is intercepting admin JSON-RPC
+          calls and serving the login HTML or a WebSudoRequiredException
+          page instead of a JSON-RPC envelope. We surface the actual HTTP
+          status, Content-Type, and a body snippet so the admin can confirm
+          which of the documented failure modes they're hitting (rather
+          than guessing) and act on it.
+
+        We use atlassian-python-api's `advanced_mode=True` to get the raw
+        requests.Response back. Without it, the library's _response_handler
+        catches the JSON parse error and silently coerces the body to None,
+        which throws away every signal we'd need to debug the failure.
+        Trade-off: the library no longer raises HTTPError on 4xx/5xx in
+        advanced mode, so this call no longer benefits from the
+        __getattr__ wrapper's retry-on-5xx; we call raise_for_status
+        ourselves to preserve the "blow up on server error" behavior.
         """
         url = "rpc/json-rpc/confluenceservice-v2"
         data = {
@@ -961,27 +995,47 @@ class OnyxConfluence:
             "id": 7,
             "params": [space_key],
         }
+        response: requests.Response = self.post(url, data=data, advanced_mode=True)
+
+        if response.status_code == 401:
+            raise HTTPError(
+                "Unauthorized (401) when calling JSON-RPC API for space permissions. "
+                "This is likely because the Remote API is disabled. "
+                "To fix: Confluence Admin -> General Configuration -> Further Configuration "
+                "-> Enable 'Remote API (XML-RPC & SOAP)'",
+                response=response,
+            )
+        response.raise_for_status()
+
         try:
-            response = self.post(url, data=data)
-        except HTTPError as e:
-            if e.response is not None and e.response.status_code == 401:
-                raise HTTPError(
-                    "Unauthorized (401) when calling JSON-RPC API for space permissions. "
-                    "This is likely because the Remote API is disabled. "
-                    "To fix: Confluence Admin -> General Configuration -> Further Configuration "
-                    "-> Enable 'Remote API (XML-RPC & SOAP)'",
-                    response=e.response,
-                ) from e
-            raise
-        logger.debug("jsonrpc response: %s", response)
-        if not response.get("result"):
+            payload = response.json()
+        except ValueError:
+            content_type = response.headers.get("Content-Type", "<unset>")
+            body_snippet = response.text[:_JSONRPC_ERROR_BODY_SNIPPET_CHARS]
+            raise ConnectorValidationError(
+                f"Confluence JSON-RPC returned a non-JSON response for space "
+                f"'{space_key}' (HTTP {response.status_code}, "
+                f"Content-Type={content_type}). This typically happens on "
+                "Confluence Server / Data Center 7.7+ when 'Secure "
+                "Administrator Sessions' (WebSudo) intercepts admin JSON-RPC "
+                "calls. To fix, either (1) disable Secure Administrator "
+                "Sessions in General Configuration -> Security Configuration, "
+                "or (2) upgrade to Confluence Data Center 9.1+ where the REST "
+                f"space-permissions API replaces JSON-RPC. See "
+                f"{_WEBSUDO_KB_URL}\n"
+                f"Response body (first {_JSONRPC_ERROR_BODY_SNIPPET_CHARS} "
+                f"chars): {body_snippet!r}"
+            )
+
+        logger.debug("jsonrpc response: %s", payload)
+        if not payload.get("result"):
             logger.warning(
                 "No jsonrpc response for space permissions for space %s\nResponse: %s",
                 space_key,
-                response,
+                payload,
             )
 
-        return response.get("result", [])
+        return payload.get("result", [])
 
     def get_current_user(self, expand: str | None = None) -> Any:
         """

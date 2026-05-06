@@ -9,6 +9,7 @@ from requests import HTTPError
 from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 
@@ -1009,3 +1010,66 @@ def test_paginate_url_504_halves_multiple_times(
     assert "limit=20" in mock_get_call_paths[1]
     assert "limit=10" in mock_get_call_paths[2]
     assert "limit=5" in mock_get_call_paths[3]
+
+
+def test_jsonrpc_websudo_html_response_raises_validation_error(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for the production failure on cc_pair=44 / cc_pair=50
+    against Confluence DC 10.2.10.
+
+    When 'Secure Administrator Sessions' (WebSudo) intercepts a JSON-RPC
+    call, the response body is HTML (login page / WebSudoRequiredException)
+    rather than a JSON-RPC envelope. atlassian-python-api's _response_handler
+    swallows the ValueError from response.json() and returns None, and the
+    pre-fix implementation then did `response.get("result")` and blew up
+    with `AttributeError: 'NoneType' object has no attribute 'get'` --
+    leaking up through permission sync as an unactionable error.
+
+    After the fix, this surfaces as a ConnectorValidationError that:
+      - Names the WebSudo failure mode and points at the Atlassian KB.
+      - Includes the actual HTTP status, Content-Type, and body snippet so
+        the admin can confirm WebSudo (rather than guessing) and act on it.
+    """
+    websudo_html = (
+        "<!DOCTYPE html>\n"
+        "<html><head><title>Confluence</title></head>\n"
+        "<body><h1>WebSudoRequiredException</h1>"
+        "<p>You need to confirm your password to access this resource. "
+        "(Secure Administrator Sessions are enabled.)</p></body></html>"
+    )
+    fake_response = requests.Response()
+    fake_response.status_code = 200
+    fake_response.url = "http://fake-confluence.com/rpc/json-rpc/confluenceservice-v2"
+    fake_response.headers["Content-Type"] = "text/html;charset=UTF-8"
+    fake_response._content = websudo_html.encode("utf-8")
+
+    post_mock = mock.Mock(return_value=fake_response)
+    confluence_server_client._confluence.post = (  # ty: ignore[invalid-assignment]
+        post_mock
+    )
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server(space_key="TST")
+
+    # Verify atlassian-python-api was invoked in advanced mode -- otherwise
+    # the library swallows the parse failure and we lose the response body.
+    _, kwargs = post_mock.call_args
+    assert kwargs.get("advanced_mode") is True
+
+    msg = str(exc_info.value)
+    # Names the failure mode in language a Confluence admin will recognize.
+    assert "Secure Administrator Sessions" in msg
+    # Includes the bad space key so it correlates with sync logs.
+    assert "TST" in msg
+    # Includes the canonical Atlassian KB so the admin can act without us.
+    assert "support.atlassian.com" in msg
+    # Includes the actual HTTP status and Content-Type from the upstream
+    # response, so a developer reading the error doesn't have to guess.
+    assert "HTTP 200" in msg
+    assert "text/html" in msg
+    # And critically, surfaces the actual body so we can confirm that what
+    # we're looking at really is WebSudo (vs e.g. a reverse-proxy error
+    # page that happens to also be HTML).
+    assert "WebSudoRequiredException" in msg
