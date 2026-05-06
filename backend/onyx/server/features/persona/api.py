@@ -535,7 +535,7 @@ def get_persona(
     # accessible to this persona (e.g. provider was restricted after the persona was saved).
     if persona.default_model_configuration_id:
         valid_ids = get_valid_model_configuration_ids_for_persona(
-            persona_id, user, db_session
+            persona, user, db_session
         )
         if persona.default_model_configuration_id not in valid_ids:
             persona.default_model_configuration_id = None

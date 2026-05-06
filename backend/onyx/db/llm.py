@@ -565,6 +565,18 @@ def fetch_default_model(
     return model_config
 
 
+def fetch_model_configuration_by_id(
+    db_session: Session, model_configuration_id: int | None
+) -> ModelConfiguration | None:
+    if model_configuration_id is None:
+        return None
+    return db_session.scalar(
+        select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
+        .where(ModelConfiguration.id == model_configuration_id)
+    )
+
+
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:
@@ -593,31 +605,9 @@ def remove_embedding_provider(
     db_session.commit()
 
 
-def remove_llm_provider(db_session: Session, provider_id: int) -> None:
-    provider = db_session.get(LLMProviderModel, provider_id)
-    if not provider:
-        raise ValueError("LLM Provider not found")
-
-    # Clear the model config FK from any personas using this provider so they
-    # fall back to the global default. The FK has ON DELETE SET NULL so the DB
-    # would do this automatically, but we clear it here explicitly for
-    # transactional safety before the DELETE fires.
-    for persona in get_personas_using_provider(db_session, provider_id):
-        persona.default_model_configuration_id = None
-
-    db_session.execute(
-        delete(LLMProvider__UserGroup).where(
-            LLMProvider__UserGroup.llm_provider_id == provider_id
-        )
-    )
-    db_session.execute(
-        delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    db_session.commit()
-
-
-def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> None:
-    """Remove LLM provider."""
+def remove_llm_provider(
+    db_session: Session, provider_id: int, commit: bool = True
+) -> None:
     provider = db_session.get(LLMProviderModel, provider_id)
     if not provider:
         raise ValueError("LLM Provider not found")
@@ -633,7 +623,10 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.execute(
         delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
     )
-    db_session.flush()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
 
 
 def update_default_provider(

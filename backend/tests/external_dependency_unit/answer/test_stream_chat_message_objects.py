@@ -82,6 +82,7 @@ def test_stream_chat_message_objects_without_web_search(
         tool_ids=[],  # Explicitly no tools
         document_set_ids=None,
         is_listed=True,
+        default_model_configuration_id=None,
     )
 
     # Create a chat session with our test persona
