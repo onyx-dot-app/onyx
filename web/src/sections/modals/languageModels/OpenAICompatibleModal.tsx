@@ -9,14 +9,14 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchOpenAICompatibleModels } from "@/lib/llmConfig/svc";
+import { fetchOpenAICompatibleModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIBaseField,
@@ -25,9 +25,9 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface OpenAICompatibleModalValues extends BaseLLMFormValues {
   api_key: string;

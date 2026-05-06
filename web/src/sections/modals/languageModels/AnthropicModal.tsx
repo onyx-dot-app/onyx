@@ -5,8 +5,8 @@ import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import {
   useInitialValues,
   buildValidationSchema,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -14,12 +14,12 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { InputDivider } from "@opal/layouts";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
 
-export default function OpenAIModal({
+export default function AnthropicModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
@@ -33,7 +33,7 @@ export default function OpenAIModal({
 
   const initialValues = useInitialValues(
     isOnboarding,
-    LLMProviderName.OPENAI,
+    LLMProviderName.ANTHROPIC,
     existingLlmProvider
   );
 
@@ -43,7 +43,7 @@ export default function OpenAIModal({
 
   return (
     <ModalWrapper
-      providerName={LLMProviderName.OPENAI}
+      providerName={LLMProviderName.ANTHROPIC}
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
@@ -53,7 +53,7 @@ export default function OpenAIModal({
           analyticsSource: isOnboarding
             ? LLMProviderConfiguredSource.CHAT_ONBOARDING
             : LLMProviderConfiguredSource.ADMIN_PAGE,
-          providerName: LLMProviderName.OPENAI,
+          providerName: LLMProviderName.ANTHROPIC,
           values,
           initialValues,
           existingLlmProvider,
@@ -76,7 +76,7 @@ export default function OpenAIModal({
         });
       }}
     >
-      <APIKeyField providerName="OpenAI" />
+      <APIKeyField providerName="Anthropic" />
 
       {!isOnboarding && (
         <>

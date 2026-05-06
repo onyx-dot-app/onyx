@@ -10,16 +10,16 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+} from "@/sections/modals/languageModels/shared";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";

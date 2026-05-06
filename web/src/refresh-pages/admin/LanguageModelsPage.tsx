@@ -19,9 +19,12 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getProvider } from "@/lib/llmConfig";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
-import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
+import { getProvider } from "@/lib/languageModels";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import {
+  deleteLlmProvider,
+  setDefaultLlmModel,
+} from "@/lib/languageModels/svc";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -287,10 +290,10 @@ function NewCustomProviderCard({
 }
 
 // ============================================================================
-// LLMConfigurationPage — main page component
+// LanguageModelsPage — main page component
 // ============================================================================
 
-export default function LLMConfigurationPage() {
+export default function LanguageModelsPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();

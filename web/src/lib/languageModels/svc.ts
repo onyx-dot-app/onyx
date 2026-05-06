@@ -13,7 +13,7 @@
 import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/llmConfig/constants";
+} from "@/lib/languageModels/constants";
 import {
   OllamaModelResponse,
   OpenRouterModelResponse,

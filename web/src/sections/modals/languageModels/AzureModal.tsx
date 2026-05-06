@@ -14,8 +14,8 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -23,13 +23,13 @@ import {
   ModelAccessField,
   ModelSelectionField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;

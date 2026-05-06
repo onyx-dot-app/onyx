@@ -19,7 +19,7 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton } from "@opal/components";
-import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
+import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -50,7 +50,7 @@ import useUsers from "@/hooks/useUsers";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 import Modal from "@/refresh-components/Modal";
-import { getProvider } from "@/lib/llmConfig";
+import { getProvider } from "@/lib/languageModels";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 

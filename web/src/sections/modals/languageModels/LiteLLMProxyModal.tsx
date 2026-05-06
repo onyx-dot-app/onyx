@@ -1,6 +1,5 @@
 "use client";
 
-import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider } from "@opal/layouts";
@@ -9,48 +8,51 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchBifrostModels } from "@/lib/llmConfig/svc";
+import { fetchLiteLLMProxyModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
-  APIBaseField,
   APIKeyField,
+  APIBaseField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
-interface BifrostModalValues extends BaseLLMFormValues {
+const DEFAULT_API_BASE = "http://localhost:4000";
+
+interface LiteLLMProxyModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
 }
 
-interface BifrostModalInternalsProps {
+interface LiteLLMProxyModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   isOnboarding: boolean;
 }
 
-function BifrostModalInternals({
+function LiteLLMProxyModalInternals({
   existingLlmProvider,
   isOnboarding,
-}: BifrostModalInternalsProps) {
-  const formikProps = useFormikContext<BifrostModalValues>();
+}: LiteLLMProxyModalInternalsProps) {
+  const formikProps = useFormikContext<LiteLLMProxyModalValues>();
 
-  const isFetchDisabled = !formikProps.values.api_base;
+  const isFetchDisabled =
+    !formikProps.values.api_base || !formikProps.values.api_key;
 
   const handleFetchModels = async () => {
-    const { models, error } = await fetchBifrostModels({
+    const { models, error } = await fetchLiteLLMProxyModels({
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key || undefined,
+      api_key: formikProps.values.api_key,
       provider_name: existingLlmProvider?.name ?? undefined,
     });
     if (error) {
@@ -68,16 +70,11 @@ function BifrostModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
-        placeholder="https://your-bifrost-gateway.com/v1"
+        subDescription="The base URL for your LiteLLM Proxy server."
+        placeholder="https://your-litellm-proxy.com"
       />
 
-      <APIKeyField
-        optional
-        subDescription={markdown(
-          "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
-        )}
-      />
+      <APIKeyField providerName="LiteLLM Proxy" />
 
       {!isOnboarding && (
         <>
@@ -102,7 +99,7 @@ function BifrostModalInternals({
   );
 }
 
-export default function BifrostModal({
+export default function LiteLLMProxyModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
@@ -114,19 +111,23 @@ export default function BifrostModal({
 
   const onClose = () => onOpenChange?.(false);
 
-  const initialValues: BifrostModalValues = useInitialValues(
-    isOnboarding,
-    LLMProviderName.BIFROST,
-    existingLlmProvider
-  ) as BifrostModalValues;
+  const initialValues: LiteLLMProxyModalValues = {
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.LITELLM_PROXY,
+      existingLlmProvider
+    ),
+    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+  } as LiteLLMProxyModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
     apiBase: true,
   });
 
   return (
     <ModalWrapper
-      providerName={LLMProviderName.BIFROST}
+      providerName={LLMProviderName.LITELLM_PROXY}
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
@@ -136,7 +137,7 @@ export default function BifrostModal({
           analyticsSource: isOnboarding
             ? LLMProviderConfiguredSource.CHAT_ONBOARDING
             : LLMProviderConfiguredSource.ADMIN_PAGE,
-          providerName: LLMProviderName.BIFROST,
+          providerName: LLMProviderName.LITELLM_PROXY,
           values,
           initialValues,
           existingLlmProvider,
@@ -159,7 +160,7 @@ export default function BifrostModal({
         });
       }}
     >
-      <BifrostModalInternals
+      <LiteLLMProxyModalInternals
         existingLlmProvider={existingLlmProvider}
         isOnboarding={isOnboarding}
       />

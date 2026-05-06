@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";

@@ -89,7 +89,7 @@ import Popover from "@/refresh-components/Popover";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
 import type { LLMOption } from "@/refresh-components/popovers/interfaces";
 import type { RichStr } from "@opal/types";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;

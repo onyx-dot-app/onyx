@@ -2,7 +2,7 @@ import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/llmConfig/constants";
+} from "@/lib/languageModels/constants";
 import { toast } from "@/hooks/useToast";
 import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
@@ -14,7 +14,7 @@ import {
 import {
   BaseLLMFormValues,
   TestApiKeyResult,
-} from "@/sections/modals/llmConfig/utils";
+} from "@/sections/modals/languageModels/utils";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 

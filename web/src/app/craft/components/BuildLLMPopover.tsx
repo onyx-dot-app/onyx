@@ -18,7 +18,7 @@ import {
   isRecommendedModel,
 } from "@/app/craft/onboarding/constants";
 import { ToggleWarningModal } from "./ToggleWarningModal";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,

@@ -9,8 +9,8 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useInitialValues } from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { useInitialValues } from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -18,7 +18,7 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { useCustomProviderNames } from "@/hooks/useLanguageModels";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
@@ -32,7 +32,7 @@ import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
   Content,
   InputDivider,

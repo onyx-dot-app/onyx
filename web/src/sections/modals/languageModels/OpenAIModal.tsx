@@ -5,8 +5,8 @@ import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import {
   useInitialValues,
   buildValidationSchema,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -14,12 +14,12 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { InputDivider } from "@opal/layouts";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
 
-export default function AnthropicModal({
+export default function OpenAIModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
@@ -33,7 +33,7 @@ export default function AnthropicModal({
 
   const initialValues = useInitialValues(
     isOnboarding,
-    LLMProviderName.ANTHROPIC,
+    LLMProviderName.OPENAI,
     existingLlmProvider
   );
 
@@ -43,7 +43,7 @@ export default function AnthropicModal({
 
   return (
     <ModalWrapper
-      providerName={LLMProviderName.ANTHROPIC}
+      providerName={LLMProviderName.OPENAI}
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
@@ -53,7 +53,7 @@ export default function AnthropicModal({
           analyticsSource: isOnboarding
             ? LLMProviderConfiguredSource.CHAT_ONBOARDING
             : LLMProviderConfiguredSource.ADMIN_PAGE,
-          providerName: LLMProviderName.ANTHROPIC,
+          providerName: LLMProviderName.OPENAI,
           values,
           initialValues,
           existingLlmProvider,
@@ -76,7 +76,7 @@ export default function AnthropicModal({
         });
       }}
     >
-      <APIKeyField providerName="Anthropic" />
+      <APIKeyField providerName="OpenAI" />
 
       {!isOnboarding && (
         <>

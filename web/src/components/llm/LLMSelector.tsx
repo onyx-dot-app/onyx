@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { getModelIcon, getProvider } from "@/lib/llmConfig";
+import { getModelIcon, getProvider } from "@/lib/languageModels";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
 

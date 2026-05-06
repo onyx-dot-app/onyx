@@ -20,18 +20,18 @@ import {
 import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import type { LLMProviderView } from "@/interfaces/llm";
-import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
-import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
-import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
-import AzureModal from "@/sections/modals/llmConfig/AzureModal";
-import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
-import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
-import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import LMStudioModal from "@/sections/modals/llmConfig/LMStudioModal";
-import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
-import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
-import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
+import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
+import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
+import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
+import AzureModal from "@/sections/modals/languageModels/AzureModal";
+import BedrockModal from "@/sections/modals/languageModels/BedrockModal";
+import VertexAIModal from "@/sections/modals/languageModels/VertexAIModal";
+import OpenRouterModal from "@/sections/modals/languageModels/OpenRouterModal";
+import CustomModal from "@/sections/modals/languageModels/CustomModal";
+import LMStudioModal from "@/sections/modals/languageModels/LMStudioModal";
+import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModal";
+import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
+import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 

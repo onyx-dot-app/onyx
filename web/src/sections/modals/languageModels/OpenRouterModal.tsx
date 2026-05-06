@@ -8,14 +8,14 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchOpenRouterModels } from "@/lib/llmConfig/svc";
+import { fetchOpenRouterModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -24,9 +24,9 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 

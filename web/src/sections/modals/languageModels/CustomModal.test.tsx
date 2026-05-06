@@ -7,7 +7,7 @@
 
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
+import CustomModal from "@/sections/modals/languageModels/CustomModal";
 import { toast } from "@/hooks/useToast";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

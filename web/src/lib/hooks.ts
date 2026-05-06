@@ -23,7 +23,7 @@ import {
 } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "./llmConfig/utils";
+import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -32,7 +32,7 @@ import {
   PersonaLabel,
 } from "@/app/admin/agents/interfaces";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { isAnthropic } from "@/lib/llmConfig/svc";
+import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";

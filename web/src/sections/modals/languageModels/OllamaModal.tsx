@@ -16,20 +16,20 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
-import { fetchOllamaModels } from "@/lib/llmConfig/svc";
+} from "@/sections/modals/languageModels/shared";
+import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";

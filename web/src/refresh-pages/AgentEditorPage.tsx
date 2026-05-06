@@ -22,7 +22,7 @@ import {
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import {
   STARTER_MESSAGES_EXAMPLES,

@@ -18,21 +18,21 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
-import { fetchBedrockModels } from "@/lib/llmConfig/svc";
+} from "@/sections/modals/languageModels/shared";
+import { fetchBedrockModels } from "@/lib/languageModels/svc";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },

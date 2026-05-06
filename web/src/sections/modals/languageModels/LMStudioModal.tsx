@@ -8,14 +8,13 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchLiteLLMProxyModels } from "@/lib/llmConfig/svc";
 import {
   useInitialValues,
   buildValidationSchema,
-  BaseLLMFormValues,
+  BaseLLMFormValues as BaseLLMModalValues,
   mergeFetchedModelConfigurations,
-} from "@/sections/modals/llmConfig/utils";
-import { submitProvider } from "@/sections/modals/llmConfig/svc";
+} from "@/sections/modals/languageModels/utils";
+import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
@@ -24,44 +23,49 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
-} from "@/sections/modals/llmConfig/shared";
+} from "@/sections/modals/languageModels/shared";
+import { fetchModels } from "@/lib/languageModels/svc";
 import { toast } from "@/hooks/useToast";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
-const DEFAULT_API_BASE = "http://localhost:4000";
+const DEFAULT_API_BASE = "http://localhost:1234";
 
-interface LiteLLMProxyModalValues extends BaseLLMFormValues {
-  api_key: string;
+interface LMStudioModalValues extends BaseLLMModalValues {
   api_base: string;
+  custom_config: {
+    LM_STUDIO_API_KEY?: string;
+  };
 }
 
-interface LiteLLMProxyModalInternalsProps {
+interface LMStudioModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   isOnboarding: boolean;
 }
 
-function LiteLLMProxyModalInternals({
+function LMStudioModalInternals({
   existingLlmProvider,
   isOnboarding,
-}: LiteLLMProxyModalInternalsProps) {
-  const formikProps = useFormikContext<LiteLLMProxyModalValues>();
+}: LMStudioModalInternalsProps) {
+  const formikProps = useFormikContext<LMStudioModalValues>();
 
-  const isFetchDisabled =
-    !formikProps.values.api_base || !formikProps.values.api_key;
+  const isFetchDisabled = !formikProps.values.api_base;
 
   const handleFetchModels = async () => {
-    const { models, error } = await fetchLiteLLMProxyModels({
+    const apiKey = formikProps.values.custom_config?.LM_STUDIO_API_KEY;
+    const initialApiKey = existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY;
+    const data = await fetchModels(LLMProviderName.LM_STUDIO, {
       api_base: formikProps.values.api_base,
-      api_key: formikProps.values.api_key,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
+      api_key_changed: apiKey !== initialApiKey,
+      name: existingLlmProvider?.name ?? undefined,
     });
-    if (error) {
-      throw new Error(error);
+    if (data.error) {
+      throw new Error(data.error);
     }
     formikProps.setFieldValue(
       "model_configurations",
       mergeFetchedModelConfigurations(
-        models,
+        data.models,
         formikProps.values.model_configurations
       )
     );
@@ -70,11 +74,15 @@ function LiteLLMProxyModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="The base URL for your LiteLLM Proxy server."
-        placeholder="https://your-litellm-proxy.com"
+        subDescription="The base URL for your LM Studio server."
+        placeholder="Your LM Studio API base URL"
       />
 
-      <APIKeyField providerName="LiteLLM Proxy" />
+      <APIKeyField
+        name="custom_config.LM_STUDIO_API_KEY"
+        optional
+        subDescription="Optional API key if your LM Studio server requires authentication."
+      />
 
       {!isOnboarding && (
         <>
@@ -99,7 +107,7 @@ function LiteLLMProxyModalInternals({
   );
 }
 
-export default function LiteLLMProxyModal({
+export default function LMStudioModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
@@ -111,34 +119,48 @@ export default function LiteLLMProxyModal({
 
   const onClose = () => onOpenChange?.(false);
 
-  const initialValues: LiteLLMProxyModalValues = {
+  const initialValues: LMStudioModalValues = {
     ...useInitialValues(
       isOnboarding,
-      LLMProviderName.LITELLM_PROXY,
+      LLMProviderName.LM_STUDIO,
       existingLlmProvider
     ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-  } as LiteLLMProxyModalValues;
+    custom_config: {
+      LM_STUDIO_API_KEY: existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY,
+    },
+  } as LMStudioModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {
-    apiKey: true,
     apiBase: true,
   });
 
   return (
     <ModalWrapper
-      providerName={LLMProviderName.LITELLM_PROXY}
+      providerName={LLMProviderName.LM_STUDIO}
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
+        const filteredCustomConfig = Object.fromEntries(
+          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
+        );
+
+        const submitValues = {
+          ...values,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
+        };
+
         await submitProvider({
           analyticsSource: isOnboarding
             ? LLMProviderConfiguredSource.CHAT_ONBOARDING
             : LLMProviderConfiguredSource.ADMIN_PAGE,
-          providerName: LLMProviderName.LITELLM_PROXY,
-          values,
+          providerName: LLMProviderName.LM_STUDIO,
+          values: submitValues,
           initialValues,
           existingLlmProvider,
           shouldMarkAsDefault,
@@ -160,7 +182,7 @@ export default function LiteLLMProxyModal({
         });
       }}
     >
-      <LiteLLMProxyModalInternals
+      <LMStudioModalInternals
         existingLlmProvider={existingLlmProvider}
         isOnboarding={isOnboarding}
       />
