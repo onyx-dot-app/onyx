@@ -141,18 +141,12 @@ export function getDisplayName(
   agent: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): string | undefined {
-  const llmDescriptor = getProviderOverrideForPersona(
-    agent,
-    llmProviders ?? []
-  );
-  if (!llmDescriptor) return undefined;
-
-  const llmProvider = llmProviders?.find(
-    (p) =>
-      p.provider === llmDescriptor.provider &&
-      (p.name ?? "") === (llmDescriptor.name ?? "")
-  );
-  return llmProvider?.model_configurations.find(
-    (mc) => mc.name === llmDescriptor.modelName
-  )?.display_name;
+  if (agent.default_model_configuration_id == null) return undefined;
+  for (const p of llmProviders ?? []) {
+    const mc = p.model_configurations.find(
+      (m) => m.id === agent.default_model_configuration_id
+    );
+    if (mc) return mc.display_name;
+  }
+  return undefined;
 }
