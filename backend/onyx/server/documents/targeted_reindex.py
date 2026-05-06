@@ -81,31 +81,23 @@ def submit_targeted_reindex(
     db_session: Session = Depends(get_session),
 ) -> TargetedReindexResponse:
     error_ids = request.error_ids or []
-    manual_specs: list[TargetSpec] = [
+    target_specs_in: list[TargetSpec] = [
         TargetSpec(cc_pair_id=t.cc_pair_id, document_id=t.document_id)
         for t in (request.targets or [])
     ]
 
-    if not error_ids and not manual_specs:
+    if not error_ids and not target_specs_in:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Either error_ids or targets must be provided.",
         )
 
     skipped_from_errors = 0
-    derived: list[TargetSpec] = []
     if error_ids:
         derived, skipped_from_errors = resolve_error_ids_to_targets(
             db_session, error_ids
         )
-
-    # Order matters: dedup in create_targeted_reindex_job keeps the first
-    # occurrence of each (cc_pair_id, document_id). Error-derived specs
-    # carry `source_error_id` and the manual ones don't, so derived must
-    # come first — otherwise the dedup drops the error linkage and the
-    # task's resolution-tracking step never marks the source error
-    # `is_resolved=True`.
-    target_specs_in: list[TargetSpec] = derived + manual_specs
+        target_specs_in.extend(derived)
 
     if not target_specs_in:
         raise OnyxError(

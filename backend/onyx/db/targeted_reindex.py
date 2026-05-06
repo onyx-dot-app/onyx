@@ -25,13 +25,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
-from onyx.db.models import SearchSettings
 from onyx.db.models import TargetedReindexJob
 from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.search_settings import get_active_search_settings_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,6 +54,25 @@ class TargetSpec(BaseModel):
 
 
 class CreateTargetedReindexJobResult(BaseModel):
+    """Return value of `create_targeted_reindex_job`.
+
+    - `targeted_reindex_job_id`: row id; the FE polls the GET status
+      endpoint with this value.
+    - `celery_task_id`: pre-allocated UUID. Caller (API endpoint) uses
+      this as the `task_id` arg to `apply_async` so the orphan-detector
+      can clean up if dispatch fails after the DB rows commit.
+    - `queued_count`: targets that survived dedup and got persisted.
+    - `skipped_count`: dedup + caller-supplied upstream skips, persisted
+      on the job row so the GET endpoint returns it before the task
+      runs.
+    - `cc_pair_search_settings_pairs`: the (cc_pair_id, search_settings_id)
+      tuples we spawned synthetic IndexAttempts for. Mostly informational
+      — the task re-queries by `targeted_reindex_job_id` and doesn't
+      need this field directly.
+    - `synthetic_attempt_ids`: the IndexAttempt rows the task will
+      transition through the lifecycle.
+    """
+
     targeted_reindex_job_id: int
     celery_task_id: str
     queued_count: int
@@ -108,34 +126,6 @@ def resolve_error_ids_to_targets(
     return targets, skipped
 
 
-def _group_targets_by_search_settings(
-    db_session: Session, targets: Sequence[TargetSpec]
-) -> dict[int, set[int]]:
-    """Map cc_pair_id → set of `search_settings_id` it should write to.
-
-    A targeted reindex needs to write to whatever search settings the
-    cc_pair currently indexes against. During an embedding-model swap
-    that's both PRESENT and FUTURE — otherwise the FUTURE index lags
-    by the targeted-reindex delta until the next full crawl.
-    """
-    cc_pair_ids = {t.cc_pair_id for t in targets}
-    if not cc_pair_ids:
-        return {}
-    active_settings = (
-        db_session.execute(
-            select(SearchSettings).where(
-                SearchSettings.status.in_(
-                    [IndexModelStatus.PRESENT, IndexModelStatus.FUTURE]
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    settings_ids = {s.id for s in active_settings}
-    return {cc_pair_id: settings_ids for cc_pair_id in cc_pair_ids}
-
-
 def create_targeted_reindex_job(
     db_session: Session,
     requested_by_user_id: UUID | None,
@@ -183,14 +173,19 @@ def create_targeted_reindex_job(
 
     # Dedup at the (cc_pair_id, document_id) level — composite PK on the
     # target table would catch this anyway, but better to error early.
-    seen: set[tuple[int, str]] = set()
-    deduped: list[TargetSpec] = []
+    # When the same (cc_pair, doc) appears more than once, prefer the
+    # spec that carries `source_error_id`. The API can hand us derived
+    # (failure-driven) and manual specs in any order; the linkage-bearing
+    # one must win or the task can't mark the original error resolved.
+    by_key: dict[tuple[int, str], TargetSpec] = {}
     for t in targets:
         key = (t.cc_pair_id, t.document_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(t)
+        existing = by_key.get(key)
+        if existing is None or (
+            existing.source_error_id is None and t.source_error_id is not None
+        ):
+            by_key[key] = t
+    deduped: list[TargetSpec] = list(by_key.values())
 
     dedup_skipped = len(targets) - len(deduped)
     initial_skipped = dedup_skipped + upstream_skipped_count
@@ -217,14 +212,18 @@ def create_targeted_reindex_job(
     # Spawn a synthetic IndexAttempt per (cc_pair_id, search_settings_id).
     # These bypass try_create_index_attempt — full crawls are allowed to
     # overlap with retries (per-doc row-locks handle write conflicts).
-    grouped = _group_targets_by_search_settings(db_session, deduped)
+    # Active search settings = primary plus the secondary if a model swap
+    # is in progress (FUTURE); reusing the canonical helper here keeps
+    # the targeted-reindex flow aligned with the main indexing path.
+    cc_pair_ids = {t.cc_pair_id for t in deduped}
+    active_search_settings = get_active_search_settings_list(db_session)
     attempt_ids: list[int] = []
     pairs: list[tuple[int, int]] = []
-    for cc_pair_id, search_settings_ids in grouped.items():
-        for search_settings_id in search_settings_ids:
+    for cc_pair_id in cc_pair_ids:
+        for search_settings in active_search_settings:
             attempt = IndexAttempt(
                 connector_credential_pair_id=cc_pair_id,
-                search_settings_id=search_settings_id,
+                search_settings_id=search_settings.id,
                 from_beginning=False,
                 status=IndexingStatus.NOT_STARTED,
                 targeted_reindex_job_id=job.id,
@@ -232,7 +231,7 @@ def create_targeted_reindex_job(
             db_session.add(attempt)
             db_session.flush()
             attempt_ids.append(attempt.id)
-            pairs.append((cc_pair_id, search_settings_id))
+            pairs.append((cc_pair_id, search_settings.id))
 
     db_session.commit()
     db_session.refresh(job)

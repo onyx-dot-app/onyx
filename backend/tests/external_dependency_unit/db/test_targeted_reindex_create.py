@@ -316,11 +316,64 @@ def test_create_job_dedup_keeps_source_error_id_when_overlapping(
     )
     manual_dup = TargetSpec(cc_pair_id=cc_pair.id, document_id="dup-doc")
 
-    # Pass derived first (matches API endpoint ordering after the fix).
+    # Pass derived first.
     result = create_targeted_reindex_job(
         db_session=db_session,
         requested_by_user_id=None,
         targets=[error_derived, manual_dup],
+    )
+
+    target_row = (
+        db_session.query(TargetedReindexJobTarget)
+        .filter(
+            TargetedReindexJobTarget.targeted_reindex_job_id
+            == result.targeted_reindex_job_id
+        )
+        .one()
+    )
+    assert target_row.source_error_id == err.id
+
+
+def test_create_job_dedup_prefers_source_error_id_regardless_of_order(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """The dedup must pick the linkage-bearing spec independent of
+    input order. Same scenario as the previous test, but manual is
+    passed FIRST. Without the prefer-linkage rule, last-in or
+    first-in semantics would drop source_error_id depending on which
+    side ordered the list."""
+    settings = get_current_search_settings(db_session)
+    parent = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=settings.id,
+        from_beginning=False,
+        status=IndexingStatus.FAILED,
+    )
+    db_session.add(parent)
+    db_session.commit()
+    db_session.refresh(parent)
+
+    err = IndexAttemptError(
+        index_attempt_id=parent.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id="dup-doc",
+        failure_message="boom",
+        is_resolved=False,
+    )
+    db_session.add(err)
+    db_session.commit()
+    db_session.refresh(err)
+
+    manual_dup = TargetSpec(cc_pair_id=cc_pair.id, document_id="dup-doc")
+    error_derived = TargetSpec(
+        cc_pair_id=cc_pair.id, document_id="dup-doc", source_error_id=err.id
+    )
+
+    # Manual first this time. Linkage-bearing spec must still win.
+    result = create_targeted_reindex_job(
+        db_session=db_session,
+        requested_by_user_id=None,
+        targets=[manual_dup, error_derived],
     )
 
     target_row = (
