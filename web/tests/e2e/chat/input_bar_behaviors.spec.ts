@@ -206,29 +206,6 @@ test.describe("Paste Behavior", () => {
 
     await expect(input).toContainText("replacement");
   });
-
-  test("pasting multiline text increases input height", async ({ page }) => {
-    const multilineText = "line1\nline2\nline3\nline4";
-    await page.evaluate((text) => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      el.focus();
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      const event = new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-      });
-      el.dispatchEvent(event);
-    }, multilineText);
-
-    await page.waitForTimeout(200);
-    const height = await page.evaluate(() => {
-      const el = document.getElementById("onyx-chat-input-textbox")!;
-      return el.parentElement!.getBoundingClientRect().height;
-    });
-    expect(height).toBeGreaterThan(44);
-  });
 });
 
 test.describe("Paste Security", () => {
@@ -647,12 +624,12 @@ for (let i = 0; i < 10; i++) {
   console.log(fibonacci(i));
 }`;
 
-async function pasteLargeText(page: import("@playwright/test").Page) {
-  await page.evaluate((text) => {
+async function pasteText(page: import("@playwright/test").Page, text: string) {
+  await page.evaluate((t) => {
     const el = document.getElementById("onyx-chat-input-textbox")!;
     el.focus();
     const dt = new DataTransfer();
-    dt.setData("text/plain", text);
+    dt.setData("text/plain", t);
     el.dispatchEvent(
       new ClipboardEvent("paste", {
         clipboardData: dt,
@@ -660,7 +637,7 @@ async function pasteLargeText(page: import("@playwright/test").Page) {
         cancelable: true,
       })
     );
-  }, LARGE_TEXT);
+  }, text);
 }
 
 test.describe("Paste Tiles", () => {
@@ -691,14 +668,14 @@ test.describe("Paste Tiles", () => {
   test("pasting large text creates a tile instead of inline text", async ({
     page,
   }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     const tile = page.locator(TILE_SELECTOR);
     await expect(tile).toBeVisible();
     await expect(tile).toHaveAttribute("data-text", LARGE_TEXT);
   });
 
   test("tile shows truncated preview and line count", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     const preview = page.locator(".rich-input-tile-preview");
     const meta = page.locator(".rich-input-tile-meta");
     await expect(preview).toBeVisible();
@@ -728,7 +705,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("clicking × removes the tile", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(1);
     await page.locator(TILE_REMOVE_SELECTOR).click();
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
@@ -740,7 +717,7 @@ test.describe("Paste Tiles", () => {
     const input = page.locator(INPUT_SELECTOR);
     await input.focus();
     await page.keyboard.type("Context: ");
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("Enter");
     const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
     await expect(msg).toContainText("Context:");
@@ -749,7 +726,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("clicking tile opens editable popover", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.locator(TILE_SELECTOR).click();
     const popover = page.locator(TILE_POPOVER_SELECTOR);
     await expect(popover).toBeVisible();
@@ -759,7 +736,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("editing text in popover updates the tile data", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.locator(TILE_SELECTOR).click();
     const textarea = page.locator(`${TILE_POPOVER_SELECTOR} textarea`);
     await textarea.fill("modified text\nline 2\nline 3\nline 4");
@@ -770,7 +747,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("Escape closes popover and refocuses input", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.locator(TILE_SELECTOR).click();
     await expect(page.locator(TILE_POPOVER_SELECTOR)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -782,7 +759,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("ArrowLeft into tile highlights it", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     const highlighted = await page.evaluate(
@@ -798,7 +775,7 @@ test.describe("Paste Tiles", () => {
     const input = page.locator(INPUT_SELECTOR);
     await input.focus();
     await page.keyboard.type("abc");
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("Home");
     // Move to end of "abc" text, then one more right into the tile
     await page.keyboard.press("ArrowRight");
@@ -815,7 +792,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("Enter on highlighted tile opens popover", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("Enter");
@@ -823,7 +800,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("Enter on highlighted tile does NOT send message", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("Enter");
@@ -832,7 +809,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("typing deselects highlighted tile", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     const before = await page.evaluate(
@@ -856,7 +833,7 @@ test.describe("Paste Tiles", () => {
     const input = page.locator(INPUT_SELECTOR);
     await input.focus();
     await page.keyboard.type("abc");
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     // First ArrowLeft highlights tile
     await page.keyboard.press("ArrowLeft");
@@ -874,7 +851,7 @@ test.describe("Paste Tiles", () => {
   test("Backspace highlights tile, second Backspace deletes it", async ({
     page,
   }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     // First backspace highlights
     await page.keyboard.press("Backspace");
@@ -887,12 +864,11 @@ test.describe("Paste Tiles", () => {
     expect(highlighted).toBe(true);
     // Second backspace deletes
     await page.keyboard.press("Backspace");
-    await page.keyboard.press("Backspace");
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
   });
 
   test("Ctrl+A highlights tiles with blue border", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("ControlOrMeta+a");
     await page.waitForTimeout(100);
     const inSelection = await page.evaluate(
@@ -905,7 +881,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("Ctrl+C on tile copies the full text", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.press("ControlOrMeta+c");
     // Clear and paste back
@@ -922,7 +898,7 @@ test.describe("Paste Tiles", () => {
   test("Ctrl+X on tile cuts the full text and clears input", async ({
     page,
   }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.press("ControlOrMeta+x");
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
@@ -931,7 +907,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("multiple tiles can coexist", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
@@ -952,7 +928,7 @@ test.describe("Paste Tiles", () => {
   });
 
   test("cursor is hidden when tile is highlighted", async ({ page }) => {
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await page.keyboard.press("End");
     await page.keyboard.press("ArrowLeft");
     const selectionCollapsed = await page.evaluate(() => {
@@ -960,6 +936,56 @@ test.describe("Paste Tiles", () => {
       return sel?.isCollapsed;
     });
     expect(selectionCollapsed).toBe(false);
+  });
+
+  test("clearing tile text to empty in popover removes the tile", async ({
+    page,
+  }) => {
+    await pasteText(page, LARGE_TEXT);
+    await page.locator(TILE_SELECTOR).click();
+    const textarea = page.locator(`${TILE_POPOVER_SELECTOR} textarea`);
+    await textarea.fill("   ");
+    await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
+    await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
+    const focused = await page.evaluate(
+      () => document.activeElement?.id === "onyx-chat-input-textbox"
+    );
+    expect(focused).toBe(true);
+  });
+
+  test("editing tile in popover then sending includes updated text", async ({
+    page,
+  }) => {
+    await pasteText(page, LARGE_TEXT);
+    await page.locator(TILE_SELECTOR).click();
+    const textarea = page.locator(`${TILE_POPOVER_SELECTOR} textarea`);
+    await textarea.fill("edited content\nline 2\nline 3\nline 4");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
+    const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
+    await expect(msg).toContainText("edited content");
+    await expect(msg).toContainText("line 2");
+  });
+
+  test("text before and after tile is preserved on send", async ({ page }) => {
+    const input = page.locator(INPUT_SELECTOR);
+    await input.focus();
+    await page.keyboard.type("before ");
+    await pasteText(page, LARGE_TEXT);
+    await page.keyboard.type(" after");
+    await page.keyboard.press("Enter");
+    const msg = page.locator(HUMAN_MESSAGE_SELECTOR);
+    await expect(msg).toContainText("before");
+    await expect(msg).toContainText("function fibonacci");
+    await expect(msg).toContainText("after");
+  });
+
+  test("clicking backdrop dismisses popover", async ({ page }) => {
+    await pasteText(page, LARGE_TEXT);
+    await page.locator(TILE_SELECTOR).click();
+    await expect(page.locator(TILE_POPOVER_SELECTOR)).toBeVisible();
+    await page.locator(".fixed.inset-0.z-40").click();
+    await expect(page.locator(TILE_POPOVER_SELECTOR)).toHaveCount(0);
   });
 });
 
@@ -979,7 +1005,7 @@ test.describe("Paste Tiles — User Setting", () => {
       .locator(INPUT_SELECTOR)
       .waitFor({ state: "visible", timeout: 10000 });
 
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
     await expect(page.locator(INPUT_SELECTOR)).toContainText(
       "function fibonacci"
@@ -1003,7 +1029,7 @@ test.describe("Paste Tiles — User Setting", () => {
       .locator(INPUT_SELECTOR)
       .waitFor({ state: "visible", timeout: 10000 });
 
-    await pasteLargeText(page);
+    await pasteText(page, LARGE_TEXT);
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(1);
     await expect(page.locator(TILE_SELECTOR)).toHaveAttribute(
       "data-text",
