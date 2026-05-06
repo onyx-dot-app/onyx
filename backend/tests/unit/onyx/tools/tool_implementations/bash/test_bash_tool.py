@@ -168,6 +168,40 @@ def test_missing_cmd_raises_tool_call_exception() -> None:
     emitter.emit.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "bad_cmd",
+    [
+        None,
+        42,
+        ["ls", "-la"],
+        {"cmd": "ls"},
+        b"ls -la",
+    ],
+)
+def test_non_string_cmd_raises_tool_call_exception(bad_cmd: object) -> None:
+    """Regression: ``cast(str, ...)`` is a no-op at runtime, so a non-string
+    ``cmd`` from the LLM (e.g. a list, None, an int) used to flow through
+    and surface as either an opaque Pydantic validation error (from
+    ``BashToolStart``) or a 422 from the upstream service. We now fail fast
+    with a clear ``ToolCallException`` before any packet is emitted."""
+    tool, emitter = _make_tool()
+
+    with pytest.raises(ToolCallException) as excinfo:
+        tool.run(
+            placement=_placement(),
+            override_kwargs=BashToolOverrideKwargs(),
+            cmd=bad_cmd,
+        )
+
+    # llm-facing message names the field and the actual type so the model
+    # can self-correct on the next try
+    assert CMD_FIELD in excinfo.value.llm_facing_message
+    assert type(bad_cmd).__name__ in excinfo.value.llm_facing_message
+
+    # No packets emitted — failure is at validation, before BashToolStart
+    emitter.emit.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Exception during execute is caught and surfaced
 # ---------------------------------------------------------------------------

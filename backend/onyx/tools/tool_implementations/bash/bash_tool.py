@@ -1,5 +1,4 @@
 from typing import Any
-from typing import cast
 
 from pydantic import BaseModel
 from pydantic import TypeAdapter
@@ -140,7 +139,19 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                     f'{{"cmd": "ls -la"}}'
                 ),
             )
-        cmd = cast(str, llm_kwargs[CMD_FIELD])
+        cmd = llm_kwargs[CMD_FIELD]
+        if not isinstance(cmd, str):
+            raise ToolCallException(
+                message=(
+                    f"'{CMD_FIELD}' must be a string in bash tool call, "
+                    f"got {type(cmd).__name__}"
+                ),
+                llm_facing_message=(
+                    f"The bash tool requires '{CMD_FIELD}' to be a string "
+                    f"(got {type(cmd).__name__}). Pass a single shell "
+                    f'command, e.g. {{"cmd": "ls -la"}}.'
+                ),
+            )
 
         self.emitter.emit(
             Packet(placement=placement, obj=BashToolStart(cmd=cmd)),
