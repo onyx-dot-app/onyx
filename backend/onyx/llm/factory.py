@@ -341,11 +341,10 @@ def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
             raise ValueError(
                 f"model_configuration id={model_configuration_id} not found"
             )
-        llm_provider = LLMProviderView.from_model(mc.llm_provider)
-    return llm_from_provider(
-        model_name=mc.name,
-        llm_provider=llm_provider,
-    )
+        return llm_from_provider(
+            model_name=mc.name,
+            llm_provider=LLMProviderView.from_model(mc.llm_provider),
+        )
 
 
 def get_default_llm(

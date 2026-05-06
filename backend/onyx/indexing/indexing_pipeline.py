@@ -1344,8 +1344,8 @@ def run_indexing_pipeline(
             # Fall back to the global default contextual RAG model (LLMModelFlow).
             from onyx.db.llm import fetch_default_contextual_rag_model
 
-            with get_session_with_current_tenant() as db_session:
-                mc = fetch_default_contextual_rag_model(db_session)
+            with get_session_with_current_tenant() as fallback_session:
+                mc = fetch_default_contextual_rag_model(fallback_session)
             mc_id = mc.id if mc else None
         if mc_id is not None:
             llm = get_llm_for_contextual_rag(mc_id)
