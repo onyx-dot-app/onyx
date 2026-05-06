@@ -32,7 +32,7 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
@@ -331,8 +331,10 @@ def configure_default_api_keys(db_session: Session) -> None:
         nonlocal has_set_default_provider
         try:
             if request.name:
-                existing = fetch_existing_llm_provider(
-                    name=request.name, db_session=db_session
+                existing = fetch_existing_llm_provider_by_name_and_type(
+                    name=request.name,
+                    provider_type=request.provider,
+                    db_session=db_session,
                 )
             else:
                 existing = fetch_existing_llm_provider_by_type_nameless(

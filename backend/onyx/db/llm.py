@@ -513,6 +513,28 @@ def fetch_existing_llm_provider_by_id(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_name_and_type(
+    name: str, provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return a provider matching both display name and provider type.
+
+    More specific than fetch_existing_llm_provider (name only) — avoids matching
+    the wrong record now that names are non-unique.
+    """
+    return db_session.scalar(
+        select(LLMProviderModel)
+        .where(
+            LLMProviderModel.name == name,
+            LLMProviderModel.provider == provider_type,
+        )
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+
+
 def fetch_existing_llm_provider_by_type_nameless(
     provider_type: str, db_session: Session
 ) -> LLMProviderModel | None:
