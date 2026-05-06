@@ -138,7 +138,22 @@ class TenantRedis(redis.Redis):
                 kwargs["keys"] = self._prefix_keys_arg(kwargs["keys"])
             elif len(args) > 0:
                 args = (self._prefix_keys_arg(args[0]),) + args[1:]
-            return method(*args, **kwargs)
+            result = method(*args, **kwargs)
+            if result is None:
+                return None
+            # BLPOP/BRPOP returns (key, value). Strip our prefix from the key
+            # so callers see the same name they passed in, matching the symmetry
+            # of _prefix_scan_iter.
+            key, value = result[0], result[1]
+            if isinstance(key, bytes):
+                prefix_bytes = f"{self.tenant_id}:".encode()
+                if key.startswith(prefix_bytes):
+                    key = key[len(prefix_bytes) :]
+            elif isinstance(key, str):
+                prefix_str = f"{self.tenant_id}:"
+                if key.startswith(prefix_str):
+                    key = key[len(prefix_str) :]
+            return (key, value)
 
         return wrapper
 
