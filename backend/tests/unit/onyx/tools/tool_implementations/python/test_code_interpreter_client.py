@@ -12,7 +12,13 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    BashExecResponse,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    CreateSessionResponse,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
@@ -173,3 +179,238 @@ def test_execute_streaming_fallback_preserves_files_param() -> None:
 
     # Should still yield valid events
     assert any(isinstance(e, StreamResultEvent) for e in events)
+
+
+def _make_create_session_response(
+    session_id: str = "sess-abc123",
+    expires_at: float = 1234567890.0,
+) -> MagicMock:
+    """Build a mock ``requests.Response`` for POST /v1/sessions."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "session_id": session_id,
+        "expires_at": expires_at,
+    }
+    return resp
+
+
+def _make_bash_response(
+    stdout: str = "",
+    stderr: str = "",
+    exit_code: int | None = 0,
+    timed_out: bool = False,
+    duration_ms: int = 25,
+) -> MagicMock:
+    """Build a mock ``requests.Response`` for POST /v1/sessions/{id}/bash."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "duration_ms": duration_ms,
+    }
+    return resp
+
+
+def test_create_session_default_payload() -> None:
+    """create_session with default args should POST {ttl_seconds: 900} and
+    return a parsed CreateSessionResponse."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    captured_url: list[str] = []
+    captured_payloads: list[dict] = []
+
+    def mock_post(url: str, **kwargs: object) -> MagicMock:
+        captured_url.append(url)
+        if "json" in kwargs:
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
+        return _make_create_session_response()
+
+    with patch.object(client.session, "post", side_effect=mock_post):
+        result = client.create_session()
+
+    assert len(captured_url) == 1
+    assert captured_url[0] == "http://fake:9000/v1/sessions"
+    assert captured_payloads == [{"ttl_seconds": 15 * 60}]
+
+    assert isinstance(result, CreateSessionResponse)
+    assert result.session_id == "sess-abc123"
+    assert result.expires_at == 1234567890.0
+
+
+def test_create_session_with_ttl_and_files() -> None:
+    """create_session should forward custom ttl_seconds and the files list."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    files_input: list[FileInput] = [{"path": "data.csv", "file_id": "file-xyz"}]
+    captured_payloads: list[dict] = []
+
+    def mock_post(_url: str, **kwargs: object) -> MagicMock:
+        if "json" in kwargs:
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
+        return _make_create_session_response(session_id="sess-with-files")
+
+    with patch.object(client.session, "post", side_effect=mock_post):
+        result = client.create_session(ttl_seconds=60, files=files_input)
+
+    assert captured_payloads == [{"ttl_seconds": 60, "files": files_input}]
+    assert result.session_id == "sess-with-files"
+
+
+def test_create_session_omits_files_when_none() -> None:
+    """create_session must not include a 'files' key when files is None."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    captured_payloads: list[dict] = []
+
+    def mock_post(_url: str, **kwargs: object) -> MagicMock:
+        if "json" in kwargs:
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
+        return _make_create_session_response()
+
+    with patch.object(client.session, "post", side_effect=mock_post):
+        client.create_session(ttl_seconds=120, files=None)
+
+    assert len(captured_payloads) == 1
+    assert "files" not in captured_payloads[0]
+
+
+def test_delete_session_calls_correct_url() -> None:
+    """delete_session should issue a DELETE to /v1/sessions/{session_id}."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    delete_resp = MagicMock()
+    delete_resp.status_code = 204
+    delete_resp.raise_for_status = MagicMock()
+
+    captured_urls: list[str] = []
+
+    def mock_delete(url: str, **_kwargs: object) -> MagicMock:
+        captured_urls.append(url)
+        return delete_resp
+
+    with patch.object(client.session, "delete", side_effect=mock_delete):
+        result = client.delete_session("sess-abc123")
+
+    assert result is None
+    assert captured_urls == ["http://fake:9000/v1/sessions/sess-abc123"]
+    delete_resp.raise_for_status.assert_called_once()
+
+
+def test_delete_session_propagates_http_errors() -> None:
+    """An HTTP error from the upstream service must propagate, not be swallowed."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    delete_resp = MagicMock()
+    delete_resp.raise_for_status.side_effect = RuntimeError("boom")
+
+    with patch.object(client.session, "delete", return_value=delete_resp):
+        try:
+            client.delete_session("sess-abc123")
+        except RuntimeError as e:
+            assert str(e) == "boom"
+        else:
+            raise AssertionError("Expected RuntimeError to propagate")
+
+
+def test_execute_bash_in_session_default_timeout() -> None:
+    """execute_bash_in_session should POST cmd + default timeout_ms and return
+    a parsed BashExecResponse."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    captured_urls: list[str] = []
+    captured_payloads: list[dict] = []
+    captured_timeouts: list[float] = []
+
+    def mock_post(url: str, **kwargs: object) -> MagicMock:
+        captured_urls.append(url)
+        if "json" in kwargs:
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
+        if "timeout" in kwargs:
+            captured_timeouts.append(
+                kwargs["timeout"]  # ty: ignore[invalid-argument-type]
+            )
+        return _make_bash_response(stdout="hello\n", exit_code=0, duration_ms=42)
+
+    with patch.object(client.session, "post", side_effect=mock_post):
+        result = client.execute_bash_in_session("sess-abc123", "echo hello")
+
+    assert captured_urls == ["http://fake:9000/v1/sessions/sess-abc123/bash"]
+    assert captured_payloads == [{"cmd": "echo hello", "timeout_ms": 30000}]
+    # request timeout should be timeout_ms / 1000 + 10 buffer = 40s
+    assert captured_timeouts == [40.0]
+
+    assert isinstance(result, BashExecResponse)
+    assert result.stdout == "hello\n"
+    assert result.stderr == ""
+    assert result.exit_code == 0
+    assert not result.timed_out
+    assert result.duration_ms == 42
+
+
+def test_execute_bash_in_session_custom_timeout() -> None:
+    """A custom timeout_ms should be forwarded in the payload and used to
+    derive the requests-level timeout (timeout_ms / 1000 + 10)."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    captured_payloads: list[dict] = []
+    captured_timeouts: list[float] = []
+
+    def mock_post(_url: str, **kwargs: object) -> MagicMock:
+        if "json" in kwargs:
+            captured_payloads.append(
+                kwargs["json"]  # ty: ignore[invalid-argument-type]
+            )
+        if "timeout" in kwargs:
+            captured_timeouts.append(
+                kwargs["timeout"]  # ty: ignore[invalid-argument-type]
+            )
+        return _make_bash_response()
+
+    with patch.object(client.session, "post", side_effect=mock_post):
+        client.execute_bash_in_session("sess-xyz", "ls -la", timeout_ms=5000)
+
+    assert captured_payloads == [{"cmd": "ls -la", "timeout_ms": 5000}]
+    assert captured_timeouts == [15.0]
+
+
+def test_execute_bash_in_session_parses_timeout_and_nonzero_exit() -> None:
+    """A timed-out / failed bash exec should be parsed into the response model
+    without raising on the client side."""
+
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    bash_resp = _make_bash_response(
+        stdout="",
+        stderr="killed\n",
+        exit_code=None,
+        timed_out=True,
+        duration_ms=30000,
+    )
+
+    with patch.object(client.session, "post", return_value=bash_resp):
+        result = client.execute_bash_in_session("sess-abc", "sleep 999")
+
+    assert result.timed_out is True
+    assert result.exit_code is None
+    assert result.stderr == "killed\n"
