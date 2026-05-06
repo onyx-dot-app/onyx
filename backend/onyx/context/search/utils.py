@@ -99,13 +99,12 @@ def get_query_embeddings(
         # Cache key needs search_settings.id even when the caller already
         # supplied an embedding_model.
         search_settings = get_current_search_settings(db_session)
+    assert search_settings is not None, "Bug: search_settings is None."
 
     result: list[Embedding] = []
-    cache_usable = (
-        QUERY_EMBEDDING_CACHE_ENABLED and search_settings is not None and bool(queries)
-    )
+    cache_usable: bool = QUERY_EMBEDDING_CACHE_ENABLED and bool(queries)
     if not cache_usable:
-        if queries and search_settings is not None:
+        if queries:
             record_cache_skipped(embedding_model.provider_type, count=len(queries))
         result = embedding_model.encode(queries, text_type=EmbedTextType.QUERY)
         assert len(result) == len(
@@ -113,7 +112,6 @@ def get_query_embeddings(
         ), "Bug: The length of embeddings does not match the length of queries."
         return result
 
-    assert search_settings is not None, "Bug: search_settings is None."
     cached = get_cached_query_embeddings(
         queries=queries,
         search_settings_id=search_settings.id,
