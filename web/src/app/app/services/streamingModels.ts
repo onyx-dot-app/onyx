@@ -61,6 +61,15 @@ export enum PacketType {
   INTERMEDIATE_REPORT_START = "intermediate_report_start",
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
+
+  // Coding Agent packets
+  CODING_AGENT_START = "coding_agent_start",
+  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
+  CODING_AGENT_FINAL = "coding_agent_final",
+
+  // Bash Tool packets
+  BASH_TOOL_START = "bash_tool_start",
+  BASH_TOOL_DELTA = "bash_tool_delta",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -299,6 +308,37 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: OnyxDocument[] | null;
 }
 
+// Coding Agent Packets
+export interface CodingAgentStart extends BaseObj {
+  type: "coding_agent_start";
+  query: string;
+  repo: string;
+}
+
+export interface CodingAgentThinkingDelta extends BaseObj {
+  type: "coding_agent_thinking_delta";
+  content: string;
+}
+
+export interface CodingAgentFinal extends BaseObj {
+  type: "coding_agent_final";
+  answer: string;
+}
+
+// Bash Tool Packets
+export interface BashToolStart extends BaseObj {
+  type: "bash_tool_start";
+  cmd: string;
+}
+
+export interface BashToolDelta extends BaseObj {
+  type: "bash_tool_delta";
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+  timed_out: boolean;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -384,6 +424,18 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
+// CodingAgentObj covers both the agent's own packets and the BashTool packets
+// it emits inline — they always land in the same group as the agent, so they
+// share a discriminated-union type.
+export type CodingAgentObj =
+  | CodingAgentStart
+  | CodingAgentThinkingDelta
+  | CodingAgentFinal
+  | BashToolStart
+  | BashToolDelta
+  | SectionEnd
+  | PacketError;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | ChatObj
@@ -395,6 +447,7 @@ export type ObjTypes =
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
+  | CodingAgentObj
   | PacketErrorObj
   | CitationObj;
 
@@ -485,4 +538,9 @@ export interface DeepResearchPlanPacket {
 export interface ResearchAgentPacket {
   placement: Placement;
   obj: ResearchAgentObj;
+}
+
+export interface CodingAgentPacket {
+  placement: Placement;
+  obj: CodingAgentObj;
 }

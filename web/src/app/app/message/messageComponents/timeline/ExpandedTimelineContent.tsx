@@ -17,6 +17,7 @@ import { TimelineStepComposer } from "./TimelineStepComposer";
 import {
   isSearchToolPackets,
   isPythonToolPackets,
+  isCodingAgentPackets,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // =============================================================================
@@ -117,8 +118,14 @@ export const ExpandedTimelineContent = React.memo(
   }: ExpandedTimelineContentProps) {
     return (
       <div className="w-full">
-        {turnGroups.map((turnGroup, turnIdx) =>
-          turnGroup.isParallel ? (
+        {turnGroups.map((turnGroup, turnIdx) => {
+          // Coding-agent groups always render via ParallelTimelineTabs so
+          // their tab-pill chrome is consistent with the multi-agent case.
+          const renderAsParallelTabs =
+            turnGroup.isParallel ||
+            turnGroup.steps.some((step) => isCodingAgentPackets(step.packets));
+
+          return renderAsParallelTabs ? (
             <ParallelTimelineTabs
               key={turnGroup.turnIndex}
               turnGroup={turnGroup}
@@ -155,8 +162,8 @@ export const ExpandedTimelineContent = React.memo(
                 />
               );
             })
-          )
-        )}
+          );
+        })}
 
         {/* Done indicator */}
         {showDoneStep && (
