@@ -46,6 +46,7 @@ import {
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import {
   EmptyMessageCard,
@@ -426,6 +427,9 @@ export default function ChatPreferencesPage() {
   );
   const codeInterpreterTool = availableTools.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const codingAgentTool = availableTools.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
 
   // Connectors
@@ -875,6 +879,30 @@ export default function ChatPreferencesPage() {
                                 void toggleTool(codeInterpreterTool.id, checked)
                               }
                               disabled={!codeInterpreterTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
+
+                      <Disabled disabled={!codingAgentTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Coding Agent"
+                            description="Investigate a GitHub repository and answer questions about its code."
+                            disabled={!codingAgentTool}
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                codingAgentTool
+                                  ? isToolEnabled(codingAgentTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codingAgentTool &&
+                                void toggleTool(codingAgentTool.id, checked)
+                              }
+                              disabled={!codingAgentTool}
                             />
                           </InputHorizontal>
                         </Card>
