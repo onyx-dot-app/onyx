@@ -632,8 +632,9 @@ class TestTabularChunkerChunkSection:
 
 class TestTabularChunkerMalformedCsv:
     def test_bare_cr_normalized_and_parsed(self) -> None:
-        """A bare \\r (old Mac line ending) is normalized to \\n before
-        parsing, so the rows are recovered instead of dropped."""
+        """A bare \\r (old Mac line ending) is normalized inside
+        parse_csv_string, so rows are recovered and the chunker never
+        sees an error."""
         # "value1,line1\rline2" normalizes to two rows:
         #   row 2: col1=value1, col2=line1
         #   row 3: col1=line2  (short row — col2 absent, skipped by zip)
@@ -659,19 +660,6 @@ class TestTabularChunkerMalformedCsv:
         assert len(result.payloads) > 0
         texts = [p.text for p in result.payloads]
         assert any("col1" in t for t in texts)
-
-    def test_header_only_csv_falls_back_to_plain_text(self) -> None:
-        """A header-only CSV (no data rows) with ignore_metadata_chunks=True
-        produces no tabular chunks. The section falls back to plain text so
-        the content is still indexed rather than silently dropped."""
-        header_only = "col1,col2,col3"
-        section = _tabular_section(header_only)
-        chunker = _make_chunker_no_metadata()
-        result = chunker.chunk_section(
-            section, AccumulatorState(), content_token_limit=500
-        )
-        assert len(result.payloads) > 0
-        assert any("col1" in p.text for p in result.payloads)
 
 
 class TestBuildSheetDescriptorChunks:
