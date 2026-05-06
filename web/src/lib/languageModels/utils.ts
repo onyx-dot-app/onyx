@@ -2,9 +2,15 @@ import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { LlmDescriptor } from "@/lib/hooks";
+import { getProvider } from "@/lib/languageModels";
+
+export function providerDisplayName(provider: LLMProviderView): string {
+  return provider.name || getProvider(provider.provider, provider).productName;
+}
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
@@ -72,11 +78,11 @@ export function getProviderOverrideForPersona(
 }
 
 export const structureValue = (
-  name: string,
+  name: string | null,
   provider: string,
   modelName: string
 ) => {
-  return `${name}__${provider}__${modelName}`;
+  return `${name ?? ""}__${provider}__${modelName}`;
 };
 
 export const parseLlmDescriptor = (value: string): LlmDescriptor => {

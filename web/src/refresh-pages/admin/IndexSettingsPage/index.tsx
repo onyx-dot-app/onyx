@@ -212,7 +212,10 @@ function LlmPicker({
 
   const handleSelect = useCallback(
     (option: LLMOption) => {
-      onChange({ modelName: option.modelName, providerName: option.name });
+      onChange({
+        modelName: option.modelName,
+        providerName: option.name ?? "",
+      });
       setOpen(false);
     },
     [onChange]

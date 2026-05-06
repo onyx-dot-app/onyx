@@ -2,7 +2,7 @@ import type { IconProps } from "@opal/types";
 import { FunctionComponent } from "react";
 
 export interface LLMOption {
-  name: string;
+  name: string | null;
   provider: string;
   providerDisplayName: string;
   modelName: string;

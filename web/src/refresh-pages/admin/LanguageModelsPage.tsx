@@ -25,6 +25,7 @@ import {
   deleteLlmProvider,
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
+import { providerDisplayName } from "@/lib/languageModels/utils";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -33,10 +34,6 @@ import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
-
-function providerDisplayName(provider: LLMProviderView): string {
-  return provider.name || getProvider(provider.provider, provider).productName;
-}
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)

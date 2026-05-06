@@ -63,7 +63,7 @@ export default function useMultiModelChat(
     );
     if (!match) return null;
     return {
-      name: match.name,
+      name: match.name ?? "",
       provider: match.provider,
       modelName: match.modelName,
       displayName: match.displayName,
@@ -175,7 +175,7 @@ export default function useMultiModelChat(
         );
         if (match) {
           restored.push({
-            name: match.name,
+            name: match.name ?? "",
             provider: match.provider,
             modelName: match.modelName,
             displayName: match.displayName,
@@ -201,7 +201,7 @@ export default function useMultiModelChat(
       if (match) {
         setSelectedModels([
           {
-            name: match.name,
+            name: match.name ?? "",
             provider: match.provider,
             modelName: match.modelName,
             displayName: match.displayName,

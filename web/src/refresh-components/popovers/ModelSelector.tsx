@@ -88,7 +88,7 @@ export default function ModelSelector({
 
   const handleSelect = (option: LLMOption) => {
     const model: SelectedModel = {
-      name: option.name,
+      name: option.name ?? "",
       provider: option.provider,
       modelName: option.modelName,
       displayName: option.displayName,
