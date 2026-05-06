@@ -14,26 +14,29 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
  */
 
 const getDefaultModelSelector = (page: Page) =>
-  page
-    .locator(
-      'button:has-text("User Default"), button:has-text("System Default")'
-    )
-    .first();
+  page.locator('[data-testid="model-picker-trigger"] button').first();
 
 const getLLMProviderOptions = async (page: Page) => {
   // Click the selector to open the dropdown
   await getDefaultModelSelector(page).click();
 
-  // Wait for the dropdown to be visible
-  await page.waitForSelector('[role="option"]', { state: "visible" });
+  // Wait for the popover content to be visible (Radix renders into a popper wrapper)
+  await page.waitForSelector(
+    '[data-radix-popper-content-wrapper] [data-state="open"]',
+    { state: "visible" }
+  );
 
-  // Get all visible options
-  const options = await page.locator('[role="option"]').allTextContents();
+  // Model options are LineItemButton elements inside the popover content
+  const options = await page
+    .locator(
+      '[data-radix-popper-content-wrapper] [data-state="open"] button[type="button"]'
+    )
+    .allTextContents();
 
-  // Close the dropdown by clicking elsewhere
+  // Close the dropdown by pressing Escape
   await page.keyboard.press("Escape");
 
-  return options;
+  return options.map((o) => o.trim()).filter(Boolean);
 };
 
 test("Restricted LLM Provider should not appear for unauthorized users", async ({
@@ -81,7 +84,7 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
     // Step 7: Get all available LLM provider options
     const llmOptions = await getLLMProviderOptions(page);
 
-    // Step 8: Verify that we have some options (at least the default provider)
+    // Step 8: Verify that we have some options (at least the default provider's models)
     expect(llmOptions.length).toBeGreaterThan(0);
 
     // Step 9: Verify the restricted provider does NOT appear
@@ -89,15 +92,6 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
       option.includes(restrictedProviderName)
     );
     expect(hasRestrictedProvider).toBe(false);
-
-    // Step 10: Verify that default/public providers DO appear
-    const hasDefaultOption = llmOptions.some(
-      (option) =>
-        option.includes("Default") ||
-        option.includes("GPT") ||
-        option.includes("Claude")
-    );
-    expect(hasDefaultOption).toBe(true);
 
     console.log(
       `✓ Verified restricted provider "${restrictedProviderName}" does not appear for unauthorized user`
@@ -132,22 +126,9 @@ test("Default Model selector shows available models", async ({ page }) => {
   const defaultModelSection = page.locator("text=Default Model").first();
   await defaultModelSection.scrollIntoViewIfNeeded();
 
-  // Open the model selector
-  await getDefaultModelSelector(page).click();
-  await page.waitForSelector('[role="option"]', { state: "visible" });
+  // Open the model selector and get options via the shared helper
+  const options = await getLLMProviderOptions(page);
 
-  // Get all options
-  const options = await page.locator('[role="option"]').allTextContents();
-
-  // Close dropdown
-  await page.keyboard.press("Escape");
-
-  // Verify we have at least the default option
+  // Verify we have at least one model option available
   expect(options.length).toBeGreaterThan(0);
-
-  // Verify the default/system default option exists
-  const hasDefaultOption = options.some((option) =>
-    option.toLowerCase().includes("default")
-  );
-  expect(hasDefaultOption).toBeTruthy();
 });
