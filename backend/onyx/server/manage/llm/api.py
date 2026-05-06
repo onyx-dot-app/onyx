@@ -754,6 +754,37 @@ def get_valid_model_names_for_persona(
     return valid_models
 
 
+def get_valid_model_configuration_ids_for_persona(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+) -> set[int]:
+    """Get the set of ModelConfiguration IDs that a user can access for this persona.
+
+    Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
+    multiple providers expose a model with the same name.
+    """
+    persona = fetch_persona_with_groups(db_session, persona_id)
+    if not persona:
+        return set()
+
+    is_admin = user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    valid_ids: set[int] = set()
+    for llm_provider_model in all_providers:
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            for model_config in llm_provider_model.model_configurations:
+                if model_config.is_visible and model_config.id is not None:
+                    valid_ids.add(model_config.id)
+    return valid_ids
+
+
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,

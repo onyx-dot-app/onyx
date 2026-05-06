@@ -136,7 +136,11 @@ def get_llm_for_persona(
                     persona.default_model_configuration_id,
                 )
                 return get_default_llm(
-                    temperature=temperature_override or GEN_AI_TEMPERATURE,
+                    temperature=(
+                        temperature_override
+                        if temperature_override is not None
+                        else GEN_AI_TEMPERATURE
+                    ),
                     additional_headers=additional_headers,
                 )
             provider_model = model_config.llm_provider

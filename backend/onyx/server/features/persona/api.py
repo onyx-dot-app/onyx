@@ -23,7 +23,6 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -56,7 +55,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.manage.llm.api import get_valid_model_names_for_persona
+from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -535,9 +534,10 @@ def get_persona(
     # Validate and clear the model override if the referenced model is no longer
     # accessible to this persona (e.g. provider was restricted after the persona was saved).
     if persona.default_model_configuration_id:
-        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
-        mc = db_session.get(ModelConfiguration, persona.default_model_configuration_id)
-        if mc is None or mc.name not in valid_models:
+        valid_ids = get_valid_model_configuration_ids_for_persona(
+            persona_id, user, db_session
+        )
+        if persona.default_model_configuration_id not in valid_ids:
             persona.default_model_configuration_id = None
             db_session.commit()
 
