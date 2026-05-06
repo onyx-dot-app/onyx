@@ -55,6 +55,10 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
+    CODING_AGENT_START = "coding_agent_start"
+    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
+    CODING_AGENT_FINAL = "coding_agent_final"
+
     BASH_TOOL_START = "bash_tool_start"
     BASH_TOOL_DELTA = "bash_tool_delta"
 
@@ -368,6 +372,27 @@ class IntermediateReportCitedDocs(BaseObj):
         StreamingType.INTERMEDIATE_REPORT_CITED_DOCS.value
     )
     cited_docs: list[SearchDoc] | None = None
+
+
+################################################
+# Coding Agent Packets
+################################################
+class CodingAgentStart(BaseObj):
+    type: Literal["coding_agent_start"] = StreamingType.CODING_AGENT_START.value
+    query: str
+    repo: str
+
+
+class CodingAgentThinkingDelta(BaseObj):
+    type: Literal["coding_agent_thinking_delta"] = (
+        StreamingType.CODING_AGENT_THINKING_DELTA.value
+    )
+    content: str
+
+
+class CodingAgentFinal(BaseObj):
+    type: Literal["coding_agent_final"] = StreamingType.CODING_AGENT_FINAL.value
+    answer: str
 
 
 ################################################
