@@ -67,6 +67,13 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
 
         connect_args["ssl"] = create_ssl_context_if_iam()
 
+        # Disable asyncpg's prepared-statement cache. Required when running
+        # against pgbouncer in transaction pool mode: the server connection
+        # rotates between transactions (with `DISCARD ALL`), so cached named
+        # prepared statements get wiped, leading to intermittent
+        # `prepared statement does not exist` / `MissingGreenlet` errors.
+        connect_args["statement_cache_size"] = 0
+
         engine_kwargs = {
             "connect_args": connect_args,
             "pool_pre_ping": POSTGRES_POOL_PRE_PING,
