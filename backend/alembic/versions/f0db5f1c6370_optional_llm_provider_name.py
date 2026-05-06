@@ -1,7 +1,7 @@
 """optional llm provider name
 
 Revision ID: f0db5f1c6370
-Revises: a5370af8f8a0
+Revises: b6c7d8e9f0a1
 Create Date: 2026-05-05
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "f0db5f1c6370"
-down_revision = "a5370af8f8a0"
+down_revision = "b6c7d8e9f0a1"
 branch_labels = None
 depends_on = None
 
