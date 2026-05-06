@@ -262,6 +262,75 @@ function LlmPicker({
   );
 }
 
+interface LlmPickerByIdProps {
+  modelConfigurationId: number | null;
+  onChange: (id: number | null) => void;
+  disabled?: boolean;
+}
+
+function LlmPickerById({
+  modelConfigurationId,
+  onChange,
+  disabled,
+}: LlmPickerByIdProps) {
+  const [open, setOpen] = useState(false);
+  const { llmProviders, isLoading } = useLlmDefaults();
+
+  const isSelected = useCallback(
+    (option: LLMOption) =>
+      option.modelConfigurationId != null &&
+      option.modelConfigurationId === modelConfigurationId,
+    [modelConfigurationId]
+  );
+
+  const handleSelect = useCallback(
+    (option: LLMOption) => {
+      onChange(option.modelConfigurationId ?? null);
+      setOpen(false);
+    },
+    [onChange]
+  );
+
+  const { displayName, providerType } = useMemo(() => {
+    if (modelConfigurationId == null || !llmProviders) {
+      return { displayName: null as string | null, providerType: null };
+    }
+    for (const p of llmProviders) {
+      const cfg = p.model_configurations.find(
+        (m) => m.id === modelConfigurationId
+      );
+      if (cfg) {
+        return {
+          displayName: cfg.display_name || cfg.name,
+          providerType: p.provider,
+        };
+      }
+    }
+    return { displayName: null, providerType: null };
+  }, [llmProviders, modelConfigurationId]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild disabled={disabled}>
+        <OpenButton
+          disabled={disabled}
+          icon={providerType ? getModelIcon(providerType, "") : undefined}
+        >
+          {displayName ?? "Select a model"}
+        </OpenButton>
+      </Popover.Trigger>
+      <Popover.Content side="top" align="end" width="xl">
+        <ModelListContent
+          llmProviders={llmProviders}
+          isLoading={isLoading}
+          onSelect={handleSelect}
+          isSelected={isSelected}
+        />
+      </Popover.Content>
+    </Popover>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Embedding model picker components
 // ---------------------------------------------------------------------------
@@ -638,8 +707,7 @@ interface IndexSettingsFormValues {
    */
   custom_model: EmbeddingModel | null;
   enable_contextual_rag: boolean;
-  contextual_rag_llm_name: string | null;
-  contextual_rag_llm_provider: string | null;
+  contextual_rag_model_configuration_id: number | null;
 }
 
 export default function IndexSettingsPage() {
@@ -806,16 +874,10 @@ export default function IndexSettingsPage() {
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
-      contextual_rag_llm_name:
-        searchSettings?.contextual_rag_llm_name ??
-        defaultLlm?.modelName ??
-        null,
-      contextual_rag_llm_provider:
-        searchSettings?.contextual_rag_llm_provider ??
-        defaultLlm?.providerName ??
-        null,
+      contextual_rag_model_configuration_id:
+        searchSettings?.contextual_rag_model_configuration_id ?? null,
     }),
-    [currentEmbeddingModel, searchSettings, defaultLlm]
+    [currentEmbeddingModel, searchSettings]
   );
 
   const handleCancelReindex = useCallback(async () => {
@@ -915,11 +977,8 @@ export default function IndexSettingsPage() {
                 providerName,
                 switchoverType,
                 enableContextualRag: values.enable_contextual_rag,
-                contextualRagLlmName: values.enable_contextual_rag
-                  ? values.contextual_rag_llm_name
-                  : null,
-                contextualRagLlmProvider: values.enable_contextual_rag
-                  ? values.contextual_rag_llm_provider
+                contextualRagModelConfigurationId: values.enable_contextual_rag
+                  ? values.contextual_rag_model_configuration_id
                   : null,
               });
 
@@ -1477,20 +1536,15 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <LlmPicker
-                                modelName={values.contextual_rag_llm_name}
-                                providerName={
-                                  values.contextual_rag_llm_provider
+                              <LlmPickerById
+                                modelConfigurationId={
+                                  values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
-                                onChange={({ modelName, providerName }) => {
+                                onChange={(id) => {
                                   void setFieldValue(
-                                    "contextual_rag_llm_name",
-                                    modelName
-                                  );
-                                  void setFieldValue(
-                                    "contextual_rag_llm_provider",
-                                    providerName
+                                    "contextual_rag_model_configuration_id",
+                                    id
                                   );
                                 }}
                               />

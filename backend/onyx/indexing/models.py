@@ -198,6 +198,9 @@ class IndexingSetting(EmbeddingModelDetail):
 
     switchover_type: SwitchoverType = SwitchoverType.REINDEX
     enable_contextual_rag: bool
+    contextual_rag_model_configuration_id: int | None = None
+    # Deprecated: accepted for backward compat but never written to DB.
+    # Resolved to contextual_rag_model_configuration_id on the server side.
     contextual_rag_llm_name: str | None = None
     contextual_rag_llm_provider: str | None = None
 

@@ -743,40 +743,20 @@ def update_no_default_contextual_rag_provider(
 def update_default_contextual_model(
     db_session: Session,
     enable_contextual_rag: bool,
-    contextual_rag_llm_provider: str | None,
-    contextual_rag_llm_name: str | None,
+    model_configuration_id: int | None,
 ) -> None:
     """Sets or clears the default contextual RAG model.
 
     Should be called whenever the PRESENT search settings change
     (e.g. inline update or FUTURE → PRESENT swap).
     """
-    if (
-        not enable_contextual_rag
-        or not contextual_rag_llm_name
-        or not contextual_rag_llm_provider
-    ):
+    if not enable_contextual_rag or model_configuration_id is None:
         update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
-    provider = fetch_existing_llm_provider(
-        name=contextual_rag_llm_provider, db_session=db_session
-    )
-    if not provider:
-        raise ValueError(f"Provider '{contextual_rag_llm_provider}' not found")
-
-    model_config = next(
-        (
-            mc
-            for mc in provider.model_configurations
-            if mc.name == contextual_rag_llm_name
-        ),
-        None,
-    )
+    model_config = db_session.get(ModelConfiguration, model_configuration_id)
     if not model_config:
-        raise ValueError(
-            f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
-        )
+        raise ValueError(f"model_configuration id={model_configuration_id} not found")
 
     add_model_to_flow(
         db_session=db_session,
@@ -785,8 +765,8 @@ def update_default_contextual_model(
     )
     _update_default_model(
         db_session=db_session,
-        provider_id=provider.id,
-        model=contextual_rag_llm_name,
+        provider_id=model_config.llm_provider_id,
+        model=model_config.name,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 

@@ -13,7 +13,6 @@ from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
@@ -76,8 +75,7 @@ def set_new_search_settings(
             )
 
     validate_contextual_rag_model(
-        provider_name=search_settings_new.contextual_rag_llm_provider,
-        model_name=search_settings_new.contextual_rag_llm_name,
+        model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
         db_session=db_session,
     )
 
@@ -244,8 +242,7 @@ def update_saved_search_settings(
         )
 
     validate_contextual_rag_model(
-        provider_name=search_settings.contextual_rag_llm_provider,
-        model_name=search_settings.contextual_rag_llm_name,
+        model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
     )
 
@@ -285,38 +282,18 @@ def delete_unstructured_api_key_endpoint(
 
 
 def validate_contextual_rag_model(
-    provider_name: str | None,
-    model_name: str | None,
+    model_configuration_id: int | None,
     db_session: Session,
 ) -> None:
-    if error_msg := _validate_contextual_rag_model(
-        provider_name=provider_name,
-        model_name=model_name,
-        db_session=db_session,
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+    if model_configuration_id is None:
+        return
+    from onyx.db.models import ModelConfiguration
 
-
-def _validate_contextual_rag_model(
-    provider_name: str | None,
-    model_name: str | None,
-    db_session: Session,
-) -> str | None:
-    if provider_name is None and model_name is None:
-        return None
-    if not provider_name or not model_name:
-        return "Provider name and model name are required"
-
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
-    if not provider:
-        return f"Provider {provider_name} not found"
-    model_config = next(
-        (mc for mc in provider.model_configurations if mc.name == model_name), None
-    )
-    if not model_config:
-        return f"Model {model_name} not found in provider {provider_name}"
-
-    return None
+    if not db_session.get(ModelConfiguration, model_configuration_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"model_configuration id={model_configuration_id} not found",
+        )
 
 
 def _sync_default_contextual_model(db_session: Session) -> None:
@@ -327,8 +304,7 @@ def _sync_default_contextual_model(db_session: Session) -> None:
         update_default_contextual_model(
             db_session=db_session,
             enable_contextual_rag=primary.enable_contextual_rag,
-            contextual_rag_llm_provider=primary.contextual_rag_llm_provider,
-            contextual_rag_llm_name=primary.contextual_rag_llm_name,
+            model_configuration_id=primary.contextual_rag_model_configuration_id,
         )
     except ValueError as e:
         logger.error(
