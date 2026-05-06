@@ -12,8 +12,10 @@ import { localizeAndPrettify } from "@/lib/time";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { SvgAlertTriangle } from "@opal/icons";
+
+const ROW_HEIGHT = 65; // 4rem + 1px for border
 
 export interface IndexAttemptErrorsModalProps {
   errors: {
@@ -22,6 +24,7 @@ export interface IndexAttemptErrorsModalProps {
   totalPages: number;
   currentPage: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   onClose: () => void;
   onResolveAll: () => void;
   isResolvingErrors?: boolean;
@@ -32,10 +35,42 @@ export default function IndexAttemptErrorsModal({
   totalPages,
   currentPage,
   onPageChange,
+  onPageSizeChange,
   onClose,
   onResolveAll,
   isResolvingErrors = false,
 }: IndexAttemptErrorsModalProps) {
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const tableContainerRef = useCallback(
+    (container: HTMLDivElement | null) => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+      if (!container) return;
+
+      const observer = new ResizeObserver(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          const thead = container.querySelector("thead");
+          const theadHeight = thead?.getBoundingClientRect().height ?? 0;
+          const availableHeight = container.clientHeight - theadHeight;
+          const newPageSize = Math.max(
+            3,
+            Math.floor(availableHeight / ROW_HEIGHT)
+          );
+          onPageSizeChange(newPageSize);
+        }, 150);
+      });
+
+      observer.observe(container);
+      observerRef.current = observer;
+    },
+    [onPageSizeChange]
+  );
+
   const hasUnresolvedErrors = useMemo(
     () => errors.items.some((error) => !error.is_resolved),
     [errors.items]
@@ -76,7 +111,10 @@ export default function IndexAttemptErrorsModal({
             </div>
           )}
 
-          <div className="flex-1 w-full overflow-hidden min-h-0">
+          <div
+            ref={tableContainerRef}
+            className="flex-1 w-full overflow-hidden min-h-0"
+          >
             <Table>
               <TableHeader>
                 <TableRow>

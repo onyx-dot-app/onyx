@@ -236,9 +236,9 @@ function usePaginatedFetch<T extends PaginatedType>({
   useEffect(() => {
     setCachedBatches({});
     setTotalItems(0);
-    goToPage(1);
+    setCurrentPage(1);
     setError(null);
-  }, [currentPath, query, filter]);
+  }, [currentPath, query, filter, itemsPerPage]);
 
   return {
     currentPage,
