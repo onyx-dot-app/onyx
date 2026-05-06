@@ -652,10 +652,10 @@ test.describe("Paste Tiles", () => {
     await page.locator(TILE_SELECTOR).click();
     const textarea = page.locator(`${TILE_POPOVER_SELECTOR} textarea`);
     await textarea.fill("modified text\nline 2\nline 3\nline 4");
-    const dataText = await page
-      .locator(TILE_SELECTOR)
-      .getAttribute("data-text");
-    expect(dataText).toBe("modified text\nline 2\nline 3\nline 4");
+    await expect(page.locator(TILE_SELECTOR)).toHaveAttribute(
+      "data-text",
+      "modified text\nline 2\nline 3\nline 4"
+    );
   });
 
   test("Escape closes popover and refocuses input", async ({ page }) => {
@@ -798,10 +798,10 @@ test.describe("Paste Tiles", () => {
     await page.keyboard.press("ControlOrMeta+v");
     // Should create a new tile since the full text was on clipboard
     await expect(page.locator(TILE_SELECTOR)).toHaveCount(1);
-    const dataText = await page
-      .locator(TILE_SELECTOR)
-      .getAttribute("data-text");
-    expect(dataText).toContain("line 1");
+    await expect(page.locator(TILE_SELECTOR)).toHaveAttribute(
+      "data-text",
+      /line 1/
+    );
   });
 
   test("Ctrl+X on tile cuts the full text and clears input", async ({
