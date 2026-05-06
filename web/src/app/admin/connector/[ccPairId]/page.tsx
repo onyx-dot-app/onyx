@@ -117,12 +117,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const { currentPageData: indexAttemptErrorsPage } =
-    usePaginatedFetch<IndexAttemptError>({
-      itemsPerPage: 10,
-      pagesPerBatch: 1,
-      endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-    });
+  const {
+    currentPageData: indexAttemptErrorsPage,
+    totalItems: indexAttemptErrorsTotalItems,
+    currentPage: indexAttemptErrorsCurrentPage,
+    goToPage: goToIndexAttemptErrorsPage,
+  } = usePaginatedFetch<IndexAttemptError>({
+    itemsPerPage: 10,
+    pagesPerBatch: 1,
+    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+  });
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
@@ -140,7 +144,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const indexAttemptErrors = indexAttemptErrorsPage
     ? {
         items: indexAttemptErrorsPage,
-        total_items: indexAttemptErrorsPage.length,
+        total_items: indexAttemptErrorsTotalItems,
       }
     : null;
 
@@ -413,6 +417,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {showIndexAttemptErrors && indexAttemptErrors && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
+          currentPage={indexAttemptErrorsCurrentPage}
+          onPageChange={goToIndexAttemptErrorsPage}
           onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
             setShowIndexAttemptErrors(false);

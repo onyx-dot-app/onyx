@@ -12,77 +12,35 @@ import { localizeAndPrettify } from "@/lib/time";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useMemo } from "react";
 import { SvgAlertTriangle } from "@opal/icons";
+
+const ITEMS_PER_PAGE = 10;
+
 export interface IndexAttemptErrorsModalProps {
   errors: {
     items: IndexAttemptError[];
     total_items: number;
   };
+  currentPage: number;
+  onPageChange: (page: number) => void;
   onClose: () => void;
   onResolveAll: () => void;
   isResolvingErrors?: boolean;
 }
 
-const ROW_HEIGHT = 65; // 4rem + 1px for border
-
 export default function IndexAttemptErrorsModal({
   errors,
+  currentPage,
+  onPageChange,
   onClose,
   onResolveAll,
   isResolvingErrors = false,
 }: IndexAttemptErrorsModalProps) {
-  const observerRef = useRef<ResizeObserver | null>(null);
-  const [pageSize, setPageSize] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const tableContainerRef = useCallback((container: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-
-    if (!container) return;
-
-    const observer = new ResizeObserver(() => {
-      const thead = container.querySelector("thead");
-      const theadHeight = thead?.getBoundingClientRect().height ?? 0;
-      const availableHeight = container.clientHeight - theadHeight;
-      const newPageSize = Math.max(3, Math.floor(availableHeight / ROW_HEIGHT));
-      setPageSize(newPageSize);
-    });
-
-    observer.observe(container);
-    observerRef.current = observer;
-  }, []);
-
-  // When data changes, reset to page 1.
-  // When page size changes (resize), preserve the user's position by
-  // finding which new page contains the first item they were looking at.
-  const prevPageSizeRef = useRef(pageSize);
-  useEffect(() => {
-    if (pageSize !== prevPageSizeRef.current) {
-      setCurrentPage((prev) => {
-        const firstVisibleIndex = (prev - 1) * prevPageSizeRef.current;
-        const newPage = Math.floor(firstVisibleIndex / pageSize) + 1;
-        const totalPages = Math.ceil(errors.items.length / pageSize);
-        return Math.min(newPage, totalPages);
-      });
-      prevPageSizeRef.current = pageSize;
-    } else {
-      setCurrentPage(1);
-    }
-  }, [errors.items.length, pageSize]);
-
-  const paginationData = useMemo(() => {
-    const totalPages = Math.ceil(errors.items.length / pageSize);
-    const startIndex = (currentPage - 1) * pageSize;
-    const currentPageItems = errors.items.slice(
-      startIndex,
-      startIndex + pageSize
-    );
-    return { totalPages, currentPageItems };
-  }, [errors.items, pageSize, currentPage]);
+  const totalPages = useMemo(
+    () => Math.ceil(errors.total_items / ITEMS_PER_PAGE),
+    [errors.total_items]
+  );
 
   const hasUnresolvedErrors = useMemo(
     () => errors.items.some((error) => !error.is_resolved),
@@ -90,9 +48,8 @@ export default function IndexAttemptErrorsModal({
   );
 
   const handlePageChange = (page: number) => {
-    // Ensure we don't go to an invalid page
-    if (page >= 1 && page <= paginationData.totalPages) {
-      setCurrentPage(page);
+    if (page >= 1 && page <= totalPages) {
+      onPageChange(page);
     }
   };
 
@@ -125,10 +82,7 @@ export default function IndexAttemptErrorsModal({
             </div>
           )}
 
-          <div
-            ref={tableContainerRef}
-            className="flex-1 w-full overflow-hidden min-h-0"
-          >
+          <div className="flex-1 w-full overflow-hidden min-h-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -139,8 +93,8 @@ export default function IndexAttemptErrorsModal({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginationData.currentPageItems.length > 0 ? (
-                  paginationData.currentPageItems.map((error) => (
+                {errors.items.length > 0 ? (
+                  errors.items.map((error) => (
                     <TableRow key={error.id} className="h-[4rem]">
                       <TableCell>
                         {localizeAndPrettify(error.time_created)}
@@ -168,8 +122,8 @@ export default function IndexAttemptErrorsModal({
                         <span
                           className={`px-2 py-1 rounded text-xs ${
                             error.is_resolved
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
+                              ? "bg-status-success-02 text-status-success-05"
+                              : "bg-status-error-02 text-status-error-05"
                           }`}
                         >
                           {error.is_resolved ? "Resolved" : "Unresolved"}
@@ -181,7 +135,7 @@ export default function IndexAttemptErrorsModal({
                   <TableRow className="h-[4rem]">
                     <TableCell
                       colSpan={4}
-                      className="text-center py-8 text-gray-500"
+                      className="text-center py-8 text-text-03"
                     >
                       No errors found on this page
                     </TableCell>
@@ -191,10 +145,10 @@ export default function IndexAttemptErrorsModal({
             </Table>
           </div>
 
-          {paginationData.totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="flex w-full justify-center">
               <PageSelector
-                totalPages={paginationData.totalPages}
+                totalPages={totalPages}
                 currentPage={currentPage}
                 onPageChange={handlePageChange}
               />
