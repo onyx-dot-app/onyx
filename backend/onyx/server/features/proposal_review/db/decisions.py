@@ -47,7 +47,7 @@ def upsert_finding_decision(
     finding.decided_at = datetime.now(timezone.utc)
     db_session.flush()
 
-    logger.info(f"Recorded decision on finding {finding_id}: {action}")
+    logger.info("Recorded decision on finding %s: %s", finding_id, action)
     return finding
 
 
@@ -88,7 +88,7 @@ def update_proposal_decision(
     proposal.updated_at = datetime.now(timezone.utc)
     db_session.flush()
 
-    logger.info(f"Recorded proposal decision {decision} for proposal {proposal_id}")
+    logger.info("Recorded proposal decision %s for proposal %s", decision, proposal_id)
     return proposal
 
 
@@ -111,5 +111,5 @@ def mark_proposal_jira_synced(
     proposal.jira_synced = True
     proposal.jira_synced_at = datetime.now(timezone.utc)
     db_session.flush()
-    logger.info(f"Marked proposal {proposal_id} as jira_synced")
+    logger.info("Marked proposal %s as jira_synced", proposal_id)
     return proposal

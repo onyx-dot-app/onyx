@@ -362,6 +362,111 @@ def get_active_import_job(
 
 
 @router.get(
+    "/rulesets/{ruleset_id}/import/latest-failed",
+)
+def get_latest_failed_import_job(
+    ruleset_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> ImportJobResponse | None:
+    """Get the most recent FAILED import job for a ruleset, if any."""
+    tenant_id = get_current_tenant_id()
+
+    ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
+    if not ruleset:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
+
+    job = imports_db.get_latest_failed_import_job(ruleset_id, db_session)
+    if not job:
+        return None
+
+    return ImportJobResponse.from_model(job)
+
+
+@router.post(
+    "/rulesets/{ruleset_id}/import/{import_job_id}/retry",
+    status_code=202,
+)
+def retry_import_job(
+    ruleset_id: UUID,
+    import_job_id: UUID,
+    user: User = Depends(  # noqa: ARG001
+        require_permission(Permission.MANAGE_CONNECTORS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> dict[str, str]:
+    """Retry a FAILED import job.
+
+    Deletes any partial rules from the failed attempt, resets the job
+    back to PENDING, and re-dispatches the Celery task.
+
+    Only the most recent import job for a ruleset can be retried to
+    avoid accidentally deleting rules from a newer import.
+    """
+    tenant_id = get_current_tenant_id()
+
+    ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
+    if not ruleset:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
+
+    job = imports_db.get_import_job(import_job_id, db_session)
+    if not job or job.ruleset_id != ruleset_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Import job not found")
+
+    if job.status != "FAILED":
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Only FAILED import jobs can be retried (current status: {job.status})",
+        )
+
+    # Only allow retrying the most recent job to prevent deleting rules
+    # that belong to a newer import.
+    latest_failed = imports_db.get_latest_failed_import_job(ruleset_id, db_session)
+    if not latest_failed or latest_failed.id != import_job_id:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only the most recent import can be retried",
+        )
+
+    # Clean up any partial rules from the failed attempt. Always run the
+    # delete (don't gate on rules_created) because the counter may be
+    # stale if the worker crashed before incrementing it.
+    from onyx.server.features.proposal_review.db.models import ProposalReviewRule
+
+    deleted = (
+        db_session.query(ProposalReviewRule)
+        .filter(
+            ProposalReviewRule.ruleset_id == ruleset_id,
+            ProposalReviewRule.source == "IMPORTED",
+            ProposalReviewRule.created_at >= job.created_at,
+        )
+        .delete(synchronize_session="fetch")
+    )
+    if deleted:
+        logger.info("Deleted %s partial rule(s) from failed import %s", deleted, job.id)
+
+    # Atomic conditional UPDATE — returns False if a concurrent retry
+    # already transitioned this job out of FAILED.
+    if not imports_db.reset_import_job_for_retry(import_job_id, db_session):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Import job is no longer in FAILED state (concurrent retry?)",
+        )
+
+    db_session.commit()
+
+    from onyx.background.celery.versioned_apps.client import app as celery_app
+
+    celery_app.send_task(
+        "run_checklist_import",
+        args=[str(job.id), tenant_id],
+        expires=600,
+    )
+
+    return {"import_job_id": str(job.id)}
+
+
+@router.get(
     "/rulesets/{ruleset_id}/import/{import_job_id}/status",
 )
 def get_import_job_status(
@@ -414,6 +519,7 @@ def test_rule(
         proposal_text="[Sample proposal text for testing. No real proposal loaded.]",
         budget_text="[No budget text available for test.]",
         foa_text="[No FOA text available for test.]",
+        supplemental_text="",
         metadata={"test_mode": True},
         jira_key="TEST-000",
     )

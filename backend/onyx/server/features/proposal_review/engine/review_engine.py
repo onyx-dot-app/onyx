@@ -13,6 +13,7 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import timezone
+from typing import cast
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -51,7 +52,7 @@ def _execute_review(
     is_retry = rule_ids is not None
 
     if is_retry and not rule_ids:
-        logger.warning(f"Retry called with empty rule_ids for run {review_run_id}")
+        logger.warning("Retry called with empty rule_ids for run %s", review_run_id)
         # Reset status since the API already set it to RUNNING
         with get_session_with_current_tenant() as db_session:
             run = findings_db.get_review_run(run_uuid, db_session)
@@ -70,6 +71,7 @@ def _execute_review(
         ruleset_id = run.ruleset_id
 
         if is_retry:
+            assert rule_ids is not None  # guaranteed by early return above
             rule_id_set = set(rule_ids)
             # Delete old error findings for the rules being retried
             failed = findings_db.get_failed_findings_for_run(run_uuid, db_session)
@@ -92,30 +94,44 @@ def _execute_review(
             run.started_at = datetime.now(timezone.utc)
         db_session.commit()
 
-    # Step 2: Assemble proposal context
+    # Step 2: Load review_model from config; assemble proposal context
+    review_model: str | None = None
+    with get_session_with_current_tenant() as db_session:
+        from onyx.server.features.proposal_review.db import config as config_db
+        from shared_configs.contextvars import get_current_tenant_id
+
+        config = config_db.get_config(get_current_tenant_id(), db_session)
+        if config:
+            review_model = config.review_model
+
     with get_session_with_current_tenant() as db_session:
         context = get_proposal_context(proposal_id, db_session)
 
     # Step 3: Try to auto-fetch FOA if opportunity_id is in metadata
-    opportunity_id = context.metadata.get("opportunity_id") or context.metadata.get(
-        "funding_opportunity_number"
+    opportunity_id = (
+        context.metadata.get("opportunity_id")
+        or context.metadata.get("funding_opportunity_number")
+        or context.metadata.get("Funding Opportunity Number")
     )
     if opportunity_id and not context.foa_text:
-        logger.info(f"Attempting to auto-fetch FOA for opportunity_id={opportunity_id}")
+        logger.info(
+            "Attempting to auto-fetch FOA for opportunity_id=%s", opportunity_id
+        )
         try:
             with get_session_with_current_tenant() as db_session:
                 foa_text = fetch_foa(opportunity_id, proposal_id, db_session)
                 db_session.commit()
                 if foa_text:
                     context.foa_text = foa_text
-                    logger.info(f"Auto-fetched FOA: {len(foa_text)} chars")
+                    logger.info("Auto-fetched FOA: %s chars", len(foa_text))
         except Exception as e:
-            logger.warning(f"FOA auto-fetch failed (non-fatal): {e}")
+            logger.warning("FOA auto-fetch failed (non-fatal): %s", e)
 
     # Step 4: Determine which rules to evaluate
     if is_retry:
         # Retry: use the specific rule IDs passed in
         rules_to_eval = rule_ids
+        assert rules_to_eval is not None  # guaranteed by early return above
     else:
         # Full run: get all active rules for the ruleset
         with get_session_with_current_tenant() as db_session:
@@ -125,7 +141,7 @@ def _execute_review(
             rules_to_eval = [str(rule.id) for rule in rules]
 
         if not rules_to_eval:
-            logger.warning(f"No active rules found for ruleset {ruleset_id}")
+            logger.warning("No active rules found for ruleset %s", ruleset_id)
             with get_session_with_current_tenant() as db_session:
                 run = findings_db.get_review_run(run_uuid, db_session)
                 if run:
@@ -154,6 +170,7 @@ def _execute_review(
                 rid,
                 proposal_id,
                 context,
+                review_model,
             ): rid
             for rid in rules_to_eval
         }
@@ -166,7 +183,9 @@ def _execute_review(
             except Exception as e:
                 succeeded = False
                 logger.error(
-                    f"Rule {rid} failed: {e}",
+                    "Rule %s failed: %s",
+                    rid,
+                    e,
                     exc_info=True,
                 )
 
@@ -195,9 +214,10 @@ def _execute_review(
             db_session.commit()
 
     logger.info(
-        f"Review run {review_run_id} completed: "
-        f"{len(rules_to_eval)} rules evaluated"
-        f"{' (retry)' if is_retry else ''}"
+        "Review run %s completed: %s rules evaluated%s",
+        review_run_id,
+        len(rules_to_eval),
+        " (retry)" if is_retry else "",
     )
 
 
@@ -206,14 +226,13 @@ def _evaluate_and_save(
     rule_id: str,
     proposal_id: "UUID",
     context: "ProposalContext",
+    review_model: str | None = None,
 ) -> None:
     """Evaluate a single rule and save the finding to DB."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.server.features.proposal_review.db import findings as findings_db
     from onyx.server.features.proposal_review.db import rulesets as rulesets_db
-    from onyx.server.features.proposal_review.engine.rule_evaluator import (
-        evaluate_rule,
-    )
+    from onyx.server.features.proposal_review.engine.rule_evaluator import evaluate_rule
 
     rule_uuid = UUID(rule_id)
     run_uuid = UUID(review_run_id)
@@ -225,7 +244,7 @@ def _evaluate_and_save(
             raise ValueError(f"Rule {rule_id} not found")
 
         # Evaluate the rule
-        result = evaluate_rule(rule, context, db_session)
+        result = evaluate_rule(rule, context, db_session, review_model=review_model)
 
         # Save finding
         findings_db.create_finding(
@@ -243,7 +262,7 @@ def _evaluate_and_save(
         )
         db_session.commit()
 
-    logger.debug(f"Rule {rule_id} evaluated: verdict={result['verdict']}")
+    logger.debug("Rule %s evaluated: verdict=%s", rule_id, result["verdict"])
 
 
 def _save_error_finding(
@@ -271,7 +290,7 @@ def _save_error_finding(
             )
             db_session.commit()
     except Exception as e:
-        logger.error(f"Failed to save error finding for rule {rule_id}: {e}")
+        logger.error("Failed to save error finding for rule %s: %s", rule_id, e)
 
 
 def _mark_run_failed(review_run_id: str) -> None:
@@ -287,11 +306,18 @@ def _mark_run_failed(review_run_id: str) -> None:
                 run.completed_at = datetime.now(timezone.utc)
                 db_session.commit()
     except Exception as e:
-        logger.error(f"Failed to mark run {review_run_id} as FAILED: {e}")
+        logger.error("Failed to mark run %s as FAILED: %s", review_run_id, e)
 
 
-_MAX_RULE_RETRIES = int(os.environ.get("PROPOSAL_REVIEW_RULE_MAX_RETRIES", "2"))
-_RETRY_BACKOFF_BASE = 2  # seconds — retry waits 2s, 4s, ...
+_MAX_RULE_RETRIES = int(os.environ.get("PROPOSAL_REVIEW_RULE_MAX_RETRIES", "5"))
+_RETRY_BACKOFF_BASE = 2  # seconds — retry waits 2s, 4s, 8s, ...
+_RATE_LIMIT_BACKOFF = 30  # seconds — longer wait for rate limit errors
+
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    """Check if an exception is a rate limit error."""
+    error_str = str(e).lower()
+    return "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str
 
 
 def _evaluate_single_rule(
@@ -299,13 +325,15 @@ def _evaluate_single_rule(
     rule_id: str,
     proposal_id: "UUID",
     context: "ProposalContext",
+    review_model: str | None = None,
 ) -> bool:
     """Evaluate one rule, save the finding. Called from ThreadPoolExecutor.
 
     Context is shared in-memory from the parent — no DB re-fetch needed.
     Retries up to _MAX_RULE_RETRIES times with exponential backoff on failure
-    (e.g. LLM timeout). On final failure, an error finding (NEEDS_REVIEW) is
-    saved so the officer sees which rule failed.
+    (e.g. LLM timeout). Rate limit errors get longer backoff. On final
+    failure, an error finding (NEEDS_REVIEW) is saved so the officer sees
+    which rule failed.
 
     Returns True on success, False if all attempts failed.
     """
@@ -313,20 +341,31 @@ def _evaluate_single_rule(
 
     for attempt in range(_MAX_RULE_RETRIES + 1):
         try:
-            _evaluate_and_save(review_run_id, rule_id, proposal_id, context)
+            _evaluate_and_save(
+                review_run_id, rule_id, proposal_id, context, review_model
+            )
             return True
         except Exception as e:
             last_error = e
             if attempt < _MAX_RULE_RETRIES:
-                wait = _RETRY_BACKOFF_BASE * (2**attempt)
+                if _is_rate_limit_error(e):
+                    wait = _RATE_LIMIT_BACKOFF * (attempt + 1)
+                else:
+                    wait = _RETRY_BACKOFF_BASE * (2**attempt)
                 logger.warning(
-                    f"Rule {rule_id} attempt {attempt + 1} failed: {e}. "
-                    f"Retrying in {wait}s..."
+                    "Rule %s attempt %s failed: %s. Retrying in %ss...",
+                    rule_id,
+                    attempt + 1,
+                    e,
+                    wait,
                 )
                 time.sleep(wait)
             else:
                 logger.error(
-                    f"Rule {rule_id} failed after {attempt + 1} attempts: {e}",
+                    "Rule %s failed after %s attempts: %s",
+                    rule_id,
+                    attempt + 1,
+                    e,
                     exc_info=True,
                 )
 
@@ -347,6 +386,8 @@ def _execute_checklist_import(import_job_id: str) -> None:
     from onyx.server.features.proposal_review.db import rulesets as rulesets_db
     from onyx.server.features.proposal_review.engine.checklist_importer import (
         decompose_checklist_item,
+    )
+    from onyx.server.features.proposal_review.engine.checklist_importer import (
         enumerate_checklist_items,
     )
 
@@ -373,7 +414,7 @@ def _execute_checklist_import(import_job_id: str) -> None:
     items = enumerate_checklist_items(extracted_text, llm)
 
     if not items:
-        logger.warning(f"Import {import_job_id}: no checklist items found")
+        logger.warning("Import %s: no checklist items found", import_job_id)
         with get_session_with_current_tenant() as db_session:
             job = imports_db.get_import_job(job_uuid, db_session)
             if job:
@@ -391,9 +432,12 @@ def _execute_checklist_import(import_job_id: str) -> None:
     work_items = _split_large_items(items, max_sub_checks)
 
     logger.info(
-        f"Import {import_job_id}: enumerated {len(items)} items "
-        f"({len(work_items)} work units after splitting), "
-        f"decomposing with {parallel_workers} workers"
+        "Import %s: enumerated %s items (%s work units after splitting), "
+        "decomposing with %s workers",
+        import_job_id,
+        len(items),
+        len(work_items),
+        parallel_workers,
     )
 
     # Step 3: Decompose each work item in parallel, persist as each completes
@@ -416,10 +460,13 @@ def _execute_checklist_import(import_job_id: str) -> None:
         for future in as_completed(future_to_item):
             item = future_to_item[future]
             try:
-                rule_dicts = future.result()
+                rule_dicts = cast(list[dict], future.result())
             except Exception as e:
                 logger.error(
-                    f"  [{item.id}] '{item.name}' failed: {e}",
+                    "  [%s] '%s' failed: %s",
+                    item.id,
+                    item.name,
+                    e,
                     exc_info=True,
                 )
                 failed_items.append(item.name)
@@ -459,9 +506,11 @@ def _execute_checklist_import(import_job_id: str) -> None:
                 db_session.commit()
 
             logger.info(
-                f"  [{item.id}] '{item.name}': "
-                f"{len(rule_dicts)} rules persisted "
-                f"({rules_created} total)"
+                "  [%s] '%s': %s rules persisted (%s total)",
+                item.id,
+                item.name,
+                len(rule_dicts),
+                rules_created,
             )
 
     # Step 4: Mark completed
@@ -475,7 +524,7 @@ def _execute_checklist_import(import_job_id: str) -> None:
     status = f"{rules_created} rules created"
     if failed_items:
         status += f", {len(failed_items)} items failed: {failed_items}"
-    logger.info(f"Import job {import_job_id} completed: {status}")
+    logger.info("Import job %s completed: %s", import_job_id, status)
 
 
 def _mark_import_failed(import_job_id: str, error: str) -> None:
@@ -492,7 +541,7 @@ def _mark_import_failed(import_job_id: str, error: str) -> None:
                 job.completed_at = datetime.now(timezone.utc)
                 db_session.commit()
     except Exception as e:
-        logger.error(f"Failed to mark import job {import_job_id} as FAILED: {e}")
+        logger.error("Failed to mark import job %s as FAILED: %s", import_job_id, e)
 
 
 def _split_large_items(

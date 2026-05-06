@@ -22,11 +22,14 @@ from dataclasses import field
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import AssistantMessage
 from onyx.llm.models import SystemMessage
+from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import get_llm_max_output_tokens
 from onyx.llm.utils import get_model_map
 from onyx.llm.utils import llm_response_to_string
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -176,7 +179,7 @@ def enumerate_checklist_items(
         RuntimeError: If the LLM call fails or returns unparseable output.
     """
     user_content = _ENUMERATE_USER.format(checklist_text=checklist_text)
-    messages = [
+    messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage] = [
         SystemMessage(content=_ENUMERATE_SYSTEM),
         UserMessage(content=user_content),
     ]
@@ -184,14 +187,16 @@ def enumerate_checklist_items(
     max_output_tokens = _get_max_output_tokens(llm)
 
     try:
-        with llm_generation_span(llm, "checklist_enumerate", messages) as gen_span:
+        with llm_generation_span(
+            llm, LLMFlow.CHECKLIST_ENUMERATE, messages
+        ) as gen_span:
             response = llm.invoke(
                 messages, timeout_override=300, max_tokens=max_output_tokens
             )
             record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
     except Exception as e:
-        logger.error(f"Pass 1 (enumerate) LLM call failed: {e}")
+        logger.error("Pass 1 (enumerate) LLM call failed: %s", e)
         raise RuntimeError(f"Failed to enumerate checklist items: {str(e)}") from e
 
     parsed = _parse_json_array(raw_text, context="enumerate")
@@ -199,13 +204,13 @@ def enumerate_checklist_items(
     items: list[ChecklistItem] = []
     for i, raw in enumerate(parsed):
         if not isinstance(raw, dict):
-            logger.warning(f"Enumerate: skipping non-dict at index {i}")
+            logger.warning("Enumerate: skipping non-dict at index %s", i)
             continue
 
         item_id = str(raw.get("id", f"ITEM-{i + 1}"))
         name = raw.get("name")
         if not name:
-            logger.warning(f"Enumerate: skipping item at index {i} (no name)")
+            logger.warning("Enumerate: skipping item at index %s (no name)", i)
             continue
 
         items.append(
@@ -251,7 +256,7 @@ def decompose_checklist_item(
         sub_checks=sub_checks_str,
         checklist_text=checklist_text,
     )
-    messages = [
+    messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage] = [
         SystemMessage(content=_DECOMPOSE_SYSTEM),
         UserMessage(content=user_content),
     ]
@@ -260,7 +265,7 @@ def decompose_checklist_item(
 
     try:
         with llm_generation_span(
-            llm, f"checklist_decompose_{item.id}", messages
+            llm, LLMFlow.CHECKLIST_DECOMPOSE, messages
         ) as gen_span:
             response = llm.invoke(
                 messages, timeout_override=300, max_tokens=max_output_tokens
@@ -364,13 +369,13 @@ def refine_rule(
         refinement_question=refinement_question,
         user_answer=user_answer,
     )
-    messages = [
+    messages: list[SystemMessage | UserMessage | AssistantMessage | ToolMessage] = [
         SystemMessage(content=_REFINE_SYSTEM),
         UserMessage(content=user_content),
     ]
 
     try:
-        with llm_generation_span(llm, "checklist_refine_rule", messages) as gen_span:
+        with llm_generation_span(llm, LLMFlow.CHECKLIST_REFINE, messages) as gen_span:
             response = llm.invoke(messages, timeout_override=120)
             record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
@@ -422,7 +427,7 @@ def _get_max_output_tokens(llm: LLM) -> int:
             model_provider=llm.config.model_provider,
         )
     except Exception as e:
-        logger.warning(f"Failed to resolve max output tokens: {e}")
+        logger.warning("Failed to resolve max output tokens: %s", e)
         return int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
 
@@ -438,8 +443,8 @@ def _parse_json_array(raw_text: str, context: str) -> list:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as e:
-        logger.error(f"[{context}] Failed to parse JSON: {e}")
-        logger.debug(f"[{context}] Raw LLM response: {text[:500]}...")
+        logger.error("[%s] Failed to parse JSON: %s", context, e)
+        logger.debug("[%s] Raw LLM response: %s...", context, text[:500])
         raise RuntimeError(
             f"LLM returned invalid JSON during {context}. "
             "Please try the import again."
@@ -465,12 +470,12 @@ def _validate_rule(raw_rule: dict, index: int) -> dict | None:
 
     name = raw_rule.get("name")
     if not name:
-        logger.warning(f"Rule at index {index} missing 'name', skipping")
+        logger.warning("Rule at index %s missing 'name', skipping", index)
         return None
 
     prompt_template = raw_rule.get("prompt_template")
     if not prompt_template:
-        logger.warning(f"Rule '{name}' missing 'prompt_template', skipping")
+        logger.warning("Rule '%s' missing 'prompt_template', skipping", name)
         return None
 
     rule_type = str(raw_rule.get("rule_type", "CUSTOM_NL")).upper()

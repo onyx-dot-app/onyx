@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button, Text } from "@opal/components";
-import { SvgHistory, SvgChevronDown } from "@opal/icons";
+import { SvgHistory, SvgChevronDown, SvgTrash } from "@opal/icons";
 import { cn } from "@opal/utils";
 import Popover from "@/refresh-components/Popover";
 import type { ReviewRun } from "@/app/proposal-review/types";
@@ -52,6 +52,8 @@ interface RunHistorySelectorProps {
   runs: ReviewRun[];
   selectedRunId: string | null;
   onSelectRun: (runId: string | null) => void;
+  proposalId: string;
+  onRunDeleted: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,8 +64,11 @@ export default function RunHistorySelector({
   runs,
   selectedRunId,
   onSelectRun,
+  proposalId,
+  onRunDeleted,
 }: RunHistorySelectorProps) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const latestRun = runs[0] as ReviewRun | undefined;
   if (!latestRun) return null;
@@ -74,6 +79,25 @@ export default function RunHistorySelector({
     ? latestRun
     : runs.find((r) => r.id === selectedRunId) ?? latestRun;
 
+  async function handleDelete(run: ReviewRun, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (run.status === "RUNNING") return;
+
+    setDeleting(run.id);
+    try {
+      const res = await fetch(
+        `/api/proposal-review/proposals/${proposalId}/review-runs/${run.id}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        onRunDeleted();
+        setOpen(false);
+      }
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   return (
     <div className="flex items-center px-4 py-1.5 border-b border-border-01 shrink-0">
       <Popover open={open} onOpenChange={setOpen}>
@@ -82,7 +106,7 @@ export default function RunHistorySelector({
             <SvgHistory className="h-3.5 w-3.5 text-text-02" />
             <Text font="secondary-body" color="text-03">
               {isViewingLatest
-                ? `Latest run \u00b7 ${formatRunDate(selectedRun.created_at)}`
+                ? `Latest run · ${formatRunDate(selectedRun.created_at)}`
                 : formatRunDate(selectedRun.created_at)}
             </Text>
             <SvgChevronDown className="h-3 w-3 text-text-02" />
@@ -94,12 +118,13 @@ export default function RunHistorySelector({
               const isSelected =
                 run.id === selectedRun.id &&
                 (isViewingLatest ? index === 0 : true);
+              const isRunning = run.status === "RUNNING";
 
               return (
                 <Popover.Close asChild key={run.id}>
                   <button
                     className={cn(
-                      "flex items-center gap-2 w-full px-2 py-1.5 rounded-08 text-left",
+                      "flex items-center gap-2 w-full px-2 py-1.5 rounded-08 text-left group",
                       "hover:bg-background-neutral-02 transition-colors",
                       isSelected && "bg-background-neutral-02"
                     )}
@@ -114,13 +139,26 @@ export default function RunHistorySelector({
                     <div className="flex-1 min-w-0">
                       <Text font="secondary-action" color="text-04">
                         {index === 0
-                          ? `Latest \u00b7 ${formatRunDate(run.created_at)}`
+                          ? `Latest · ${formatRunDate(run.created_at)}`
                           : formatRunDate(run.created_at)}
                       </Text>
                     </div>
                     <Text font="secondary-body" color="text-03">
                       {statusLabel(run)}
                     </Text>
+                    {!isRunning && (
+                      <div
+                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={(e) => handleDelete(run, e)}
+                      >
+                        <SvgTrash
+                          className={cn(
+                            "h-3.5 w-3.5 text-text-02 hover:text-action-danger-03 transition-colors",
+                            deleting === run.id && "animate-pulse"
+                          )}
+                        />
+                      </div>
+                    )}
                   </button>
                 </Popover.Close>
               );

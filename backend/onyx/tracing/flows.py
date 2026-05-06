@@ -43,6 +43,14 @@ class LLMFlow(StrEnum):
     KG_DOCUMENT_CLASSIFICATION = "kg_document_classification"
     KG_DEEP_EXTRACTION = "kg_deep_extraction"
 
+    # Proposal review — checklist import
+    CHECKLIST_ENUMERATE = "checklist_enumerate"
+    CHECKLIST_DECOMPOSE = "checklist_decompose"
+    CHECKLIST_REFINE = "checklist_refine_rule"
+
+    # Proposal review — rule evaluation
+    PROPOSAL_REVIEW = "proposal_review"
+
     # Image generation
     IMAGE_GENERATION = "image_generation"
     IMAGE_EDIT = "image_edit"

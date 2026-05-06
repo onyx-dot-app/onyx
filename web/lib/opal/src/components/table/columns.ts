@@ -73,6 +73,8 @@ interface DisplayColumnConfig<TData> {
   width: ColumnWidth;
   /** Enable hiding. @default true */
   enableHiding?: boolean;
+  /** Extract a sortable value from the row. When provided, enables sorting. */
+  sortValue?: (row: TData) => string | number | null | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,16 +205,33 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
     displayColumn(
       config: DisplayColumnConfig<TData>
     ): OnyxDisplayColumn<TData> {
-      const { id, header, cell, width, enableHiding = true } = config;
-
-      const def: ColumnDef<TData, any> = helper.display({
+      const {
         id,
-        header: header ?? undefined,
-        enableHiding,
-        enableSorting: false,
-        enableResizing: false,
-        cell: (info) => cell(info.row.original),
-      });
+        header,
+        cell,
+        width,
+        enableHiding = true,
+        sortValue,
+      } = config;
+
+      const def: ColumnDef<TData, any> = sortValue
+        ? {
+            id,
+            header: header ?? undefined,
+            enableHiding,
+            enableSorting: true,
+            enableResizing: false,
+            accessorFn: sortValue,
+            cell: (info: CellContext<TData, any>) => cell(info.row.original),
+          }
+        : helper.display({
+            id,
+            header: header ?? undefined,
+            enableHiding,
+            enableSorting: false,
+            enableResizing: false,
+            cell: (info) => cell(info.row.original),
+          });
 
       return {
         kind: "display",

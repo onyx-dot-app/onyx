@@ -234,11 +234,18 @@ export default function ChecklistPanel({ proposalId }: ChecklistPanelProps) {
       )}
 
       {/* Run history selector */}
-      {reviewRuns.length > 1 && (
+      {reviewRuns.length > 0 && (
         <RunHistorySelector
           runs={reviewRuns}
           selectedRunId={viewingRunId}
           onSelectRun={setViewingRunId}
+          proposalId={proposalId}
+          onRunDeleted={() => {
+            setViewingRunId(null);
+            mutateReviewRuns();
+            mutateFindings();
+            mutateReviewStatus();
+          }}
         />
       )}
 

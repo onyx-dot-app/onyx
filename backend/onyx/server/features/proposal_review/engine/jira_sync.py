@@ -52,7 +52,7 @@ def sync_to_jira(
         raise ValueError(f"No decision found for proposal {proposal_id}")
 
     if proposal.jira_synced:
-        logger.info(f"Decision for proposal {proposal_id} already synced to Jira")
+        logger.info("Decision for proposal %s already synced to Jira", proposal_id)
         return
 
     # Load tenant config for Jira settings
@@ -133,7 +133,9 @@ def sync_to_jira(
     db_session.flush()
 
     logger.info(
-        f"Successfully synced decision for proposal {proposal_id} to Jira issue {issue_key}"
+        "Successfully synced decision for proposal %s to Jira issue %s",
+        proposal_id,
+        issue_key,
     )
 
 
@@ -239,9 +241,9 @@ def _update_custom_fields(
     try:
         resp = requests.put(url, headers=auth_headers, json=payload, timeout=30)
         resp.raise_for_status()
-        logger.info(f"Updated custom fields on {issue_key}")
+        logger.info("Updated custom fields on %s", issue_key)
     except requests.RequestException as e:
-        logger.error(f"Failed to update custom fields on {issue_key}: {e}")
+        logger.error("Failed to update custom fields on %s: %s", issue_key, e)
         raise RuntimeError(f"Jira field update failed: {e}") from e
 
 
@@ -257,7 +259,7 @@ def _transition_issue(
     transition_name = transition_map.get(decision)
 
     if not transition_name:
-        logger.debug(f"No transition configured for decision '{decision}', skipping")
+        logger.debug("No transition configured for decision '%s', skipping", decision)
         return
 
     # First, get available transitions
@@ -267,7 +269,7 @@ def _transition_issue(
         resp.raise_for_status()
         available = resp.json().get("transitions", [])
     except requests.RequestException as e:
-        logger.error(f"Failed to fetch transitions for {issue_key}: {e}")
+        logger.error("Failed to fetch transitions for %s: %s", issue_key, e)
         raise RuntimeError(f"Jira transition fetch failed: {e}") from e
 
     # Find the matching transition by name (case-insensitive)
@@ -280,8 +282,10 @@ def _transition_issue(
     if not target_transition:
         available_names = [t.get("name", "") for t in available]
         logger.warning(
-            f"Transition '{transition_name}' not found for {issue_key}. "
-            f"Available: {available_names}"
+            "Transition '%s' not found for %s. Available: %s",
+            transition_name,
+            issue_key,
+            available_names,
         )
         return
 
@@ -292,9 +296,9 @@ def _transition_issue(
             transitions_url, headers=auth_headers, json=payload, timeout=30
         )
         resp.raise_for_status()
-        logger.info(f"Transitioned {issue_key} to '{transition_name}'")
+        logger.info("Transitioned %s to '%s'", issue_key, transition_name)
     except requests.RequestException as e:
-        logger.error(f"Failed to transition {issue_key}: {e}")
+        logger.error("Failed to transition %s: %s", issue_key, e)
         raise RuntimeError(f"Jira transition failed: {e}") from e
 
 
@@ -332,9 +336,9 @@ def _post_comment(
     try:
         resp = requests.post(url, headers=auth_headers, json=payload, timeout=30)
         resp.raise_for_status()
-        logger.info(f"Posted review summary comment on {issue_key}")
+        logger.info("Posted review summary comment on %s", issue_key)
     except requests.RequestException as e:
-        logger.error(f"Failed to post comment on {issue_key}: {e}")
+        logger.error("Failed to post comment on %s: %s", issue_key, e)
         raise RuntimeError(f"Jira comment post failed: {e}") from e
 
 

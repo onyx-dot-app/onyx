@@ -35,8 +35,10 @@ def create_review_run(
     db_session.add(run)
     db_session.flush()
     logger.info(
-        f"Created review run {run.id} for proposal {proposal_id} "
-        f"with {total_rules} rules"
+        "Created review run %s for proposal %s with %s rules",
+        run.id,
+        proposal_id,
+        total_rules,
     )
     return run
 
@@ -115,7 +117,10 @@ def create_finding(
     db_session.add(finding)
     db_session.flush()
     logger.info(
-        f"Created finding {finding.id} verdict={verdict} for proposal {proposal_id}"
+        "Created finding %s verdict=%s for proposal %s",
+        finding.id,
+        verdict,
+        proposal_id,
     )
     return finding
 
@@ -204,3 +209,19 @@ def delete_findings(
         .delete(synchronize_session="fetch")
     )
     return count
+
+
+def delete_review_run(
+    run_id: UUID,
+    db_session: Session,
+) -> bool:
+    """Delete a review run and all its findings. Returns True if deleted."""
+    db_session.query(ProposalReviewFinding).filter(
+        ProposalReviewFinding.review_run_id == run_id,
+    ).delete(synchronize_session="fetch")
+    count = (
+        db_session.query(ProposalReviewRun)
+        .filter(ProposalReviewRun.id == run_id)
+        .delete(synchronize_session="fetch")
+    )
+    return count > 0

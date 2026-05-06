@@ -73,7 +73,10 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 
 # Anthropic models that require the adaptive thinking API (thinking.type.adaptive
 # + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
+_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+)
 
 
 class LLMTimeoutError(Exception):

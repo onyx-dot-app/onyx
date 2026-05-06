@@ -101,6 +101,8 @@ interface UseDataTableOptions<TData extends RowData> {
   columnResizeMode?: ColumnResizeMode;
   /** Initial sorting state. @default [] */
   initialSorting?: SortingState;
+  /** Called when sorting changes. Receives the full sorting state. */
+  onSortingChange?: (sorting: SortingState) => void;
   /** Initial column visibility state. @default {} */
   initialColumnVisibility?: VisibilityState;
   /** Called when column visibility changes. */
@@ -200,6 +202,7 @@ export default function useDataTable<TData extends RowData>(
     enableColumnResizing = true,
     columnResizeMode = "onChange",
     initialSorting = [],
+    onSortingChange: onSortingChangeProp,
     initialColumnVisibility = {},
     onColumnVisibilityChange: onColumnVisibilityChangeProp,
     initialRowSelection = {},
@@ -214,7 +217,18 @@ export default function useDataTable<TData extends RowData>(
   const isServerSide = !!serverSide;
 
   // ---- internal state -----------------------------------------------------
-  const [sorting, setSorting] = useState<SortingState>(initialSorting);
+  const [sortingRaw, setSortingRaw] = useState<SortingState>(initialSorting);
+  const setSorting: typeof setSortingRaw = useCallback(
+    (updater) => {
+      setSortingRaw((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        onSortingChangeProp?.(next);
+        return next;
+      });
+    },
+    [onSortingChangeProp]
+  );
+  const sorting = sortingRaw;
   const [rowSelection, setRowSelection] =
     useState<RowSelectionState>(initialRowSelection);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});

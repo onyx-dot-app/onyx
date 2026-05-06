@@ -99,7 +99,7 @@ def create_ruleset(
     )
     db_session.add(ruleset)
     db_session.flush()
-    logger.info(f"Created ruleset {ruleset.id} '{name}' for tenant {tenant_id}")
+    logger.info("Created ruleset %s '%s' for tenant %s", ruleset.id, name, tenant_id)
     return ruleset
 
 
@@ -139,7 +139,7 @@ def delete_ruleset(
         return False
     db_session.delete(ruleset)
     db_session.flush()
-    logger.info(f"Deleted ruleset {ruleset_id}")
+    logger.info("Deleted ruleset %s", ruleset_id)
     return True
 
 
@@ -243,7 +243,7 @@ def create_rule(
     )
     db_session.add(rule)
     db_session.flush()
-    logger.info(f"Created rule {rule.id} '{name}' in ruleset {ruleset_id}")
+    logger.info("Created rule %s '%s' in ruleset %s", rule.id, name, ruleset_id)
     return rule
 
 
@@ -279,7 +279,7 @@ def delete_rule(
         return False
     db_session.delete(rule)
     db_session.flush()
-    logger.info(f"Deleted rule {rule_id}")
+    logger.info("Deleted rule %s", rule_id)
     return True
 
 
@@ -318,7 +318,7 @@ def bulk_update_rules(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown bulk action: {action}")
 
     db_session.flush()
-    logger.info(f"Bulk {action} on {count} rules")
+    logger.info("Bulk %s on %s rules", action, count)
     return count
 
 

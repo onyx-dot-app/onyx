@@ -21,16 +21,22 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgPlus,
+  SvgRefreshCw,
   SvgTrash,
   SvgUploadCloud,
+  SvgX,
 } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import Modal from "@/refresh-components/Modal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
 import RuleEditor from "@/app/admin/proposal-review/components/RuleEditor";
 import ImportFlow from "@/app/admin/proposal-review/components/ImportFlow";
-import { useImportStatus } from "@/app/admin/proposal-review/hooks/useImportStatus";
+import {
+  useImportStatus,
+  useFailedImport,
+} from "@/app/admin/proposal-review/hooks/useImportStatus";
 import RefinementModal from "@/app/admin/proposal-review/components/RefinementModal";
 import RuleTestModal from "@/app/admin/proposal-review/components/RuleTestModal";
 import type {
@@ -60,6 +66,7 @@ function RulesetDetailPage() {
   const [deleteTarget, setDeleteTarget] = useState<RuleResponse | null>(null);
   const [testTarget, setTestTarget] = useState<RuleResponse | null>(null);
   const [refineTarget, setRefineTarget] = useState<RuleResponse | null>(null);
+  const [showImportError, setShowImportError] = useState(false);
   const [ruleSearch, setRuleSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -72,6 +79,12 @@ function RulesetDetailPage() {
     rulesetId,
     importJobId
   );
+  const {
+    failedJob,
+    dismiss: dismissFailedJob,
+    refreshAfterRetry,
+  } = useFailedImport(rulesetId);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // When import completes, refresh the ruleset and show toast
   useEffect(() => {
@@ -89,15 +102,15 @@ function RulesetDetailPage() {
         } from "${importJob.source_filename}" as inactive drafts.`
       );
       setImportJobId(null);
-    }
-    if (isFailed) {
+    } else if (isFailed) {
       handledJobRef.current = importJob.id;
       toast.error(
         `Import failed: ${importJob.error_message || "Unknown error"}`
       );
       setImportJobId(null);
+      refreshAfterRetry();
     }
-  }, [isComplete, isFailed, importJob, apiUrl]);
+  }, [isComplete, isFailed, importJob, apiUrl, refreshAfterRetry]);
 
   async function handleImportFile(file: File) {
     setShowImportFlow(false);
@@ -122,6 +135,28 @@ function RulesetDetailPage() {
     } catch (err) {
       setIsUploading(false);
       toast.error(err instanceof Error ? err.message : "Import failed");
+    }
+  }
+
+  async function handleRetryImport(jobId: string) {
+    setIsRetrying(true);
+    try {
+      const res = await fetch(
+        `/api/proposal-review/rulesets/${rulesetId}/import/${jobId}/retry`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to retry import");
+      }
+      const data = await res.json();
+      handledJobRef.current = null;
+      setImportJobId(data.import_job_id);
+      refreshAfterRetry();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setIsRetrying(false);
     }
   }
 
@@ -558,6 +593,41 @@ function RulesetDetailPage() {
           </div>
         )}
 
+        {/* Failed import banner */}
+        {failedJob && !isProcessing && !isUploading && !isRetrying && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-08 bg-status-error-01 border border-status-error-02">
+            <SvgAlertCircle className="shrink-0 w-4 h-4 text-status-error-05" />
+            <div className="flex-1">
+              <Text font="secondary-body" color="text-04">
+                {`Rule generation for "${failedJob.source_filename}" failed.`}
+              </Text>
+            </div>
+            <Button
+              prominence="tertiary"
+              size="sm"
+              onClick={() => setShowImportError(true)}
+            >
+              View details
+            </Button>
+            <Button
+              prominence="secondary"
+              size="sm"
+              icon={SvgRefreshCw}
+              onClick={() => handleRetryImport(failedJob.id)}
+              disabled={isRetrying}
+            >
+              Retry
+            </Button>
+            <Button
+              prominence="tertiary"
+              size="sm"
+              icon={SvgX}
+              onClick={dismissFailedJob}
+              tooltip="Dismiss"
+            />
+          </div>
+        )}
+
         {/* Search + action bar */}
         <div className="flex items-center gap-3">
           {ruleset.rules.length > 0 && (
@@ -747,6 +817,46 @@ function RulesetDetailPage() {
             )}
           </Text>
         </ConfirmationModalLayout>
+      )}
+
+      {/* Import Error Detail Modal */}
+      {showImportError && failedJob && (
+        <Modal open onOpenChange={(open) => !open && setShowImportError(false)}>
+          <Modal.Content width="md">
+            <Modal.Header
+              icon={SvgAlertCircle}
+              title="Import Error"
+              onClose={() => setShowImportError(false)}
+            />
+            <Modal.Body twoTone>
+              <div className="flex flex-col gap-3">
+                <Text as="p" color="text-03">
+                  {`Rule generation for "${failedJob.source_filename}" failed.`}
+                </Text>
+                <pre className="whitespace-pre-wrap break-words text-xs p-3 rounded-08 bg-background-neutral-02 text-text-03 overflow-auto max-h-[300px]">
+                  {failedJob.error_message || "Unknown error"}
+                </pre>
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                prominence="secondary"
+                onClick={() => setShowImportError(false)}
+              >
+                Close
+              </Button>
+              <Button
+                icon={SvgRefreshCw}
+                onClick={async () => {
+                  setShowImportError(false);
+                  await handleRetryImport(failedJob.id);
+                }}
+              >
+                Retry
+              </Button>
+            </Modal.Footer>
+          </Modal.Content>
+        </Modal>
       )}
     </SettingsLayouts.Root>
   );

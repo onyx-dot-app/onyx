@@ -61,7 +61,8 @@ def fetch_foa(
     )
     if existing_foa and existing_foa.extracted_text:
         logger.info(
-            f"FOA document already exists for proposal {proposal_id}, skipping fetch"
+            "FOA document already exists for proposal %s, skipping fetch",
+            proposal_id,
         )
         return existing_foa.extracted_text
 
@@ -81,7 +82,7 @@ def fetch_foa(
 
         provider = get_default_provider()
     except Exception as e:
-        logger.warning(f"Failed to load web search provider: {e}")
+        logger.warning("Failed to load web search provider: %s", e)
         provider = None
 
     if provider is None:
@@ -95,16 +96,16 @@ def fetch_foa(
     try:
         results = provider.search(search_query)
     except Exception as e:
-        logger.error(f"Web search failed for FOA '{opportunity_id}': {e}")
+        logger.error("Web search failed for FOA '%s': %s", opportunity_id, e)
         return None
 
     if not results:
-        logger.info(f"No search results found for FOA '{opportunity_id}'")
+        logger.info("No search results found for FOA '%s'", opportunity_id)
         return None
 
     # Pick the best result URL
     best_url = str(results[0].link)
-    logger.info(f"Fetching FOA content from: {best_url}")
+    logger.info("Fetching FOA content from: %s", best_url)
 
     # Fetch full content from the URL
     try:
@@ -120,13 +121,13 @@ def fetch_foa(
             or not contents[0].scrape_successful
             or not contents[0].full_content
         ):
-            logger.warning(f"No content extracted from FOA URL: {best_url}")
+            logger.warning("No content extracted from FOA URL: %s", best_url)
             return None
 
         foa_text = contents[0].full_content
 
     except Exception as e:
-        logger.error(f"Failed to fetch FOA content from {best_url}: {e}")
+        logger.error("Failed to fetch FOA content from %s: %s", best_url, e)
         return None
 
     # Save as a proposal_review_document with role=FOA
@@ -142,11 +143,13 @@ def fetch_foa(
         db_session.add(foa_doc)
         db_session.flush()
         logger.info(
-            f"Saved FOA document for proposal {proposal_id} "
-            f"(opportunity_id={opportunity_id}, {len(foa_text)} chars)"
+            "Saved FOA document for proposal %s " "(opportunity_id=%s, %s chars)",
+            proposal_id,
+            opportunity_id,
+            len(foa_text),
         )
     except Exception as e:
-        logger.error(f"Failed to save FOA document: {e}")
+        logger.error("Failed to save FOA document: %s", e)
         # Still return the text even if save fails
         return foa_text
 

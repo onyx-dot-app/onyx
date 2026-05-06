@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Text, Tag, Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
+import type { SortingState } from "@tanstack/react-table";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -125,6 +126,7 @@ export default function ProposalQueue() {
         id: "jira_key",
         header: "Jira Key",
         width: { weight: 10, minWidth: 100 },
+        sortValue: (row) => row.metadata.jira_key ?? "",
         cell: (row) => (
           <Text font="main-ui-body" color="text-04" nowrap>
             {row.metadata.jira_key ?? "--"}
@@ -135,6 +137,7 @@ export default function ProposalQueue() {
         id: "title",
         header: "Title",
         width: { weight: 25, minWidth: 150 },
+        sortValue: (row) => row.metadata.title ?? "",
         cell: (row) => (
           <Text font="main-ui-body" color="text-04">
             {row.metadata.title ?? "Untitled"}
@@ -147,6 +150,7 @@ export default function ProposalQueue() {
           id: `meta_${key}`,
           header: key,
           width: { weight: 12, minWidth: 100 },
+          sortValue: (row) => formatCellValue(row.metadata[key]),
           cell: (row) => {
             const value = row.metadata[key];
             // Render dates with locale formatting
@@ -169,6 +173,7 @@ export default function ProposalQueue() {
         id: "review_status",
         header: "Review",
         width: { weight: 10, minWidth: 120 },
+        sortValue: (row) => row.status,
         cell: (row) => {
           const statusConfig = STATUS_TAG[row.status];
           return (
@@ -185,8 +190,9 @@ export default function ProposalQueue() {
     return cols;
   }, [dynamicKeys]);
 
-  // Load saved visibility from localStorage, falling back to defaults
+  // Load saved visibility / sorting from localStorage
   const STORAGE_KEY = "proposal-review-queue-columns";
+  const SORTING_STORAGE_KEY = "proposal-review-queue-sorting";
 
   const initialColumnVisibility = useMemo(() => {
     try {
@@ -213,6 +219,24 @@ export default function ProposalQueue() {
     },
     []
   );
+
+  const initialSorting = useMemo<SortingState>(() => {
+    try {
+      const saved = localStorage.getItem(SORTING_STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as SortingState;
+    } catch {
+      // ignore
+    }
+    return [];
+  }, []);
+
+  const handleSortingChange = useCallback((sorting: SortingState) => {
+    try {
+      localStorage.setItem(SORTING_STORAGE_KEY, JSON.stringify(sorting));
+    } catch {
+      // localStorage full or unavailable — silently ignore
+    }
+  }, []);
 
   // Filter proposals
   const filteredProposals = useMemo(() => {
@@ -371,6 +395,8 @@ export default function ProposalQueue() {
             data={filteredProposals}
             getRowId={(row) => row.id}
             columns={columns}
+            initialSorting={initialSorting}
+            onSortingChange={handleSortingChange}
             initialColumnVisibility={initialColumnVisibility}
             onColumnVisibilityChange={handleColumnVisibilityChange}
             onRowClick={(row) => handleRowClick(row)}

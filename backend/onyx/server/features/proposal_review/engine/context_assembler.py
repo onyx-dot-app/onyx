@@ -48,7 +48,7 @@ _JIRA_TEXT_METADATA_KEYS = [
     "priority",
     "status",
     "resolution",
-    "issue_type",
+    "issuetype",
     "labels",
     "components",
     "fix_versions",
@@ -67,6 +67,7 @@ class ProposalContext:
     proposal_text: str  # concatenated text from all documents
     budget_text: str  # best-effort budget section extraction
     foa_text: str  # FOA content (auto-fetched or uploaded)
+    supplemental_text: str  # docs not classified as budget or FOA
     metadata: dict[str, Any]  # structured metadata from Document tags
     jira_key: str  # for display/reference
     metadata_raw: dict[str, Any] = field(
@@ -98,6 +99,7 @@ def get_proposal_context(
             proposal_text="",
             budget_text="",
             foa_text="",
+            supplemental_text="",
             metadata={},
             jira_key="",
             metadata_raw={},
@@ -162,6 +164,7 @@ def get_proposal_context(
     # 4. Fetch manually uploaded documents from proposal_review_document.
     # This is the PRIMARY source of rich text content for V1 since the
     # extracted_text column holds the full document content.
+    supplemental_parts: list[str] = []
     manual_docs = (
         db_session.query(ProposalReviewDocument)
         .filter(ProposalReviewDocument.proposal_id == proposal_id)
@@ -174,17 +177,27 @@ def get_proposal_context(
                 f"--- Document: {doc.file_name} (role: {doc.document_role}) ---\n"
                 f"{doc.extracted_text}"
             )
-            # Classify by role
+            # Classify by role or filename heuristic
             role_upper = (doc.document_role or "").upper()
+            classified = False
             if role_upper == "BUDGET" or _is_budget_filename(doc.file_name):
                 budget_parts.append(doc.extracted_text)
-            elif role_upper == "FOA":
+                classified = True
+            if role_upper == "FOA" or _is_foa_filename(doc.file_name):
                 foa_parts.append(doc.extracted_text)
+                classified = True
+            if not classified:
+                supplemental_parts.append(
+                    f"--- {doc.file_name} ---\n{doc.extracted_text}"
+                )
 
     return ProposalContext(
         proposal_text="\n\n".join(all_text_parts) if all_text_parts else "",
         budget_text="\n\n".join(budget_parts) if budget_parts else "",
         foa_text="\n\n".join(foa_parts) if foa_parts else "",
+        supplemental_text=(
+            "\n\n".join(supplemental_parts) if supplemental_parts else ""
+        ),
         metadata=metadata,
         jira_key=jira_key,
         metadata_raw=metadata,
@@ -350,10 +363,7 @@ def _classify_child_text(
 
     if _is_budget_filename(semantic_id):
         budget_parts.append(text)
-    elif any(
-        term in semantic_id
-        for term in ["foa", "funding opportunity", "rfa", "solicitation", "nofo"]
-    ):
+    elif _is_foa_filename(semantic_id):
         foa_parts.append(text)
 
 
@@ -361,3 +371,20 @@ def _is_budget_filename(filename: str) -> bool:
     """Check if a filename suggests budget content."""
     lower = (filename or "").lower()
     return any(term in lower for term in ["budget", "cost", "financial", "expenditure"])
+
+
+def _is_foa_filename(filename: str) -> bool:
+    """Check if a filename suggests FOA / solicitation content."""
+    lower = (filename or "").lower()
+    return any(
+        term in lower
+        for term in [
+            "solicitation",
+            "foa",
+            "rfa",
+            "scope of call",
+            "nofo",
+            "funding opportunity",
+            "call for proposal",
+        ]
+    )

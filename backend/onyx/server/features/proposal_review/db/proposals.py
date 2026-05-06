@@ -73,7 +73,7 @@ def get_or_create_proposal(
         if proposal is None:
             raise
         return proposal
-    logger.info(f"Lazily created proposal {proposal.id} for document {document_id}")
+    logger.info("Lazily created proposal %s for document %s", proposal.id, document_id)
     return proposal
 
 
@@ -129,5 +129,5 @@ def update_proposal_status(
     proposal.status = status
     proposal.updated_at = datetime.now(timezone.utc)
     db_session.flush()
-    logger.info(f"Updated proposal {proposal_id} status to {status}")
+    logger.info("Updated proposal %s status to %s", proposal_id, status)
     return proposal

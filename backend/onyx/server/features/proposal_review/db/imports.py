@@ -83,6 +83,53 @@ def get_dangling_import_jobs(
     )
 
 
+def get_latest_failed_import_job(
+    ruleset_id: UUID,
+    db_session: Session,
+) -> ProposalReviewImportJob | None:
+    """Get the most recent FAILED import job for a ruleset, but only if no
+    newer COMPLETED or in-progress job exists (i.e. the failure is still
+    the latest outcome)."""
+    latest = (
+        db_session.query(ProposalReviewImportJob)
+        .filter(ProposalReviewImportJob.ruleset_id == ruleset_id)
+        .order_by(ProposalReviewImportJob.created_at.desc())
+        .first()
+    )
+    if latest and latest.status == "FAILED":
+        return latest
+    return None
+
+
+def reset_import_job_for_retry(
+    job_id: UUID,
+    db_session: Session,
+) -> bool:
+    """Atomically reset a FAILED import job back to PENDING for re-dispatch.
+
+    Returns True if the row was updated, False if the job was not in FAILED
+    state (e.g. a concurrent retry already transitioned it).
+    """
+    rows = (
+        db_session.query(ProposalReviewImportJob)
+        .filter(
+            ProposalReviewImportJob.id == job_id,
+            ProposalReviewImportJob.status == "FAILED",
+        )
+        .update(
+            {
+                ProposalReviewImportJob.status: "PENDING",
+                ProposalReviewImportJob.error_message: None,
+                ProposalReviewImportJob.rules_created: 0,
+                ProposalReviewImportJob.completed_at: None,
+            },
+            synchronize_session="fetch",
+        )
+    )
+    db_session.flush()
+    return rows > 0
+
+
 def mark_import_job_failed(
     job: ProposalReviewImportJob,
     error_message: str,

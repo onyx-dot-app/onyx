@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Lightweight stand-in for ProposalContext (avoids importing the real one,
 # which pulls in SQLAlchemy models that are irrelevant to pure-logic tests).
@@ -27,6 +26,7 @@ def make_proposal_context():
         proposal_text: str = "Default proposal text.",
         budget_text: str = "",
         foa_text: str = "",
+        supplemental_text: str = "",
         metadata: dict | None = None,
         jira_key: str = "PROJ-100",
     ) -> "ProposalContext":
@@ -34,6 +34,7 @@ def make_proposal_context():
             proposal_text=proposal_text,
             budget_text=budget_text,
             foa_text=foa_text,
+            supplemental_text=supplemental_text,
             metadata=metadata or {},
             jira_key=jira_key,
         )

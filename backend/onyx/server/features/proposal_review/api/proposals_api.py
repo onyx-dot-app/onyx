@@ -179,7 +179,7 @@ def list_proposals(
                 select(Document__Tag.document_id)
                 .join(Tag, Document__Tag.tag_id == Tag.id)
                 .where(
-                    Tag.tag_key == "Issue Type",
+                    Tag.tag_key == "issuetype",
                     Tag.tag_value.in_(config.jira_issue_types),
                 )
             )

@@ -70,8 +70,10 @@ def trigger_review(
 
     db_session.commit()
     logger.info(
-        f"Review triggered for proposal {proposal_id} "
-        f"with ruleset {request.ruleset_id} ({active_rule_count} rules)"
+        "Review triggered for proposal %s with ruleset %s (%s rules)",
+        proposal_id,
+        request.ruleset_id,
+        active_rule_count,
     )
 
     # Dispatch Celery task via the client app (has Redis broker configured)
@@ -166,8 +168,10 @@ def retry_failed_rules_endpoint(
     db_session.commit()
 
     logger.info(
-        f"Retrying {len(rule_ids)} failed rules for run {run.id} "
-        f"on proposal {proposal_id}"
+        "Retrying %s failed rules for run %s on proposal %s",
+        len(rule_ids),
+        run.id,
+        proposal_id,
     )
 
     from onyx.background.celery.versioned_apps.client import app as celery_app
@@ -180,6 +184,36 @@ def retry_failed_rules_endpoint(
     )
 
     return ReviewRunResponse.from_model(run)
+
+
+@router.delete(
+    "/proposals/{proposal_id}/review-runs/{run_id}",
+    status_code=204,
+)
+def delete_review_run(
+    proposal_id: UUID,
+    run_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Delete a review run and all its findings."""
+    tenant_id = get_current_tenant_id()
+    proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
+    if not proposal:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
+
+    run = findings_db.get_review_run(run_id, db_session)
+    if not run or run.proposal_id != proposal_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Review run not found")
+
+    if run.status == "RUNNING":
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Cannot delete a running review",
+        )
+
+    findings_db.delete_review_run(run_id, db_session)
+    db_session.commit()
 
 
 @router.get(

@@ -6,13 +6,17 @@ import re
 from sqlalchemy.orm import Session
 
 from onyx.llm.factory import get_default_llm
+from onyx.llm.interfaces import LLM
+from onyx.llm.models import AssistantMessage
 from onyx.llm.models import SystemMessage
+from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.server.features.proposal_review.db.models import ProposalReviewRule
 from onyx.server.features.proposal_review.engine.context_assembler import (
     ProposalContext,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -48,10 +52,52 @@ Verdict meanings:
 """
 
 
+def _get_llm_for_model(model_name: str | None) -> LLM:
+    """Return an LLM instance for the given model name, or the default."""
+    if not model_name:
+        return get_default_llm()
+
+    from sqlalchemy.orm import selectinload
+
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.models import LLMProvider
+    from onyx.db.models import ModelConfiguration
+    from onyx.llm.factory import llm_from_provider
+    from onyx.server.manage.llm.models import LLMProviderView
+
+    with get_session_with_current_tenant() as db_session:
+        model_config = (
+            db_session.query(ModelConfiguration)
+            .options(
+                selectinload(ModelConfiguration.llm_provider).selectinload(
+                    LLMProvider.model_configurations
+                )
+            )
+            .filter(ModelConfiguration.name == model_name)
+            .first()
+        )
+
+        if not model_config or not model_config.llm_provider:
+            logger.warning(
+                "Model '%s' not found in DB, falling back to default LLM",
+                model_name,
+            )
+            return get_default_llm()
+
+        provider_view = LLMProviderView.from_model(model_config.llm_provider)
+        resolved_name = model_config.name
+
+    return llm_from_provider(
+        model_name=resolved_name,
+        llm_provider=provider_view,
+    )
+
+
 def evaluate_rule(
     rule: ProposalReviewRule,
     context: ProposalContext,
     _db_session: Session | None = None,
+    review_model: str | None = None,
 ) -> dict:
     """Evaluate one rule against proposal context via LLM.
 
@@ -64,6 +110,7 @@ def evaluate_rule(
         rule: The rule to evaluate.
         context: Assembled proposal context.
         db_session: Optional DB session (not used for LLM call but kept for API compat).
+        review_model: Optional model name override from proposal_review_config.
 
     Returns:
         Dict with verdict, confidence, evidence, explanation, suggested_action,
@@ -75,15 +122,17 @@ def evaluate_rule(
     # 2. Build full prompt
     user_content = f"{filled_prompt}\n\n" f"{RESPONSE_FORMAT_INSTRUCTIONS}"
 
-    prompt_messages = [
+    prompt_messages: list[
+        SystemMessage | UserMessage | AssistantMessage | ToolMessage
+    ] = [
         SystemMessage(content=SYSTEM_PROMPT),
         UserMessage(content=user_content),
     ]
 
     # 3. Call LLM — exceptions propagate to the caller so the retry
     #    mechanism in _evaluate_single_rule can handle transient failures.
-    llm = get_default_llm()
-    with llm_generation_span(llm, "proposal_review", prompt_messages) as gen_span:
+    llm = _get_llm_for_model(review_model)
+    with llm_generation_span(llm, LLMFlow.PROPOSAL_REVIEW, prompt_messages) as gen_span:
         response = llm.invoke(prompt_messages)
         record_llm_response(gen_span, response)
     raw_text = llm_response_to_string(response)
@@ -110,6 +159,9 @@ def _fill_template(template: str, context: ProposalContext) -> str:
     - {{metadata}} -> JSON dump of context.metadata
     - {{metadata.FIELD}} -> specific metadata field value
     - {{jira_key}} -> context.jira_key
+
+    After substitution, any unclassified attachment text is appended so
+    every rule has access to the full document set.
     """
     result = template
 
@@ -132,6 +184,15 @@ def _fill_template(template: str, context: ProposalContext) -> str:
             field_value = json.dumps(field_value, default=str)
         result = result.replace(match.group(0), str(field_value))
 
+    # Append unclassified attachments so no document content is silently
+    # dropped. Classified docs appear in their labeled sections above;
+    # everything else lands here.
+    if context.supplemental_text:
+        result += (
+            "\n\n--- Additional Attachments (not classified as budget or FOA) ---\n"
+            + context.supplemental_text
+        )
+
     return result
 
 
@@ -153,7 +214,7 @@ def _parse_llm_response(raw_text: str) -> dict:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError:
-        logger.warning(f"Failed to parse LLM response as JSON: {text[:200]}...")
+        logger.warning("Failed to parse LLM response as JSON: %s...", text[:200])
         return {
             "verdict": "NEEDS_REVIEW",
             "confidence": "LOW",

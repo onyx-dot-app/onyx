@@ -144,6 +144,8 @@ export interface DataTableProps<TData> {
   pageSize?: number;
   /** Initial sorting state. */
   initialSorting?: SortingState;
+  /** Called when sorting changes. Receives the full sorting state. */
+  onSortingChange?: (sorting: SortingState) => void;
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
   /** Called when column visibility changes. Receives the full visibility state. */

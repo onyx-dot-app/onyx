@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import useSWR from "swr";
+import { useCallback, useEffect, useState } from "react";
+import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export interface ImportJobStatus {
@@ -75,5 +75,38 @@ export function useImportStatus(rulesetId: string, importJobId: string | null) {
     isComplete: job?.status === "COMPLETED",
     isFailed: job?.status === "FAILED",
     error,
+  };
+}
+
+/**
+ * Fetches the most recent FAILED import job for a ruleset, if any.
+ * Used to show an error banner with a retry option on the ruleset page.
+ */
+export function useFailedImport(rulesetId: string) {
+  const key = `/api/proposal-review/rulesets/${rulesetId}/import/latest-failed`;
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
+
+  const { data, error } = useSWR<ImportJobStatus | null>(
+    key,
+    errorHandlingFetcher
+  );
+
+  const raw = data ?? null;
+  const failedJob = raw && raw.id !== dismissedJobId ? raw : null;
+
+  const dismiss = useCallback(() => {
+    if (raw) setDismissedJobId(raw.id);
+  }, [raw]);
+
+  const refreshAfterRetry = useCallback(() => {
+    setDismissedJobId(null);
+    mutate(key);
+  }, [key]);
+
+  return {
+    failedJob,
+    error,
+    dismiss,
+    refreshAfterRetry,
   };
 }
