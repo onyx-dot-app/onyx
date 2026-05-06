@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
@@ -54,35 +53,43 @@ def test_filter_documents_empty_title_and_content() -> None:
     doc = create_test_document(
         title="", semantic_id="", sections=[TextSection(text="", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 0
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_title_with_content() -> None:
     doc = create_test_document(
         title="", sections=[TextSection(text="Valid content", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_content_with_title() -> None:
     doc = create_test_document(
         title="Valid Title", sections=[TextSection(text="", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert len(failures) == 0
 
 
 def test_filter_documents_exceeding_max_chars() -> None:
-    if not MAX_DOCUMENT_CHARS:  # Skip if no max chars configured
-        return
-    long_text = "a" * (MAX_DOCUMENT_CHARS + 1)
+    limit = 100
+    long_text = "a" * (limit + 1)
     doc = create_test_document(sections=[TextSection(text=long_text, link="test_link")])
-    result = filter_documents([doc])
-    assert len(result) == 0
+    with patch("onyx.indexing.indexing_pipeline.MAX_DOCUMENT_CHARS", limit):
+        docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 1
+    assert failures[0].failed_document is not None
+    assert failures[0].failed_document.document_id == "test_id"
+    assert "too large to index" in failures[0].failure_message
+    assert "MAX_DOCUMENT_CHARS" in failures[0].failure_message
 
 
 def test_filter_documents_valid_document() -> None:
@@ -90,10 +97,11 @@ def test_filter_documents_valid_document() -> None:
         title="Valid Title",
         sections=[TextSection(text="Valid content", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
-    assert result[0].title == "Valid Title"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert docs[0].title == "Valid Title"
+    assert len(failures) == 0
 
 
 def test_filter_documents_whitespace_only() -> None:
@@ -102,8 +110,9 @@ def test_filter_documents_whitespace_only() -> None:
         semantic_id="  ",
         sections=[TextSection(text="   ", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 0
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 def test_filter_documents_semantic_id_no_title() -> None:
@@ -112,9 +121,10 @@ def test_filter_documents_semantic_id_no_title() -> None:
         semantic_id="Valid Semantic ID",
         sections=[TextSection(text="Valid content", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].semantic_identifier == "Valid Semantic ID"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].semantic_identifier == "Valid Semantic ID"
+    assert len(failures) == 0
 
 
 def test_filter_documents_multiple_sections() -> None:
@@ -125,27 +135,30 @@ def test_filter_documents_multiple_sections() -> None:
             TextSection(text="Content 3", link="test_link"),
         ]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert len(result[0].sections) == 3
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert len(docs[0].sections) == 3
+    assert len(failures) == 0
 
 
 def test_filter_documents_multiple_documents() -> None:
-    docs = [
+    docs_input = [
         create_test_document(doc_id="1", title="Title 1"),
         create_test_document(
             doc_id="2", title="", sections=[TextSection(text="", link="test_link")]
-        ),  # Should be filtered
+        ),  # Should be filtered (empty, no failure)
         create_test_document(doc_id="3", title="Title 3"),
     ]
-    result = filter_documents(docs)
-    assert len(result) == 2
-    assert {doc.id for doc in result} == {"1", "3"}
+    docs, failures = filter_documents(docs_input)
+    assert len(docs) == 2
+    assert {doc.id for doc in docs} == {"1", "3"}
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_batch() -> None:
-    result = filter_documents([])
-    assert len(result) == 0
+    docs, failures = filter_documents([])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 @patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 4096)

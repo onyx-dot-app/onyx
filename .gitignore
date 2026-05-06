@@ -62,3 +62,4 @@ plans/
 
 # Added context for LLMs
 .claude/CLAUDE.md
+.claude/settings.local.json

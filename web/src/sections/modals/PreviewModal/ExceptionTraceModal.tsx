@@ -8,19 +8,27 @@ interface ExceptionTraceModalProps {
   onOutsideClick: () => void;
   exceptionTrace: string;
   language?: string;
+  /**
+   * Modal header. Defaults to "Full Exception Trace" — the original
+   * caller (`IndexAttemptsTable`) renders multi-line Python tracebacks.
+   * Pass a more specific label (e.g. "Sync Error") for shorter, less
+   * trace-shaped error messages.
+   */
+  title?: string;
 }
 
 export default function ExceptionTraceModal({
   onOutsideClick,
   exceptionTrace,
   language = "python",
+  title = "Full Exception Trace",
 }: ExceptionTraceModalProps) {
   return (
     <Modal open onOpenChange={onOutsideClick}>
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
-          title="Full Exception Trace"
+          title={title}
           onClose={onOutsideClick}
           height="fit"
         />
