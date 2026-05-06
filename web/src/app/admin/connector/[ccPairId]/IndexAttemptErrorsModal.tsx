@@ -15,13 +15,11 @@ import { PageSelector } from "@/components/PageSelector";
 import { useMemo } from "react";
 import { SvgAlertTriangle } from "@opal/icons";
 
-const ITEMS_PER_PAGE = 10;
-
 export interface IndexAttemptErrorsModalProps {
   errors: {
     items: IndexAttemptError[];
-    total_items: number;
   };
+  totalPages: number;
   currentPage: number;
   onPageChange: (page: number) => void;
   onClose: () => void;
@@ -31,17 +29,13 @@ export interface IndexAttemptErrorsModalProps {
 
 export default function IndexAttemptErrorsModal({
   errors,
+  totalPages,
   currentPage,
   onPageChange,
   onClose,
   onResolveAll,
   isResolvingErrors = false,
 }: IndexAttemptErrorsModalProps) {
-  const totalPages = useMemo(
-    () => Math.ceil(errors.total_items / ITEMS_PER_PAGE),
-    [errors.total_items]
-  );
-
   const hasUnresolvedErrors = useMemo(
     () => errors.items.some((error) => !error.is_resolved),
     [errors.items]

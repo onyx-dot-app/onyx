@@ -119,6 +119,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const {
     currentPageData: indexAttemptErrorsPage,
+    totalPages: indexAttemptErrorsTotalPages,
     totalItems: indexAttemptErrorsTotalItems,
     currentPage: indexAttemptErrorsCurrentPage,
     goToPage: goToIndexAttemptErrorsPage,
@@ -142,10 +143,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const indexAttemptErrors = indexAttemptErrorsPage
-    ? {
-        items: indexAttemptErrorsPage,
-        total_items: indexAttemptErrorsTotalItems,
-      }
+    ? { items: indexAttemptErrorsPage }
     : null;
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -417,6 +415,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {showIndexAttemptErrors && indexAttemptErrors && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
+          totalPages={indexAttemptErrorsTotalPages}
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
           onClose={() => setShowIndexAttemptErrors(false)}
@@ -561,7 +560,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       )}
 
-      {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
+      {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
         <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
           <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
           <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
