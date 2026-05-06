@@ -70,7 +70,7 @@ class TestWiring:
         """
         # Precondition.
         q_hit = f"testing partial hit {uuid4().hex[:8]}"
-        q_miss = "testing partial miss"
+        q_miss = f"testing partial miss {uuid4().hex[:8]}"
 
         model, encode = _make_fake_embedding_model([[1.0, 1.0]])
         get_query_embeddings(

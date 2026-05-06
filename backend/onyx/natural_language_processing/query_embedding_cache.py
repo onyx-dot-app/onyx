@@ -64,6 +64,9 @@ def _safe_unpack_or_none(buf: bytes) -> Embedding | None:
     Returns:
         The deserialized embedding or None if the unpacking failed.
     """
+    if len(buf) % 4 != 0 or len(buf) == 0:
+        logger.warning("Invalid embedding buffer length: %d bytes.", len(buf))
+        return None
     try:
         num_floats = len(buf) // 4
         return list(struct.unpack(f"<{num_floats}f", buf))
