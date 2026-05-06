@@ -239,7 +239,12 @@ def upsert_llm_provider(
         }
 
     api_base = llm_provider_upsert_request.api_base or None
-    existing_llm_provider.name = llm_provider_upsert_request.name
+    # Only update name when it was explicitly present in the request payload.
+    # Absent = "don't change"; explicit null = "clear"; string = "set".
+    # Pydantic v2 only includes a field in model_fields_set when it appeared
+    # in the input data, so absent and null are distinguishable.
+    if "name" in llm_provider_upsert_request.model_fields_set:
+        existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
