@@ -191,6 +191,10 @@ class ChatTurnSetup:
     llms: list[LLM]  # length 1 for single-model, N for multi-model
     model_display_names: list[str]  # parallel to llms
     simple_chat_history: list[ChatMessageSimple]
+    # Full chain of ChatMessage rows from the first non-root message up to and
+    # including the just-saved user message. Reused by `llm_loop_completion_handle`
+    # so the post-save compression check doesn't re-fetch every message in the session.
+    chat_history_with_user: list[ChatMessage]
     extracted_context_files: ExtractedContextFiles
     reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
     reserved_token_count: int

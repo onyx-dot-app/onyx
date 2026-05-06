@@ -814,6 +814,12 @@ def build_chat_turn(
         )
         chat_history.append(user_message)
 
+    # Snapshot the full chain (root → user_message) BEFORE summary truncation
+    # filters chat_history. The completion-handle path uses this for the
+    # compression check post-stream so we don't have to re-fetch the whole
+    # session from the DB.
+    chat_history_with_user: list[ChatMessage] = list(chat_history)
+
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
     # via the FileReaderTool.
@@ -1040,6 +1046,7 @@ def build_chat_turn(
         llms=llms,
         model_display_names=model_display_names,
         simple_chat_history=simple_chat_history,
+        chat_history_with_user=chat_history_with_user,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
         reserved_token_count=reserved_token_count,
@@ -1279,6 +1286,7 @@ def _run_models(
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
+                                pre_save_chat_history=setup.chat_history_with_user,
                             )
                         except Exception:
                             logger.exception(
@@ -1344,6 +1352,7 @@ def _run_models(
                     assistant_message=setup.reserved_messages[i],
                     llm=setup.llms[i],
                     reserved_tokens=setup.reserved_token_count,
+                    pre_save_chat_history=setup.chat_history_with_user,
                 )
             except Exception:
                 logger.exception(
@@ -1379,6 +1388,7 @@ def _run_models(
                             assistant_message=setup.reserved_messages[i],
                             llm=setup.llms[i],
                             reserved_tokens=setup.reserved_token_count,
+                            pre_save_chat_history=setup.chat_history_with_user,
                         )
                     except Exception:
                         logger.exception(
@@ -1683,6 +1693,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
+    pre_save_chat_history: list[ChatMessage],
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
@@ -1728,11 +1739,9 @@ def llm_loop_completion_handle(
         pre_answer_processing_time=pre_answer_processing_time,
     )
 
-    # Check if compression is needed after saving the message
-    updated_chat_history = create_chat_history_chain(
-        chat_session_id=chat_session_id,
-        db_session=db_session,
-    )
+    # Check if compression is needed after saving the message. The chain is
+    # already in memory (root → user → assistant) — no need to re-fetch.
+    updated_chat_history = pre_save_chat_history + [assistant_message]
     total_tokens = calculate_total_history_tokens(updated_chat_history)
 
     compression_params = get_compression_params(
