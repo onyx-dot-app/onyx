@@ -289,8 +289,30 @@ def test_create_job_dedup_keeps_source_error_id_when_overlapping(
     """If the same (cc_pair, doc) appears in both the error-derived and
     arbitrary buckets, the error-derived one (carrying source_error_id)
     must win the dedup so the task can mark the error resolved."""
+    settings = get_current_search_settings(db_session)
+    parent = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=settings.id,
+        from_beginning=False,
+        status=IndexingStatus.FAILED,
+    )
+    db_session.add(parent)
+    db_session.commit()
+    db_session.refresh(parent)
+
+    err = IndexAttemptError(
+        index_attempt_id=parent.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id="dup-doc",
+        failure_message="boom",
+        is_resolved=False,
+    )
+    db_session.add(err)
+    db_session.commit()
+    db_session.refresh(err)
+
     error_derived = TargetSpec(
-        cc_pair_id=cc_pair.id, document_id="dup-doc", source_error_id=42
+        cc_pair_id=cc_pair.id, document_id="dup-doc", source_error_id=err.id
     )
     manual_dup = TargetSpec(cc_pair_id=cc_pair.id, document_id="dup-doc")
 
@@ -309,4 +331,4 @@ def test_create_job_dedup_keeps_source_error_id_when_overlapping(
         )
         .one()
     )
-    assert target_row.source_error_id == 42
+    assert target_row.source_error_id == err.id
