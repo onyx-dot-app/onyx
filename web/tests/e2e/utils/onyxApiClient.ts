@@ -137,6 +137,19 @@ export class OnyxApiClient {
   }
 
   /**
+   * Generic PATCH request to the API.
+   *
+   * @param endpoint - API endpoint path (e.g., "/paste-as-tile?paste_as_tile=true")
+   * @param data - Optional request body data
+   * @returns The API response
+   */
+  private async patch(endpoint: string, data?: any): Promise<APIResponse> {
+    return await this.request.patch(`${this.baseUrl}${endpoint}`, {
+      data,
+    });
+  }
+
+  /**
    * Handle API response - parse JSON and handle errors.
    *
    * @param response - The API response to handle
@@ -1302,5 +1315,21 @@ export class OnyxApiClient {
       `Failed to set default app mode to ${mode}`
     );
     this.log(`Set default app mode: ${mode}`);
+  }
+
+  /**
+   * Enables or disables the paste-as-tile user preference.
+   *
+   * @param enabled - Whether paste-as-tile should be enabled
+   */
+  async setPasteTileSetting(enabled: boolean): Promise<void> {
+    const response = await this.patch(
+      `/paste-as-tile?paste_as_tile=${enabled}`
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set paste_as_tile to ${enabled}`
+    );
+    this.log(`Set paste_as_tile: ${enabled}`);
   }
 }
