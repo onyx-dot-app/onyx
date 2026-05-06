@@ -36,6 +36,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -439,9 +440,9 @@ def put_llm_provider(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
-    # Validate that the provider exists (or doesn't) as expected for the operation.
-    # Identity is the integer PK — name is now a mutable display label with no uniqueness
-    # guarantee, so we no longer check for name duplicates or block renaming.
+    # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
+    # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
+    # the result
     existing_provider = None
     if llm_provider_upsert_request.id:
         existing_provider = fetch_existing_llm_provider_by_id(
@@ -451,12 +452,12 @@ def put_llm_provider(
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"LLM Provider with id={llm_provider_upsert_request.id} already exists",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            f"LLM Provider with id={llm_provider_upsert_request.id} does not exist",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -811,15 +812,15 @@ def list_llm_providers_for_persona(
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
 
-    # Build default_text and default_vision using persona overrides when available,
-    # falling back to the global defaults.
+    # Build default_text and default_vision using the persona's model config FK when
+    # available, falling back to the global defaults.
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
     if persona.default_model_configuration_id:
-        # Canonical path: model config FK encodes both provider and model name.
-        db_session.refresh(persona)
-        model_config = persona.default_model_configuration
+        model_config = db_session.get(
+            ModelConfiguration, persona.default_model_configuration_id
+        )
         if model_config and can_user_access_llm_provider(
             model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
         ):
@@ -827,33 +828,6 @@ def list_llm_providers_for_persona(
                 provider_id=model_config.llm_provider_id,
                 model_name=model_config.name,
             )
-    elif persona.llm_model_provider_override:
-        # Legacy fallback: persona was saved before the model-config FK migration.
-        provider = fetch_existing_llm_provider(
-            persona.llm_model_provider_override, db_session
-        )
-        if provider and can_user_access_llm_provider(
-            provider, user_group_ids, persona, is_admin=is_admin
-        ):
-            model_name = persona.llm_model_version_override
-            if model_name:
-                default_text = DefaultModel(
-                    provider_id=provider.id,
-                    model_name=model_name,
-                )
-            else:
-                visible_model = next(
-                    (mc for mc in provider.model_configurations if mc.is_visible),
-                    None,
-                )
-                fallback_model = visible_model or next(
-                    iter(provider.model_configurations), None
-                )
-                if fallback_model:
-                    default_text = DefaultModel(
-                        provider_id=provider.id,
-                        model_name=fallback_model.name,
-                    )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,

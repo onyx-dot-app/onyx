@@ -1,0 +1,44 @@
+"""optional llm provider name
+
+Revision ID: c1d2e3f4a5b6
+Revises: a5370af8f8a0
+Create Date: 2026-05-05
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+revision = "c1d2e3f4a5b6"
+down_revision = "a5370af8f8a0"
+branch_labels = None
+depends_on = None
+
+llm_provider_table = sa.table(
+    "llm_provider",
+    sa.column("id", sa.Integer),
+    sa.column("name", sa.String),
+    sa.column("provider", sa.String),
+)
+
+
+def upgrade() -> None:
+    op.alter_column("llm_provider", "name", nullable=True)
+    op.drop_constraint("llm_provider_name_key", "llm_provider", type_="unique")
+
+
+def downgrade() -> None:
+    # Best-effort: fill NULLs with "<provider>-<id>" before restoring NOT NULL + UNIQUE.
+    op.execute(
+        sa.update(llm_provider_table)
+        .values(
+            name=sa.func.concat(
+                llm_provider_table.c.provider,
+                "-",
+                sa.cast(llm_provider_table.c.id, sa.String),
+            )
+        )
+        .where(llm_provider_table.c.name.is_(None))
+    )
+    op.create_unique_constraint("llm_provider_name_key", "llm_provider", ["name"])
+    op.alter_column("llm_provider", "name", nullable=False)

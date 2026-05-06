@@ -121,12 +121,13 @@ def _seed_llms(
 
     logger.notice("Seeding LLMs")
     for request in llm_upsert_requests:
-        if request.name is not None:
-            existing = fetch_existing_llm_provider(
-                name=request.name, db_session=db_session
-            )
-            if existing:
-                request.id = existing.id
+        existing = (
+            fetch_existing_llm_provider(name=request.name, db_session=db_session)
+            if request.name
+            else None
+        )
+        if existing:
+            request.id = existing.id
     seeded_providers: list[LLMProviderView] = []
     for llm_upsert_request in llm_upsert_requests:
         try:
@@ -169,8 +170,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     name=persona.name,
                     description=persona.description,
                     document_set_ids=persona.document_set_ids,
-                    llm_model_provider_override=persona.llm_model_provider_override,
-                    llm_model_version_override=persona.llm_model_version_override,
+                    default_model_configuration_id=persona.default_model_configuration_id,
                     starter_messages=persona.starter_messages,
                     is_public=persona.is_public,
                     db_session=db_session,

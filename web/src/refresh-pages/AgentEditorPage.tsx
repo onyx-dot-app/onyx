@@ -522,20 +522,6 @@ export default function AgentEditorPage({
         }
       }
     }
-    // Legacy fallback for agents created before the FK migration.
-    if (
-      values.llm_model_version_override &&
-      values.llm_model_provider_override
-    ) {
-      const provider = providers?.find(
-        (p: any) => p.name === values.llm_model_provider_override
-      );
-      return structureValue(
-        values.llm_model_provider_override,
-        provider?.provider || "",
-        values.llm_model_version_override
-      );
-    }
     return null;
   }, []);
 
@@ -543,8 +529,6 @@ export default function AgentEditorPage({
     (selected: string | null, setFieldValue: any) => {
       if (selected === null) {
         setFieldValue("default_model_configuration_id", null);
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
         if (modelName && name) {
@@ -556,8 +540,6 @@ export default function AgentEditorPage({
             "default_model_configuration_id",
             modelConfig?.id ?? null
           );
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
         }
       }
     },
@@ -649,10 +631,6 @@ export default function AgentEditorPage({
     // Advanced
     default_model_configuration_id:
       existingAgent?.default_model_configuration_id ?? null,
-    llm_model_provider_override:
-      existingAgent?.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      existingAgent?.llm_model_version_override ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -762,8 +740,6 @@ export default function AgentEditorPage({
 
     // Advanced
     default_model_configuration_id: Yup.number().nullable().optional(),
-    llm_model_provider_override: Yup.string().nullable().optional(),
-    llm_model_version_override: Yup.string().nullable().optional(),
     knowledge_cutoff_date: Yup.date()
       .nullable()
       .optional()
@@ -868,8 +844,6 @@ export default function AgentEditorPage({
         is_public: values.is_public,
         default_model_configuration_id:
           (values as any).default_model_configuration_id ?? null,
-        llm_model_provider_override: values.llm_model_provider_override || null,
-        llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,

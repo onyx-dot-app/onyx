@@ -107,11 +107,7 @@ class PersonaUpsertRequest(BaseModel):
     description: str
     document_set_ids: list[int]
     is_public: bool
-    # Single FK that encodes both provider and model.
     default_model_configuration_id: int | None = None
-    # Deprecated string fields — kept for backward compat with old clients.
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
@@ -160,8 +156,6 @@ class MinimalPersonaSnapshot(BaseModel):
     # Unique sources from all knowledge (document sets + hierarchy nodes)
     # Used to populate source filters in chat
     knowledge_sources: list[DocumentSource]
-    llm_model_version_override: str | None
-    llm_model_provider_override: str | None
     default_model_configuration_id: int | None
 
     uploaded_image_id: str | None
@@ -223,8 +217,6 @@ class MinimalPersonaSnapshot(BaseModel):
             hierarchy_node_count=len(persona.hierarchy_nodes),
             attached_document_count=len(persona.attached_documents),
             knowledge_sources=list(sources),
-            llm_model_version_override=persona.llm_model_version_override,
-            llm_model_provider_override=persona.llm_model_provider_override,
             default_model_configuration_id=persona.default_model_configuration_id,
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
@@ -262,8 +254,6 @@ class PersonaSnapshot(BaseModel):
     users: list[MinimalUserSnapshot]
     groups: list[int]
     document_sets: list[DocumentSetSummary]
-    llm_model_provider_override: str | None
-    llm_model_version_override: str | None
     default_model_configuration_id: int | None = None
     # Hierarchy nodes attached for scoped search
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
@@ -319,8 +309,6 @@ class PersonaSnapshot(BaseModel):
                 DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
-            llm_model_provider_override=persona.llm_model_provider_override,
-            llm_model_version_override=persona.llm_model_version_override,
             default_model_configuration_id=persona.default_model_configuration_id,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
@@ -387,8 +375,6 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for document_set_model in persona.document_sets
             ],
             search_start_date=persona.search_start_date,
-            llm_model_provider_override=persona.llm_model_provider_override,
-            llm_model_version_override=persona.llm_model_version_override,
             default_model_configuration_id=persona.default_model_configuration_id,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,

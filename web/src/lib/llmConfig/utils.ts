@@ -37,14 +37,6 @@ export function getFinalLLM(
           break;
         }
       }
-    } else if (persona.llm_model_provider_override) {
-      // Legacy fallback: string-based override from before the FK migration.
-      const underlyingProvider = llmProviders.find(
-        (item: LLMProviderDescriptor) =>
-          item.name === persona.llm_model_provider_override
-      );
-      provider = underlyingProvider?.provider || provider;
-      model = persona.llm_model_version_override || model;
     }
   }
 
@@ -74,30 +66,6 @@ export function getProviderOverrideForPersona(
         };
       }
     }
-  }
-
-  // Legacy fallback: string-based override from before the FK migration.
-  const overrideProvider = liveAgent.llm_model_provider_override;
-  const overrideModel = liveAgent.llm_model_version_override;
-
-  if (!overrideModel) {
-    return null;
-  }
-
-  const matchingProvider = llmProviders.find(
-    (provider) =>
-      (overrideProvider ? provider.name === overrideProvider : true) &&
-      provider.model_configurations
-        .map((modelConfiguration) => modelConfiguration.name)
-        .includes(overrideModel)
-  );
-
-  if (matchingProvider) {
-    return {
-      name: matchingProvider.name ?? "",
-      provider: matchingProvider.provider,
-      modelName: overrideModel,
-    };
   }
 
   return null;

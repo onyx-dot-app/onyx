@@ -307,8 +307,6 @@ def create_update_persona(
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
             default_model_configuration_id=create_persona_request.default_model_configuration_id,
-            llm_model_provider_override=create_persona_request.llm_model_provider_override,
-            llm_model_version_override=create_persona_request.llm_model_version_override,
             starter_messages=create_persona_request.starter_messages,
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
@@ -914,8 +912,6 @@ def upsert_persona(
     user: User | None,
     name: str,
     description: str,
-    llm_model_provider_override: str | None,
-    llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
     # Embedded prompt fields
     system_prompt: str | None,
@@ -1050,18 +1046,7 @@ def upsert_persona(
         # `default` and `built-in` properties can only be set when creating a persona.
         existing_persona.name = name
         existing_persona.description = description
-        # Only overwrite the model config FK when the request explicitly provides a new
-        # value. If absent the caller is a legacy client that doesn't know about the new
-        # field, so we preserve the existing value to avoid silently dropping the override.
-        if (
-            default_model_configuration_id is not None
-            or llm_model_provider_override is not None
-        ):
-            existing_persona.default_model_configuration_id = (
-                default_model_configuration_id
-            )
-        existing_persona.llm_model_provider_override = llm_model_provider_override
-        existing_persona.llm_model_version_override = llm_model_version_override
+        existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
@@ -1134,8 +1119,6 @@ def upsert_persona(
             replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
             default_model_configuration_id=default_model_configuration_id,
-            llm_model_provider_override=llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
             tools=tools or [],
             uploaded_image_id=uploaded_image_id,

@@ -222,8 +222,8 @@ def upsert_llm_provider(
             raise ValueError(
                 f"LLM provider with id {llm_provider_upsert_request.id} not found"
             )
+
     else:
-        # Name is now a display label only — no uniqueness guarantee. Always create new.
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
@@ -239,7 +239,6 @@ def upsert_llm_provider(
         }
 
     api_base = llm_provider_upsert_request.api_base or None
-    existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
@@ -583,40 +582,17 @@ def remove_embedding_provider(
     db_session.commit()
 
 
-def _clear_persona_provider_overrides(
-    db_session: Session, provider_id: int, provider_name: str | None
-) -> None:
-    """Clear model configuration and legacy string overrides from personas using this provider."""
-    for persona in get_personas_using_provider(db_session, provider_id):
-        persona.default_model_configuration_id = None
-        persona.llm_model_provider_override = None
-        persona.llm_model_version_override = None
-
-    # Also clear legacy string-only overrides (personas created before the FK migration)
-    if provider_name:
-        legacy_personas = list(
-            db_session.scalars(
-                select(Persona).where(
-                    Persona.llm_model_provider_override == provider_name,
-                    Persona.deleted == False,  # noqa: E712
-                )
-            ).all()
-        )
-        for persona in legacy_personas:
-            persona.llm_model_provider_override = None
-            persona.llm_model_version_override = None
-
-
 def remove_llm_provider(db_session: Session, provider_id: int) -> None:
     provider = db_session.get(LLMProviderModel, provider_id)
     if not provider:
         raise ValueError("LLM Provider not found")
 
-    # Clear the provider override from any personas using it so they fall back
-    # to the default provider. The FK has ON DELETE SET NULL so the DB would do
-    # this automatically, but we clear it here explicitly for transactional safety
-    # before the DELETE fires.
-    _clear_persona_provider_overrides(db_session, provider_id, provider.name)
+    # Clear the model config FK from any personas using this provider so they
+    # fall back to the global default. The FK has ON DELETE SET NULL so the DB
+    # would do this automatically, but we clear it here explicitly for
+    # transactional safety before the DELETE fires.
+    for persona in get_personas_using_provider(db_session, provider_id):
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
@@ -635,7 +611,8 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     if not provider:
         raise ValueError("LLM Provider not found")
 
-    _clear_persona_provider_overrides(db_session, provider_id, provider.name)
+    for persona in get_personas_using_provider(db_session, provider_id):
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(

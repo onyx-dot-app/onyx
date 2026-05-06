@@ -747,11 +747,6 @@ export function useLlmManager(
         currentChatSession.current_alternate_model,
         llmProviders
       );
-    } else if (liveAgent?.llm_model_version_override) {
-      resolved = getValidLlmDescriptorForProviders(
-        liveAgent.llm_model_version_override,
-        llmProviders
-      );
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
@@ -776,7 +771,6 @@ export function useLlmManager(
     llmProviders,
     defaultText,
     currentChatSession,
-    liveAgent?.llm_model_version_override,
     userHasManuallyOverriddenLLM,
     manualLlm,
     user?.preferences?.default_model,

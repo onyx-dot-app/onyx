@@ -13,8 +13,6 @@ interface PersonaUpsertRequest {
   document_set_ids: number[];
   is_public: boolean;
   default_model_configuration_id: number | null;
-  llm_model_provider_override: string | null;
-  llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -44,8 +42,6 @@ export interface PersonaUpsertParameters {
   document_set_ids: number[];
   is_public: boolean;
   default_model_configuration_id?: number | null;
-  llm_model_provider_override: string | null;
-  llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -83,8 +79,6 @@ function buildPersonaUpsertRequest({
   uploaded_image_id,
   is_featured,
   default_model_configuration_id,
-  llm_model_provider_override,
-  llm_model_version_override,
   starter_messages,
   label_ids,
   replace_base_system_prompt,
@@ -106,8 +100,6 @@ function buildPersonaUpsertRequest({
     datetime_aware,
     is_featured: is_featured ?? false,
     default_model_configuration_id: default_model_configuration_id ?? null,
-    llm_model_provider_override: llm_model_provider_override ?? null,
-    llm_model_version_override: llm_model_version_override ?? null,
     starter_messages: starter_messages ?? null,
     display_priority: null,
     label_ids: label_ids ?? null,
