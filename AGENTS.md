@@ -62,27 +62,20 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
    - Runs with 4 threads concurrency
 
-6. **KG Processing Worker** (`kg_processing`)
-
-   - Handles Knowledge Graph processing and clustering
-   - Builds relationships between documents
-   - Runs clustering algorithms
-   - Configurable concurrency
-
-7. **Monitoring Worker** (`monitoring`)
+6. **Monitoring Worker** (`monitoring`)
 
    - System health monitoring and metrics collection
    - Monitors Celery queues, process memory, and system status
    - Single thread (monitoring doesn't need parallelism)
    - Cloud-specific monitoring tasks
 
-8. **User File Processing Worker** (`user_file_processing`)
+7. **User File Processing Worker** (`user_file_processing`)
 
    - Processes user-uploaded files
    - Handles user file indexing and project synchronization
    - Configurable concurrency
 
-9. **Beat Worker** (`beat`)
+8. **Beat Worker** (`beat`)
    - Celery's scheduler for periodic tasks
    - Uses DynamicTenantScheduler for multi-tenant support
    - Schedules tasks like:
@@ -90,7 +83,6 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - Connector deletion checks (every 20 seconds)
      - Vespa sync checks (every 20 seconds)
      - Pruning checks (every 20 seconds)
-     - KG processing (every 60 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
 

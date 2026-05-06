@@ -45,7 +45,6 @@
         "Celery primary",
         "Celery light",
         "Celery heavy",
-        "Celery kg_processing",
         "Celery monitoring",
         "Celery user_file_processing",
         "Celery docfetching",
