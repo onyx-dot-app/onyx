@@ -75,6 +75,19 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
 _ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
 
+# Anthropic models that reject any non-default sampling parameter (temperature,
+# top_p, top_k). For these models we must omit these params entirely from the
+# request payload — passing them returns a 400 invalid_request_error. LiteLLM's
+# drop_params is unreliable here because AnthropicConfig still lists temperature
+# as supported. Match on substring to cover proxy/Vertex naming variants (e.g.
+# "claude-4.7-opus" via litellm_proxy).
+_ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
+    "claude-opus-4-7",
+    "claude-opus-4.7",
+    "claude-4-7-opus",
+    "claude-4.7-opus",
+)
+
 
 class LLMTimeoutError(Exception):
     """
@@ -241,6 +254,14 @@ def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
     return any(
         adaptive_model in normalized_model_name
         for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
+    )
+
+
+def _anthropic_omits_sampling_params(model_name: str) -> bool:
+    normalized_model_name = model_name.lower()
+    return any(
+        no_sampling_model in normalized_model_name
+        for no_sampling_model in _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS
     )
 
 
@@ -501,7 +522,17 @@ class LitellmLLM(LLM):
             tool_choice = None
 
         # Temperature
-        temperature = 1 if is_reasoning else self._temperature
+        # Some models reject any non-default sampling parameter (e.g. Claude
+        # Opus 4.7 returns a 400 invalid_request_error if temperature is set to
+        # anything). For those models we must omit the param entirely —
+        # LiteLLM's drop_params is not reliable here because the upstream
+        # provider config can still claim the param is supported.
+        # https://github.com/BerriAI/litellm/issues/26444
+        # TODO(litellm): Consider removing this once the above is resolved,
+        # although this assumes users have upgraded their litellm if relevant.
+        omits_sampling_params = _anthropic_omits_sampling_params(self.config.model_name)
+        if not omits_sampling_params:
+            optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
         if stream and not is_vertex_model_rejecting_output_config:
             optional_kwargs["stream_options"] = {"include_usage": True}
@@ -660,7 +691,6 @@ class LitellmLLM(LLM):
                     messages=messages,
                     tools=tools,
                     stream=stream,
-                    temperature=temperature,
                     timeout=timeout_override or self._timeout,
                     max_tokens=max_tokens,
                     client=client,
