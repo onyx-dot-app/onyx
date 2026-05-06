@@ -5,8 +5,8 @@ import re
 import time
 from collections.abc import Callable
 from collections.abc import Generator
-from typing import Any
 from functools import wraps
+from typing import Any
 from typing import Concatenate
 from typing import Literal
 from typing import ParamSpec
