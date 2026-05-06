@@ -527,6 +527,9 @@ class LitellmLLM(LLM):
         # anything). For those models we must omit the param entirely —
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
+        # https://github.com/BerriAI/litellm/issues/26444
+        # TODO(litellm): Consider removing this once the above is resolved,
+        # although this assumes users have upgraded their litellm if relevant.
         omits_sampling_params = _anthropic_omits_sampling_params(self.config.model_name)
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
