@@ -8,9 +8,14 @@ convert the batch response into the same stream-event interface.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Generator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
+from onyx.tools.tool_implementations.python import code_interpreter_client as cic
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
 )
@@ -18,15 +23,37 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    CodeInterpreterVersionError,
+)
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CreateSessionResponse,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    HealthResponse,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamOutputEvent,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
+
+
+def _prime_health(base_url: str, version: str) -> None:
+    """Populate the module-level health cache so version checks don't hit
+    the network."""
+    cic._health_cache[base_url] = (
+        time.monotonic(),
+        HealthResponse(healthy=True, version=version),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clear_health_cache() -> Generator[None, None, None]:
+    cic._health_cache.clear()
+    yield
+    cic._health_cache.clear()
 
 
 def _make_batch_response(
@@ -222,6 +249,7 @@ def test_create_session_default_payload() -> None:
     return a parsed CreateSessionResponse."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     captured_url: list[str] = []
     captured_payloads: list[dict] = []
@@ -250,6 +278,7 @@ def test_create_session_with_ttl_and_files() -> None:
     """create_session should forward custom ttl_seconds and the files list."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     files_input: list[FileInput] = [{"path": "data.csv", "file_id": "file-xyz"}]
     captured_payloads: list[dict] = []
@@ -272,6 +301,7 @@ def test_create_session_omits_files_when_none() -> None:
     """create_session must not include a 'files' key when files is None."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     captured_payloads: list[dict] = []
 
@@ -293,6 +323,7 @@ def test_delete_session_calls_correct_url() -> None:
     """delete_session should issue a DELETE to /v1/sessions/{session_id}."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     delete_resp = MagicMock()
     delete_resp.status_code = 204
@@ -316,6 +347,7 @@ def test_delete_session_propagates_http_errors() -> None:
     """An HTTP error from the upstream service must propagate, not be swallowed."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     delete_resp = MagicMock()
     delete_resp.raise_for_status.side_effect = RuntimeError("boom")
@@ -334,6 +366,7 @@ def test_execute_bash_in_session_default_timeout() -> None:
     a parsed BashExecResponse."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     captured_urls: list[str] = []
     captured_payloads: list[dict] = []
@@ -372,6 +405,7 @@ def test_execute_bash_in_session_custom_timeout() -> None:
     derive the requests-level timeout (timeout_ms / 1000 + 10)."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     captured_payloads: list[dict] = []
     captured_timeouts: list[float] = []
@@ -399,6 +433,7 @@ def test_execute_bash_in_session_parses_timeout_and_nonzero_exit() -> None:
     without raising on the client side."""
 
     client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
 
     bash_resp = _make_bash_response(
         stdout="",
@@ -414,3 +449,175 @@ def test_execute_bash_in_session_parses_timeout_and_nonzero_exit() -> None:
     assert result.timed_out is True
     assert result.exit_code is None
     assert result.stderr == "killed\n"
+
+
+# ---------------------------------------------------------------------------
+# Version gating
+# ---------------------------------------------------------------------------
+
+
+def test_create_session_passes_when_server_meets_minimum() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
+
+    with patch.object(
+        client.session, "post", return_value=_make_create_session_response()
+    ):
+        client.create_session()
+
+
+def test_create_session_raises_version_error_when_server_too_old() -> None:
+    """Self-gating: skipping ``supports()`` must still surface a typed
+    error, not a 404."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.3.0")
+
+    with pytest.raises(CodeInterpreterVersionError) as exc_info:
+        client.create_session()
+
+    assert exc_info.value.method_name == "create_session"
+    assert exc_info.value.server_version == "0.3.0"
+    assert exc_info.value.required == "0.4.0"
+
+
+def test_delete_session_raises_version_error_when_server_too_old() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.3.0")
+
+    with pytest.raises(CodeInterpreterVersionError) as exc_info:
+        client.delete_session("sess-abc")
+
+    assert exc_info.value.method_name == "delete_session"
+
+
+def test_execute_bash_in_session_raises_version_error_when_server_too_old() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.3.0")
+
+    with pytest.raises(CodeInterpreterVersionError) as exc_info:
+        client.execute_bash_in_session("sess-abc", "echo hi")
+
+    assert exc_info.value.method_name == "execute_bash_in_session"
+
+
+def test_version_error_message_includes_method_and_versions() -> None:
+    err = CodeInterpreterVersionError(
+        method_name="create_session",
+        server_version="0.3.1",
+        required="0.4.0",
+    )
+    msg = str(err)
+    assert "create_session" in msg
+    assert "0.3.1" in msg
+    assert "0.4.0" in msg
+
+
+def test_parse_version_handles_prerelease_and_build_metadata() -> None:
+    assert cic._parse_version("0.4.0") == (0, 4, 0)
+    assert cic._parse_version("v0.4.0") == (0, 4, 0)
+    assert cic._parse_version("0.4.0-rc.1") == (0, 4, 0)
+    assert cic._parse_version("0.4.0+build.7") == (0, 4, 0)
+    # Malformed input must not crash the gate.
+    assert cic._parse_version("not-a-version") == (0, 0, 0)
+
+
+def test_requires_rejects_malformed_version_at_decoration_time() -> None:
+    """Programmer bug: a typo'd version should fail loud, not silently
+    parse to 0.0.0 and skip every gate forever."""
+    with pytest.raises(ValueError, match="MAJOR.MINOR.PATCH"):
+        cic.requires("not-a-version")
+
+    with pytest.raises(ValueError, match="MAJOR.MINOR.PATCH"):
+        cic.requires("0.4")
+
+
+def test_requires_accepts_valid_versions() -> None:
+    cic.requires("0.4.0")
+    cic.requires("1.2.3")
+    cic.requires("0.4.0-rc.1")
+    cic.requires("0.4.0+build.7")
+
+
+# ---------------------------------------------------------------------------
+# supports()
+# ---------------------------------------------------------------------------
+
+
+def test_supports_returns_true_when_server_meets_minimum() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
+    assert client.supports(client.create_session) is True
+    assert client.supports(client.execute_bash_in_session) is True
+
+
+def test_supports_returns_true_for_newer_server() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="1.2.3")
+    assert client.supports(client.create_session) is True
+
+
+def test_supports_returns_false_for_older_server() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.3.9")
+    assert client.supports(client.create_session) is False
+
+
+def test_supports_returns_false_for_default_zero_version() -> None:
+    """``0.0.0`` is health()'s fallback for unreachable servers — gated
+    methods correctly degrade to unsupported."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.0.0")
+    assert client.supports(client.create_session) is False
+
+
+def test_supports_with_multiple_methods_requires_all_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any unmet requirement fails the whole check. Simulates a future
+    split via monkeypatch."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.5")
+
+    assert (
+        client.supports(client.create_session, client.execute_bash_in_session) is True
+    )
+
+    monkeypatch.setattr(
+        CodeInterpreterClient.execute_bash_in_session,
+        cic._MIN_VERSION_ATTR,
+        "0.5.0",
+    )
+
+    assert client.supports(client.create_session) is True
+    assert client.supports(client.execute_bash_in_session) is False
+    assert (
+        client.supports(client.create_session, client.execute_bash_in_session) is False
+    )
+
+
+def test_supports_treats_undecorated_method_as_always_available() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.0.0")
+    # ``execute`` is unconditional.
+    assert client.supports(client.execute) is True
+
+
+def test_supports_with_no_arguments_raises() -> None:
+    """Empty input would be vacuously true — reject it."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, version="0.4.0")
+
+    with pytest.raises(ValueError, match="at least one"):
+        client.supports()
+
+
+def test_min_version_for_undecorated_method_defaults_to_zero() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    assert cic._min_version_for(client.execute) == cic._DEFAULT_SERVER_VERSION
+
+
+def test_min_version_for_decorated_method_returns_declared_value() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    assert cic._min_version_for(client.create_session) == "0.4.0"
+    assert cic._min_version_for(client.delete_session) == "0.4.0"
+    assert cic._min_version_for(client.execute_bash_in_session) == "0.4.0"

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
+from functools import wraps
+from typing import Concatenate
 from typing import Literal
+from typing import ParamSpec
 from typing import TypedDict
+from typing import TypeVar
 from typing import Union
 
 import requests
@@ -19,6 +25,90 @@ logger = setup_logger()
 _HEALTH_CACHE_TTL_SECONDS = 30
 _DEFAULT_SERVER_VERSION = "0.0.0"
 _health_cache: dict[str, tuple[float, "HealthResponse"]] = {}
+
+
+class CodeInterpreterVersionError(RuntimeError):
+    """Raised when the connected Code Interpreter is older than the called
+    method requires."""
+
+    def __init__(self, method_name: str, server_version: str, required: str) -> None:
+        self.method_name = method_name
+        self.server_version = server_version
+        self.required = required
+        super().__init__(
+            f"Code Interpreter server {server_version} does not support "
+            f"'{method_name}' (requires >= {required})"
+        )
+
+
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+([-+].*)?$")
+
+
+def _parse_version(version: str) -> tuple[int, int, int]:
+    """Parse ``MAJOR.MINOR.PATCH``; suffixes are ignored. Malformed input
+    falls back to ``(0, 0, 0)`` so a misreporting server is treated as
+    ancient rather than crashing the gate."""
+    clean = re.sub(r"[-+].*$", "", version.lstrip("v"))
+    parts = clean.split(".")
+    try:
+        return (
+            int(parts[0]) if len(parts) > 0 else 0,
+            int(parts[1]) if len(parts) > 1 else 0,
+            int(parts[2]) if len(parts) > 2 else 0,
+        )
+    except ValueError:
+        return (0, 0, 0)
+
+
+def _is_version_gte(actual: str, required: str) -> bool:
+    return _parse_version(actual) >= _parse_version(required)
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+_MIN_VERSION_ATTR = "__ci_min_version__"
+
+
+def requires(
+    min_version: str,
+) -> Callable[
+    [Callable[Concatenate["CodeInterpreterClient", _P], _R]],
+    Callable[Concatenate["CodeInterpreterClient", _P], _R],
+]:
+    """Gate a method on a minimum server version. Raises
+    ``CodeInterpreterVersionError`` at call time, and records the minimum on
+    the wrapper so ``client.supports(method)`` can introspect it."""
+    if not _VERSION_RE.match(min_version):
+        raise ValueError(
+            f"@requires expects a MAJOR.MINOR.PATCH version, got {min_version!r}"
+        )
+
+    def decorator(
+        func: Callable[Concatenate["CodeInterpreterClient", _P], _R],
+    ) -> Callable[Concatenate["CodeInterpreterClient", _P], _R]:
+        # ``Callable`` doesn't promise a ``__name__``; ours always do.
+        method_name = getattr(func, "__name__", "<unknown>")
+
+        @wraps(func)
+        def wrapper(
+            self: "CodeInterpreterClient", *args: _P.args, **kwargs: _P.kwargs
+        ) -> _R:
+            self._require(min_version, method_name=method_name)
+            return func(self, *args, **kwargs)
+
+        # Bound-method attribute lookup falls through to the underlying
+        # function, so ``client.foo.__ci_min_version__`` works.
+        setattr(wrapper, _MIN_VERSION_ATTR, min_version)
+        return wrapper
+
+    return decorator
+
+
+def _min_version_for(method: Callable[..., object]) -> str:
+    """Min server version recorded on a method, or ``"0.0.0"`` (always
+    supported) when the method isn't ``@requires``-decorated."""
+    return getattr(method, _MIN_VERSION_ATTR, _DEFAULT_SERVER_VERSION)
 
 
 class HealthResponse(BaseModel):
@@ -179,6 +269,29 @@ class CodeInterpreterClient:
         _health_cache[self.base_url] = (time.monotonic(), result)
         return result
 
+    def supports(self, *methods: Callable[..., object]) -> bool:
+        """True iff the server version satisfies every listed method's
+        ``@requires`` minimum (undecorated methods default to ``"0.0.0"``).
+        """
+        if not methods:
+            raise ValueError("supports() requires at least one method")
+
+        server_version = self.health(use_cache=True).version
+        return all(
+            _is_version_gte(server_version, _min_version_for(m)) for m in methods
+        )
+
+    def _require(self, min_version: str, method_name: str) -> None:
+        """Raise ``CodeInterpreterVersionError`` if server is older than
+        *min_version*."""
+        server_version = self.health(use_cache=True).version
+        if not _is_version_gte(server_version, min_version):
+            raise CodeInterpreterVersionError(
+                method_name=method_name,
+                server_version=server_version,
+                required=min_version,
+            )
+
     def execute(
         self,
         code: str,
@@ -294,6 +407,7 @@ class CodeInterpreterClient:
             files=result.files,
         )
 
+    @requires("0.4.0")
     def create_session(
         self,
         ttl_seconds: int = 15 * 60,
@@ -314,6 +428,7 @@ class CodeInterpreterClient:
 
         return CreateSessionResponse(**response.json())
 
+    @requires("0.4.0")
     def delete_session(self, session_id: str) -> None:
         """Tear down a session pod by ID."""
         url = f"{self.base_url}/v1/sessions/{session_id}"
@@ -321,6 +436,7 @@ class CodeInterpreterClient:
         response = self.session.delete(url, timeout=30)
         response.raise_for_status()
 
+    @requires("0.4.0")
     def execute_bash_in_session(
         self,
         session_id: str,
