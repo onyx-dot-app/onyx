@@ -1,4 +1,4 @@
-import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
+import { buildLlmOptions, groupLlmOptions } from "./llmUtils";
 import { LLMOption } from "./interfaces";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
@@ -89,6 +89,7 @@ describe("LLMPopover helpers", () => {
         modelName: "claude-3-5-sonnet",
         displayName: "Claude 3.5 Sonnet",
         vendor: "anthropic",
+        modelConfigId: null,
       },
       {
         name: "OpenAI Provider",
@@ -97,6 +98,7 @@ describe("LLMPopover helpers", () => {
         modelName: "gpt-4o-mini",
         displayName: "GPT-4o Mini",
         vendor: null,
+        modelConfigId: null,
       },
     ];
 

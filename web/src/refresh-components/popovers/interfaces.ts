@@ -15,6 +15,8 @@ export interface LLMOption {
   version?: string | null;
   supportsReasoning?: boolean;
   supportsImageInput?: boolean;
+  /** Stable FK to `model_configuration.id`. Null for locally-constructed (non-persisted) configs. */
+  modelConfigId: number | null;
 }
 
 export interface LLMOptionGroup {

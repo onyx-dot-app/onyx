@@ -1,10 +1,12 @@
 import { LLMProviderDescriptor } from "@/interfaces/llm";
-import { LLMOption } from "./interfaces";
+import { getModelIcon } from "@/lib/languageModels";
+import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
+import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 /**
  * Build a flat list of LLM options from provider descriptors.
  * Pure utility — no React dependencies. Used by ModelSelector,
- * useMultiModelChat, ChatUI, and LLMPopover.
+ * useMultiModelChat, ChatUI, and ModelPickerPopover.
  */
 export function buildLlmOptions(
   llmProviders: LLMProviderDescriptor[] | undefined,
@@ -49,9 +51,59 @@ export function buildLlmOptions(
           version: modelConfiguration.version || null,
           supportsReasoning: modelConfiguration.supports_reasoning || false,
           supportsImageInput: modelConfiguration.supports_image_input || false,
+          modelConfigId: modelConfiguration.id ?? null,
         });
       });
   });
 
   return options;
+}
+
+export function groupLlmOptions(
+  filteredOptions: LLMOption[]
+): LLMOptionGroup[] {
+  const groups = new Map<string, Omit<LLMOptionGroup, "key">>();
+
+  filteredOptions.forEach((option) => {
+    const provider = option.provider.toLowerCase();
+    const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
+    const groupKey =
+      isAggregator && option.vendor
+        ? `${provider}/${option.vendor.toLowerCase()}`
+        : provider;
+
+    if (!groups.has(groupKey)) {
+      let displayName: string;
+
+      if (isAggregator && option.vendor) {
+        const vendorDisplayName =
+          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
+        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+      } else {
+        displayName = option.providerDisplayName;
+      }
+
+      groups.set(groupKey, {
+        displayName,
+        options: [],
+        Icon: getModelIcon(provider),
+      });
+    }
+
+    groups.get(groupKey)!.options.push(option);
+  });
+
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
+    groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
+  );
+
+  return sortedKeys.map((key) => {
+    const group = groups.get(key)!;
+    return {
+      key,
+      displayName: group.displayName,
+      options: group.options,
+      Icon: group.Icon,
+    };
+  });
 }
