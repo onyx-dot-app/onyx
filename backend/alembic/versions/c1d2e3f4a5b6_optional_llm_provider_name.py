@@ -28,13 +28,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Best-effort: fill NULLs with "<provider>-<id>" before restoring NOT NULL + UNIQUE.
+    # Best-effort: fill NULLs with "__unnamed_<id>" before restoring NOT NULL + UNIQUE.
+    # The "__unnamed_" prefix is distinct from any legitimate provider name, so it can
+    # never collide with an existing named provider.
     op.execute(
         sa.update(llm_provider_table)
         .values(
             name=sa.func.concat(
-                llm_provider_table.c.provider,
-                "-",
+                "__unnamed_",
                 sa.cast(llm_provider_table.c.id, sa.String),
             )
         )

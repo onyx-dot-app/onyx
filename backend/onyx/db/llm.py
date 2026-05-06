@@ -513,6 +513,27 @@ def fetch_existing_llm_provider_by_id(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_type_nameless(
+    provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return the first unnamed provider of the given type (e.g. "openai").
+
+    Used by seeding to detect idempotent re-runs when no display name was configured.
+    """
+    return db_session.scalar(
+        select(LLMProviderModel)
+        .where(
+            LLMProviderModel.provider == provider_type,
+            LLMProviderModel.name.is_(None),
+        )
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:
