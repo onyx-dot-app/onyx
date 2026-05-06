@@ -27,6 +27,7 @@ from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
 )
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,7 +55,9 @@ def _has_anonymous_read_permission(anonymous_permissions: list[dict]) -> bool:
             candidates.append(entry[_OPERATION])
 
     return any(
-        op.get("operationKey") == SPACE_PERMISSION_OPERATION_READ for op in candidates
+        op.get("operationKey") == SPACE_PERMISSION_OPERATION_READ
+        and op.get("targetType") == SPACE_PERMISSION_TARGET_TYPE_SPACE
+        for op in candidates
     )
 
 
@@ -75,6 +78,14 @@ def _resolve_anonymous_access(
                 space_key=space_key,
             )
         )
+    except InsufficientPermissionsError:
+        # CONFSERVER-99908: HTTP 500 from the anonymous endpoint means the
+        # bot lacks Confluence/space-admin rights. The main probe in
+        # validate_confluence_perm_sync only checks the bulk endpoint, so
+        # this can pass validation but fail here on every sync. Surface it
+        # loudly instead of silently flagging every space as "no anonymous
+        # access" -- otherwise public spaces would be hidden from users.
+        raise
     except Exception as e:
         # Don't fail the whole sync over an anonymous-permissions hiccup.
         # The bulk-permissions response covers explicit grants; we only
