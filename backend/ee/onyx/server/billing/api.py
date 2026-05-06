@@ -36,6 +36,7 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
+from ee.onyx.server.billing.models import EndTrialResponse
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import StripePublishableKeyResponse
@@ -46,6 +47,7 @@ from ee.onyx.server.billing.service import (
 from ee.onyx.server.billing.service import (
     create_customer_portal_session as create_portal_service,
 )
+from ee.onyx.server.billing.service import end_trial as end_trial_service
 from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
@@ -87,11 +89,13 @@ def _is_billing_circuit_open() -> bool:
         redis_client = get_shared_redis_client()
         is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
         logger.debug(
-            f"Circuit breaker check: key={BILLING_CIRCUIT_BREAKER_KEY}, is_open={is_open}"
+            "Circuit breaker check: key=%s, is_open=%s",
+            BILLING_CIRCUIT_BREAKER_KEY,
+            is_open,
         )
         return is_open
     except Exception as e:
-        logger.error(f"Failed to check circuit breaker: {e}")
+        logger.error("Failed to check circuit breaker: %s", e)
         return False
 
 
@@ -109,11 +113,12 @@ def _open_billing_circuit() -> None:
         # Verify it was set
         exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
         logger.warning(
-            f"Billing circuit breaker opened (TTL={BILLING_CIRCUIT_BREAKER_TTL_SECONDS}s, "
-            f"verified={exists}). Stripe billing requests are disabled until manually reset."
+            "Billing circuit breaker opened (TTL=%ss, verified=%s). Stripe billing requests are disabled until manually reset.",
+            BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
+            exists,
         )
     except Exception as e:
-        logger.error(f"Failed to open circuit breaker: {e}")
+        logger.error("Failed to open circuit breaker: %s", e)
 
 
 def _close_billing_circuit() -> None:
@@ -127,7 +132,7 @@ def _close_billing_circuit() -> None:
             "Billing circuit breaker closed. Stripe billing requests re-enabled."
         )
     except Exception as e:
-        logger.error(f"Failed to close circuit breaker: {e}")
+        logger.error("Failed to close circuit breaker: %s", e)
 
 
 def _get_license_data(db_session: Session) -> str | None:
@@ -212,6 +217,7 @@ async def create_customer_portal_session(
         license_data=license_data,
         return_url=return_url,
         tenant_id=tenant_id,
+        flow_type=request.flow_type if request else None,
     )
 
 
@@ -292,6 +298,29 @@ async def update_seats(
         license_data=license_data,
         tenant_id=tenant_id,
     )
+
+
+@router.post("/end-trial")
+async def end_trial(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> EndTrialResponse:
+    """End the current trial immediately and charge the customer's card.
+
+    Cloud-only. The control plane sets `trial_end="now"` on the Stripe
+    subscription; Stripe attempts to charge the attached payment method, and
+    the resulting webhook transitions the subscription to active.
+
+    Returns 402 (forwarded from the control plane) when no payment method is
+    attached. The frontend handles that by routing to the customer portal.
+    """
+    if not MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "End-trial is only available for cloud deployments",
+        )
+
+    tenant_id = _get_tenant_id()
+    return await end_trial_service(tenant_id=tenant_id)
 
 
 @router.get("/stripe-publishable-key")

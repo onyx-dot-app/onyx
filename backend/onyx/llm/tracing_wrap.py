@@ -136,12 +136,13 @@ def wrap_invoke(
         if _outer_generation_span_active():
             return invoke_fn(self, *args, **kwargs)
 
+        from onyx.tracing.flows import LLMFlow
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_response
 
         prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(
-            self, flow="llm_invoke_fallback", input_messages=prompt
+            self, flow=LLMFlow.UNTAGGED_INVOKE, input_messages=prompt
         ) as span:
             try:
                 response = invoke_fn(self, *args, **kwargs)
@@ -192,12 +193,13 @@ def wrap_stream(
             yield from stream_fn(self, *args, **kwargs)
             return
 
+        from onyx.tracing.flows import LLMFlow
         from onyx.tracing.llm_utils import llm_generation_span
         from onyx.tracing.llm_utils import record_llm_span_output
 
         prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(
-            self, flow="llm_stream_fallback", input_messages=prompt
+            self, flow=LLMFlow.UNTAGGED_STREAM, input_messages=prompt
         ) as span:
             accumulated_content: list[str] = []
             final_usage: Usage | None = None

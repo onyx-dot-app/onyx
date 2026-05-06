@@ -79,7 +79,7 @@ def gmail_doc_sync(
                     )
                 continue
             if slim_doc.external_access is None:
-                logger.warning(f"No permissions found for document {slim_doc.id}")
+                logger.warning("No permissions found for document %s", slim_doc.id)
                 continue
 
             yield DocExternalAccess(

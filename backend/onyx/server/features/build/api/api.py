@@ -391,7 +391,7 @@ def _proxy_request(
     if request.query_params:
         target_url = f"{target_url}?{request.query_params}"
 
-    logger.debug(f"Proxying request to: {target_url}")
+    logger.debug("Proxying request to: %s", target_url)
 
     try:
         # Make the request to the target URL
@@ -437,10 +437,10 @@ def _proxy_request(
             )
 
     except httpx.TimeoutException:
-        logger.error(f"Timeout while proxying request to {target_url}")
+        logger.error("Timeout while proxying request to %s", target_url)
         raise HTTPException(status_code=504, detail="Gateway timeout")
     except httpx.RequestError as e:
-        logger.error(f"Error proxying request to {target_url}: {e}")
+        logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
 
@@ -546,7 +546,7 @@ def reset_sandbox(
         raise
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Failed to reset sandbox for user {user.id}: {e}")
+        logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to reset sandbox: {e}",

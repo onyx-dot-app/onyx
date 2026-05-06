@@ -326,6 +326,7 @@ def get_chat_session(
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_top_two_level_tool_calls=True,
+        prefetch_message_details=True,
     )
 
     # Convert messages to ChatMessageDetail format
@@ -561,7 +562,7 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug(f"Received new chat message: {chat_message_req.message}")
+    logger.debug("Received new chat message: %s", chat_message_req.message)
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(

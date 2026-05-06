@@ -27,6 +27,7 @@ from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
 from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
 from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
 from onyx.prompts.compression_prompts import USER_REMINDER
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
@@ -314,7 +315,7 @@ def generate_summary(
 
     with llm_generation_span(
         llm=llm,
-        flow="chat_history_summarization",
+        flow=LLMFlow.CHAT_HISTORY_SUMMARIZATION,
         input_messages=input_messages,
     ) as span_generation:
         response = llm.invoke(input_messages)
@@ -368,8 +369,10 @@ def compress_chat_history(
     chat_session_id = chat_history[0].chat_session_id
 
     logger.info(
-        f"Starting compression for session {chat_session_id}, "
-        f"history_len={len(chat_history)}, tokens_for_recent={compression_params.tokens_for_recent}"
+        "Starting compression for session %s, history_len=%s, tokens_for_recent=%s",
+        chat_session_id,
+        len(chat_history),
+        compression_params.tokens_for_recent,
     )
 
     with ensure_trace(
@@ -411,7 +414,9 @@ def compress_chat_history(
             tokenizer = get_tokenizer(None, None)
             summary_token_count = len(tokenizer.encode(summary_text))
             logger.debug(
-                f"Generated summary ({summary_token_count} tokens): {summary_text[:200]}..."
+                "Generated summary (%s tokens): %s...",
+                summary_token_count,
+                summary_text[:200],
             )
 
             # Create new summary as a ChatMessage
@@ -428,9 +433,10 @@ def compress_chat_history(
             db_session.commit()
 
             logger.info(
-                f"Compressed {len(summary_content.older_messages)} messages into summary "
-                f"(session_id={chat_session_id}, "
-                f"summary_tokens={summary_token_count})"
+                "Compressed %s messages into summary (session_id=%s, summary_tokens=%s)",
+                len(summary_content.older_messages),
+                chat_session_id,
+                summary_token_count,
             )
 
             return CompressionResult(
@@ -439,7 +445,9 @@ def compress_chat_history(
             )
 
         except Exception as e:
-            logger.exception(f"Compression failed for session {chat_session_id}: {e}")
+            logger.exception(
+                "Compression failed for session %s: %s", chat_session_id, e
+            )
             db_session.rollback()
             return CompressionResult(
                 summary_created=False,

@@ -29,7 +29,7 @@ def _delete_vespa_chunk(
             f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}",
         )
     except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to delete chunk, details: {e.response.text}")
+        logger.error("Failed to delete chunk, details: %s", e.response.text)
         raise
 
 

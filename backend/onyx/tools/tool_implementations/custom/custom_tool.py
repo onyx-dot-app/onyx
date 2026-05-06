@@ -79,9 +79,8 @@ class CustomTool(Tool[None]):
         )
         if has_auth_header and self._user_oauth_token:
             logger.warning(
-                f"Tool '{self._name}' has both an Authorization "
-                "header and OAuth token set. This is likely a configuration "
-                "error as the OAuth token will override the custom header."
+                "Tool '%s' has both an Authorization header and OAuth token set. This is likely a configuration error as the OAuth token will override the custom header.",
+                self._name,
             )
 
         if self._user_oauth_token:
@@ -206,7 +205,9 @@ class CustomTool(Tool[None]):
                 message=f"{self._name} action failed because of authentication error",
             )
             logger.warning(
-                f"Auth error from custom tool '{self._name}': HTTP {response.status_code}"
+                "Auth error from custom tool '%s': HTTP %s",
+                self._name,
+                response.status_code,
             )
 
         tool_result: Any
@@ -235,14 +236,14 @@ class CustomTool(Tool[None]):
                 data = tool_result
             except JSONDecodeError:
                 logger.exception(
-                    f"Failed to parse response as JSON for tool '{self._name}'"
+                    "Failed to parse response as JSON for tool '%s'", self._name
                 )
                 tool_result = response.text
                 response_type = "text"
                 data = tool_result
 
         logger.info(
-            f"Returning tool response for {self._name} with type {response_type}"
+            "Returning tool response for %s with type %s", self._name, response_type
         )
 
         # Emit CustomToolDelta packet

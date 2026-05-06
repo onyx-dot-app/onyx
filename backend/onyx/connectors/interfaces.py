@@ -315,7 +315,7 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
 
 class Resolver(BaseConnector):
     @abc.abstractmethod
-    def resolve_errors(
+    def reindex(
         self,
         errors: list[ConnectorFailure],
         include_permissions: bool = False,

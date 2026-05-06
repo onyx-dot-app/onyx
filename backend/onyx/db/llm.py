@@ -162,14 +162,17 @@ def validate_persona_ids_exist(
     return fetched_persona_ids, missing_personas
 
 
-def get_personas_using_provider(
-    db_session: Session, provider_name: str
-) -> list[Persona]:
-    """Get all non-deleted personas that use a specific LLM provider."""
+def get_personas_using_provider(db_session: Session, provider_id: int) -> list[Persona]:
+    """Get all non-deleted personas whose default_model_configuration references this provider."""
     return list(
         db_session.scalars(
-            select(Persona).where(
-                Persona.llm_model_provider_override == provider_name,
+            select(Persona)
+            .join(
+                ModelConfiguration,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
+            )
+            .where(
+                ModelConfiguration.llm_provider_id == provider_id,
                 Persona.deleted == False,  # noqa: E712
             )
         ).all()
@@ -562,6 +565,18 @@ def fetch_default_model(
     return model_config
 
 
+def fetch_model_configuration_by_id(
+    db_session: Session, model_configuration_id: int | None
+) -> ModelConfiguration | None:
+    if model_configuration_id is None:
+        return None
+    return db_session.scalar(
+        select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
+        .where(ModelConfiguration.id == model_configuration_id)
+    )
+
+
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:
@@ -590,51 +605,28 @@ def remove_embedding_provider(
     db_session.commit()
 
 
-def remove_llm_provider(db_session: Session, provider_id: int) -> None:
+def remove_llm_provider(
+    db_session: Session, provider_id: int, commit: bool = True
+) -> None:
     provider = db_session.get(LLMProviderModel, provider_id)
     if not provider:
         raise ValueError("LLM Provider not found")
 
-    # Clear the provider override from any personas using it
-    # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
-    for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
+    for persona in get_personas_using_provider(db_session, provider_id):
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
             LLMProvider__UserGroup.llm_provider_id == provider_id
         )
     )
-    # Remove LLMProvider
     db_session.execute(
         delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
     )
-    db_session.commit()
-
-
-def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> None:
-    """Remove LLM provider."""
-    provider = db_session.get(LLMProviderModel, provider_id)
-    if not provider:
-        raise ValueError("LLM Provider not found")
-
-    # Clear the provider override from any personas using it
-    # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
-    for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
-
-    db_session.execute(
-        delete(LLMProvider__UserGroup).where(
-            LLMProvider__UserGroup.llm_provider_id == provider_id
-        )
-    )
-    # Remove LLMProvider
-    db_session.execute(
-        delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    db_session.flush()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
 
 
 def update_default_provider(

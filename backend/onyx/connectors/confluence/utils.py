@@ -145,9 +145,10 @@ def process_attachment(
         else:
             if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
                 logger.warning(
-                    f"Skipping {attachment_link} due to size. "
-                    f"size={attachment_size} "
-                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+                    "Skipping %s due to size. size=%s threshold=%s",
+                    attachment_link,
+                    attachment_size,
+                    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 )
                 return AttachmentProcessingResult(
                     text=None,
@@ -156,14 +157,19 @@ def process_attachment(
                 )
 
         logger.info(
-            f"Downloading attachment: title={attachment['title']} length={attachment_size} link={attachment_link}"
+            "Downloading attachment: title=%s length=%s link=%s",
+            attachment["title"],
+            attachment_size,
+            attachment_link,
         )
 
         # Download the attachment
         resp: requests.Response = confluence_client._session.get(attachment_link)
         if resp.status_code != 200:
             logger.warning(
-                f"Failed to fetch {attachment_link} with status code {resp.status_code}"
+                "Failed to fetch %s with status code %s",
+                attachment_link,
+                resp.status_code,
             )
             return AttachmentProcessingResult(
                 text=None,
@@ -226,7 +232,7 @@ def _process_image_attachment(
             media_type=media_type,
             file_origin=FileOrigin.CONNECTOR,
         )
-        logger.info(f"Stored image attachment with file name: {file_name}")
+        logger.info("Stored image attachment with file name: %s", file_name)
 
         # Return empty text but include the file_name for later processing
         return AttachmentProcessingResult(text="", file_name=file_name, error=None)
@@ -252,14 +258,16 @@ def convert_attachment_to_content(
     # Quick check for unsupported types:
     if media_type.startswith("video/") or media_type == "application/gliffy+json":
         logger.warning(
-            f"Skipping unsupported attachment type: '{media_type}' for {attachment['title']}"
+            "Skipping unsupported attachment type: '%s' for %s",
+            media_type,
+            attachment["title"],
         )
         return None
 
     result = process_attachment(confluence_client, attachment, page_id, allow_images)
     if result.error is not None:
         logger.warning(
-            f"Attachment {attachment['title']} encountered error: {result.error}"
+            "Attachment %s encountered error: %s", attachment["title"], result.error
         )
         return None
 
@@ -367,7 +375,8 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
             except requests.HTTPError as e:
                 delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                 logger.warning(
-                    f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
+                    "HTTPError in confluence call. Retrying in %s seconds...",
+                    delay_until,
                 )
                 while time.monotonic() < delay_until:
                     # in the future, check a signal here to exit
@@ -403,8 +412,8 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
         FORBIDDEN_RETRY_DELAY = 10
         if attempt < FORBIDDEN_MAX_RETRY_ATTEMPTS:
             logger.warning(
-                "403 error. This sometimes happens when we hit "
-                f"Confluence rate limits. Retrying in {FORBIDDEN_RETRY_DELAY} seconds..."
+                "403 error. This sometimes happens when we hit Confluence rate limits. Retrying in %s seconds...",
+                FORBIDDEN_RETRY_DELAY,
             )
             return FORBIDDEN_RETRY_DELAY
 
@@ -416,8 +425,10 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
 
         delay = min(STARTING_DELAY * (BACKOFF**attempt), MAX_DELAY)
         logger.warning(
-            f"Server error {e.response.status_code}. "
-            f"Retrying in {delay} seconds (attempt {attempt + 1})..."
+            "Server error %s. Retrying in %s seconds (attempt %s)...",
+            e.response.status_code,
+            delay,
+            attempt + 1,
         )
         return math.ceil(time.monotonic() + delay)
 
@@ -435,7 +446,9 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
             retry_after = int(retry_after_header)
             if retry_after > MAX_DELAY:
                 logger.warning(
-                    f"Clamping retry_after from {retry_after} to {MAX_DELAY} seconds..."
+                    "Clamping retry_after from %s to %s seconds...",
+                    retry_after,
+                    MAX_DELAY,
                 )
                 retry_after = MAX_DELAY
             if retry_after < MIN_DELAY:
@@ -445,7 +458,7 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
 
     if retry_after is not None:
         logger.warning(
-            f"Rate limiting with retry header. Retrying after {retry_after} seconds..."
+            "Rate limiting with retry header. Retrying after %s seconds...", retry_after
         )
         delay = retry_after
     else:

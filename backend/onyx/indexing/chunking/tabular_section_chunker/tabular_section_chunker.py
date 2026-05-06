@@ -274,7 +274,7 @@ class TabularChunker(SectionChunker):
 
         if not chunk_texts:
             logger.warning(
-                f"TabularChunker: skipping unparseable section (link={section.link})"
+                "TabularChunker: skipping unparseable section (link=%s)", section.link
             )
             return SectionChunkerOutput(
                 payloads=payloads, accumulator=AccumulatorState()

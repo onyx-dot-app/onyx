@@ -9,7 +9,6 @@ Create Date: 2025-12-29 16:54:36.635574
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "7e490836d179"
 down_revision = "c1d2e3f4a5b6"
@@ -45,13 +44,11 @@ def upgrade() -> None:
     # Set system_prompt to NULL where it matches the previous default
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET system_prompt = NULL
             WHERE system_prompt = :previous_default
-            """
-        ),
+            """),
         {"previous_default": PREVIOUS_DEFAULT_SYSTEM_PROMPT},
     )
 
@@ -62,13 +59,11 @@ def downgrade() -> None:
     # before this migration, but there's no way to distinguish them
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET system_prompt = :previous_default
             WHERE system_prompt IS NULL
-            """
-        ),
+            """),
         {"previous_default": PREVIOUS_DEFAULT_SYSTEM_PROMPT},
     )
 

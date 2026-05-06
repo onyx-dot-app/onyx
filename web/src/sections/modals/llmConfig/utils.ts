@@ -5,7 +5,7 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import { useWellKnownLLMProvider } from "@/hooks/useLanguageModels";
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 

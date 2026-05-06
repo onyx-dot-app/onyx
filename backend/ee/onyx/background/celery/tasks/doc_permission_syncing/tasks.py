@@ -146,11 +146,11 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 
     sync_config = get_source_perm_sync_config(cc_pair.connector.source)
     if sync_config is None:
-        logger.error(f"No sync config found for {cc_pair.connector.source}")
+        logger.error("No sync config found for %s", cc_pair.connector.source)
         return False
 
     if sync_config.doc_sync_config is None:
-        logger.error(f"No doc sync config found for {cc_pair.connector.source}")
+        logger.error("No doc sync config found for %s", cc_pair.connector.source)
         return False
 
     # if indexing also does perm sync, don't start running doc_sync until at
@@ -446,7 +446,8 @@ def connector_permission_sync_generator_task(
 
         if payload.celery_task_id is None:
             logger.info(
-                f"connector_permission_sync_generator_task - Waiting for fence: fence={redis_connector.permissions.fence_key}"
+                "connector_permission_sync_generator_task - Waiting for fence: fence=%s",
+                redis_connector.permissions.fence_key,
             )
             sleep(1)
             continue
@@ -454,9 +455,9 @@ def connector_permission_sync_generator_task(
         payload_id = payload.id
 
         logger.info(
-            f"connector_permission_sync_generator_task - Fence found, continuing...: "
-            f"fence={redis_connector.permissions.fence_key} "
-            f"payload_id={payload.id}"
+            "connector_permission_sync_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+            redis_connector.permissions.fence_key,
+            payload.id,
         )
         break
 
@@ -529,7 +530,7 @@ def connector_permission_sync_generator_task(
                     f"No doc sync func found for {source_type} with cc_pair={cc_pair_id}"
                 )
 
-            logger.info(f"Syncing docs for {source_type} with cc_pair={cc_pair_id}")
+            logger.info("Syncing docs for %s with cc_pair=%s", source_type, cc_pair_id)
 
             mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
@@ -978,9 +979,10 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
             elapsed = time.monotonic() - self.start_monotonic
             if elapsed > self.timeout_seconds:
                 logger.warning(
-                    f"PermissionSyncCallback - task timeout exceeded: "
-                    f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
-                    f"cc_pair={self.redis_connector.cc_pair_id}"
+                    "PermissionSyncCallback - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
+                    format(elapsed, ".0f"),
+                    self.timeout_seconds,
+                    self.redis_connector.cc_pair_id,
                 )
                 return True
 
@@ -1001,12 +1003,12 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
             self.last_tag = tag
         except LockError:
             logger.exception(
-                f"PermissionSyncCallback - lock.reacquire exceptioned: "
-                f"lock_timeout={self.redis_lock.timeout} "
-                f"start={self.started} "
-                f"last_tag={self.last_tag} "
-                f"last_reacquired={self.last_lock_reacquire} "
-                f"now={datetime.now(timezone.utc)}"
+                "PermissionSyncCallback - lock.reacquire exceptioned: lock_timeout=%s start=%s last_tag=%s last_reacquired=%s now=%s",
+                self.redis_lock.timeout,
+                self.started,
+                self.last_tag,
+                self.last_lock_reacquire,
+                datetime.now(timezone.utc),
             )
 
             redis_lock_dump(self.redis_lock, self.redis_client)

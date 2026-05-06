@@ -39,12 +39,12 @@ def event_telemetry(
     # Log the pre-enrichment properties so the real client IP (PII) never
     # reaches the application log aggregator. PostHog itself still receives
     # the enriched payload via the capture call below.
-    logger.info(f"Capturing PostHog event: {distinct_id} {event} {properties}")
+    logger.info("Capturing PostHog event: %s %s %s", distinct_id, event, properties)
     try:
         posthog.capture(distinct_id, event, enriched)
         posthog.flush()
     except Exception as e:
-        logger.error(f"Error capturing PostHog event: {e}")
+        logger.error("Error capturing PostHog event: %s", e)
 
 
 def identify_user(
@@ -60,4 +60,4 @@ def identify_user(
         posthog.identify(distinct_id, enriched)
         posthog.flush()
     except Exception as e:
-        logger.error(f"Error identifying PostHog user: {e}")
+        logger.error("Error identifying PostHog user: %s", e)

@@ -28,6 +28,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -36,6 +37,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -171,10 +173,13 @@ def _sync_fetched_models(
         )
         if new_count > 0:
             logger.info(
-                f"Added {new_count} new {source_label} models to provider '{provider_name}'"
+                "Added %s new %s models to provider '%s'",
+                new_count,
+                source_label,
+                provider_name,
             )
     except ValueError as e:
-        logger.warning(f"Failed to sync {source_label} models to DB: {e}")
+        logger.warning("Failed to sync %s models to DB: %s", source_label, e)
 
 
 def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
@@ -402,7 +407,8 @@ def list_llm_providers(
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
-            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
+            "LLMProviderView.from_model took %s seconds",
+            format(from_model_duration, ".2f"),
         )
 
         _mask_provider_credentials(full_llm_provider)
@@ -410,7 +416,9 @@ def list_llm_providers(
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
-    logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
+    logger.debug(
+        "Completed fetching LLM providers in %s seconds", format(duration, ".2f")
+    )
 
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
@@ -662,7 +670,7 @@ def get_vision_capable_providers(
         for provider_id, model_names in provider_models.items()
     ]
 
-    logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
+    logger.debug("Found %s vision-capable providers", len(vision_provider_response))
 
     return LLMProviderResponse[VisionProviderResponse].from_models(
         providers=vision_provider_response,
@@ -713,7 +721,9 @@ def list_llm_provider_basics(
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     logger.debug(
-        f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
+        "Completed fetching %s user-accessible providers in %s seconds",
+        len(accessible_providers),
+        format(duration, ".2f"),
     )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
@@ -762,6 +772,33 @@ def get_valid_model_names_for_persona(
     return valid_models
 
 
+def get_valid_model_configuration_ids_for_persona(
+    persona: Persona,
+    user: User,
+    db_session: Session,
+) -> set[int]:
+    """Get the set of ModelConfiguration IDs that a user can access for this persona.
+
+    Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
+    multiple providers expose a model with the same name.
+    """
+    is_admin = user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    valid_ids: set[int] = set()
+    for llm_provider_model in all_providers:
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            for model_config in llm_provider_model.model_configurations:
+                if model_config.is_visible and model_config.id is not None:
+                    valid_ids.add(model_config.id)
+    return valid_ids
+
+
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,
@@ -778,7 +815,7 @@ def list_llm_providers_for_persona(
     and should NOT block the UI.
     """
     start_time = datetime.now(timezone.utc)
-    logger.debug(f"Starting to fetch LLM providers for persona {persona_id}")
+    logger.debug("Starting to fetch LLM providers for persona %s", persona_id)
 
     persona = fetch_persona_with_groups(db_session, persona_id)
     if not persona:
@@ -811,48 +848,31 @@ def list_llm_providers_for_persona(
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     logger.debug(
-        f"Completed fetching {len(llm_provider_list)} LLM providers for persona {persona_id} in {duration:.2f} seconds"
+        "Completed fetching %s LLM providers for persona %s in %s seconds",
+        len(llm_provider_list),
+        persona_id,
+        format(duration, ".2f"),
     )
-
-    # Get the default model and vision model for the persona
-    # TODO: Port persona's over to use ID
-    persona_default_provider = persona.llm_model_provider_override
-    persona_default_model = persona.llm_model_version_override
 
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
 
-    # Build default_text and default_vision using persona overrides when available,
-    # falling back to the global defaults.
+    # Build default_text and default_vision using the persona's model config FK when
+    # available, falling back to the global defaults.
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
-    if persona_default_provider:
-        provider = fetch_existing_llm_provider(persona_default_provider, db_session)
-        if provider and can_user_access_llm_provider(
-            provider, user_group_ids, persona, is_admin=is_admin
+    if persona.default_model_configuration_id:
+        model_config = fetch_model_configuration_by_id(
+            db_session, persona.default_model_configuration_id
+        )
+        if model_config and can_user_access_llm_provider(
+            model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
         ):
-            if persona_default_model:
-                # Persona specifies both provider and model — use them directly
-                default_text = DefaultModel(
-                    provider_id=provider.id,
-                    model_name=persona_default_model,
-                )
-            else:
-                # Persona specifies only the provider — pick a visible (public) model,
-                # falling back to any model on this provider
-                visible_model = next(
-                    (mc for mc in provider.model_configurations if mc.is_visible),
-                    None,
-                )
-                fallback_model = visible_model or next(
-                    iter(provider.model_configurations), None
-                )
-                if fallback_model:
-                    default_text = DefaultModel(
-                        provider_id=provider.id,
-                        model_name=fallback_model.name,
-                    )
+            default_text = DefaultModel(
+                provider_id=model_config.llm_provider_id,
+                model_name=model_config.name,
+            )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
@@ -1010,7 +1030,7 @@ def get_bedrock_available_models(
                             "supports_image_input": infer_vision_support(profile_id),
                         }
         except Exception as e:
-            logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
+            logger.warning("Couldn't fetch inference profiles for Bedrock: %s", e)
 
         # Prefer profiles: de-dupe available models, then add profile IDs
         candidates = (available_models - cross_region_models) | profile_ids

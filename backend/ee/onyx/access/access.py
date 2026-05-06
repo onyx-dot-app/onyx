@@ -74,7 +74,7 @@ def _get_access_for_documents(
         document = doc_id_map[document_id]
         source = doc_id_to_source_map.get(document_id)
         if source is None:
-            logger.error(f"Document {document_id} has no source")
+            logger.error("Document %s has no source", document_id)
             continue
 
         perm_sync_config = get_source_perm_sync_config(source)

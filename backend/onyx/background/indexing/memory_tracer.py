@@ -19,7 +19,7 @@ class MemoryTracer:
     def start(self) -> None:
         """Start the memory tracer if interval is greater than 0."""
         if self.interval > 0:
-            logger.debug(f"Memory tracer starting: interval={self.interval}")
+            logger.debug("Memory tracer starting: interval=%s", self.interval)
             tracemalloc.start(DANSWER_TRACEMALLOC_FRAMES)
             self._take_snapshot()
 
@@ -56,9 +56,9 @@ class MemoryTracer:
         """Log the memory difference between two snapshots."""
         stats = current.compare_to(previous, "traceback")
         for s in stats[: self.num_print_entries]:
-            logger.debug(f"Tracer diff: {s}")
+            logger.debug("Tracer diff: %s", s)
             for line in s.traceback.format():
-                logger.debug(f"* {line}")
+                logger.debug("* %s", line)
 
     def increment_and_maybe_trace(self) -> None:
         """Increment counter and perform trace if interval is hit."""
@@ -68,7 +68,9 @@ class MemoryTracer:
         self.counter += 1
         if self.counter % self.interval == 0:
             logger.debug(
-                f"Running trace comparison for batch {self.counter}. interval={self.interval}"
+                "Running trace comparison for batch %s. interval=%s",
+                self.counter,
+                self.interval,
             )
             self._take_snapshot()
             if self.snapshot and self.snapshot_prev:
@@ -80,7 +82,8 @@ class MemoryTracer:
             return
 
         logger.debug(
-            f"Running trace comparison between start and end of indexing. {self.counter} batches processed."
+            "Running trace comparison between start and end of indexing. %s batches processed.",
+            self.counter,
         )
         self._take_snapshot()
         if self.snapshot and self.snapshot_first:

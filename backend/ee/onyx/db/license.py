@@ -163,7 +163,7 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
         )
         return LicenseMetadata.model_validate_json(cached_str)
     except Exception as e:
-        logger.warning(f"Failed to parse cached license metadata: {e}")
+        logger.warning("Failed to parse cached license metadata: %s", e)
         return None
 
 
@@ -207,12 +207,19 @@ def update_license_cache(
         The cached LicenseMetadata
     """
     from ee.onyx.utils.license import get_license_status
+    from ee.onyx.utils.license_expiry import get_expiry_warning_stage
+    from ee.onyx.utils.license_expiry import get_grace_period_end
 
     tenant = tenant_id or get_current_tenant_id()
     cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
-    status = get_license_status(payload, grace_period_end)
+    # Default the grace window to 14 days past expires_at so the license-
+    # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
+    # that window — matching the banner copy and daily admin emails.
+    effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
+    status = get_license_status(payload, effective_grace_end)
+    warning_stage = get_expiry_warning_stage(payload.expires_at)
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -222,8 +229,9 @@ def update_license_cache(
         plan_type=payload.plan_type,
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
-        grace_period_end=grace_period_end,
+        grace_period_end=effective_grace_end,
         status=status,
+        expiry_warning_stage=warning_stage,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
     )
@@ -234,7 +242,9 @@ def update_license_cache(
         ex=LICENSE_CACHE_TTL_SECONDS,
     )
 
-    logger.info(f"License cache updated: {metadata.seats} seats, status={status.value}")
+    logger.info(
+        "License cache updated: %s seats, status=%s", metadata.seats, status.value
+    )
     return metadata
 
 
@@ -273,7 +283,7 @@ def refresh_license_cache(
             tenant_id=tenant_id,
         )
     except ValueError as e:
-        logger.error(f"Failed to verify license during cache refresh: {e}")
+        logger.error("Failed to verify license during cache refresh: %s", e)
         invalidate_license_cache(tenant_id)
         return None
 

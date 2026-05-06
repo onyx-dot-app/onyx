@@ -156,7 +156,8 @@ def try_generate_stale_document_sync_tasks(
     maybe_mark_tenant_active(tenant_id, caller="vespa_sync")
 
     logger.info(
-        f"Stale documents found (at least {stale_doc_count}). Generating sync tasks in one batch."
+        "Stale documents found (at least %s). Generating sync tasks in one batch.",
+        stale_doc_count,
     )
 
     logger.info("generate_document_sync_tasks starting for all documents.")
@@ -173,13 +174,15 @@ def try_generate_stale_document_sync_tasks(
 
     if tasks_generated >= max_tasks:
         logger.info(
-            f"generate_document_sync_tasks reached the task generation limit: "
-            f"tasks_generated={tasks_generated} max_tasks={max_tasks}"
+            "generate_document_sync_tasks reached the task generation limit: tasks_generated=%s max_tasks=%s",
+            tasks_generated,
+            max_tasks,
         )
     else:
         logger.info(
-            f"generate_document_sync_tasks finished for all documents. "
-            f"tasks_generated={tasks_generated} total_docs_found={total_docs}"
+            "generate_document_sync_tasks finished for all documents. tasks_generated=%s total_docs_found=%s",
+            tasks_generated,
+            total_docs,
         )
 
     set_document_sync_fence(r, tasks_generated)

@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
@@ -95,6 +97,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 
 
 @patch(

@@ -81,7 +81,7 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             return mask_sensitive_data(data)
         except Exception as e:
-            logger.warning(f"Failed to mask data: {e}")
+            logger.warning("Failed to mask data: %s", e)
             return data
 
     def _calculate_cost(self, data: GenerationSpanData) -> Optional[float]:
@@ -105,7 +105,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                     # Convert cents to dollars for Langfuse
                     return cost_cents / 100.0
         except Exception as e:
-            logger.debug(f"Failed to calculate cost: {e}")
+            logger.debug("Failed to calculate cost: %s", e)
         return None
 
     def on_trace_start(self, trace: Trace) -> None:
@@ -140,7 +140,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 # Use trace_id as key for root span's ID (children with no parent_id will use this)
                 self._langfuse_span_ids[trace.trace_id] = langfuse_span.id
         except Exception as e:
-            logger.error(f"Error starting Langfuse trace: {e}")
+            logger.error("Error starting Langfuse trace: %s", e)
 
     def on_trace_end(self, trace: Trace) -> None:
         """Called when a trace is finished."""
@@ -163,7 +163,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 )
                 langfuse_span.end()
         except Exception as e:
-            logger.error(f"Error ending Langfuse trace: {e}")
+            logger.error("Error ending Langfuse trace: %s", e)
 
     def on_span_start(self, span: Span[SpanData]) -> None:
         """Called when a span is started.
@@ -192,7 +192,8 @@ class LangfuseTracingProcessor(TracingProcessor):
             # If no trace ID found, we can't create a properly linked span
             if langfuse_trace_id is None:
                 logger.warning(
-                    f"No Langfuse trace ID found for span {span.span_id}, creating orphan"
+                    "No Langfuse trace ID found for span %s, creating orphan",
+                    span.span_id,
                 )
                 # Fall back to creating an orphan span
                 # In Langfuse SDK v3, use start_observation instead of start_span
@@ -265,7 +266,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 # Store Langfuse span ID for future children to reference
                 self._langfuse_span_ids[span.span_id] = langfuse_span.id
         except Exception as e:
-            logger.error(f"Error starting Langfuse span: {e}")
+            logger.error("Error starting Langfuse span: %s", e)
 
     def on_span_end(self, span: Span[SpanData]) -> None:
         """Called when a span is finished."""
@@ -335,7 +336,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                     self._last_output[trace_id] = output_data
 
         except Exception as e:
-            logger.error(f"Error ending Langfuse span: {e}")
+            logger.error("Error ending Langfuse span: %s", e)
 
     def _get_generation_name(self, data: GenerationSpanData) -> str:
         """Get a descriptive name for a generation span."""
@@ -397,7 +398,7 @@ class LangfuseTracingProcessor(TracingProcessor):
             if client:
                 client.flush()
         except Exception as e:
-            logger.warning(f"Failed to flush Langfuse client: {e}")
+            logger.warning("Failed to flush Langfuse client: %s", e)
 
     def shutdown(self) -> None:
         """Called when the application stops."""
@@ -407,4 +408,4 @@ class LangfuseTracingProcessor(TracingProcessor):
             if client:
                 client.shutdown()
         except Exception as e:
-            logger.warning(f"Failed to shutdown Langfuse client: {e}")
+            logger.warning("Failed to shutdown Langfuse client: %s", e)

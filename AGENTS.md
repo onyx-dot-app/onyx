@@ -27,18 +27,21 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
 #### Worker Types
 
 1. **Primary Worker** (`celery_app.py`)
+
    - Coordinates core background tasks and system-wide operations
    - Handles connector management, document sync, pruning, and periodic checks
    - Runs with 4 threads concurrency
    - Tasks: connector deletion, vespa sync, pruning, LLM model updates, user file sync
 
 2. **Docfetching Worker** (`docfetching`)
+
    - Fetches documents from external data sources (connectors)
    - Spawns docprocessing tasks for each document batch
    - Implements watchdog monitoring for stuck connectors
    - Configurable concurrency (default from env)
 
 3. **Docprocessing Worker** (`docprocessing`)
+
    - Processes fetched documents through the indexing pipeline:
      - Upserts documents to PostgreSQL
      - Chunks documents and adds contextual information
@@ -48,28 +51,33 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Configurable concurrency (default from env)
 
 4. **Light Worker** (`light`)
+
    - Handles lightweight, fast operations
    - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
    - Higher concurrency for quick tasks
 
 5. **Heavy Worker** (`heavy`)
+
    - Handles resource-intensive operations
    - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
    - Runs with 4 threads concurrency
 
 6. **KG Processing Worker** (`kg_processing`)
+
    - Handles Knowledge Graph processing and clustering
    - Builds relationships between documents
    - Runs clustering algorithms
    - Configurable concurrency
 
 7. **Monitoring Worker** (`monitoring`)
+
    - System health monitoring and metrics collection
    - Monitors Celery queues, process memory, and system status
    - Single thread (monitoring doesn't need parallelism)
    - Cloud-specific monitoring tasks
 
 8. **User File Processing Worker** (`user_file_processing`)
+
    - Processes user-uploaded files
    - Handles user file indexing and project synchronization
    - Configurable concurrency
@@ -118,7 +126,7 @@ If you make any updates to a celery worker and you want to test these changes, y
 to ask me to restart the celery worker. There is no auto-restart on code-change mechanism.
 
 **Task Time Limits**:
-Since all tasks are executed in thread pools, the time limit features of Celery are silently 
+Since all tasks are executed in thread pools, the time limit features of Celery are silently
 disabled and won't work. Timeout logic must be implemented within the task itself.
 
 ### Code Quality
@@ -290,6 +298,19 @@ will be tailing their logs to this file.
 - Streaming support for real-time responses
 - Token management and rate limiting
 - Custom prompts and agent actions
+
+### Tracing — every LLM invocation must be tagged
+
+Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
+
+- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
+- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
+
+Rules:
+
+1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
+2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
+3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
 
 ## Creating a Plan
 

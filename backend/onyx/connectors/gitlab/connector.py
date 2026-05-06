@@ -50,8 +50,14 @@ def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[li
 
 
 def get_author(author: Any) -> BasicExpertInfo:
+    # GitLab masks the `name` field as "****" for blocked users and as an
+    # anti-scraping measure on free-tier public projects. Fall back to
+    # `username` so we surface a usable identifier instead.
+    name = author.get("name")
+    if not name or name == "****":
+        name = author.get("username")
     return BasicExpertInfo(
-        display_name=author.get("name"),
+        display_name=name,
     )
 
 

@@ -27,7 +27,7 @@ export class ChatPage {
     this.page = page;
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
-    this.chatInputTextarea = page.locator("#onyx-chat-input-textarea");
+    this.chatInputTextarea = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.humanMessages = page.locator("#onyx-human-message");
     this.aiMessages = page.getByTestId("onyx-ai-message");

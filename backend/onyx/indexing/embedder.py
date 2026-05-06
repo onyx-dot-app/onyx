@@ -299,7 +299,7 @@ def embed_chunks_with_failure_handling(
                     scope.set_tag("tenant_id", tenant_id)
                 scope.fingerprint = ["embedding-failure", type(e).__name__]
                 sentry_sdk.capture_exception(e)
-            logger.exception(f"Failed to embed chunks for document '{doc_id}'")
+            logger.exception("Failed to embed chunks for document '%s'", doc_id)
             failures.append(
                 ConnectorFailure(
                     failed_document=DocumentFailure(

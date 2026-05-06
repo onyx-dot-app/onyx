@@ -483,3 +483,17 @@ textarea {
 .container {
   margin-bottom: 1rem;
 }
+
+/* contentEditable placeholder */
+[data-placeholder][data-empty] {
+  position: relative;
+}
+[data-placeholder][data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--text-03);
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: inherit;
+}

@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { Button, MessageCard } from "@opal/components";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import { SvgArrowExchange } from "@opal/icons";
+import { Button, MessageCard } from "@opal/components";
 
 interface CustomToolAuthCardProps {
   toolName: string;

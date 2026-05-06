@@ -120,8 +120,11 @@ async def search_indexed_documents(
     ```
     """
     logger.info(
-        f"Onyx MCP Server: document search: query='{query}', sources={source_types}, "
-        f"document_sets={document_set_names}, limit={limit}"
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, limit=%s",
+        query,
+        source_types,
+        document_set_names,
+        limit,
     )
 
     # Normalize empty list inputs to None so downstream filter construction is
@@ -137,7 +140,9 @@ async def search_indexed_documents(
             time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
         except ValueError as e:
             logger.warning(
-                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. Continuing without time filter."
+                "Onyx MCP Server: Invalid time_cutoff format '%s': %s. Continuing without time filter.",
+                time_cutoff,
+                e,
             )
             # Continue with no time_cutoff instead of returning an error
             time_cutoff_dt = None
@@ -183,7 +188,8 @@ async def search_indexed_documents(
                 source_type_enums.append(DocumentSource(src.lower()))
             except ValueError:
                 logger.warning(
-                    f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
+                    "Onyx MCP Server: Invalid source type '%s' - will be ignored by server",
+                    src,
                 )
 
     filters: BaseFilters | None = None
@@ -270,7 +276,7 @@ async def search_indexed_documents(
         documents = documents[:limit]
 
         logger.info(
-            f"Onyx MCP Server: Internal search returned {len(documents)} results"
+            "Onyx MCP Server: Internal search returned %s results", len(documents)
         )
         return {
             "documents": documents,
@@ -278,7 +284,7 @@ async def search_indexed_documents(
             "query": query,
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
+        logger.error("Onyx MCP Server: Document search error: %s", e, exc_info=True)
         return {
             "error": f"Document search failed: {str(e)}",
             "documents": [],
@@ -306,7 +312,7 @@ async def search_web(
     }
     ```
     """
-    logger.info(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
+    logger.info("Onyx MCP Server: Web search: query='%s', limit=%s", query, limit)
 
     access_token = require_access_token()
 
@@ -328,7 +334,7 @@ async def search_web(
             "query": query,
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: Web search error: {e}", exc_info=True)
+        logger.error("Onyx MCP Server: Web search error: %s", e, exc_info=True)
         return {
             "error": f"Web search failed: {str(e)}",
             "results": [],
@@ -356,7 +362,7 @@ async def open_urls(
     }
     ```
     """
-    logger.info(f"Onyx MCP Server: Open URL: fetching {len(urls)} URLs")
+    logger.info("Onyx MCP Server: Open URL: fetching %s URLs", len(urls))
 
     access_token = require_access_token()
 
@@ -376,7 +382,7 @@ async def open_urls(
             "results": [result.model_dump(mode="json") for result in payload.results],
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: URL fetch error: {e}", exc_info=True)
+        logger.error("Onyx MCP Server: URL fetch error: %s", e, exc_info=True)
         return {
             "error": f"URL fetch failed: {str(e)}",
             "results": [],

@@ -186,7 +186,7 @@ class ConfluenceConnector(
         self.continue_on_failure = continue_on_failure
 
     def set_allow_images(self, value: bool) -> None:
-        logger.info(f"Setting allow_images to {value}.")
+        logger.info("Setting allow_images to %s.", value)
         self.allow_images = value
 
     def _yield_space_hierarchy_nodes(
@@ -470,7 +470,7 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = _get_page_id(page)
             page_title = page["title"]
-            logger.info(f"Converting page {page_title} to document")
+            logger.info("Converting page %s to document", page_title)
             page_url = build_confluence_document_id(
                 self.wiki_base, page["_links"]["webui"], self.is_cloud
             )
@@ -532,7 +532,7 @@ class ConfluenceConnector(
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
         except Exception as e:
-            logger.error(f"Error converting page {page.get('id', 'unknown')}: {e}")
+            logger.error("Error converting page %s: %s", page.get("id", "unknown"), e)
             if is_atlassian_date_error(e):  # propagate error to be caught and retried
                 raise
             return ConnectorFailure(
@@ -579,7 +579,8 @@ class ConfluenceConnector(
                 if not self.allow_images:
                     if media_type.startswith("image/"):
                         logger.info(
-                            f"Skipping attachment because allow images is False: {attachment['title']}"
+                            "Skipping attachment because allow images is False: %s",
+                            attachment["title"],
                         )
                         continue
 
@@ -587,12 +588,15 @@ class ConfluenceConnector(
                     attachment,
                 ):
                     logger.info(
-                        f"Skipping attachment because it is not an accepted file type: {attachment['title']}"
+                        "Skipping attachment because it is not an accepted file type: %s",
+                        attachment["title"],
                     )
                     continue
 
                 logger.info(
-                    f"Processing attachment: {attachment['title']} attached to page {page['title']}"
+                    "Processing attachment: %s attached to page %s",
+                    attachment["title"],
+                    page["title"],
                 )
                 # Attachment document id: use the download URL for stable identity
                 try:
@@ -601,9 +605,9 @@ class ConfluenceConnector(
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Invalid attachment url for id {attachment['id']}, skipping"
+                        "Invalid attachment url for id %s, skipping", attachment["id"]
                     )
-                    logger.debug(f"Error building attachment url: {e}")
+                    logger.debug("Error building attachment url: %s", e)
                     continue
                 try:
                     response = convert_attachment_to_content(
@@ -691,7 +695,8 @@ class ConfluenceConnector(
                     attachment_docs.append(attachment_doc)
                 except Exception as e:
                     logger.error(
-                        f"Failed to extract/summarize attachment {attachment['title']}",
+                        "Failed to extract/summarize attachment %s",
+                        attachment["title"],
                         exc_info=e,
                     )
                     if is_atlassian_date_error(e):
@@ -773,7 +778,7 @@ class ConfluenceConnector(
         page_query_url = checkpoint.next_page_url or self._build_page_retrieval_url(
             start_ts, end, self.batch_size
         )
-        logger.debug(f"page_query_url: {page_query_url}")
+        logger.debug("page_query_url: %s", page_query_url)
 
         # store the next page start for confluence server, cursor for confluence cloud
         def store_next_page_url(next_page_url: str) -> None:
@@ -842,9 +847,8 @@ class ConfluenceConnector(
         except Exception as e:
             if is_atlassian_date_error(e) and start is not None:
                 logger.warning(
-                    "Confluence says we provided an invalid 'updated' field. This may indicate"
-                    "a real issue, but can also appear during edge cases like daylight"
-                    f"savings time changes. Retrying with a 1 hour offset. Error: {e}"
+                    "Confluence says we provided an invalid 'updated' field. This may indicatea real issue, but can also appear during edge cases like daylightsavings time changes. Retrying with a 1 hour offset. Error: %s",
+                    e,
                 )
                 return self._fetch_document_batches(checkpoint, start - ONE_HOUR, end)
             raise

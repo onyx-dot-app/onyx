@@ -45,7 +45,7 @@ class LongTermLogger:
             # Delete oldest files that exceed the limit
             for file in files[self.max_files_per_category :]:
                 if not file.is_file():
-                    logger.debug(f"File already deleted: {file}")
+                    logger.debug("File already deleted: %s", file)
                     continue
                 try:
                     file.unlink()

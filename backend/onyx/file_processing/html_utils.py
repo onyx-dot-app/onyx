@@ -212,7 +212,7 @@ def web_html_cleanup(
             if not page_text:
                 raise ValueError("Empty content returned by trafilatura.")
         except Exception as e:
-            logger.info(f"Trafilatura parsing failed: {e}. Falling back on bs4.")
+            logger.info("Trafilatura parsing failed: %s. Falling back on bs4.", e)
             page_text = format_document_soup(soup)
     else:
         page_text = format_document_soup(soup)

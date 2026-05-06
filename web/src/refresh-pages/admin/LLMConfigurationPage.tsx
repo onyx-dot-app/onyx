@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
+import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import {

@@ -132,10 +132,10 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         self._redis.set(self._delay_key, "1", px=ttl_ms_new)
 
         logger.warning(
-            f"OnyxRedisSlackRetryHandler.prepare_for_next_attempt setting delay: "
-            f"current_attempt={state.current_attempt} "
-            f"retry-after={retry_after_value} "
-            f"{ttl_ms_new=}"
+            "OnyxRedisSlackRetryHandler.prepare_for_next_attempt setting delay: current_attempt=%s retry-after=%s ttl_ms_new=%r",
+            state.current_attempt,
+            retry_after_value,
+            ttl_ms_new,
         )
 
         state.increment_current_attempt()

@@ -243,7 +243,7 @@ def send_email_with_sendgrid(
     sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
     response = sg.client.mail.send.post(request_body=mail_json)  # can raise
     if response.status_code != 202:
-        logger.warning(f"Unexpected status code {response.status_code}")
+        logger.warning("Unexpected status code %s", response.status_code)
 
 
 def send_email_with_smtplib(

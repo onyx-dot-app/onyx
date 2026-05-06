@@ -153,11 +153,18 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 last_exc = e
                 if attempt == 0:
                     logger.warning(
-                        f"Batch fetch of {len(chunk)} {object_type} failed, retrying: {e}"
+                        "Batch fetch of %s %s failed, retrying: %s",
+                        len(chunk),
+                        object_type,
+                        e,
                     )
                     time.sleep(1)
         logger.warning(
-            f"Failed to batch-fetch {len(chunk)} {object_type} {chunk} after retry: {last_exc}"
+            "Failed to batch-fetch %s %s %s after retry: %s",
+            len(chunk),
+            object_type,
+            chunk,
+            last_exc,
         )
         return []
 
@@ -299,9 +306,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 )
             except (ValueError, TypeError):
                 logger.error(
-                    f"HubSpot search limit reached but last modified timestamp "
-                    f"has unrecognized format ({last_ts_ms!r}); records after "
-                    "the 10,000th may be missing."
+                    "HubSpot search limit reached but last modified timestamp has unrecognized format (%r); records after the 10,000th may be missing.",
+                    last_ts_ms,
                 )
                 return
         if next_start <= start:
@@ -490,7 +496,10 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         except Exception as e:
             logger.warning(
-                f"Failed to get associations from {from_object_type} to {to_object_type}: {e}"
+                "Failed to get associations from %s to %s: %s",
+                from_object_type,
+                to_object_type,
+                e,
             )
             return []
 
@@ -529,7 +538,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             return associated_notes
 
         except Exception as e:
-            logger.warning(f"Failed to get notes for {object_type} {object_id}: {e}")
+            logger.warning(
+                "Failed to get notes for %s %s: %s", object_type, object_id, e
+            )
             return []
 
     def _create_object_section(

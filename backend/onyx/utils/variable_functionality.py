@@ -192,7 +192,9 @@ def fetch_ee_implementation_or_noop(
     try:
         return fetch_versioned_implementation(module, attribute)
     except Exception as e:
-        logger.error(f"Failed to fetch implementation for {module}.{attribute}: {e}")
+        logger.error(
+            "Failed to fetch implementation for %s.%s: %s", module, attribute, e
+        )
         raise
 
 

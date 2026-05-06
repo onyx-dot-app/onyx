@@ -84,7 +84,7 @@ def _get_entities(
         total_records = data["TotalRecords"]
         contents = data["ResponseData"]
         pages_fetched += len(contents)
-        logger.debug(f"Fetched {pages_fetched} {ENTITY_NAME_MAP[entity_type]}")
+        logger.debug("Fetched %s %s", pages_fetched, ENTITY_NAME_MAP[entity_type])
 
         for page in contents:
             update_time = time_str_to_utc(page["DateUpdated"])
@@ -138,7 +138,7 @@ def _map_post_to_parent(
 
     for ind, post in enumerate(posts):
         if (ind + 1) % 25 == 0:
-            logger.debug(f"Processed {ind + 1} posts or responses")
+            logger.debug("Processed %s posts or responses", ind + 1)
 
         post_time = time_str_to_utc(
             post.get("DateUpdated") or post.get("DateCreated") or epoch_str
@@ -200,7 +200,7 @@ def _get_forums(
         total_records = data["TotalRecords"]
         contents = data["ResponseData"]
         pages_fetched += len(contents)
-        logger.debug(f"Fetched {pages_fetched} forums")
+        logger.debug("Fetched %s forums", pages_fetched)
 
         for page in contents:
             pages_to_return.append(page)

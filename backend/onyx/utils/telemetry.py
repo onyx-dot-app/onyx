@@ -162,7 +162,9 @@ def mt_cloud_telemetry(
     all_properties = {**properties} if properties else {}
     if properties and "tenant_id" in properties:
         logger.warning(
-            f"tenant_id already in properties: {properties}. Overwriting with new value {tenant_id}."
+            "tenant_id already in properties: %s. Overwriting with new value %s.",
+            properties,
+            tenant_id,
         )
     all_properties["tenant_id"] = tenant_id
 

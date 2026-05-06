@@ -205,7 +205,7 @@ class TestRailConnector(LoadConnector, PollConnector):
             fields = self._api_get("get_case_fields")
             return fields if isinstance(fields, list) else []
         except Exception as e:
-            logger.warning(f"Failed to fetch case fields from TestRail: {e}")
+            logger.warning("Failed to fetch case fields from TestRail: %s", e)
             return []
 
     def _parse_items_string(self, items_str: str) -> dict[str, str]:
@@ -263,7 +263,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                             )
 
         except Exception as e:
-            logger.warning(f"Failed to build field maps from TestRail: {e}")
+            logger.warning("Failed to build field maps from TestRail: %s", e)
 
         return field_labels, value_maps
 
@@ -454,7 +454,9 @@ class TestRailConnector(LoadConnector, PollConnector):
         full_text = "\n".join(text_lines)
         if len(full_text) > self.skip_doc_absolute_chars:
             logger.warning(
-                f"Skipping TestRail case {case_id} due to excessive size: {len(full_text)} chars"
+                "Skipping TestRail case %s due to excessive size: %s chars",
+                case_id,
+                len(full_text),
             )
             return None
 

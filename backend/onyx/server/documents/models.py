@@ -27,6 +27,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
@@ -283,7 +284,7 @@ class IndexAttemptStageMetricsResponse(BaseModel):
 PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
-class PermissionSyncAttemptSnapshot(BaseModel):
+class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
@@ -294,10 +295,10 @@ class PermissionSyncAttemptSnapshot(BaseModel):
     time_finished: str | None
 
     @classmethod
-    def from_permission_sync_attempt_db_model(
+    def from_doc_permission_sync_attempt_db_model(
         cls, attempt: DocPermissionSyncAttempt
-    ) -> "PermissionSyncAttemptSnapshot":
-        return PermissionSyncAttemptSnapshot(
+    ) -> "DocPermissionSyncAttemptSnapshot":
+        return DocPermissionSyncAttemptSnapshot(
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
@@ -313,7 +314,56 @@ class PermissionSyncAttemptSnapshot(BaseModel):
         )
 
 
+class ExternalGroupSyncAttemptSnapshot(BaseModel):
+    id: int
+    status: PermissionSyncStatus
+    error_message: str | None
+    total_users_processed: int
+    total_groups_processed: int
+    total_group_memberships_synced: int
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_external_group_sync_attempt_db_model(
+        cls, attempt: ExternalGroupPermissionSyncAttempt
+    ) -> "ExternalGroupSyncAttemptSnapshot":
+        return ExternalGroupSyncAttemptSnapshot(
+            id=attempt.id,
+            status=attempt.status,
+            error_message=attempt.error_message,
+            total_users_processed=attempt.total_users_processed or 0,
+            total_groups_processed=attempt.total_groups_processed or 0,
+            total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            time_created=attempt.time_created.isoformat(),
+            time_started=(
+                attempt.time_started.isoformat() if attempt.time_started else None
+            ),
+            time_finished=(
+                attempt.time_finished.isoformat() if attempt.time_finished else None
+            ),
+        )
+
+
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
+
+
+class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
+    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+
+    ``applicable`` is False when the cc-pair's source does not run the kind
+    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
+    has neither doc sync nor group sync). The frontend uses this to render an
+    explanatory message instead of an empty-state — the two are distinct
+    states: ``applicable=True, items=[], total_items=0`` legitimately means
+    "no attempts yet" and must not be confused with "this kind of sync isn't
+    applicable for this source".
+    """
+
+    applicable: bool
     items: list[PaginatedType]
     total_items: int
 

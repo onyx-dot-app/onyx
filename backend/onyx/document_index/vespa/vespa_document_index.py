@@ -264,8 +264,11 @@ def _update_single_chunk(
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
         logger.error(
-            f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
-            f"Code: {e.response.status_code}. Details: {e.response.text}"
+            "Failed to update doc chunk %s (doc_id=%s). Code: %s. Details: %s",
+            doc_chunk_id,
+            doc_id,
+            e.response.status_code,
+            e.response.text,
         )
         # Re-raise so the @retry decorator will catch and retry, unless the
         # status code is < 5xx, in which case wrap the exception in something
@@ -523,7 +526,7 @@ class VespaDocumentIndex(DocumentIndex):
                         )
 
                     logger.info(
-                        f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
+                        "Updated %s chunks for document %s.", len(doc_chunk_ids), doc_id
                     )
 
     def id_based_retrieval(
@@ -594,9 +597,9 @@ class VespaDocumentIndex(DocumentIndex):
             f"hybrid_search_{query_type.value}_base_{len(query_embedding)}"
         )
 
-        logger.info(f"Selected ranking profile: {ranking_profile}")
+        logger.info("Selected ranking profile: %s", ranking_profile)
 
-        logger.debug(f"Query YQL: {yql}")
+        logger.debug("Query YQL: %s", yql)
 
         # In this interface we do not pass in hybrid alpha. Tracing the codepath
         # of the legacy Vespa interface, it so happens that KEYWORD always

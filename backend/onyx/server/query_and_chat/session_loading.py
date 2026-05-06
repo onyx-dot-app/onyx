@@ -727,7 +727,7 @@ def translate_assistant_message_to_packets(
                         )
 
                 except Exception as e:
-                    logger.warning(f"Error processing tool call {tool_call.id}: {e}")
+                    logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
 
             if research_agent_count > 1:

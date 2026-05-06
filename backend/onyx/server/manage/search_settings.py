@@ -254,7 +254,7 @@ def update_saved_search_settings(
     )
 
     logger.info(
-        f"Updated current search settings to {search_settings.model_dump_json()}"
+        "Updated current search settings to %s", search_settings.model_dump_json()
     )
 
     # Re-sync default to match PRESENT search settings
@@ -332,7 +332,8 @@ def _sync_default_contextual_model(db_session: Session) -> None:
         )
     except ValueError as e:
         logger.error(
-            f"Error syncing default contextual model, defaulting to no contextual model: {e}"
+            "Error syncing default contextual model, defaulting to no contextual model: %s",
+            e,
         )
         update_no_default_contextual_rag_provider(
             db_session=db_session,

@@ -69,9 +69,13 @@ def redis_shared_lock(
             if lock.owned():
                 lock.release()
                 logger.debug(
-                    f"Redis lock {lock_name} released after {time.monotonic() - start_time:.3f} seconds."
+                    "Redis lock %s released after %s seconds.",
+                    lock_name,
+                    format(time.monotonic() - start_time, ".3f"),
                 )
             else:
                 logger.warning(
-                    f"Redis lock {lock_name} was not owned on exit. The lock context manager took {time.monotonic() - start_time:.3f} seconds."
+                    "Redis lock %s was not owned on exit. The lock context manager took %s seconds.",
+                    lock_name,
+                    format(time.monotonic() - start_time, ".3f"),
                 )
