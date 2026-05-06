@@ -162,12 +162,32 @@ export async function POST(request: NextRequest) {
           controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
           controller.close();
 
-          // Clean up the chat session so it doesn't pollute the user's history
+          // Clean up the chat session so it doesn't pollute the user's history.
+          // Awaited so a failure can be observed; the stream is already closed
+          // above so this does not delay the client response. Use minimal
+          // cookie-only headers rather than the original POST headers (which
+          // carry stale Content-Type/Content-Length and forwarded fields not
+          // valid for a DELETE).
           if (chatSessionIdToDelete) {
-            fetch(`${INTERNAL_URL}/delete-chat-session/${chatSessionIdToDelete}`, {
-              method: "DELETE",
-              headers,
-            }).catch(e => console.error("Failed to delete transient agent wizard chat session:", e));
+            const cleanupHeaders = new Headers();
+            const cookie = headers.get("cookie");
+            if (cookie) cleanupHeaders.set("cookie", cookie);
+            try {
+              const res = await fetch(
+                `${INTERNAL_URL}/delete-chat-session/${chatSessionIdToDelete}`,
+                { method: "DELETE", headers: cleanupHeaders }
+              );
+              if (!res.ok) {
+                console.error(
+                  `Failed to delete transient agent wizard chat session ${chatSessionIdToDelete}: ${res.status} ${await res.text()}`
+                );
+              }
+            } catch (e) {
+              console.error(
+                `Failed to delete transient agent wizard chat session ${chatSessionIdToDelete}:`,
+                e
+              );
+            }
           }
         }
       }

@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from collections.abc import Callable
 from typing import Any
@@ -240,6 +241,12 @@ def _try_fallback_tool_extraction(
 
 
 DEFAULT_MAX_LLM_CYCLES = 15
+# Env-var override preserved for backwards compatibility with deployments that
+# set MAX_LLM_CYCLES in their environment (upstream onyx-dot-app/onyx#10780).
+# The admin-configurable `Settings.max_tool_calls` takes precedence when set.
+ENV_MAX_LLM_CYCLES = (
+    int(os.environ["MAX_LLM_CYCLES"]) if os.environ.get("MAX_LLM_CYCLES") else None
+)
 
 
 def _build_context_file_citation_mapping(
@@ -712,7 +719,11 @@ def run_llm_loop(
         custom_agent_prompt_msg = None
 
         settings = load_settings()
-        max_llm_cycles = settings.max_tool_calls or DEFAULT_MAX_LLM_CYCLES
+        max_llm_cycles = (
+            settings.max_tool_calls
+            or ENV_MAX_LLM_CYCLES
+            or DEFAULT_MAX_LLM_CYCLES
+        )
 
         reasoning_cycles = 0
         for llm_cycle_count in range(max_llm_cycles):
