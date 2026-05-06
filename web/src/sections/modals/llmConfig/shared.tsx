@@ -720,7 +720,7 @@ function ModalWrapperInner({
   } = getProvider(providerName);
 
   const title = llmProvider
-    ? markdown(`Configure *${llmProvider.name}*`)
+    ? markdown(`Configure *${llmProvider.name ?? providerProductName}*`)
     : `Set up ${providerProductName}`;
   const description =
     descriptionOverride ??
