@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Generator
+from typing import Any
 from typing import Literal
 from typing import TypedDict
 from typing import Union
@@ -288,7 +289,7 @@ class CodeInterpreterClient:
         even if the API service crashes and restarts.
         """
         url = f"{self.base_url}/v1/sessions"
-        payload: dict = {"ttl_seconds": ttl_seconds}
+        payload: dict[str, Any] = {"ttl_seconds": ttl_seconds}
         if files:
             payload["files"] = files
 
