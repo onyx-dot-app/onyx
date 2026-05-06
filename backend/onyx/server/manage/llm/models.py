@@ -295,7 +295,7 @@ class VisionProviderResponse(LLMProviderView):
 
 
 class LLMCost(BaseModel):
-    provider: str
+    provider_name: str
     model_name: str
     cost: float
 

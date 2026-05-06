@@ -903,7 +903,7 @@ def get_provider_contextual_cost(
             cost = get_llm_contextual_cost(llm)
             costs.append(
                 LLMCost(
-                    provider=provider.name or provider.provider,
+                    provider_name=provider.name or provider.provider,
                     model_name=model_configuration.name,
                     cost=cost,
                 )
