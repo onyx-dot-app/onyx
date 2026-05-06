@@ -3,11 +3,14 @@ from typing import cast
 
 from pydantic import BaseModel
 from pydantic import TypeAdapter
+from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
 from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
+from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import BashToolDelta
 from onyx.server.query_and_chat.streaming_models import BashToolStart
@@ -81,6 +84,32 @@ class BashTool(Tool[BashToolOverrideKwargs]):
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @override
+    @classmethod
+    def is_available(cls, db_session: Session) -> bool:
+        """Available only when the code-interpreter is configured, healthy,
+        AND the deployed service version supports the session/bash routes.
+
+        Mirrors ``PythonTool.is_available`` for the env / DB / health checks,
+        plus a ``client.supports(...)`` capability gate so an outdated
+        code-interpreter deployment doesn't make this tool appear available
+        when its underlying calls would be rejected by the version guard.
+        """
+        if not CODE_INTERPRETER_BASE_URL:
+            return False
+        server = fetch_code_interpreter_server(db_session)
+        if not server.server_enabled:
+            return False
+
+        with CodeInterpreterClient() as client:
+            if not client.health(use_cache=True).healthy:
+                return False
+            return client.supports(
+                CodeInterpreterClient.create_session,
+                CodeInterpreterClient.execute_bash_in_session,
+                CodeInterpreterClient.delete_session,
+            )
 
     def tool_definition(self) -> dict:
         return {
