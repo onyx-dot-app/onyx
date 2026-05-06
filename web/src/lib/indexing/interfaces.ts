@@ -162,7 +162,7 @@ export interface SavedSearchSettings
 }
 
 export interface LLMContextualCost {
-  provider: string;
+  provider_name: string;
   model_name: string;
   cost: number;
 }

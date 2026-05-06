@@ -522,23 +522,35 @@ def fetch_existing_llm_provider_by_id(
 def fetch_existing_llm_provider_by_name_and_type(
     name: str, provider_type: str, db_session: Session
 ) -> LLMProviderModel | None:
-    """Return a provider matching both display name and provider type.
+    """Return the provider matching both display name and provider type.
 
-    More specific than fetch_existing_llm_provider (name only) — avoids matching
-    the wrong record now that names are non-unique.
+    Returns None if zero or multiple matches are found — multiple matches mean
+    the name is ambiguous (user may have created a provider with the same name)
+    so the caller should not assume which one to use.
     """
-    return db_session.scalar(
-        select(LLMProviderModel)
-        .where(
-            LLMProviderModel.name == name,
-            LLMProviderModel.provider == provider_type,
-        )
-        .options(
-            selectinload(LLMProviderModel.model_configurations),
-            selectinload(LLMProviderModel.groups),
-            selectinload(LLMProviderModel.personas),
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.name == name,
+                LLMProviderModel.provider == provider_type,
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
         )
     )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d providers with name='%s' and type='%s'; skipping ambiguous match.",
+            len(results),
+            name,
+            provider_type,
+        )
+        return None
+    return results[0] if results else None
 
 
 def fetch_existing_llm_provider_by_type_nameless(
@@ -546,20 +558,31 @@ def fetch_existing_llm_provider_by_type_nameless(
 ) -> LLMProviderModel | None:
     """Return the first unnamed provider of the given type (e.g. "openai").
 
-    Used by seeding to detect idempotent re-runs when no display name was configured.
+    Logs a warning if more than one nameless provider of the type exists, since
+    the choice is ambiguous.
     """
-    return db_session.scalar(
-        select(LLMProviderModel)
-        .where(
-            LLMProviderModel.provider == provider_type,
-            LLMProviderModel.name.is_(None),
-        )
-        .options(
-            selectinload(LLMProviderModel.model_configurations),
-            selectinload(LLMProviderModel.groups),
-            selectinload(LLMProviderModel.personas),
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.provider == provider_type,
+                LLMProviderModel.name.is_(None),
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
         )
     )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d nameless providers of type '%s'; returning the first (id=%d).",
+            len(results),
+            provider_type,
+            results[0].id,
+        )
+    return results[0] if results else None
 
 
 def fetch_embedding_provider(

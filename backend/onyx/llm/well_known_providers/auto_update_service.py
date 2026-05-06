@@ -132,7 +132,7 @@ def sync_llm_models_from_github(
         )
 
         if changes > 0:
-            results[f"{provider.provider}-{provider.id}"] = changes
+            results[str(provider.id)] = changes
             logger.info(
                 "Applied %s model changes to provider '%s'",
                 changes,
