@@ -53,7 +53,7 @@ function usePaginatedFetch<T extends PaginatedType>({
 
   // State to initialize and hold the current page number
   const [currentPage, setCurrentPage] = useState(() =>
-    parseInt(searchParams?.get("page") || "1", 10)
+    disableUrlSync ? 1 : parseInt(searchParams?.get("page") || "1", 10)
   );
   const [currentPageData, setCurrentPageData] = useState<T[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
