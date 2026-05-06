@@ -149,39 +149,39 @@ class BashTool(Tool[BashToolOverrideKwargs]):
 
         adapter = TypeAdapter(LlmBashExecutionResult)
 
-        with CodeInterpreterClient() as client:
-            try:
+        try:
+            with CodeInterpreterClient() as client:
                 logger.debug("Executing bash in session %s: %s", self._session_id, cmd)
                 response = client.execute_bash_in_session(
                     session_id=self._session_id,
                     cmd=cmd,
                     timeout_ms=CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
                 )
-            except Exception as e:
-                logger.error("Bash execution failed: %s", e)
-                error_msg = str(e)
-                error_result = LlmBashExecutionResult(
-                    stdout="",
-                    stderr=error_msg,
-                    exit_code=-1,
-                    timed_out=False,
-                    error=error_msg,
-                )
-                self.emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=BashToolDelta(
-                            stdout="",
-                            stderr=error_msg,
-                            exit_code=-1,
-                            timed_out=False,
-                        ),
+        except Exception as e:
+            logger.error("Bash execution failed: %s", e)
+            error_msg = str(e)
+            error_result = LlmBashExecutionResult(
+                stdout="",
+                stderr=error_msg,
+                exit_code=-1,
+                timed_out=False,
+                error=error_msg,
+            )
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=BashToolDelta(
+                        stdout="",
+                        stderr=error_msg,
+                        exit_code=-1,
+                        timed_out=False,
                     ),
-                )
-                return ToolResponse(
-                    rich_response=None,
-                    llm_facing_response=adapter.dump_json(error_result).decode(),
-                )
+                ),
+            )
+            return ToolResponse(
+                rich_response=None,
+                llm_facing_response=adapter.dump_json(error_result).decode(),
+            )
 
         truncated_stdout = _truncate_output(
             response.stdout, CODE_INTERPRETER_MAX_OUTPUT_LENGTH, "stdout"

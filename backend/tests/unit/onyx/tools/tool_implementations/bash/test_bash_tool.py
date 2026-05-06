@@ -202,6 +202,38 @@ def test_client_exception_returns_error_result_and_emits_error_delta() -> None:
     assert "connection refused" in delta_packet.obj.stderr
 
 
+def test_client_constructor_failure_still_emits_closing_delta() -> None:
+    """Regression: a ``CodeInterpreterClient()`` constructor failure (e.g.
+    ``CODE_INTERPRETER_BASE_URL`` unset, raising ``ValueError`` in __init__)
+    must NOT escape past the try/except. Without the fix, ``BashToolStart``
+    would already be on the wire and no closing ``BashToolDelta`` would
+    follow — leaving the frontend timeline stuck."""
+    tool, emitter = _make_tool()
+
+    with patch(
+        f"{TOOL_MODULE}.CodeInterpreterClient",
+        side_effect=ValueError("CODE_INTERPRETER_BASE_URL not configured"),
+    ):
+        response = tool.run(
+            placement=_placement(),
+            override_kwargs=BashToolOverrideKwargs(),
+            cmd="ls",
+        )
+
+    # Error path: error result returned, no exception bubbled out
+    payload = json.loads(response.llm_facing_response)
+    assert payload["exit_code"] == -1
+    assert "CODE_INTERPRETER_BASE_URL" in payload["error"]
+
+    # Critically: both Start AND closing Delta were emitted, in that order
+    assert emitter.emit.call_count == 2
+    start_packet = emitter.emit.call_args_list[0].args[0]
+    delta_packet = emitter.emit.call_args_list[1].args[0]
+    assert isinstance(start_packet.obj, BashToolStart)
+    assert isinstance(delta_packet.obj, BashToolDelta)
+    assert delta_packet.obj.exit_code == -1
+
+
 # ---------------------------------------------------------------------------
 # Output truncation
 # ---------------------------------------------------------------------------
