@@ -1023,9 +1023,9 @@ gitdb==4.0.12 \
     --hash=sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571 \
     --hash=sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf
     # via gitpython
-gitpython==3.1.47 \
-    --hash=sha256:489f590edfd6d20571b2c0e72c6a6ac6915ee8b8cd04572330e3842207a78905 \
-    --hash=sha256:dba27f922bd2b42cb54c87a8ab3cb6beb6bf07f3d564e21ac848913a05a8a3cd
+gitpython==3.1.49 \
+    --hash=sha256:024b0422d7f84d15cd794844e029ffebd4c5d42a7eb9b936b458697ef550a02c \
+    --hash=sha256:42f9399c9eb33fc581014bedd76049dfbaf6375aa2a5754575966387280315e1
     # via braintrust
 google-api-core==2.28.1 \
     --hash=sha256:2b405df02d68e68ce0fbc138559e6036559e685159d148ae5861013dc201baf8 \
