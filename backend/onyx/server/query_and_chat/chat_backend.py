@@ -587,21 +587,19 @@ def handle_send_chat_message(
 
         def multi_model_stream_generator() -> Generator[str, None, None]:
             try:
-                with get_session_with_current_tenant() as db_session:
-                    for obj in handle_multi_model_stream(
-                        new_msg_req=chat_message_req,
-                        user=user,
-                        db_session=db_session,
-                        llm_overrides=llm_overrides,
-                        litellm_additional_headers=extract_headers(
-                            request.headers, LITELLM_PASS_THROUGH_HEADERS
-                        ),
-                        custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                            request.headers
-                        ),
-                        mcp_headers=chat_message_req.mcp_headers,
-                    ):
-                        yield get_json_line(obj.model_dump())
+                for obj in handle_multi_model_stream(
+                    new_msg_req=chat_message_req,
+                    user=user,
+                    llm_overrides=llm_overrides,
+                    litellm_additional_headers=extract_headers(
+                        request.headers, LITELLM_PASS_THROUGH_HEADERS
+                    ),
+                    custom_tool_additional_headers=get_custom_tool_additional_request_headers(
+                        request.headers
+                    ),
+                    mcp_headers=chat_message_req.mcp_headers,
+                ):
+                    yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
                 yield json.dumps({"error": str(e)})
@@ -618,27 +616,45 @@ def handle_send_chat_message(
 
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
-        with get_session_with_current_tenant() as db_session:
-            # Check and track non-streaming API usage limits
-            if is_usage_limits_enabled():
+        if is_usage_limits_enabled():
+            with get_session_with_current_tenant() as usage_db_session:
                 check_usage_and_raise(
-                    db_session=db_session,
+                    db_session=usage_db_session,
                     usage_type=UsageType.NON_STREAMING_API_CALLS,
                     tenant_id=tenant_id,
                     pending_amount=1,
                 )
                 increment_usage(
-                    db_session=db_session,
+                    db_session=usage_db_session,
                     usage_type=UsageType.NON_STREAMING_API_CALLS,
                     amount=1,
                 )
-                db_session.commit()
+                usage_db_session.commit()
 
-            state_container = ChatStateContainer()
-            packets = handle_stream_message_objects(
+        state_container = ChatStateContainer()
+        packets = handle_stream_message_objects(
+            new_msg_req=chat_message_req,
+            user=user,
+            litellm_additional_headers=extract_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
+            custom_tool_additional_headers=get_custom_tool_additional_request_headers(
+                request.headers
+            ),
+            mcp_headers=chat_message_req.mcp_headers,
+            additional_context=chat_message_req.additional_context,
+            external_state_container=state_container,
+        )
+        result = gather_stream_full(packets, state_container)
+        return result
+
+    # Streaming path, normal Onyx UI behavior
+    def stream_generator() -> Generator[str, None, None]:
+        state_container = ChatStateContainer()
+        try:
+            for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
                 user=user,
-                db_session=db_session,
                 litellm_additional_headers=extract_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
@@ -648,32 +664,8 @@ def handle_send_chat_message(
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
                 external_state_container=state_container,
-            )
-            result = gather_stream_full(packets, state_container)
-            # Note: LLM cost tracking is now handled in multi_llm.py
-            return result
-
-    # Streaming path, normal Onyx UI behavior
-    def stream_generator() -> Generator[str, None, None]:
-        state_container = ChatStateContainer()
-        try:
-            with get_session_with_current_tenant() as db_session:
-                for obj in handle_stream_message_objects(
-                    new_msg_req=chat_message_req,
-                    user=user,
-                    db_session=db_session,
-                    litellm_additional_headers=extract_headers(
-                        request.headers, LITELLM_PASS_THROUGH_HEADERS
-                    ),
-                    custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                        request.headers
-                    ),
-                    mcp_headers=chat_message_req.mcp_headers,
-                    additional_context=chat_message_req.additional_context,
-                    external_state_container=state_container,
-                ):
-                    yield get_json_line(obj.model_dump())
-                # Note: LLM cost tracking is now handled in multi_llm.py
+            ):
+                yield get_json_line(obj.model_dump())
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
@@ -869,7 +861,6 @@ def fetch_chat_file(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-
     # For user files, we need to get the file id from the user file id
     file_id_from_user_file = get_file_id_by_user_file_id(file_id, user.id, db_session)
     if file_id_from_user_file:

@@ -66,9 +66,8 @@ def _first_from_stream(req: SendMessageRequest, overrides: list[LLMOverride]) ->
     user = MagicMock()
     user.is_anonymous = False
     user.email = "test@example.com"
-    db = MagicMock()
 
-    gen = handle_multi_model_stream(req, user, db, overrides)
+    gen = handle_multi_model_stream(req, user, overrides)
     return next(gen)
 
 
@@ -276,7 +275,7 @@ def _run_models_collect(setup: MagicMock) -> list:
     """Drive _run_models to completion and return all yielded items."""
     from onyx.chat.process_message import _run_models
 
-    return list(_run_models(setup, MagicMock(), MagicMock()))
+    return list(_run_models(setup, MagicMock()))
 
 
 class TestRunModels:
@@ -598,7 +597,7 @@ class TestRunModels:
         ):
             from onyx.chat.process_message import _run_models
 
-            gen = cast(Generator, _run_models(setup, MagicMock(), MagicMock()))
+            gen = cast(Generator, _run_models(setup, MagicMock()))
             first = next(gen)
             assert isinstance(first, Packet)
             # Simulate Starlette closing the stream on HTTP client disconnect.
@@ -654,7 +653,7 @@ class TestRunModels:
         ):
             from onyx.chat.process_message import _run_models
 
-            gen = cast(Generator, _run_models(setup, MagicMock(), MagicMock()))
+            gen = cast(Generator, _run_models(setup, MagicMock()))
             first = next(gen)
             assert isinstance(first, Packet)
 
@@ -730,11 +729,7 @@ class TestRunModels:
                 return_value=lambda _: 0,
             ),
         ):
-            list(
-                _run_models(
-                    setup, MagicMock(), MagicMock(), external_state_container=external
-                )
-            )
+            list(_run_models(setup, MagicMock(), external_state_container=external))
 
         # The state_container kwarg passed to run_llm_loop must be the external one
         call_kwargs = mock_llm.call_args.kwargs
