@@ -30,6 +30,7 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -100,6 +101,9 @@ export const MessageTextRenderer: MessageRenderer<
   children,
 }) => {
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
+  const setLatestMessageRenderComplete = useChatSessionStore(
+    (state) => state.setLatestMessageRenderComplete
+  );
 
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
@@ -274,8 +278,21 @@ export const MessageTextRenderer: MessageRenderer<
     if (streamFullyDisplayed && !onCompleteFiredRef.current) {
       onCompleteFiredRef.current = true;
       onComplete();
+      // Only the actively-animating renderer signals "latest message
+      // rendered" to the chat-session gate. Historical mounts have
+      // animate=false and would otherwise flip the flag while a newer
+      // stream is still in flight.
+      if (animate) {
+        const sid = useChatSessionStore.getState().currentSessionId;
+        if (sid) setLatestMessageRenderComplete(sid, true);
+      }
     }
-  }, [streamFullyDisplayed, onComplete]);
+  }, [
+    streamFullyDisplayed,
+    onComplete,
+    animate,
+    setLatestMessageRenderComplete,
+  ]);
 
   const processedContent = useMemo(
     () => processContent(displayedContent),

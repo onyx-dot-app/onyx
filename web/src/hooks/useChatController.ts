@@ -162,6 +162,9 @@ export default function useChatController({
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
   );
+  const setLatestMessageRenderComplete = useChatSessionStore(
+    (state) => state.setLatestMessageRenderComplete
+  );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
   );
@@ -588,6 +591,7 @@ export default function useChatController({
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
+      setLatestMessageRenderComplete(frozenSessionId, false);
 
       // find the parent
       const currMessageHistory =
