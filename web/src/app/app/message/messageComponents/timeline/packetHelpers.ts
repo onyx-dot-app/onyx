@@ -26,18 +26,16 @@ export const isResearchAgentPackets = (packets: Packet[]): boolean =>
 // Check if packets belong to a coding agent. The agent's group always contains
 // CodingAgentStart, but BashTool packets are emitted into the same group, so
 // any of these types signal a coding-agent group.
-export const CODING_AGENT_PACKET_TYPES: readonly PacketType[] = [
+export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
   PacketType.CODING_AGENT_THINKING_DELTA,
   PacketType.CODING_AGENT_FINAL,
   PacketType.BASH_TOOL_START,
   PacketType.BASH_TOOL_DELTA,
-];
+]);
 
 export const isCodingAgentPackets = (packets: Packet[]): boolean =>
-  packets.some((p) =>
-    CODING_AGENT_PACKET_TYPES.includes(p.obj.type as PacketType)
-  );
+  packets.some((p) => CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType));
 
 // Check if packets belong to a search tool
 export const isSearchToolPackets = (packets: Packet[]): boolean =>
@@ -131,7 +129,13 @@ export const stepHasCollapsedStreamingContent = (
   }
 
   // Coding agent has meaningful content from start (task) onward
-  if (CODING_AGENT_PACKET_TYPES.some((type) => packetTypes.has(type))) {
+  if (
+    packetTypes.has(PacketType.CODING_AGENT_START) ||
+    packetTypes.has(PacketType.CODING_AGENT_THINKING_DELTA) ||
+    packetTypes.has(PacketType.CODING_AGENT_FINAL) ||
+    packetTypes.has(PacketType.BASH_TOOL_START) ||
+    packetTypes.has(PacketType.BASH_TOOL_DELTA)
+  ) {
     return true;
   }
 
