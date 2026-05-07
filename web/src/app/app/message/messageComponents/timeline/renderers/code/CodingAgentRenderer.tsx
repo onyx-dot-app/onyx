@@ -1,6 +1,5 @@
 import { JSX, Key, useMemo } from "react";
 import {
-  SvgArrowExchange,
   SvgCheckCircle,
   SvgCircle,
   SvgSparkle,
@@ -25,8 +24,8 @@ import { StepContainer } from "@/app/app/message/messageComponents/timeline/Step
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { Text } from "@opal/components";
+import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
 
-// Lazy registration for bash highlighting
 function ensureBashHljsRegistered() {
   if (!hljs.listLanguages().includes("bash")) {
     hljs.registerLanguage("bash", bash);
@@ -54,24 +53,7 @@ function HighlightedBashCode({ code }: { code: string }) {
   );
 }
 
-// Mirrors the small "Request" / "Response" label CustomToolRenderer uses
-// (CustomToolRenderer.tsx:175-180, :233-239) — the same arrow-exchange icon +
-// secondary-body label combo.
-function IoBlockLabel({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <SvgArrowExchange className="w-3 h-3 text-text-02" />
-      <Text font="secondary-body" color="text-04">
-        {label}
-      </Text>
-    </div>
-  );
-}
-
-// ── Interleaved step model ────────────────────────────────────────────────
-// The agent alternates between thinking and bash calls. We build a flat list
-// of steps in packet order so the timeline reflects the real sequence.
-
+// Agent alternates between thinking and bash; build a flat ordered list.
 interface ThinkingStepView {
   kind: "thinking";
   content: string;
@@ -91,7 +73,32 @@ type AgentStep = ThinkingStepView | BashStepView;
 
 function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
   const steps: AgentStep[] = [];
+  const findOpenBash = (): BashStepView | undefined => {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const c = steps[i];
+      if (c?.kind === "bash" && !c.isComplete) return c;
+    }
+    return undefined;
+  };
+
   for (const packet of packets) {
+    if (packet.obj.type === PacketType.BASH_TOOL_DELTA) {
+      // Fold output; finalization waits for the next non-delta packet.
+      const delta = packet.obj as BashToolDelta;
+      const open = findOpenBash();
+      if (open) {
+        open.stdout += delta.stdout || "";
+        open.stderr += delta.stderr || "";
+        open.exit_code = delta.exit_code;
+        open.timed_out = delta.timed_out;
+      }
+      continue;
+    }
+
+    // Any non-delta packet (thinking, next bash, FINAL, ERROR, …) closes the open bash.
+    const open = findOpenBash();
+    if (open) open.isComplete = true;
+
     if (packet.obj.type === PacketType.CODING_AGENT_THINKING_DELTA) {
       const delta = packet.obj as CodingAgentThinkingDelta;
       const last = steps[steps.length - 1];
@@ -100,9 +107,7 @@ function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
       } else {
         steps.push({ kind: "thinking", content: delta.content });
       }
-      continue;
-    }
-    if (packet.obj.type === PacketType.BASH_TOOL_START) {
+    } else if (packet.obj.type === PacketType.BASH_TOOL_START) {
       const start = packet.obj as BashToolStart;
       steps.push({
         kind: "bash",
@@ -113,32 +118,11 @@ function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
         timed_out: false,
         isComplete: false,
       });
-      continue;
-    }
-    if (packet.obj.type === PacketType.BASH_TOOL_DELTA) {
-      const delta = packet.obj as BashToolDelta;
-      // Find the last incomplete bash step to attach the result to
-      for (let i = steps.length - 1; i >= 0; i--) {
-        const candidate = steps[i];
-        if (
-          candidate !== undefined &&
-          candidate.kind === "bash" &&
-          !candidate.isComplete
-        ) {
-          candidate.stdout += delta.stdout || "";
-          candidate.stderr += delta.stderr || "";
-          candidate.exit_code = delta.exit_code;
-          candidate.timed_out = delta.timed_out;
-          candidate.isComplete = true;
-          break;
-        }
-      }
     }
   }
+
   return steps;
 }
-
-// ── Step renderers ────────────────────────────────────────────────────────
 
 interface ThinkingStepProps {
   step: ThinkingStepView;
@@ -181,11 +165,9 @@ function BashStepBody({ call }: { call: BashStepView }) {
   const hasStdout = call.stdout.length > 0;
   const hasStderr = call.stderr.length > 0;
   const hasResponse = hasStdout || hasStderr || call.isComplete;
-  const isStreaming = !call.isComplete;
 
   return (
     <div className="flex flex-col gap-3 pl-[var(--timeline-common-text-padding)]">
-      {/* Request: bash command */}
       <div>
         <IoBlockLabel label="Request" />
         <div className="prose max-w-full">
@@ -199,7 +181,6 @@ function BashStepBody({ call }: { call: BashStepView }) {
         </div>
       </div>
 
-      {/* Response: stdout / stderr, capped to 3 lines and expandable */}
       {hasResponse && (
         <div className="flex flex-col gap-2">
           <IoBlockLabel label="Response" />
@@ -208,7 +189,6 @@ function BashStepBody({ call }: { call: BashStepView }) {
               title="stdout"
               content={call.stdout}
               maxLines={3}
-              isStreaming={isStreaming}
             />
           )}
           {hasStderr && (
@@ -216,7 +196,6 @@ function BashStepBody({ call }: { call: BashStepView }) {
               title="stderr"
               content={call.stderr}
               maxLines={3}
-              isStreaming={isStreaming}
             />
           )}
           {!hasStdout && !hasStderr && call.isComplete && (
@@ -252,24 +231,20 @@ function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
   );
 }
 
-// Dispatches a step to its renderer (shared by COMPACT and FULL paths).
 function renderAgentStep(
   step: AgentStep,
   key: Key,
   isLastStep: boolean,
   isHover: boolean
 ): JSX.Element {
-  if (step.kind === "thinking") {
-    return (
-      <ThinkingStep
-        key={key}
-        step={step}
-        isLastStep={isLastStep}
-        isHover={isHover}
-      />
-    );
-  }
-  return (
+  return step.kind === "thinking" ? (
+    <ThinkingStep
+      key={key}
+      step={step}
+      isLastStep={isLastStep}
+      isHover={isHover}
+    />
+  ) : (
     <BashCallStep
       key={key}
       call={step}
@@ -279,7 +254,6 @@ function renderAgentStep(
   );
 }
 
-// "Coding Task" step container — shared by COMPACT-fallback and FULL paths.
 interface CodingTaskStepProps {
   taskText: string;
   isLastStep: boolean;
@@ -309,8 +283,6 @@ function CodingTaskStep({
   );
 }
 
-// ── Main renderer ─────────────────────────────────────────────────────────
-
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   packets,
   renderType,
@@ -336,8 +308,6 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       : startPacket.query
     : "";
 
-  // All three render modes return a single result with the same shape; only
-  // the inner content changes.
   const wrap = (content: JSX.Element) =>
     children([
       {
@@ -349,8 +319,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       },
     ]);
 
-  // Condensed modes show only the latest active item — falling back to the
-  // task when no thinking/bash step has streamed yet.
+  // Condensed modes show only the latest item; fall back to the task before any step streams.
   const latestStep = steps[steps.length - 1];
   const lastStepIsActive = !stopPacketSeen && !isComplete;
 
