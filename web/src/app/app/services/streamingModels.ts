@@ -312,7 +312,7 @@ export interface IntermediateReportCitedDocs extends BaseObj {
 export interface CodingAgentStart extends BaseObj {
   type: "coding_agent_start";
   query: string;
-  repo: string;
+  repo: string | null;
 }
 
 export interface CodingAgentThinkingDelta extends BaseObj {
