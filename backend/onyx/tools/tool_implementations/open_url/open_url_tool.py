@@ -19,8 +19,8 @@ from onyx.db.document import fetch_document_ids_by_links
 from onyx.db.document import filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
@@ -743,7 +743,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         document_ids = [req.document_id for req in all_requests]
         chunk_requests = [
-            VespaChunkRequest(document_id=request.document_id)
+            DocumentSectionRequest(document_id=request.document_id)
             for request in all_requests
         ]
 

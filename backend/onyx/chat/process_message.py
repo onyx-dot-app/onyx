@@ -81,8 +81,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
@@ -269,7 +269,7 @@ def _fetch_cached_image_captions(
         return []
     try:
         chunks = document_index.id_based_retrieval(
-            chunk_requests=[VespaChunkRequest(document_id=str(user_file.id))],
+            chunk_requests=[DocumentSectionRequest(document_id=str(user_file.id))],
             filters=IndexFilters(
                 access_control_list=None,
                 tenant_id=get_current_tenant_id() if MULTI_TENANT else None,

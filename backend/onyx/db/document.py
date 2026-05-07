@@ -51,7 +51,7 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
-from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier

@@ -23,8 +23,8 @@ from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
 from onyx.configs.app_configs import VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,

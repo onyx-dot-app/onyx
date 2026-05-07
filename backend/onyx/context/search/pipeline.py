@@ -17,7 +17,7 @@ from onyx.context.search.retrieval.search_runner import search_chunks
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.models import User
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo

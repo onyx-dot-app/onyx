@@ -9,7 +9,6 @@ from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import delete_orphan_tags__no_commit
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +37,7 @@ from onyx.db.permission_sync_attempt import (
     delete_external_group_permission_sync_attempts__no_commit,
 )
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -75,9 +74,8 @@ def _unsafe_deletion(
 
         for document in documents:
             for document_index in document_indices:
-                document_index.delete_single(
-                    doc_id=document.id,
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA,
+                document_index.delete(
+                    document.id,
                     chunk_count=document.chunk_count,
                 )
 
