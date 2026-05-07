@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from onyx.coding_agent.mock_tools import BASH_TOOL_CMD_KEY
-from onyx.coding_agent.utils import download_github_repo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.bash.bash_tool import BashToolOverrideKwargs
