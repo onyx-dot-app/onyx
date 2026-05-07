@@ -6,6 +6,7 @@ import {
   operatorFirstName,
 } from "@/lib/chat/timeOfDayGreeting";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import Logo from "@/refresh-components/Logo";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -78,10 +79,8 @@ export default function WelcomeMessage({
       data-testid="chat-intro"
       className="flex flex-col items-center w-full font-['Inter',_sans-serif]"
     >
-      <div className="inline-flex items-center gap-2.5 border border-black/10 rounded-full pt-1.5 pr-3 pb-1.5 pl-3 mb-8 backdrop-blur-md">
-        <span className="text-[11px] uppercase text-neutral-500 tracking-widest font-mono">
-          AI
-        </span>
+      <div className="mb-8">
+        <Logo folded size={48} />
       </div>
 
       <h1 className="md:text-4xl lg:text-5xl text-3xl font-medium text-neutral-900 tracking-tight text-center mb-4">

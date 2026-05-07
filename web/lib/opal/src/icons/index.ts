@@ -29,6 +29,7 @@ export { default as SvgBookmark } from "@opal/icons/bookmark";
 export { default as SvgBooksLineSmall } from "@opal/icons/books-line-small";
 export { default as SvgBooksStackSmall } from "@opal/icons/books-stack-small";
 export { default as SvgBracketCurly } from "@opal/icons/bracket-curly";
+export { default as SvgBrainSmall } from "@opal/icons/brain-small";
 export { default as SvgBranch } from "@opal/icons/branch";
 export { default as SvgBubbleText } from "@opal/icons/bubble-text";
 export { default as SvgBullhorn } from "@opal/icons/bullhorn";

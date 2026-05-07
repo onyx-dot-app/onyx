@@ -11,6 +11,7 @@ import {
   SvgBarChartSmall,
   SvgBooksLineSmall,
   SvgBooksStackSmall,
+  SvgBrainSmall,
   SvgCheckSmall,
   SvgClockHandsSmall,
   SvgFileSmall,
@@ -41,6 +42,7 @@ export const agentAvatarIconMap: Record<string, IconConfig> = {
   },
 
   // blue
+  Brain: { Icon: SvgBrainSmall, className: "stroke-theme-blue-05" },
   TextLines: { Icon: SvgTextLinesSmall, className: "stroke-theme-blue-05" },
   Pen: { Icon: SvgPenSmall, className: "stroke-theme-blue-05" },
   ClockHands: { Icon: SvgClockHandsSmall, className: "stroke-theme-blue-05" },
