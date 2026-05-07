@@ -1,4 +1,4 @@
-import { JSX, useMemo } from "react";
+import { JSX, Key, useMemo } from "react";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -252,6 +252,63 @@ function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
   );
 }
 
+// Dispatches a step to its renderer (shared by COMPACT and FULL paths).
+function renderAgentStep(
+  step: AgentStep,
+  key: Key,
+  isLastStep: boolean,
+  isHover: boolean
+): JSX.Element {
+  if (step.kind === "thinking") {
+    return (
+      <ThinkingStep
+        key={key}
+        step={step}
+        isLastStep={isLastStep}
+        isHover={isHover}
+      />
+    );
+  }
+  return (
+    <BashCallStep
+      key={key}
+      call={step}
+      isLastStep={isLastStep}
+      isHover={isHover}
+    />
+  );
+}
+
+// "Coding Task" step container — shared by COMPACT-fallback and FULL paths.
+interface CodingTaskStepProps {
+  taskText: string;
+  isLastStep: boolean;
+  isHover: boolean;
+}
+
+function CodingTaskStep({
+  taskText,
+  isLastStep,
+  isHover,
+}: CodingTaskStepProps) {
+  return (
+    <StepContainer
+      stepIcon={SvgCircle}
+      header="Coding Task"
+      collapsible={true}
+      isLastStep={isLastStep}
+      isFirstStep={true}
+      isHover={isHover}
+    >
+      <div className="pl-[var(--timeline-common-text-padding)]">
+        <Text as="p" font="main-ui-muted" color="text-02">
+          {taskText}
+        </Text>
+      </div>
+    </StepContainer>
+  );
+}
+
 // ── Main renderer ─────────────────────────────────────────────────────────
 
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
@@ -279,157 +336,93 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       : startPacket.query
     : "";
 
+  // All three render modes return a single result with the same shape; only
+  // the inner content changes.
+  const wrap = (content: JSX.Element) =>
+    children([
+      {
+        icon: null,
+        status: null,
+        content,
+        supportsCollapsible: true,
+        timelineLayout: "content",
+      },
+    ]);
+
   // Condensed modes show only the latest active item — falling back to the
   // task when no thinking/bash step has streamed yet.
-  const isCompact = renderType === RenderType.COMPACT;
-  const isHighlight = renderType === RenderType.HIGHLIGHT;
   const latestStep = steps[steps.length - 1];
+  const lastStepIsActive = !stopPacketSeen && !isComplete;
 
-  if (isHighlight) {
-    let content: JSX.Element;
+  if (renderType === RenderType.HIGHLIGHT) {
+    let header: string | null = null;
+    let body: JSX.Element | null = null;
+
     if (latestStep?.kind === "bash") {
-      content = (
-        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
-          <Text as="p" font="main-ui-muted" color="text-04">
-            {bashStepHeader(latestStep)}
-          </Text>
-          <BashStepBody call={latestStep} />
-        </div>
-      );
+      header = bashStepHeader(latestStep);
+      body = <BashStepBody call={latestStep} />;
     } else if (latestStep?.kind === "thinking") {
-      content = (
-        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
-          <Text as="p" font="main-ui-muted" color="text-04">
-            Thinking
-          </Text>
-          <Text as="p" font="main-ui-muted" color="text-02">
-            {latestStep.content}
-          </Text>
-        </div>
+      header = "Thinking";
+      body = (
+        <Text as="p" font="main-ui-muted" color="text-02">
+          {latestStep.content}
+        </Text>
       );
     } else if (taskText) {
-      content = (
-        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
-          <Text as="p" font="main-ui-muted" color="text-04">
-            Coding Task
-          </Text>
-          <Text as="p" font="main-ui-muted" color="text-03">
-            {taskText}
-          </Text>
-        </div>
+      header = "Coding Task";
+      body = (
+        <Text as="p" font="main-ui-muted" color="text-03">
+          {taskText}
+        </Text>
       );
-    } else {
-      content = <></>;
     }
-    return children([
-      {
-        icon: null,
-        status: null,
-        content,
-        supportsCollapsible: true,
-        timelineLayout: "content",
-      },
-    ]);
+
+    if (header === null) return wrap(<></>);
+    return wrap(
+      <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
+        <Text as="p" font="main-ui-muted" color="text-04">
+          {header}
+        </Text>
+        {body}
+      </div>
+    );
   }
 
-  if (isCompact) {
-    let content: JSX.Element;
-    if (latestStep?.kind === "bash") {
-      content = (
-        <BashCallStep
-          call={latestStep}
-          isLastStep={!stopPacketSeen && !isComplete}
+  if (renderType === RenderType.COMPACT) {
+    if (latestStep) {
+      return wrap(
+        renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
+      );
+    }
+    if (startPacket) {
+      return wrap(
+        <CodingTaskStep
+          taskText={taskText}
+          isLastStep={lastStepIsActive}
           isHover={isHover}
         />
       );
-    } else if (latestStep?.kind === "thinking") {
-      content = (
-        <ThinkingStep
-          step={latestStep}
-          isLastStep={!stopPacketSeen && !isComplete}
-          isHover={isHover}
-        />
-      );
-    } else if (startPacket) {
-      content = (
-        <StepContainer
-          stepIcon={SvgCircle}
-          header="Coding Task"
-          collapsible={true}
-          isLastStep={!stopPacketSeen && !isComplete}
-          isFirstStep={true}
-          isHover={isHover}
-        >
-          <div className="pl-[var(--timeline-common-text-padding)]">
-            <Text as="p" font="main-ui-muted" color="text-02">
-              {taskText}
-            </Text>
-          </div>
-        </StepContainer>
-      );
-    } else {
-      content = <></>;
     }
-    return children([
-      {
-        icon: null,
-        status: null,
-        content,
-        supportsCollapsible: true,
-        timelineLayout: "content",
-      },
-    ]);
+    return wrap(<></>);
   }
 
-  return children([
-    {
-      icon: null,
-      status: null,
-      content: (
-        <div className="flex flex-col">
-          {startPacket && (
-            <StepContainer
-              stepIcon={SvgCircle}
-              header="Coding Task"
-              collapsible={true}
-              isLastStep={!stopPacketSeen && steps.length === 0 && !isComplete}
-              isFirstStep={true}
-              isHover={isHover}
-            >
-              <div className="pl-[var(--timeline-common-text-padding)]">
-                <Text as="p" font="main-ui-muted" color="text-02">
-                  {taskText}
-                </Text>
-              </div>
-            </StepContainer>
-          )}
-
-          {steps.map((step, idx) => {
-            const isLastStep =
-              !stopPacketSeen && idx === steps.length - 1 && !isComplete;
-            if (step.kind === "thinking") {
-              return (
-                <ThinkingStep
-                  key={idx}
-                  step={step}
-                  isLastStep={isLastStep}
-                  isHover={isHover}
-                />
-              );
-            }
-            return (
-              <BashCallStep
-                key={idx}
-                call={step}
-                isLastStep={isLastStep}
-                isHover={isHover}
-              />
-            );
-          })}
-        </div>
-      ),
-      supportsCollapsible: true,
-      timelineLayout: "content",
-    },
-  ]);
+  return wrap(
+    <div className="flex flex-col">
+      {startPacket && (
+        <CodingTaskStep
+          taskText={taskText}
+          isLastStep={lastStepIsActive && steps.length === 0}
+          isHover={isHover}
+        />
+      )}
+      {steps.map((step, idx) =>
+        renderAgentStep(
+          step,
+          idx,
+          lastStepIsActive && idx === steps.length - 1,
+          isHover
+        )
+      )}
+    </div>
+  );
 };
