@@ -261,7 +261,11 @@ export const MessageTextRenderer: MessageRenderer<
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
-  const displayedContent = useTypewriter(content, isStreamingAnimationEnabled);
+  const displayedContent = useTypewriter(
+    content,
+    isStreamingAnimationEnabled,
+    isStreamFinished
+  );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive
   // this from "typewriter currently behind" — it oscillates mid-stream
