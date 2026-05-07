@@ -46,3 +46,11 @@ Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-clas
 ## SWR Cache Keys — Always Use SWR_KEYS Registry
 
 All `useSWR()` calls and `mutate()` calls in the frontend must reference the centralized `SWR_KEYS` registry in `web/src/lib/swr-keys.ts` instead of inline endpoint strings or local string constants. Never write `useSWR("/api/some/endpoint", ...)` or `mutate("/api/some/endpoint")` — always use the corresponding `SWR_KEYS.someEndpoint` constant. If the endpoint does not yet exist in the registry, add it there first. This applies to all variants of an endpoint (e.g. query-string variants like `?get_editable=true` must also be registered as their own key).
+
+## Playwright E2E — Page Object Model
+
+All tests under `web/tests/e2e/` must drive the UI through Page Object classes (e.g. `ChatPage`, `InputBar`). Locators and interactions for a surface live on the page object; specs call methods like `chatPage.inputBar.someMethod()` and do not construct locators inline. When extending coverage for an area that has no page object, create one before writing the spec. See `web/tests/e2e/README.md`.
+
+## Playwright E2E — Auto-Retrying Matchers Only
+
+Never use `locator.getAttribute()`, `locator.textContent()`, `locator.count()`, or `page.evaluate()` snapshots as the basis of an assertion on state that may update asynchronously (React state, effects, microtasks, deferred DOM mutations). One-shot reads flake. Use Playwright's auto-retrying matchers: `expect(locator).toHaveAttribute(...)`, `toHaveClass(...)`, `toHaveText(...)` / `toContainText(...)`, `toHaveCount(...)`, `toHaveValue(...)`, `toBeVisible()` / `toBeHidden()`. Snapshot reads are still fine when the value drives control flow inside the spec — not for assertions. See `web/tests/e2e/README.md`.
