@@ -1,15 +1,10 @@
 "use client";
 
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import {
-  DEFAULT_LOGO_SIZE_PX,
-  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
-} from "@/lib/constants";
+import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import { Flame } from "lucide-react";
 
 export interface LogoProps {
   folded?: boolean;
@@ -17,11 +12,26 @@ export interface LogoProps {
   className?: string;
 }
 
+/**
+ * Brand mark for the operator-brain rebrand. Renders the flame
+ * (Ember) icon in the brand blue inside a rounded white tile,
+ * paired with the application name when not folded.
+ *
+ * Enterprise customisation still wins:
+ *   - `use_custom_logo` true → render the uploaded image
+ *   - `application_name` set → use that as the displayed name
+ *   - `logo_display_style` "logo_only" / "name_only" honoured
+ *
+ * Default brand defaults to "Ember" when the operator hasn't
+ * configured an enterprise application name. The component never
+ * shows "Powered by Onyx" anymore.
+ */
 export default function Logo({ folded, size, className }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
   const settings = useSettingsContext();
   const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
-  const applicationName = settings.enterpriseSettings?.application_name;
+  const applicationName =
+    settings.enterpriseSettings?.application_name?.trim() || "Ember";
 
   // Cache-buster: the logo URL never changes (/api/enterprise-settings/logo)
   // so the browser serves the in-memory cached image even after an admin
@@ -34,13 +44,17 @@ export default function Logo({ folded, size, className }: LogoProps) {
     [settings.enterpriseSettings]
   );
 
-  const logo = settings.enterpriseSettings?.use_custom_logo ? (
+  const tileSize = resolvedSize;
+  const flameSize = Math.max(12, Math.round(tileSize * 0.55));
+
+  const customMark = settings.enterpriseSettings?.use_custom_logo;
+  const mark = customMark ? (
     <div
       className={cn(
         "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
         className
       )}
-      style={{ height: resolvedSize }}
+      style={{ height: tileSize, width: tileSize }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -50,60 +64,45 @@ export default function Logo({ folded, size, className }: LogoProps) {
       />
     </div>
   ) : (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("flex-shrink-0", className)}
-    />
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-xl border border-neutral-200 bg-white flex-shrink-0",
+        className
+      )}
+      style={{ width: tileSize, height: tileSize, color: "#295EFF" }}
+      aria-hidden="true"
+    >
+      <Flame
+        size={flameSize}
+        strokeWidth={2}
+        color="#295EFF"
+        style={{ color: "#295EFF" }}
+      />
+    </div>
   );
 
-  const renderNameAndPoweredBy = (opts: {
-    includeLogo: boolean;
-    includeName: boolean;
-  }) => {
-    return (
-      <div className="flex min-w-0 gap-2">
-        {opts.includeLogo && logo}
-        {!folded && (
-          /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
-          <div className="flex flex-1 flex-col -mt-0.5">
-            {opts.includeName && (
-              <Truncated headingH3>{applicationName}</Truncated>
-            )}
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-              <Text
-                secondaryBody
-                text03
-                className={"line-clamp-1 truncate"}
-                nowrap
-              >
-                Powered by Onyx
-              </Text>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const nameNode = (
+    <span
+      className="font-semibold tracking-tight text-neutral-900 leading-none truncate"
+      style={{ fontSize: Math.max(13, Math.round(tileSize * 0.5)) }}
+    >
+      {applicationName}
+    </span>
+  );
 
-  // Handle "logo_only" display style
-  if (logoDisplayStyle === "logo_only") {
-    return renderNameAndPoweredBy({ includeLogo: true, includeName: false });
-  }
+  if (folded) return mark;
 
-  // Handle "name_only" display style
+  if (logoDisplayStyle === "logo_only") return mark;
+
   if (logoDisplayStyle === "name_only") {
-    return renderNameAndPoweredBy({ includeLogo: false, includeName: true });
+    return <div className="flex items-center min-w-0">{nameNode}</div>;
   }
 
-  // Handle "logo_and_name" or default behavior
-  return applicationName ? (
-    renderNameAndPoweredBy({ includeLogo: true, includeName: true })
-  ) : folded ? (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("flex-shrink-0", className)}
-    />
-  ) : (
-    <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+  // Default + "logo_and_name": both, side by side.
+  return (
+    <div className="flex items-center min-w-0 gap-2.5">
+      {mark}
+      {nameNode}
+    </div>
   );
 }

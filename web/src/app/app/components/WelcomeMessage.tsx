@@ -1,85 +1,98 @@
 "use client";
 
-import Logo from "@/refresh-components/Logo";
+import { useEffect, useState } from "react";
 import {
-  getRandomGreeting,
-  GREETING_MESSAGES,
-} from "@/lib/chat/greetingMessages";
+  getTimeOfDayGreeting,
+  operatorFirstName,
+} from "@/lib/chat/timeOfDayGreeting";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { Section } from "@/layouts/general-layouts";
+import { useUser } from "@/providers/UserProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
   isDefaultAgent: boolean;
 }
 
+/**
+ * Home-page hero greeting. Two states:
+ *
+ * 1. Default agent (the common case) — renders the redesigned
+ *    operator-brain landing hero: a small "AI" pill, a large
+ *    time-of-day greeting with the operator's first name italicised
+ *    in the brand serif, and a sub-headline. Uses
+ *    `useUser()` for the name and a pure time-bucket helper for
+ *    the greeting; both behave correctly under SSR/hydration since
+ *    we only swap to the live values in a `useEffect`.
+ *
+ * 2. Custom agent — the original Onyx behaviour: agent avatar +
+ *    agent name, so picking a non-default agent still feels
+ *    grounded in that agent's identity.
+ *
+ * The component never throws on missing data (no agent yet, no
+ * personalization name): the redesigned default-agent state always
+ * renders, and the custom-agent branch returns null while the agent
+ * loads (matches prior contract).
+ */
 export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const { user } = useUser();
   const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
 
-  // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+  // Stable defaults for SSR — the live values bind in `useEffect` so the
+  // server-rendered HTML and the first client render match.
+  const [greeting, setGreeting] = useState("Welcome");
+  const [firstName, setFirstName] = useState("there");
 
   useEffect(() => {
     if (enterpriseSettings?.custom_greeting_message) {
       setGreeting(enterpriseSettings.custom_greeting_message);
     } else {
-      setGreeting(getRandomGreeting());
+      setGreeting(getTimeOfDayGreeting());
     }
-  }, [enterpriseSettings?.custom_greeting_message]);
+    setFirstName(operatorFirstName(user));
+  }, [enterpriseSettings?.custom_greeting_message, user]);
 
-  let content: React.ReactNode = null;
-
-  if (isDefaultAgent) {
-    content = (
-      <Section
-        data-testid="onyx-logo"
-        flexDirection="column"
-        alignItems="start"
-        gap={0.5}
-        width="fit"
-      >
-        <Logo folded size={32} />
-        <Text as="p" headingH2>
-          {greeting}
-        </Text>
-      </Section>
-    );
-  } else if (agent) {
-    content = (
-      <Section
+  if (!isDefaultAgent) {
+    if (!agent) return null;
+    return (
+      <div
         data-testid="agent-name-display"
-        flexDirection="column"
-        alignItems="start"
-        gap={0.5}
-        width="fit"
+        className="flex flex-col items-start gap-2"
       >
         <AgentAvatar agent={agent} size={36} />
         <Text as="p" headingH2>
           {agent.name}
         </Text>
-      </Section>
+      </div>
     );
   }
 
-  // if we aren't using the default agent, we need to wait for the agent info to load
-  // before rendering
-  if (!content) return null;
-
   return (
-    <FrostedDiv
+    <div
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center gap-3 w-full max-w-[var(--app-page-main-content-width)]"
+      className="flex flex-col items-center w-full font-['Inter',_sans-serif]"
     >
-      {content}
-    </FrostedDiv>
+      <div className="inline-flex items-center gap-2.5 border border-black/10 rounded-full pt-1.5 pr-3 pb-1.5 pl-3 mb-8 backdrop-blur-md">
+        <span className="text-[11px] uppercase text-neutral-500 tracking-widest font-mono">
+          AI
+        </span>
+      </div>
+
+      <h1 className="md:text-4xl lg:text-5xl text-3xl font-medium text-neutral-900 tracking-tight text-center mb-4">
+        {greeting},{" "}
+        <span className="italic text-[#295EFF] font-serif pr-1">
+          {firstName}
+        </span>
+      </h1>
+      <p className="md:text-2xl text-xl font-light text-neutral-500 tracking-tight text-center max-w-2xl mb-2 leading-relaxed">
+        What can I help you with?
+      </p>
+    </div>
   );
 }

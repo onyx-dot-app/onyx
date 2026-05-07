@@ -98,8 +98,7 @@ export default function RootLayout({
       <body className={`relative font-hanken`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
           disableTransitionOnChange
         >
           <div className="text-text min-h-screen bg-background">

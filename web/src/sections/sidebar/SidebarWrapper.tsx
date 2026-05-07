@@ -78,7 +78,13 @@ export default function SidebarWrapper({
     <div>
       <div
         className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
+          // Operator-brain redesign: pure-white sidebar with a 1px
+          // neutral right border, mirroring `border-r border-neutral-100`
+          // in operator-brain/home.html. The bg variable already
+          // resolves to white via the LIGHT-mode token overrides in
+          // globals.css; the border-r adds the visual seam between
+          // sidebar and main content.
+          "h-screen flex flex-col bg-background-tint-02 border-r border-background-neutral-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
           folded ? "w-[3.25rem]" : "w-[15rem]"
         )}
       >

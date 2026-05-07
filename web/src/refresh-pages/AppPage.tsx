@@ -771,14 +771,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           }
           noClick
         >
-          {({ getRootProps }) => (
+          {({ getRootProps }) => {
+            // Operator-brain redesign — true on the landing/empty home
+            // state (no chat session loaded yet). Used to scope the
+            // redesigned shiny-border treatment on AppInputBar so it
+            // doesn't bleed into active chat / search / project
+            // surfaces. The original Onyx gating
+            // `(isNewSession || isAgent) && (idle || classifying)`
+            // also evaluated true during an idle chat session because
+            // appFocus.isAgent() can be true while a default-agent
+            // chat is at rest; the dark theme used to hide that
+            // overlap. The `!currentChatSessionId` guard makes the
+            // empty-state condition explicit.
+            const isHomeEmpty =
+              !currentChatSessionId &&
+              (appFocus.isNewSession() || appFocus.isAgent()) &&
+              (state.phase === "idle" || state.phase === "classifying");
+            return (
             <div
               className="h-full w-full flex flex-col items-center outline-none relative"
               {...getRootProps({ tabIndex: -1 })}
             >
-              {/* Main content grid — 3 rows, animated */}
+              {/* Main content grid — 3 rows, animated. The
+                  app-wide grid + radial-glow background is painted
+                  on body via globals.css now (was scoped to the
+                  empty home state in earlier commits; the chat
+                  surface should pick up the same texture per the
+                  design). */}
               <div
-                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
+                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out relative z-10"
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
@@ -869,12 +890,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     </div>
                   )}
 
-                  {/* WelcomeMessageUI */}
+                  {/* WelcomeMessageUI — uses the same `isHomeEmpty`
+                      gate as the shiny input so the hero only shows
+                      on the true empty home (no chat session loaded). */}
                   <Fade
-                    show={
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      (state.phase === "idle" || state.phase === "classifying")
-                    }
+                    show={isHomeEmpty}
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
                     <Section
@@ -913,7 +933,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     sessionFetchError && "hidden"
                   )}
                 >
-                  <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
+                  <div
+                    className={cn(
+                      "relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col",
+                      // Operator-brain redesign — shiny animated border
+                      // around the input on the home/empty state only.
+                      // The wrapper itself is white inside (padding-box)
+                      // so AppInputBar's own bg sits on top correctly.
+                      isHomeEmpty && "ob-shiny-input-wrapper p-[1px] shadow-2xl shadow-black/[0.03]"
+                    )}
+                  >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
                       <div className="absolute top-[-3.5rem] self-center">
@@ -1044,12 +1073,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     </div>
                   )}
 
-                  {/* SuggestionsUI */}
+                  {/* SuggestionsUI — only on the true empty home so
+                      starter-message cards don't appear under the
+                      input during an active chat. */}
                   <Fade
-                    show={
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      hasStarterMessages
-                    }
+                    show={isHomeEmpty && hasStarterMessages}
                     className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)]"
                   >
                     <Spacer rem={0.5} />
@@ -1067,7 +1095,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
               </div>
             </div>
-          )}
+          );
+          }}
         </Dropzone>
       </AppLayouts.Root>
 

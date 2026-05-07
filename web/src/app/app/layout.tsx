@@ -28,7 +28,14 @@ export default async function Layout({ children }: LayoutProps) {
       <VoiceModeProvider>
         <div className="flex flex-row w-full h-full">
           <AppSidebar />
-          {children}
+          {/* `ob-content-bg` paints the grid + radial-glow only in
+              the main-content column — the sidebar stays plain white
+              per the design. The class itself lives in globals.css
+              and uses ::before / ::after pseudo-elements so the
+              backdrop sits behind the children of this wrapper. */}
+          <div className="ob-content-bg flex-1 min-w-0 relative">
+            {children}
+          </div>
         </div>
       </VoiceModeProvider>
     </ProjectsProvider>

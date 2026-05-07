@@ -462,11 +462,15 @@ function Footer() {
   const settings = useSettingsContext();
   const appFocus = useAppFocus();
 
+  // Operator-brain rebrand: drop the default "Onyx <ver> - Open Source AI
+  // Platform" link. Enterprise admins can still set
+  // `custom_lower_disclaimer_content` to render their own footer; absent
+  // that, the footer renders nothing (we keep the spacer footer element so
+  // the page-grid template that sizes the chat-input shadow gap doesn't
+  // shift, see the @raunakab note below).
   const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
-      settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+    settings?.enterpriseSettings?.custom_lower_disclaimer_content?.trim() ||
+    "";
 
   return (
     <footer
@@ -489,11 +493,13 @@ function Footer() {
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >
-      <MinimalMarkdown
-        content={customFooterContent}
-        className={cn("max-w-full text-center")}
-        components={footerMarkdownComponents}
-      />
+      {customFooterContent ? (
+        <MinimalMarkdown
+          content={customFooterContent}
+          className={cn("max-w-full text-center")}
+          components={footerMarkdownComponents}
+        />
+      ) : null}
     </footer>
   );
 }
