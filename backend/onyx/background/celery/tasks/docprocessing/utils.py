@@ -290,6 +290,13 @@ def should_index(
     ):
         return True
 
+    # If the previous attempt was interrupted by infrastructure (pod death,
+    # OOM, rolling deploy SIGKILL), retry immediately rather than waiting
+    # for the connector's refresh cadence — the watchdog already saved a
+    # checkpoint that the next attempt will resume from.
+    if last_index_attempt.status == IndexingStatus.INTERRUPTED:
+        return True
+
     current_db_time = get_db_current_time(db_session)
     time_since_index = current_db_time - last_index_attempt.time_updated
     if time_since_index.total_seconds() < connector.refresh_freq:

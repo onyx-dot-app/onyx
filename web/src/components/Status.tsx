@@ -70,6 +70,19 @@ export function IndexAttemptStatus({
         Canceled
       </Badge>
     );
+  } else if (status === "interrupted") {
+    const icon = (
+      <Badge variant="in_progress" icon={FiClock}>
+        Auto-retrying
+      </Badge>
+    );
+    badge = errorMsg ? (
+      <Tooltip tooltip={errorMsg}>
+        <div className="cursor-pointer">{icon}</div>
+      </Tooltip>
+    ) : (
+      icon
+    );
   } else if (status === "invalid") {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
@@ -222,6 +235,15 @@ export function CCPairStatus({
       badge = (
         <Badge variant="canceled" icon={FiClock}>
           Canceled
+        </Badge>
+      );
+    } else if (
+      lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "interrupted"
+    ) {
+      badge = (
+        <Badge variant="in_progress" icon={FiClock}>
+          Auto-retrying
         </Badge>
       );
     } else {

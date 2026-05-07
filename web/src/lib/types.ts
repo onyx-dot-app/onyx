@@ -176,6 +176,7 @@ export type ValidStatuses =
   | "completed_with_errors"
   | "canceled"
   | "failed"
+  | "interrupted"
   | "in_progress"
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";

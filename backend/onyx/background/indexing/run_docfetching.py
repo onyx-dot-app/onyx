@@ -517,6 +517,7 @@ def connector_document_extraction(
             and (
                 most_recent_attempt.status == IndexingStatus.FAILED
                 or most_recent_attempt.status == IndexingStatus.CANCELED
+                or most_recent_attempt.status == IndexingStatus.INTERRUPTED
             )
         ):
             window_end = most_recent_attempt.poll_range_end
@@ -1032,15 +1033,19 @@ def connector_document_extraction(
 
         else:
             with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite attempts that are already failed/canceled for another reason
+                # don't overwrite attempts that are already in a terminal state
+                # for another reason (e.g. the watchdog beat us here and marked
+                # the attempt INTERRUPTED — we want to preserve that signal)
                 index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
                 if index_attempt and index_attempt.status in [
                     IndexingStatus.CANCELED,
                     IndexingStatus.FAILED,
+                    IndexingStatus.INTERRUPTED,
                 ]:
                     logger.info(
-                        "Attempt %s is already failed/canceled, skipping marking as failed.",
+                        "Attempt %s is already in terminal state %s, skipping marking as failed.",
                         index_attempt_id,
+                        index_attempt.status,
                     )
                     raise e
 

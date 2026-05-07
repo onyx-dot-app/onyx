@@ -82,6 +82,7 @@ from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import mark_attempt_interrupted
 from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -243,16 +244,24 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            # Heartbeat is stale. If docfetching has finished (total_batches is
-            # set), use the Redis counters to decide whether to invalidate:
+            # Heartbeat is stale. The phase determines both how we decide
+            # whether to invalidate and what status we transition to:
             #
-            #   in_flight > 0               → workers crashed holding batches → invalidate
-            #   in_flight = 0, pending > 0  → batches in queue, no crash → wait
-            #   in_flight = 0, pending = 0  → no work anywhere, stuck → invalidate
+            # docprocessing phase (total_batches is set): consult Redis
+            #   counters from main's batch-counter logic to distinguish a
+            #   real crash from a queue backlog.
+            #     in_flight > 0              → workers crashed → invalidate
+            #     in_flight = 0, pending > 0 → backlog, not crash → wait
+            #     in_flight = 0, pending = 0 → stuck → invalidate
             #
-            # If total_batches is not set yet, docfetching is still running;
-            # fall through to immediate invalidation (base timeout elapsed).
-            if fresh_attempt.total_batches is not None:
+            # docfetching phase (total_batches is None): the heartbeat
+            #   thread runs independently of rate limiting, so a stale
+            #   heartbeat means a real worker crash. Invalidate immediately;
+            #   if a checkpoint exists, mark INTERRUPTED for auto-retry.
+            is_docfetching_phase = fresh_attempt.total_batches is None
+            has_resumable_checkpoint = fresh_attempt.checkpoint_pointer is not None
+
+            if not is_docfetching_phase:
                 in_flight = 0
                 pending = 0
                 try:
@@ -294,9 +303,6 @@ def validate_active_indexing_attempts(
                         f"no pending or in-flight batches — all batches failed or lost"
                     )
             else:
-                # total_batches is None: docfetching is still running but the
-                # worker process died. The heartbeat thread runs independently
-                # of rate limiting, so a stale heartbeat here means a real crash.
                 failure_reason = (
                     f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
                 )
@@ -305,8 +311,32 @@ def validate_active_indexing_attempts(
                 f"Invalidating attempt {fresh_attempt.id}: "
                 f"last_heartbeat_time={last_check_time} "
                 f"cutoff_time={cutoff_time} "
-                f"counter={current_counter}"
+                f"counter={current_counter} "
+                f"docfetching_phase={is_docfetching_phase} "
+                f"has_checkpoint={has_resumable_checkpoint}"
             )
+
+            if is_docfetching_phase and has_resumable_checkpoint:
+                interrupt_reason = (
+                    f"Worker heartbeat lost after "
+                    f"{heartbeat_timeout_seconds}s during docfetching; "
+                    f"will auto-resume from checkpoint"
+                )
+                try:
+                    mark_attempt_interrupted(
+                        fresh_attempt.id,
+                        db_session,
+                        reason=interrupt_reason,
+                    )
+                    task_logger.warning(
+                        f"Marked attempt {fresh_attempt.id} as INTERRUPTED "
+                        f"due to heartbeat timeout; scheduler will auto-retry"
+                    )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to mark attempt {fresh_attempt.id} as INTERRUPTED"
+                    )
+                continue
 
             try:
                 mark_attempt_failed(
