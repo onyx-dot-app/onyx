@@ -129,13 +129,7 @@ export const stepHasCollapsedStreamingContent = (
   }
 
   // Coding agent has meaningful content from start (task) onward
-  if (
-    packetTypes.has(PacketType.CODING_AGENT_START) ||
-    packetTypes.has(PacketType.CODING_AGENT_THINKING_DELTA) ||
-    packetTypes.has(PacketType.CODING_AGENT_FINAL) ||
-    packetTypes.has(PacketType.BASH_TOOL_START) ||
-    packetTypes.has(PacketType.BASH_TOOL_DELTA)
-  ) {
+  if (isCodingAgentPackets(packets)) {
     return true;
   }
 
