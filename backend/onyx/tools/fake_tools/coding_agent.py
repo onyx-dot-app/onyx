@@ -437,7 +437,6 @@ def run_coding_agent_call(
                                 image_files=None,
                             )
                         )
-                        reasoning_cycles += 1
                         most_recent_reasoning = llm_step_result.reasoning
                         continue
 
