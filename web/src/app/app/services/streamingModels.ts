@@ -424,9 +424,6 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-// CodingAgentObj covers both the agent's own packets and the BashTool packets
-// it emits inline — they always land in the same group as the agent, so they
-// share a discriminated-union type.
 export type CodingAgentObj =
   | CodingAgentStart
   | CodingAgentThinkingDelta
