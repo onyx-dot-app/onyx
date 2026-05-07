@@ -27,6 +27,7 @@ export function useTimelineExpansion(
   }, []);
 
   // Auto-collapse when streaming completes or message content starts
+  // BUT respect user intent - if they've manually toggled, don't auto-collapse
   useEffect(() => {
     if ((stopPacketSeen || hasDisplayContent) && !userHasToggled.current) {
       setIsExpanded(false);
