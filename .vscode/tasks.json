@@ -42,8 +42,8 @@
     {
       "type": "shell",
       "label": "start frontend (remote backend)",
-      "detail": "Loads INTERNAL_URL and DEBUG_AUTH_COOKIE from .vscode/.env. See web/README.md.",
-      "envFile": "${workspaceFolder}/.vscode/.env",
+      "detail": "Loads INTERNAL_URL and DEBUG_AUTH_COOKIE from ~/.onyx-env on the host (mounted at /home/dev/.onyx-env). See web/README.md.",
+      "envFile": "/home/dev/.onyx-env",
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
