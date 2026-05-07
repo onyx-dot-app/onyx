@@ -141,6 +141,23 @@ def delete_license(db_session: Session) -> bool:
 # -----------------------------------------------------------------------------
 
 
+def user_counts_toward_seats(user: User) -> bool:
+    """Whether a single user row would be counted by ``get_used_seats``.
+
+    Mirrors the filter below; canonical predicate for any caller that
+    needs to know whether a write (e.g. an EXT_PERM_USER → STANDARD
+    upgrade) flips an uncounted user into a counted one. Keep in sync
+    with ``get_used_seats`` — adding or removing a clause there must
+    update this function in lockstep.
+    """
+    return (
+        bool(user.is_active)
+        and user.role != UserRole.EXT_PERM_USER
+        and user.email != ANONYMOUS_USER_EMAIL
+        and user.account_type != AccountType.SERVICE_ACCOUNT
+    )
+
+
 def get_used_seats(tenant_id: str | None = None) -> int:
     """
     Get current seat usage directly from database.
@@ -153,6 +170,9 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     anonymous system user are excluded. BOT (Slack users) ARE counted
     because they represent real humans and get upgraded to STANDARD
     when they log in via web.
+
+    The ``user_counts_toward_seats`` helper above mirrors this filter
+    for callers that need a per-user predicate; keep them in sync.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count

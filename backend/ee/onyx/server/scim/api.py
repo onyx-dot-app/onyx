@@ -225,17 +225,22 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     the pattern: _check_seat_availability → write → dal.commit()
     (which releases the lock for the next waiting request).
     """
+    # ``fetch_ee_implementation_or_noop`` returns a callable in all build
+    # modes — the EE function in EE builds, a sync no-op (returning the
+    # passed default) in CE. On CE the no-op acquires no lock and the
+    # check returns ``None``, falling through to the ``not result`` branch.
     acquire_lock_fn = fetch_ee_implementation_or_noop(
         "onyx.db.license", "acquire_seat_lock", None
     )
     check_fn = fetch_ee_implementation_or_noop(
         "onyx.db.license", "check_seat_availability", None
     )
-    if check_fn is None or acquire_lock_fn is None:
-        return None
 
     acquire_lock_fn(dal.session, get_current_tenant_id())
     result = check_fn(dal.session, seats_needed=1)
+    if result is None:
+        # CE: noop check returns None (the default). No license, no limit.
+        return None
     if not result.available:
         return result.error_message or "Seat limit reached"
     return None

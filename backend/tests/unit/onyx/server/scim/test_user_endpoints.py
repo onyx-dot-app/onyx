@@ -788,16 +788,22 @@ class TestSeatLock:
         assert seat_lock_id_for_tenant("t1") == seat_lock_id_for_tenant("t1")
         assert seat_lock_id_for_tenant("t1") != seat_lock_id_for_tenant("t2")
 
-    def test_no_lock_when_ee_absent(
+    def test_no_error_on_ce_noop_check(
         self,
         mock_dal: MagicMock,
     ) -> None:
-        """No advisory lock should be acquired when the EE check is absent."""
+        """On CE, ``fetch_ee_implementation_or_noop`` returns a callable
+        no-op that yields ``None``; ``_check_seat_availability`` must
+        treat the absence of a result as "no enforcement" rather than
+        crashing on attribute access."""
+
+        def fake_fetch(_module: str, _name: str, _default: Any) -> Any:
+            return lambda *_a, **_kw: None
+
         with patch(
             "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop",
-            return_value=None,
+            side_effect=fake_fetch,
         ):
             result = _check_seat_availability(mock_dal)
 
         assert result is None
-        mock_dal.session.execute.assert_not_called()

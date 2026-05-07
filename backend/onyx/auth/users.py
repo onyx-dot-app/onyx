@@ -392,9 +392,15 @@ def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> Non
 def _user_currently_counts_toward_seats(user: User) -> bool:
     """Return whether ``user`` is currently counted by ``get_used_seats``.
 
-    Mirrors the filter at ``ee/onyx/db/license.py:get_used_seats``: active,
-    non-anonymous, role != EXT_PERM_USER, account_type != SERVICE_ACCOUNT.
+    Delegates to the canonical predicate in ``ee/onyx/db/license.py`` so
+    the two definitions cannot drift. The local fallback below is only
+    reached on CE / non-EE deployments where the EE module is absent.
     """
+    canonical = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "user_counts_toward_seats", None
+    )(user)
+    if canonical is not None:
+        return bool(canonical)
     return (
         bool(user.is_active)
         and user.role != UserRole.EXT_PERM_USER

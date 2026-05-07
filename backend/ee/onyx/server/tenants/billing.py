@@ -3,12 +3,15 @@ from typing import Literal
 
 import requests
 import stripe
+from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
+from ee.onyx.db.license import acquire_seat_lock
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.usage_limits import is_tenant_on_trial_fn
@@ -220,19 +223,36 @@ def attempt_seat_billing_increase(
         return False, "subscription_invalid"
 
 
-def enforce_cloud_seat_limit(seats_needed: int = 1) -> None:
+def enforce_cloud_seat_limit(
+    seats_needed: int = 1,
+    tenant_id: str | None = None,
+    db_session: Session | None = None,
+) -> None:
     """Cloud (multi-tenant) signup-time seat enforcer.
 
     Computes ``target_quantity = current_active_users + seats_needed`` for
-    the current tenant and asks the control plane (via Stripe) to bill the
+    the target tenant and asks the control plane (via Stripe) to bill the
     new total. Raises ``OnyxError(SEAT_LIMIT_EXCEEDED)`` when the auto-bill
     is declined; returns silently on success.
+
+    Concurrency: when ``db_session`` is the shared-schema session that the
+    caller will commit after inserting the seat-consuming row(s), the
+    ``pg_advisory_xact_lock`` acquired here is held until that commit. Two
+    concurrent signups for the same tenant therefore serialize across the
+    full count → bill → insert window, closing the TOCTOU gap that the
+    Stripe idempotency key alone does not.
+
+    Without ``db_session`` the lock is taken on a short-lived shared-schema
+    session and released as soon as the bill returns — best-effort: it
+    serializes the count + bill against other holders of the same lock,
+    but the caller's later insert is not protected. Use the ``db_session``
+    overload from any path that performs the seat-consuming write.
 
     Trial tenants short-circuit — the trial-invite cap in
     ``bulk_invite_users`` is the only seat backstop for trial accounts.
     """
-    tenant_id = get_current_tenant_id()
-    if is_tenant_on_trial_fn(tenant_id):
+    tenant = tenant_id or get_current_tenant_id()
+    if is_tenant_on_trial_fn(tenant):
         return
 
     # Local import keeps the billing module loadable on environments that
@@ -240,10 +260,23 @@ def enforce_cloud_seat_limit(seats_needed: int = 1) -> None:
     # that import billing only via ``fetch_ee_implementation_or_noop``).
     from ee.onyx.server.tenants.user_mapping import get_tenant_count
 
-    current_count = get_tenant_count(tenant_id)
-    target_quantity = current_count + seats_needed
+    if db_session is not None:
+        # Lock the caller's transaction for this tenant. The lock will be
+        # released by the caller's commit/rollback, after their insert.
+        acquire_seat_lock(db_session, tenant)
+        current_count = get_tenant_count(tenant)
+        target_quantity = current_count + seats_needed
+        success, reason = attempt_seat_billing_increase(tenant, target_quantity)
+    else:
+        # Best-effort fallback: serialize the count + bill on a short-lived
+        # shared-schema session. The caller's later insert is unprotected.
+        with get_session_with_shared_schema() as locked_session:
+            acquire_seat_lock(locked_session, tenant)
+            current_count = get_tenant_count(tenant)
+            target_quantity = current_count + seats_needed
+            success, reason = attempt_seat_billing_increase(tenant, target_quantity)
+            locked_session.commit()
 
-    success, reason = attempt_seat_billing_increase(tenant_id, target_quantity)
     if success:
         return
 

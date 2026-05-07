@@ -154,6 +154,7 @@ class TestEnforceCloudSeatLimit:
             # Must not raise, must not call Stripe.
             enforce_cloud_seat_limit(seats_needed=1)
 
+    @patch(f"{_BILLING}.acquire_seat_lock")
     @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
     @patch(f"{_BILLING}.attempt_seat_billing_increase")
     @patch(f"{_BILLING}.is_tenant_on_trial_fn")
@@ -164,15 +165,18 @@ class TestEnforceCloudSeatLimit:
         mock_trial: MagicMock,
         mock_attempt: MagicMock,
         mock_count: MagicMock,
+        mock_acquire_lock: MagicMock,
     ) -> None:
         mock_tenant_id.return_value = "t1"
         mock_trial.return_value = False
         mock_count.return_value = 4
         mock_attempt.return_value = (True, None)
+        db_session = MagicMock()
 
-        enforce_cloud_seat_limit(seats_needed=2)
+        enforce_cloud_seat_limit(seats_needed=2, db_session=db_session)
 
         mock_attempt.assert_called_once_with("t1", 6)
+        mock_acquire_lock.assert_called_once_with(db_session, "t1")
 
     @pytest.mark.parametrize(
         "reason,expected_in_message",
@@ -181,6 +185,7 @@ class TestEnforceCloudSeatLimit:
             ("subscription_invalid", "active subscription"),
         ],
     )
+    @patch(f"{_BILLING}.acquire_seat_lock")
     @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
     @patch(f"{_BILLING}.attempt_seat_billing_increase")
     @patch(f"{_BILLING}.is_tenant_on_trial_fn")
@@ -191,16 +196,46 @@ class TestEnforceCloudSeatLimit:
         mock_trial: MagicMock,
         mock_attempt: MagicMock,
         mock_count: MagicMock,
+        mock_acquire_lock: MagicMock,
         reason: str,
         expected_in_message: str,
     ) -> None:
+        del mock_acquire_lock  # injected by @patch but not asserted on
         mock_tenant_id.return_value = "t1"
         mock_trial.return_value = False
         mock_count.return_value = 4
         mock_attempt.return_value = (False, reason)
 
         with pytest.raises(OnyxError) as exc:
-            enforce_cloud_seat_limit(seats_needed=1)
+            enforce_cloud_seat_limit(seats_needed=1, db_session=MagicMock())
 
         assert exc.value.error_code == OnyxErrorCode.SEAT_LIMIT_EXCEEDED
         assert expected_in_message in exc.value.detail
+
+    @patch(f"{_BILLING}.acquire_seat_lock")
+    @patch("ee.onyx.server.tenants.user_mapping.get_tenant_count")
+    @patch(f"{_BILLING}.attempt_seat_billing_increase")
+    @patch(f"{_BILLING}.is_tenant_on_trial_fn")
+    @patch(f"{_BILLING}.get_current_tenant_id", return_value="ctx_var_tenant")
+    def test_explicit_tenant_id_overrides_context_var(
+        self,
+        _mock_tenant_id: MagicMock,
+        mock_trial: MagicMock,
+        mock_attempt: MagicMock,
+        mock_count: MagicMock,
+        mock_acquire_lock: MagicMock,
+    ) -> None:
+        """Caller-supplied tenant_id must be billed, not the context var."""
+        mock_trial.return_value = False
+        mock_count.return_value = 0
+        mock_attempt.return_value = (True, None)
+        db_session = MagicMock()
+
+        enforce_cloud_seat_limit(
+            seats_needed=1, tenant_id="explicit_tenant", db_session=db_session
+        )
+
+        mock_trial.assert_called_once_with("explicit_tenant")
+        mock_count.assert_called_once_with("explicit_tenant")
+        mock_attempt.assert_called_once_with("explicit_tenant", 1)
+        mock_acquire_lock.assert_called_once_with(db_session, "explicit_tenant")
