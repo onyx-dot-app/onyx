@@ -11,25 +11,35 @@ import { toast } from "@/hooks/useToast";
 import { Settings } from "@/interfaces/settings";
 
 export default function InviteOnlyCard() {
-  const settingsContext = useSettingsContext();
-  const settings = settingsContext.settings;
+  const { settings } = useSettingsContext();
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const newSettings = { ...settings, ...updates };
+      const newSettings: Settings = { ...settings, ...updates };
       try {
-        const response = await fetch("/api/admin/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newSettings),
-        });
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
-        }
-        await mutate(SWR_KEYS.settings);
+        await mutate(
+          SWR_KEYS.settings,
+          async () => {
+            const response = await fetch("/api/admin/settings", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(newSettings),
+            });
+            if (!response.ok) {
+              const body = (await response.json()) as { detail?: string };
+              throw new Error(body.detail ?? "Request failed");
+            }
+            return newSettings;
+          },
+          {
+            optimisticData: newSettings,
+            revalidate: true,
+            rollbackOnError: true,
+          }
+        );
         toast.success("Settings updated");
-      } catch {
+      } catch (err) {
+        console.error("Failed to update invite_only_enabled", err);
         toast.error("Failed to update settings");
       }
     },
