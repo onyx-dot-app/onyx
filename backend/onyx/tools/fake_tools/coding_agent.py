@@ -39,56 +39,55 @@ MAX_FINAL_ANSWER_TOKENS = 4000
 
 @contextmanager
 def _setup_session(
-    client: CodeInterpreterClient,
     repo: str,
     github_token: str | None,
 ) -> Iterator[str]:
     """Download ``repo``, create a code-interpreter session with the tarball
     staged + extracted, yield the session id, and delete the session on exit.
 
-    Couples the full lifecycle in one ``with`` block so callers can't
-    accidentally leak a session by forgetting the cleanup call. Cleanup runs
-    even when the body raises.
+    Creates its own :class:`CodeInterpreterClient` internally and tears it
+    down on exit, so callers only deal with the ``session_id``.
     """
     repo_bytes = download_github_repo(repo, github_token=github_token)
 
-    ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)
-    session_info = client.create_session(
-        ttl_seconds=CODING_AGENT_SESSION_TTL_SECONDS,
-        files=[{"path": REPO_TARBALL_PATH, "file_id": ci_file_id}],
-    )
-    session_id = session_info.session_id
-    logger.info("Created coding agent session %s", session_id)
+    with CodeInterpreterClient() as client:
+        ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)
+        session_info = client.create_session(
+            ttl_seconds=CODING_AGENT_SESSION_TTL_SECONDS,
+            files=[{"path": REPO_TARBALL_PATH, "file_id": ci_file_id}],
+        )
+        session_id = session_info.session_id
+        logger.info("Created coding agent session %s", session_id)
 
-    try:
-        # GitHub tarballs always have exactly one top-level dir;
-        # --strip-components=1 extracts the contents directly into cwd so the
-        # agent's bash calls see the repo root immediately.
-        extract_cmd = (
-            f"tar -xzf {REPO_TARBALL_PATH} --strip-components=1 "
-            f"&& rm {REPO_TARBALL_PATH} && ls"
-        )
-        extract_result = client.execute_bash_in_session(
-            session_id=session_id,
-            cmd=extract_cmd,
-            timeout_ms=CODING_AGENT_SETUP_TIMEOUT_MS,
-        )
-        if extract_result.exit_code != 0:
-            raise RuntimeError(
-                f"Failed to extract repository tarball: {extract_result.stderr}"
-            )
-        logger.info("Extracted repo into session %s", session_id)
-        yield session_id
-    finally:
         try:
-            client.delete_session(session_id)
-            logger.info("Deleted coding agent session %s", session_id)
-        except Exception as e:
-            # Don't let cleanup failure mask any exception from the body.
-            # The session has a TTL so the pod will eventually be reaped.
-            logger.warning(
-                "Failed to delete coding agent session %s: %s", session_id, e
+            # GitHub tarballs always have exactly one top-level dir;
+            # --strip-components=1 extracts the contents directly into cwd so the
+            # agent's bash calls see the repo root immediately.
+            extract_cmd = (
+                f"tar -xzf {REPO_TARBALL_PATH} --strip-components=1 "
+                f"&& rm {REPO_TARBALL_PATH} && ls"
             )
+            extract_result = client.execute_bash_in_session(
+                session_id=session_id,
+                cmd=extract_cmd,
+                timeout_ms=CODING_AGENT_SETUP_TIMEOUT_MS,
+            )
+            if extract_result.exit_code != 0:
+                raise RuntimeError(
+                    f"Failed to extract repository tarball: {extract_result.stderr}"
+                )
+            logger.info("Extracted repo into session %s", session_id)
+            yield session_id
+        finally:
+            try:
+                client.delete_session(session_id)
+                logger.info("Deleted coding agent session %s", session_id)
+            except Exception as e:
+                # Don't let cleanup failure mask any exception from the body.
+                # The session has a TTL so the pod will eventually be reaped.
+                logger.warning(
+                    "Failed to delete coding agent session %s: %s", session_id, e
+                )
 
 
 def _run_bash_call(
