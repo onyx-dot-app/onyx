@@ -334,7 +334,11 @@ class TestHandleMessageSeatCheck:
 
         self._call_handle_message(email="new@test.com")
 
-        mock_add_user.assert_called_once_with(db_session, "new@test.com")
+        mock_add_user.assert_called_once()
+        args, kwargs = mock_add_user.call_args
+        assert args == (db_session, "new@test.com")
+        assert "enforce_seat_check" in kwargs
+        assert callable(kwargs["enforce_seat_check"])
 
     @patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False)
     @patch(f"{_HANDLE_MSG}.handle_standard_answers", return_value=False)
@@ -355,7 +359,11 @@ class TestHandleMessageSeatCheck:
 
         self._call_handle_message(email="new@test.com")
 
-        mock_add_user.assert_called_once_with(db_session, "new@test.com")
+        mock_add_user.assert_called_once()
+        args, kwargs = mock_add_user.call_args
+        assert args == (db_session, "new@test.com")
+        assert "enforce_seat_check" in kwargs
+        assert callable(kwargs["enforce_seat_check"])
 
 
 # ---------------------------------------------------------------------------

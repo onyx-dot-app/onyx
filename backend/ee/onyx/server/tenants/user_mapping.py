@@ -75,6 +75,9 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     an inactive mapping (invitation) to this tenant. They can accept the
     invitation later to switch tenants.
 
+    Defense-in-depth: before inserting any new ACTIVE mapping (a brand-new
+    seat for this tenant), call ``enforce_cloud_seat_limit`` so a missed
+    upstream check still fails closed via Stripe auto-billing.
     """
     unique_emails = set(emails)
     if not unique_emails:
@@ -108,6 +111,24 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
                 .all()
             )
             emails_with_active_mapping = {m.email for m in active_mappings}
+
+            # Determine which emails will produce a NEW ACTIVE mapping for
+            # this tenant. Inactive (invitation) mappings to other tenants
+            # don't count — they don't consume a seat until accepted.
+            new_active_seat_emails = [
+                email
+                for email in unique_emails
+                if email not in emails_with_mapping
+                and email not in emails_with_active_mapping
+            ]
+
+            if new_active_seat_emails:
+                from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
+
+                # Raises OnyxError(SEAT_LIMIT_EXCEEDED) on Stripe decline; the
+                # outer `except Exception` rolls the transaction back so no
+                # mappings are persisted on failure.
+                enforce_cloud_seat_limit(seats_needed=len(new_active_seat_emails))
 
             # Add mappings for emails that don't already have one to this tenant
             for email in unique_emails:

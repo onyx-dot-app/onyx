@@ -430,7 +430,17 @@ class TestSeatLimitEnforcement:
     def test_seat_limit_only_enforced_for_self_hosted(self) -> None:
         from onyx.auth.users import enforce_seat_limit
 
-        with patch("onyx.auth.users.MULTI_TENANT", True):
+        # In MULTI_TENANT mode the local seat check is bypassed in favor of
+        # the cloud auto-bill helper. Patch fetch_ee_implementation_or_noop
+        # to the no-op default so the test does not depend on whether the
+        # real EE billing module has been imported by an earlier test.
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch(
+                "onyx.auth.users.fetch_ee_implementation_or_noop",
+                return_value=lambda **_kw: None,
+            ),
+        ):
             enforce_seat_limit(MagicMock())  # should not raise
 
 

@@ -32,7 +32,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import enforce_seat_limit
+from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
@@ -472,8 +472,13 @@ def bulk_invite_users(
 
     # Check seat availability for new users. Must run before the counter
     # reservation below — a seat-limit failure must not burn trial quota.
+    # Uses the locked variant so concurrent invite + signup flows for this
+    # tenant are serialized: the advisory lock is held until ``db_session``
+    # commits, which is the same transaction that writes the invitation
+    # rows further down, so no other request can slip in seats between the
+    # check and the write.
     if emails_needing_seats:
-        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
+        enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
     # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
     # The UPSERT holds a row-level lock on `tenant_id` during the UPDATE, so
@@ -721,9 +726,10 @@ def activate_user_api(
         logger.warning("%s is already activated", user_to_activate.email)
         return
 
-    # Check seat availability before activating
-    # Only for self-hosted (non-multi-tenant) deployments
-    enforce_seat_limit(db_session)
+    # Check seat availability before activating. Locked variant so the
+    # advisory lock is held until ``activate_user``'s commit on the same
+    # session — concurrent activate/signup requests are serialized.
+    enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)
 

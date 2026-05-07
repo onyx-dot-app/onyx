@@ -9,7 +9,11 @@ from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -109,10 +113,17 @@ def fetch_customer_portal_session(tenant_id: str, return_url: str | None = None)
     return response.json()["url"]
 
 
-def register_tenant_users(tenant_id: str, number_of_users: int) -> stripe.Subscription:
+def register_tenant_users(
+    tenant_id: str,
+    number_of_users: int,
+    idempotency_key: str | None = None,
+) -> stripe.Subscription:
     """
     Update the number of seats for a tenant's subscription.
     Preserves the existing price (monthly, annual, or grandfathered).
+
+    When ``idempotency_key`` is provided, retried HTTP requests will not
+    double-charge — Stripe deduplicates by the key for ~24 h.
     """
     response = fetch_tenant_stripe_information(tenant_id)
     stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
@@ -123,15 +134,130 @@ def register_tenant_users(tenant_id: str, number_of_users: int) -> stripe.Subscr
     # Use existing price to preserve the customer's current plan
     current_price_id = subscription_item.price.id
 
-    updated_subscription = stripe.Subscription.modify(
-        stripe_subscription_id,
-        items=[
+    modify_kwargs: dict = {
+        "items": [
             {
                 "id": subscription_item.id,
                 "price": current_price_id,
                 "quantity": number_of_users,
             }
         ],
-        metadata={"tenant_id": str(tenant_id)},
+        "metadata": {"tenant_id": str(tenant_id)},
+    }
+    if idempotency_key is not None:
+        modify_kwargs["idempotency_key"] = idempotency_key
+
+    updated_subscription = stripe.Subscription.modify(
+        stripe_subscription_id,
+        **modify_kwargs,
     )
     return updated_subscription
+
+
+def _seat_billing_idempotency_key(tenant_id: str, target_quantity: int) -> str:
+    """Stable idempotency key for an auto-bill seat increase.
+
+    Same ``(tenant_id, target_quantity)`` produces the same key, so retried
+    HTTP requests for the same logical operation are deduplicated by Stripe
+    (~24h window).
+    """
+    return f"seat-bill-{tenant_id}-{target_quantity}"
+
+
+def attempt_seat_billing_increase(
+    tenant_id: str,
+    target_quantity: int,
+) -> tuple[bool, str | None]:
+    """Attempt to set the tenant's Stripe seat quantity to ``target_quantity``.
+
+    Returns ``(True, None)`` on success.
+
+    Returns ``(False, reason)`` for billing-side declines that should reject
+    the originating signup:
+      - ``"card_declined"`` — Stripe ``CardError`` (insufficient funds, etc.)
+      - ``"subscription_invalid"`` — Stripe ``InvalidRequestError`` (e.g.,
+        no active subscription for this tenant)
+
+    Other Stripe errors (network, rate-limit, auth, generic API) propagate
+    so the caller fails closed rather than silently allowing a signup that
+    bypasses billing.
+
+    Idempotent: if the existing Stripe subscription quantity is already
+    >= ``target_quantity``, the call is a no-op and returns success without
+    reissuing the modify.
+    """
+    try:
+        response = fetch_tenant_stripe_information(tenant_id)
+        stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
+        if not stripe_subscription_id:
+            return False, "subscription_invalid"
+
+        subscription = stripe.Subscription.retrieve(stripe_subscription_id)
+        subscription_item = subscription["items"]["data"][0]
+        current_quantity = int(subscription_item.get("quantity", 0))
+        if current_quantity >= target_quantity:
+            return True, None
+
+        register_tenant_users(
+            tenant_id,
+            target_quantity,
+            idempotency_key=_seat_billing_idempotency_key(tenant_id, target_quantity),
+        )
+        return True, None
+    except stripe.CardError as e:
+        logger.warning(
+            "Card declined while billing seat increase for tenant %s: %s",
+            tenant_id,
+            e.user_message or str(e),
+        )
+        return False, "card_declined"
+    except stripe.InvalidRequestError as e:
+        logger.warning(
+            "Stripe rejected seat-billing increase for tenant %s: %s",
+            tenant_id,
+            str(e),
+        )
+        return False, "subscription_invalid"
+
+
+def enforce_cloud_seat_limit(seats_needed: int = 1) -> None:
+    """Cloud (multi-tenant) signup-time seat enforcer.
+
+    Computes ``target_quantity = current_active_users + seats_needed`` for
+    the current tenant and asks the control plane (via Stripe) to bill the
+    new total. Raises ``OnyxError(SEAT_LIMIT_EXCEEDED)`` when the auto-bill
+    is declined; returns silently on success.
+
+    Trial tenants short-circuit — the trial-invite cap in
+    ``bulk_invite_users`` is the only seat backstop for trial accounts.
+    """
+    tenant_id = get_current_tenant_id()
+    if is_tenant_on_trial_fn(tenant_id):
+        return
+
+    # Local import keeps the billing module loadable on environments that
+    # don't have the EE tenant package on the import path (e.g., CE tests
+    # that import billing only via ``fetch_ee_implementation_or_noop``).
+    from ee.onyx.server.tenants.user_mapping import get_tenant_count
+
+    current_count = get_tenant_count(tenant_id)
+    target_quantity = current_count + seats_needed
+
+    success, reason = attempt_seat_billing_increase(tenant_id, target_quantity)
+    if success:
+        return
+
+    if reason == "card_declined":
+        message = (
+            "Could not add a new seat: your payment method was declined. "
+            "Please update your billing details and try again."
+        )
+    elif reason == "subscription_invalid":
+        message = (
+            "Could not add a new seat: this tenant does not have an active "
+            "subscription. Please contact your Onyx administrator."
+        )
+    else:
+        message = "Could not add a new seat (billing declined)."
+
+    raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, message)
