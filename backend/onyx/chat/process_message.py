@@ -1264,9 +1264,13 @@ def _run_models(
                             continue
                         try:
                             succeeded = model_succeeded[i]
+
+                            def _stop_button_is_connected(s: bool = succeeded) -> bool:
+                                return s
+
                             llm_loop_completion_handle(
                                 state_container=state_containers[i],
-                                is_connected=lambda: succeeded,
+                                is_connected=_stop_button_is_connected,
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
