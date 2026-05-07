@@ -20,9 +20,6 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
-    BashExecResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
