@@ -3,10 +3,7 @@ from typing import cast
 from uuid import uuid4
 
 from pydantic import BaseModel
-<<<<<<< HEAD
 from sqlalchemy.orm import Session
-=======
->>>>>>> b8d16937dd (Coding agent as a tool)
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
@@ -22,10 +19,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-<<<<<<< HEAD
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-=======
->>>>>>> b8d16937dd (Coding agent as a tool)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -81,15 +75,12 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         return self.DISPLAY_NAME
 
     @override
-<<<<<<< HEAD
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
         """Available iff ``BashTool`` is available."""
         return BashTool.is_available(db_session)
 
     @override
-=======
->>>>>>> b8d16937dd (Coding agent as a tool)
     def tool_definition(self) -> dict:
         return {
             "type": "function",
