@@ -438,6 +438,7 @@ def run_coding_agent_call(
                             )
                         )
                         most_recent_reasoning = llm_step_result.reasoning
+                        cycle_count += 1
                         continue
 
                     # Otherwise: dispatch all bash tool calls sequentially.
