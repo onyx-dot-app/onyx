@@ -16,6 +16,7 @@ def _mock_db_session() -> MagicMock:
     return session
 
 
+@patch(f"{_S3_MODULE}.get_session_with_current_tenant")
 @patch(f"{_S3_MODULE}.get_session_with_current_tenant_if_none")
 @patch(f"{_S3_MODULE}.get_filerecord_by_file_id_optional", return_value=None)
 @patch(f"{_S3_MODULE}.get_filerecord_by_prefix")
@@ -23,11 +24,13 @@ def test_cleanup_all_batches_completes_when_files_already_deleted(
     mock_list: MagicMock,
     _mock_get_record: MagicMock,
     mock_ctx: MagicMock,
+    mock_session_ctx: MagicMock,
 ) -> None:
     """cleanup_all_batches must complete without raising even if every batch
     file is already gone — e.g. from a partial cleanup or a batch that was
     never written due to an earlier failure."""
     mock_ctx.return_value = _mock_db_session()
+    mock_session_ctx.return_value = _mock_db_session()
     mock_list.return_value = [
         MagicMock(file_id="iab/1/42/0.json"),
         MagicMock(file_id="iab/1/42/1.json"),
