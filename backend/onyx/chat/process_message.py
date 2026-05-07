@@ -65,6 +65,7 @@ from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
+from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
@@ -723,41 +724,58 @@ def build_chat_turn(
         project_id=chat_session.project_id,
     )
 
-    # Re-create linear history of messages
-    chat_history = create_chat_history_chain(
-        chat_session_id=chat_session.id, db_session=db_session
-    )
-
     # Determine the parent message based on the request:
-    # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in chain
+    # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in current mainline
     # - None or root ID: regeneration from root (first message)
-    # - positive int: place after that specific parent message
+    # - positive int: place after that specific parent message (any branch)
     root_message = get_or_create_root_message(
         chat_session_id=chat_session.id, db_session=db_session
     )
 
+    parent_message: ChatMessage
+    chat_history: list[ChatMessage]
     if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
+        chat_history = create_chat_history_chain(
+            chat_session_id=chat_session.id, db_session=db_session
+        )
         parent_message = chat_history[-1] if chat_history else root_message
     elif (
         new_msg_req.parent_message_id is None
         or new_msg_req.parent_message_id == root_message.id
     ):
-        # Regeneration from root — clear history so we start fresh
         parent_message = root_message
         chat_history = []
     else:
-        parent_message = None
-        for i in range(len(chat_history) - 1, -1, -1):
-            if chat_history[i].id == new_msg_req.parent_message_id:
-                parent_message = chat_history[i]
-                # Truncate to only messages up to and including the parent
-                chat_history = chat_history[: i + 1]
-                break
-
-    if parent_message is None:
-        raise ValueError(
-            "The new message sent is not on the latest mainline of messages"
+        # Walk UP from the supplied parent via the immutable parent_message_id
+        # chain. Independent of latest_child_message_id, which is rewritten by
+        # both the user's set-message-as-latest PUT and the streaming code at
+        # message creation/completion — those writers race and produce false
+        # rejections of "not on the latest mainline" when the client targets a
+        # branch the server's current mainline pointer doesn't reflect.
+        # Bulk-fetch session messages with tool calls eagerly loaded so the
+        # ancestor walk and downstream history iteration stay at one round trip.
+        # Session ownership was already validated by `get_chat_session_by_id`
+        # above, so skip the redundant permission re-check (extra DB query).
+        all_messages = get_chat_messages_by_session(
+            chat_session_id=chat_session.id,
+            user_id=user_id,
+            db_session=db_session,
+            skip_permission_check=True,
+            prefetch_top_two_level_tool_calls=True,
         )
+        by_id: dict[int, ChatMessage] = {m.id: m for m in all_messages}
+        target = by_id.get(new_msg_req.parent_message_id)
+        if target is None:
+            raise ValueError(
+                f"parent_message_id {new_msg_req.parent_message_id} is not in this chat session"
+            )
+        parent_message = target
+        chain_leaf_to_root: list[ChatMessage] = []
+        cur: ChatMessage | None = parent_message
+        while cur is not None and cur.parent_message_id is not None:
+            chain_leaf_to_root.append(cur)
+            cur = by_id.get(cur.parent_message_id)
+        chat_history = list(reversed(chain_leaf_to_root))
 
     # ── Query Processing hook + user message ─────────────────────────────────
     # Skipped on regeneration (parent is USER type): message already exists/was accepted.
@@ -797,6 +815,12 @@ def build_chat_turn(
             commit=True,
         )
         chat_history.append(user_message)
+
+    # Snapshot the full chain (root → user_message) BEFORE summary truncation
+    # filters chat_history. The completion-handle path uses this for the
+    # compression check post-stream so we don't have to re-fetch the whole
+    # session from the DB.
+    chat_history_with_user: list[ChatMessage] = list(chat_history)
 
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
@@ -1025,6 +1049,7 @@ def build_chat_turn(
         llms=llms,
         model_display_names=model_display_names,
         simple_chat_history=simple_chat_history,
+        chat_history_with_user=chat_history_with_user,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
         reserved_token_count=reserved_token_count,
@@ -1264,6 +1289,7 @@ def _run_models(
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
+                                pre_save_chat_history=setup.chat_history_with_user,
                             )
                         except Exception:
                             logger.exception(
@@ -1329,6 +1355,7 @@ def _run_models(
                     assistant_message=setup.reserved_messages[i],
                     llm=setup.llms[i],
                     reserved_tokens=setup.reserved_token_count,
+                    pre_save_chat_history=setup.chat_history_with_user,
                 )
             except Exception:
                 logger.exception(
@@ -1364,6 +1391,7 @@ def _run_models(
                             assistant_message=setup.reserved_messages[i],
                             llm=setup.llms[i],
                             reserved_tokens=setup.reserved_token_count,
+                            pre_save_chat_history=setup.chat_history_with_user,
                         )
                     except Exception:
                         logger.exception(
@@ -1671,6 +1699,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
+    pre_save_chat_history: list[ChatMessage],
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
@@ -1716,11 +1745,9 @@ def llm_loop_completion_handle(
         pre_answer_processing_time=pre_answer_processing_time,
     )
 
-    # Check if compression is needed after saving the message
-    updated_chat_history = create_chat_history_chain(
-        chat_session_id=chat_session_id,
-        db_session=db_session,
-    )
+    # Check if compression is needed after saving the message. The chain is
+    # already in memory (root → user → assistant) — no need to re-fetch.
+    updated_chat_history = pre_save_chat_history + [assistant_message]
     total_tokens = calculate_total_history_tokens(updated_chat_history)
 
     compression_params = get_compression_params(
