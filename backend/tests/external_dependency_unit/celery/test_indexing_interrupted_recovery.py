@@ -56,6 +56,13 @@ def cc_pair(db_session: Session):
     # Default refresh_freq=None blocks should_index by design; tests that
     # care about cadence override this on the connector directly.
     yield pair
+    # IndexAttempt has a non-cascading FK to connector_credential_pair, so
+    # cleanup_cc_pair's bulk delete fails if any attempts still reference
+    # this pair. Clear them first.
+    db_session.query(IndexAttempt).filter(
+        IndexAttempt.connector_credential_pair_id == pair.id
+    ).delete(synchronize_session="fetch")
+    db_session.commit()
     cleanup_cc_pair(db_session, pair)
 
 
@@ -216,12 +223,15 @@ class TestWatchdogInterruptedBranch:
         mock_redis_doc = MagicMock()
         mock_redis_doc.in_flight.return_value = 2
         mock_redis_doc.pending.return_value = 0
-        with patch(
-            "onyx.background.celery.tasks.docprocessing.tasks.RedisDocprocessing",
-            return_value=mock_redis_doc,
-        ), patch(
-            "onyx.background.celery.tasks.docprocessing.tasks.get_redis_client",
-            return_value=MagicMock(),
+        with (
+            patch(
+                "onyx.background.celery.tasks.docprocessing.tasks.RedisDocprocessing",
+                return_value=mock_redis_doc,
+            ),
+            patch(
+                "onyx.background.celery.tasks.docprocessing.tasks.get_redis_client",
+                return_value=MagicMock(),
+            ),
         ):
             validate_active_indexing_attempts(MagicMock())
 
@@ -253,6 +263,36 @@ class TestShouldIndexInterruptedBypass:
 
         # Last attempt was just marked INTERRUPTED — under normal cadence
         # rules we'd wait a full hour, but we should retry now.
+        _make_terminal_attempt(
+            db_session,
+            cc_pair,
+            search_settings,
+            status=IndexingStatus.INTERRUPTED,
+            time_updated=datetime.now(timezone.utc),
+        )
+
+        assert should_index(
+            cc_pair=cc_pair,
+            search_settings_instance=search_settings,
+            secondary_index_building=False,
+            db_session=db_session,
+        )
+
+    def test_interrupted_predecessor_bypasses_refresh_freq_none(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        search_settings: SearchSettings,
+    ) -> None:
+        """Regression for greptile review on PR #10926: one-time-sync
+        connectors (refresh_freq=None) must still auto-recover from an
+        INTERRUPTED predecessor — the INTERRUPTED check has to come before
+        the refresh_freq=None early-return, otherwise pod death on a
+        no-cadence connector strands the run forever.
+        """
+        cc_pair.connector.refresh_freq = None
+        db_session.commit()
+
         _make_terminal_attempt(
             db_session,
             cc_pair,
