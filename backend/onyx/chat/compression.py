@@ -353,9 +353,12 @@ def compress_chat_history(
 
     Sessions are short-lived: one for the read phase (existing summary +
     tool name map), the LLM call runs with no session held, and a fresh
-    session is opened to persist the summary. ``chat_history`` is read for
-    column attributes only (``id``, ``message``, ``last_summarized_message_id``);
-    callers may pass detached instances.
+    session is opened to persist the summary. ``chat_history`` items may
+    be detached, but callers must have eager-loaded the ``tool_calls``
+    relationship (e.g. via ``create_chat_history_chain`` with the default
+    ``prefetch_top_two_level_tool_calls=True``); ``_build_llm_messages_for_summarization``
+    walks ``msg.tool_calls`` and would raise ``DetachedInstanceError`` if
+    the relationship were lazy on a detached instance.
 
     For more details, see the COMPRESSION.md file.
 
@@ -395,7 +398,9 @@ def compress_chat_history(
                     existing_summary.message if existing_summary else None
                 )
                 all_tools = get_tools(read_session)
-                tool_id_to_name = {tool.id: tool.name for tool in all_tools}
+                tool_id_to_name: dict[int, str] = {
+                    tool.id: tool.name for tool in all_tools
+                }
 
             summary_content = get_messages_to_summarize(
                 chat_history,
