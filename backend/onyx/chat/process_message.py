@@ -1482,6 +1482,9 @@ def _stream_chat_turn(
         if new_msg_req.mock_llm_response is not None:
             mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
 
+        assert (
+            setup is not None
+        ), "build_chat_turn must complete before _run_models is called"
         yield from _run_models(
             setup=setup,
             user=user,
@@ -1678,7 +1681,8 @@ def llm_loop_completion_handle(
     pre_answer_processing_time = state_container.get_pre_answer_processing_time()
 
     completed_normally = is_connected()
-    chat_session_id = assistant_message.chat_session_id
+    chat_session_id: UUID = assistant_message.chat_session_id
+    assistant_message_id: int = assistant_message.id
     if completed_normally:
         if answer_tokens is None:
             raise RuntimeError(
@@ -1695,10 +1699,16 @@ def llm_loop_completion_handle(
             final_answer = "The generation was stopped by the user."
 
     # Open a short-lived session here rather than holding one across the LLM
-    # stream. Re-attach the (possibly detached) ChatMessage so save_chat_turn's
-    # attribute mutations are tracked and persisted on commit.
+    # stream. Re-fetch the ChatMessage so save_chat_turn's mutations are applied
+    # on top of current DB state — using merge() would silently overwrite any
+    # concurrent writes (admin edits, retries) made between build_chat_turn's
+    # commit and this completion handler.
     with get_session_with_current_tenant() as db_session:
-        attached_message = db_session.merge(assistant_message, load=False)
+        attached_message = db_session.get(ChatMessage, assistant_message_id)
+        if attached_message is None:
+            raise RuntimeError(
+                "ChatMessage %d not found during completion" % assistant_message_id
+            )
 
         save_chat_turn(
             message_text=final_answer,
