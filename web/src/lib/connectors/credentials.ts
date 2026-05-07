@@ -466,6 +466,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   federated_slack: null,
+  brain_page: null, // pushed via Ingestion API by the operator-brain layer
   discord: { discord_bot_token: "" } as DiscordCredentialJson,
 
   // NOTE: These are Special Cases

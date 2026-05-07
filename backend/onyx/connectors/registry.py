@@ -221,4 +221,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
     ),
+    # Operator brain pages — pushed via the Ingestion API; the connector
+    # is a passive placeholder so brain_page is registered as a real source
+    # (chat UI source filter only lists registered connectors).
+    DocumentSource.BRAIN_PAGE: ConnectorMapping(
+        module_path="onyx.connectors.brain_page.connector",
+        class_name="BrainPageConnector",
+    ),
 }

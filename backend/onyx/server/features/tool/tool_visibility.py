@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from onyx.db.models import Tool
 from onyx.tools.constants import MEMORY_TOOL_ID
 from onyx.tools.constants import OPEN_URL_TOOL_ID
+from onyx.tools.constants import SEARCH_TOOL_ID
 
 # Tool class name constant for OktaProfileTool (not in main constants.py as it's hidden)
 OKTA_PROFILE_TOOL_ID = "OktaProfileTool"
@@ -41,6 +42,15 @@ TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
         agent_creation_selectable=False,
         default_enabled=False,
         expose_to_frontend=False,
+    ),
+    # Internal Search is the operator-brain MVP retrieval surface. Default-on
+    # so personas with the tool attached (Operator Brain, etc.) actually
+    # invoke search without requiring a manual toggle in the chat input.
+    SEARCH_TOOL_ID: ToolVisibilitySettings(
+        chat_selectable=True,
+        agent_creation_selectable=True,
+        default_enabled=True,
+        expose_to_frontend=True,
     ),
     # Future tools can be added here with custom visibility rules
 }

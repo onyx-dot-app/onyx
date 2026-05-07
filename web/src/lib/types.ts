@@ -598,6 +598,11 @@ export enum ValidSources {
   // Craft-specific sources
   CraftFile = "craft_file",
 
+  // Operator brain pages — pushed via the Ingestion API; registered as a
+  // first-party source via a passive BrainPageConnector so they appear in
+  // the chat source-filter UI.
+  BrainPage = "brain_page",
+
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
@@ -633,6 +638,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
   | ValidSources.CraftFile // User Library - managed through dedicated UI
+  | ValidSources.BrainPage // managed via the operator-brain layer's Ingestion API
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

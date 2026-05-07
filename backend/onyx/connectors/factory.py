@@ -161,6 +161,9 @@ def validate_ccpair_for_user(
     if (
         connector.source == DocumentSource.INGESTION_API
         or connector.source == DocumentSource.MOCK_CONNECTOR
+        # Brain pages are pushed via the Ingestion API; no remote source to
+        # validate. Skip instantiation the same way INGESTION_API is skipped.
+        or connector.source == DocumentSource.BRAIN_PAGE
     ):
         return True
 

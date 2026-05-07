@@ -433,6 +433,18 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     customDescription: "Manage your uploaded files",
   },
 
+  // Operator brain pages — written via the Ingestion API by the
+  // operator-brain layer; the BrainPageConnector is a passive registration
+  // placeholder so brain_page surfaces as a chat source-filter option.
+  brain_page: {
+    icon: SvgGlobe,
+    displayName: "Brain Pages",
+    category: SourceCategory.Other,
+    isPopular: false, // Hidden from Add Connector page (push-only source)
+    alwaysConnected: true,
+    customDescription: "Per-operator compiled-truth pages and timelines",
+  },
+
   // Placeholder (non-null default)
   not_applicable: {
     icon: SvgGlobe,
@@ -483,7 +495,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         // use the "regular" slack connector when listing
         source !== "federated_slack" &&
         // user_file is for internal use (projects), not the Add Connector page
-        source !== "user_file"
+        source !== "user_file" &&
+        // brain_page is push-only (Ingestion API); not user-configurable
+        source !== "brain_page"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);
