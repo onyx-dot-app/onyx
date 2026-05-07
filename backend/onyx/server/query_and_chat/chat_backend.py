@@ -447,6 +447,11 @@ def rename_chat_session(
         max_total_tokens=max_tokens_for_naming,
     )
 
+    # Release the request-scoped connection back to the pool before the LLM
+    # call. Holding it across litellm.invoke() (2-10s) puts it at risk of
+    # idle-timeout drops by load balancers / PgBouncer.
+    db_session.close()
+
     with ensure_trace(
         "chat_session_naming",
         group_id=str(chat_session_id),
@@ -457,12 +462,13 @@ def rename_chat_session(
     ):
         new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
-    update_chat_session(
-        db_session=db_session,
-        user_id=user_id,
-        chat_session_id=chat_session_id,
-        description=new_name,
-    )
+    with get_session_with_current_tenant() as write_db_session:
+        update_chat_session(
+            db_session=write_db_session,
+            user_id=user_id,
+            chat_session_id=chat_session_id,
+            description=new_name,
+        )
 
     return RenameChatSessionResponse(new_name=new_name)
 
