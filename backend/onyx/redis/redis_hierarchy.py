@@ -20,7 +20,6 @@ from typing import cast
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -28,6 +27,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import ensure_source_node_exists as db_ensure_source_node_exists
 from onyx.db.hierarchy import get_all_hierarchy_nodes_for_source
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -120,7 +120,7 @@ def _unpack_parent_value(value: str) -> tuple[int | None, HierarchyNodeType | No
 
 
 def cache_hierarchy_node(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     entry: HierarchyNodeCacheEntry,
 ) -> None:
@@ -158,7 +158,7 @@ def cache_hierarchy_node(
 
 
 def cache_hierarchy_nodes_batch(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     entries: list[HierarchyNodeCacheEntry],
 ) -> None:
@@ -206,7 +206,7 @@ def cache_hierarchy_nodes_batch(
 
 
 def evict_hierarchy_nodes_from_cache(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     raw_node_ids: list[str],
 ) -> None:
@@ -230,7 +230,7 @@ def evict_hierarchy_nodes_from_cache(
 
 
 def get_node_id_from_raw_id(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     raw_node_id: str,
 ) -> tuple[int | None, bool]:
@@ -259,7 +259,7 @@ def get_node_id_from_raw_id(
 
 
 def get_parent_id_from_cache(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     node_id: int,
 ) -> tuple[int | None, bool]:
@@ -288,18 +288,15 @@ def get_parent_id_from_cache(
     return parent_id, True
 
 
-def is_cache_populated(redis_client: Redis, source: DocumentSource) -> bool:
+def is_cache_populated(redis_client: TenantRedisClient, source: DocumentSource) -> bool:
     """Check if the cache has any entries for this source."""
     cache_key = _cache_key(source)
     # redis.exists returns int (number of keys that exist)
-    exists_result: int = redis_client.exists(  # ty: ignore[invalid-assignment]
-        cache_key
-    )
-    return exists_result > 0
+    return redis_client.exists(cache_key) > 0
 
 
 def refresh_hierarchy_cache_from_db(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     db_session: Session,
     source: DocumentSource,
 ) -> None:
@@ -362,7 +359,7 @@ def refresh_hierarchy_cache_from_db(
 
 
 def _walk_ancestor_chain(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     start_node_id: int,
     db_session: Session,
@@ -424,7 +421,7 @@ def _walk_ancestor_chain(
 
 
 def get_ancestors_from_raw_id(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     parent_hierarchy_raw_node_id: str | None,
     db_session: Session,
@@ -484,7 +481,7 @@ def get_ancestors_from_raw_id(
 
 
 def get_source_node_id_from_cache(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     db_session: Session,
     source: DocumentSource,
 ) -> int | None:
@@ -523,7 +520,9 @@ def get_source_node_id_from_cache(
     return None
 
 
-def clear_hierarchy_cache(redis_client: Redis, source: DocumentSource) -> None:
+def clear_hierarchy_cache(
+    redis_client: TenantRedisClient, source: DocumentSource
+) -> None:
     """Clear the hierarchy cache for a source (useful for testing)."""
     cache_key = _cache_key(source)
     raw_id_key = _raw_id_cache_key(source)
@@ -534,7 +533,7 @@ def clear_hierarchy_cache(redis_client: Redis, source: DocumentSource) -> None:
 
 
 def ensure_source_node_exists(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     db_session: Session,
     source: DocumentSource,
 ) -> int:

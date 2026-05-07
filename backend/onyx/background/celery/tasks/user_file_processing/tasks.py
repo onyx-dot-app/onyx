@@ -8,7 +8,6 @@ import sqlalchemy as sa
 from celery import Celery
 from celery import shared_task
 from celery import Task
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
@@ -59,6 +58,7 @@ from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAd
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.variable_functionality import global_version
 
 
@@ -115,7 +115,7 @@ def get_user_file_project_sync_queue_depth(celery_app: Celery) -> int:
 def enqueue_user_file_project_sync_task(
     *,
     celery_app: Celery,
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     user_file_id: str | UUID,
     tenant_id: str,
     priority: OnyxCeleryPriority = OnyxCeleryPriority.HIGH,

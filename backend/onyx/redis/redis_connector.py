@@ -1,11 +1,10 @@
-import redis
-
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 # TODO: reduce dependence on redis
@@ -18,7 +17,7 @@ class RedisConnector:
 
         self.tenant_id: str = tenant_id
         self.cc_pair_id: int = cc_pair_id
-        self.redis: redis.Redis = get_redis_client(tenant_id=tenant_id)
+        self.redis: TenantRedisClient = get_redis_client(tenant_id=tenant_id)
 
         self.stop = RedisConnectorStop(tenant_id, cc_pair_id, self.redis)
         self.prune = RedisConnectorPrune(tenant_id, cc_pair_id, self.redis)

@@ -16,13 +16,13 @@ fails open with a logged warning so core invite flows continue to work.
 from dataclasses import dataclass
 from uuid import UUID
 
-from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,13 +45,10 @@ _INVITE_TENANT_PER_DAY = 15
 _REMOVE_ADMIN_PER_MIN = 3
 _REMOVE_ADMIN_PER_DAY = 30
 
-# Per-admin buckets are accidentally safe without an explicit tenant
-# prefix because admin UUIDs are globally unique. The tenant/day bucket
-# MUST embed the tenant_id directly: TenantRedis.__getattribute__ only
-# prefixes commands in an explicit allowlist and `eval` is not on it, so
-# keys passed to the Lua script reach Redis bare. A key of
-# "ratelimit:invite_put:tenant:day" would be shared across every trial
-# tenant, exhausting one global counter for the whole cluster.
+# Per-admin buckets are scoped by globally unique admin UUIDs. The tenant/day
+# bucket also embeds the tenant_id directly so two tenants never share a
+# bucket even when the script keys collide post-prefixing — defence in depth
+# alongside the per-tenant Redis prefix applied by ``TenantRedisClient``.
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
 _INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:{tenant_id}:day"
@@ -103,7 +100,7 @@ class _Bucket:
     increment: int
 
 
-def _run_atomic(redis_client: Redis, buckets: list[_Bucket]) -> None:
+def _run_atomic(redis_client: TenantRedisClient, buckets: list[_Bucket]) -> None:
     """Run the check+increment Lua script. Raise OnyxError on rejection.
 
     On Redis connection / timeout errors the rate limiter fails open: the
@@ -120,11 +117,10 @@ def _run_atomic(redis_client: Redis, buckets: list[_Bucket]) -> None:
         argv.extend([str(b.increment), str(b.limit), str(b.ttl_seconds)])
 
     try:
-        result = redis_client.eval(  # type: ignore[no-untyped-call]
+        result = redis_client.eval(
             _CHECK_AND_INCREMENT_SCRIPT,
-            len(keys),
-            *keys,
-            *argv,
+            keys=keys,
+            args=argv,
         )
     except (RedisConnectionError, RedisTimeoutError) as e:
         logger.warning(
@@ -158,7 +154,7 @@ def _run_atomic(redis_client: Redis, buckets: list[_Bucket]) -> None:
 
 
 def enforce_invite_rate_limit(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     admin_user_id: UUID | str,
     num_invites: int,
     tenant_id: str,
@@ -206,7 +202,7 @@ def enforce_invite_rate_limit(
 
 
 def enforce_remove_invited_rate_limit(
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     admin_user_id: UUID | str,
 ) -> None:
     """Check+record remove-invited-user quotas for an admin user.

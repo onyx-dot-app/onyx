@@ -3,7 +3,6 @@ import base64
 import datetime
 import hashlib
 import json
-from collections.abc import Awaitable
 from enum import Enum
 from secrets import token_urlsafe
 from typing import cast
@@ -364,8 +363,6 @@ def make_oauth_provider(
         r = get_redis_client()
         # Wait up to TTL for the code published by the /oauth/callback route
         state = r.get(key_state(user_id))
-        if isinstance(state, Awaitable):
-            state = await state
         if not state:
             raise RuntimeError("No pending OAuth state for user")
         state_obj = MCPOauthState.model_validate_json(state)
@@ -383,9 +380,7 @@ def make_oauth_provider(
         if not pop:
             raise RuntimeError("Timed out waiting for OAuth callback")
 
-        code_state_bytes = cast(tuple[bytes, bytes], pop)
-
-        code_state_dict = json.loads(code_state_bytes[1].decode())
+        code_state_dict = json.loads(pop[1].decode())
 
         code = code_state_dict["code"]
 
@@ -654,8 +649,7 @@ async def _connect_oauth(
         )
         if raw is None:
             return None
-        tup = cast(tuple[bytes, bytes], raw)
-        return tup[1].decode()
+        return raw[1].decode()
 
     auth_task = None if is_connected else asyncio.create_task(wait_auth_url())
 
@@ -779,8 +773,7 @@ async def process_oauth_callback(
     )
     if tokens_raw is None:
         raise HTTPException(status_code=400, detail="No tokens found")
-    tokens_bytes = cast(tuple[bytes, bytes], tokens_raw)
-    tokens = OAuthToken.model_validate_json(tokens_bytes[1].decode())
+    tokens = OAuthToken.model_validate_json(tokens_raw[1].decode())
 
     if not tokens.access_token:
         raise HTTPException(status_code=400, detail="No access_token in OAuth response")

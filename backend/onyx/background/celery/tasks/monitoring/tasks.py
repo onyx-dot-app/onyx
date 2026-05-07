@@ -42,6 +42,7 @@ from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.platform import is_running_in_container
 from onyx.utils.platform import is_running_in_kubernetes
 from onyx.utils.telemetry import optional_telemetry
@@ -72,12 +73,12 @@ _SYNC_START_TIME_KEY_FMT = "sync_start_time:{sync_type}:{entity_id}:{sync_record
 _SYNC_END_TIME_KEY_FMT = "sync_end_time:{sync_type}:{entity_id}:{sync_record_id}"
 
 
-def _mark_metric_as_emitted(redis_std: Redis, key: str) -> None:
+def _mark_metric_as_emitted(redis_std: TenantRedisClient, key: str) -> None:
     """Mark a metric as having been emitted by setting a Redis key with expiration"""
     redis_std.set(key, "1", ex=24 * 60 * 60)  # Expire after 1 day
 
 
-def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
+def _has_metric_been_emitted(redis_std: TenantRedisClient, key: str) -> bool:
     """Check if a metric has been emitted by checking for existence of Redis key"""
     return bool(redis_std.exists(key))
 
@@ -185,7 +186,7 @@ def _build_connector_start_latency_metric(
     cc_pair: ConnectorCredentialPair,
     recent_attempt: IndexAttempt,
     second_most_recent_attempt: IndexAttempt | None,
-    redis_std: Redis,
+    redis_std: TenantRedisClient,
 ) -> Metric | None:
     if not recent_attempt.time_started:
         return None
@@ -243,7 +244,7 @@ def _build_connector_start_latency_metric(
 def _build_connector_final_metrics(
     cc_pair: ConnectorCredentialPair,
     recent_attempts: list[IndexAttempt],
-    redis_std: Redis,
+    redis_std: TenantRedisClient,
 ) -> list[Metric]:
     """
     Final metrics for connector index attempts:
@@ -331,7 +332,9 @@ def _build_connector_final_metrics(
     return metrics
 
 
-def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
+def _collect_connector_metrics(
+    db_session: Session, redis_std: TenantRedisClient
+) -> list[Metric]:
     """Collect metrics about connector runs from the past hour"""
     one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
@@ -431,7 +434,9 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
     return metrics
 
 
-def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
+def _collect_sync_metrics(
+    db_session: Session, redis_std: TenantRedisClient
+) -> list[Metric]:
     """
     Collect metrics for document set and group syncing:
       - Success/failure status
