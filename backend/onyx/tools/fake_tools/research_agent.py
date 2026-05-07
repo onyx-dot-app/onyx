@@ -1,5 +1,4 @@
 import queue
-import time
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -13,23 +12,18 @@ from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
-from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import (
     get_research_agent_additional_tool_definitions,
 )
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
 from onyx.deep_research.models import CombinedResearchAgentCallResult
 from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.deep_research.utils import check_special_tool_calls
-from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
@@ -54,14 +48,13 @@ from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedD
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.tools.fake_tools.agent_loop_utils import build_assistant_with_tool_calls
+from onyx.tools.fake_tools.agentic_agent_base import AgenticAgentBase
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
@@ -203,6 +196,249 @@ def generate_intermediate_report(
         return final_report
 
 
+class ResearchAgent(AgenticAgentBase[ResearchAgentCallResult]):
+    agent_name = "research_agent"
+    max_cycles = MAX_RESEARCH_CYCLES
+    force_finalize_seconds = RESEARCH_AGENT_FORCE_REPORT_SECONDS
+    finalize_tool_name = GENERATE_REPORT_TOOL_NAME
+    # In case the model is tripped up by the long context and gets into an
+    # endless loop of e.g. null tokens, we cap output. None of the tool calls
+    # should be this long.
+    max_step_tokens = 1000
+    is_deep_research = True
+
+    def __init__(
+        self,
+        kickoff: ToolCallKickoff,
+        emitter: Emitter,
+        llm: LLM,
+        token_counter: Callable[[str], int],
+        user_identity: LLMUserIdentity | None,
+        *,
+        parent_tool_call_id: str,
+        tools: list[Tool],
+        state_container: ChatStateContainer,
+    ):
+        super().__init__(kickoff, emitter, llm, token_counter, user_identity)
+        self.parent_tool_call_id = parent_tool_call_id
+        self.tools = tools
+        self.state_container = state_container
+        self.tools_by_name: dict[str, Tool] = {t.name: t for t in tools}
+        # If this fails to parse, the loop can't run anyway — let it raise.
+        self.research_topic: str = kickoff.tool_args[RESEARCH_AGENT_TASK_KEY]
+        # KEEP_MARKERS preserves citation markers like [1], [2] in intermediate
+        # reports so collapse_citations() can renumber them in the final report.
+        self.citation_processor = DynamicCitationProcessor(
+            citation_mode=CitationMode.KEEP_MARKERS
+        )
+        self.citation_mapping: dict[int, str] = {}
+        self.just_ran_web_search = False
+
+    def emit_start(self) -> None:
+        self.emitter.emit(
+            Packet(
+                placement=self.root_placement,
+                obj=ResearchAgentStart(research_task=self.research_topic),
+            )
+        )
+
+    def initial_user_message(self) -> ChatMessageSimple:
+        return ChatMessageSimple(
+            message=self.research_topic,
+            token_count=self.token_counter(self.research_topic),
+            message_type=MessageType.USER,
+        )
+
+    def render_system_prompt(self, cycle: int) -> str:
+        tools_description = generate_tools_description(self.tools)
+        internal_search_tip = (
+            INTERNAL_SEARCH_GUIDANCE
+            if any(isinstance(t, SearchTool) for t in self.tools)
+            else ""
+        )
+        web_search_tip = (
+            WEB_SEARCH_TOOL_DESCRIPTION
+            if any(isinstance(t, WebSearchTool) for t in self.tools)
+            else ""
+        )
+        open_urls_tip = (
+            OPEN_URLS_TOOL_DESCRIPTION
+            if any(isinstance(t, OpenURLTool) for t in self.tools)
+            else ""
+        )
+        if self.is_reasoning_model and open_urls_tip:
+            open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
+
+        template = (
+            RESEARCH_AGENT_PROMPT_REASONING
+            if self.is_reasoning_model
+            else RESEARCH_AGENT_PROMPT
+        )
+        return template.format(
+            available_tools=tools_description,
+            current_datetime=get_current_llm_day_time(full_sentence=False),
+            current_cycle_count=cycle,
+            optional_internal_search_tool_description=internal_search_tip,
+            optional_web_search_tool_description=web_search_tip,
+            optional_open_url_tool_description=open_urls_tip,
+        )
+
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        return [tool.tool_definition() for tool in self.tools] + (
+            get_research_agent_additional_tool_definitions(
+                include_think_tool=not self.is_reasoning_model
+            )
+        )
+
+    def reminder_message(self) -> ChatMessageSimple | None:
+        if not self.just_ran_web_search:
+            return None
+        # Consume the flag — the reminder applies once after a web search
+        # produced docs.
+        self.just_ran_web_search = False
+        return ChatMessageSimple(
+            message=OPEN_URL_REMINDER_RESEARCH_AGENT,
+            token_count=100,
+            message_type=MessageType.USER,
+        )
+
+    def filter_tool_calls(
+        self, tool_calls: list[ToolCallKickoff]
+    ) -> list[ToolCallKickoff]:
+        # TODO handle the restriction of only 1 tool call type per turn —
+        # the Placement system can't differentiate sub-tool calls of mixed
+        # types yet, so keep only the first type the model emitted.
+        if not tool_calls:
+            return tool_calls
+        first_type = tool_calls[0].tool_name
+        return [tc for tc in tool_calls if tc.tool_name == first_type]
+
+    def execute_tool_calls(
+        self,
+        tool_calls: list[ToolCallKickoff],
+        step_result: LlmStepResult,
+        step_placement: Placement,
+    ) -> bool:
+        parallel_results = run_tool_calls(
+            tool_calls=tool_calls,
+            tools=self.tools,
+            message_history=self.msg_history,
+            user_memory_context=None,
+            user_info=None,
+            citation_mapping=self.citation_mapping,
+            next_citation_num=self.citation_processor.get_next_citation_number(),
+            # Packets can't differentiate parallel calls at a nested level;
+            # deep research doesn't actually emit parallel anyway.
+            max_concurrent_tools=1,
+            skip_search_query_expansion=False,
+            url_snippet_map=extract_url_snippet_map(
+                [
+                    search_doc
+                    for tc in self.state_container.get_tool_calls()
+                    if tc.search_docs
+                    for search_doc in tc.search_docs
+                ]
+            ),
+        )
+        self.citation_mapping = parallel_results.updated_citation_mapping
+
+        if tool_calls and not parallel_results.tool_responses:
+            # Tool dispatch failed entirely; record failure messages and
+            # continue so we don't infinite-loop on the same prompt.
+            failure_messages = create_tool_call_failure_messages(
+                tool_calls, self.token_counter
+            )
+            self.msg_history.extend(failure_messages)
+            return True
+
+        valid_tool_responses = [
+            tr for tr in parallel_results.tool_responses if tr.tool_call is not None
+        ]
+        if not valid_tool_responses:
+            return True
+
+        # OpenAI parallel-tool-calls form: one assistant message bundling
+        # every call, then TOOL_CALL_RESPONSE messages one-per-call.
+        valid_tool_calls = [
+            tr.tool_call for tr in valid_tool_responses if tr.tool_call is not None
+        ]
+        self.msg_history.append(
+            build_assistant_with_tool_calls(
+                tool_calls=valid_tool_calls, token_counter=self.token_counter
+            )
+        )
+
+        for tool_response in valid_tool_responses:
+            tc = tool_response.tool_call
+            assert tc is not None  # filtered above
+            tool = self.tools_by_name.get(tc.tool_name)
+            if not tool:
+                raise ValueError(f"Tool '{tc.tool_name}' not found in tools list")
+
+            search_docs = None
+            displayed_docs = None
+            if isinstance(tool_response.rich_response, SearchDocsResponse):
+                search_docs = tool_response.rich_response.search_docs
+                displayed_docs = tool_response.rich_response.displayed_docs
+                if search_docs:
+                    self.state_container.add_search_docs(search_docs)
+                # Open-URL reminder fires only when web search yielded docs.
+                if search_docs and tc.tool_name == WebSearchTool.NAME:
+                    self.just_ran_web_search = True
+
+            update_citation_processor_from_tool_response(
+                tool_response=tool_response,
+                citation_processor=self.citation_processor,
+            )
+
+            # Research Agent is a top-level tool call; tools called by the
+            # research agent are sub-tool calls. At DB save time there's
+            # only a turn index — sub-turn is implied by the parent's turn
+            # and the depth of the tree traversal.
+            tool_call_info = ToolCallInfo(
+                parent_tool_call_id=self.parent_tool_call_id,
+                turn_index=step_placement.sub_turn_index or 0,
+                tab_index=tc.placement.tab_index,
+                tool_name=tc.tool_name,
+                tool_call_id=tc.tool_call_id,
+                tool_id=tool.id,
+                reasoning_tokens=step_result.reasoning or self.most_recent_reasoning,
+                tool_call_arguments=tc.tool_args,
+                tool_call_response=tool_response.llm_facing_response,
+                search_docs=displayed_docs or search_docs,
+                generated_images=None,
+            )
+            self.state_container.add_tool_call(tool_call_info)
+
+            self.msg_history.append(
+                ChatMessageSimple(
+                    message=tool_response.llm_facing_response,
+                    token_count=self.token_counter(tool_response.llm_facing_response),
+                    message_type=MessageType.TOOL_CALL_RESPONSE,
+                    tool_call_id=tc.tool_call_id,
+                    image_files=None,
+                )
+            )
+
+        return True
+
+    def finalize(self) -> ResearchAgentCallResult:
+        final_report = generate_intermediate_report(
+            research_topic=self.research_topic,
+            history=self.msg_history,
+            llm=self.llm,
+            token_counter=self.token_counter,
+            citation_processor=self.citation_processor,
+            user_identity=self.user_identity,
+            emitter=self.emitter,
+            placement=self.root_placement,
+        )
+        return ResearchAgentCallResult(
+            intermediate_report=final_report,
+            citation_mapping=self.citation_processor.get_seen_citations(),
+        )
+
+
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
     parent_tool_call_id: str,
@@ -210,413 +446,20 @@ def run_research_agent_call(
     emitter: Emitter,
     state_container: ChatStateContainer,
     llm: LLM,
-    is_reasoning_model: bool,
+    is_reasoning_model: bool,  # noqa: ARG001 — derived from llm; kept for API stability
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
 ) -> ResearchAgentCallResult | None:
-    turn_index = research_agent_call.placement.turn_index
-    tab_index = research_agent_call.placement.tab_index
-    with function_span("research_agent") as span:
-        span.span_data.input = str(research_agent_call.tool_args)
-        try:
-            # Track start time for timeout-based forced report generation
-            start_time = time.monotonic()
-
-            # Used to track citations while keeping original citation markers in intermediate reports.
-            # KEEP_MARKERS preserves citation markers like [1], [2] in the text unchanged
-            # while tracking which documents were cited via get_seen_citations().
-            # This allows collapse_citations() to later renumber them in the final report.
-            citation_processor = DynamicCitationProcessor(
-                citation_mode=CitationMode.KEEP_MARKERS
-            )
-
-            research_cycle_count = 0
-            llm_cycle_count = 0
-            current_tools = tools
-            reasoning_cycles = 0
-            just_ran_web_search = False
-
-            # If this fails to parse, we can't run the loop anyway, let this one fail in that case
-            research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
-
-            emitter.emit(
-                Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
-                    obj=ResearchAgentStart(research_task=research_topic),
-                )
-            )
-
-            initial_user_message = ChatMessageSimple(
-                message=research_topic,
-                token_count=token_counter(research_topic),
-                message_type=MessageType.USER,
-            )
-            msg_history: list[ChatMessageSimple] = [initial_user_message]
-
-            citation_mapping: dict[int, str] = {}
-            most_recent_reasoning: str | None = None
-            while research_cycle_count <= MAX_RESEARCH_CYCLES:
-                # Check if we've exceeded the time limit - if so, skip LLM and generate report
-                elapsed_seconds = time.monotonic() - start_time
-                if elapsed_seconds > RESEARCH_AGENT_FORCE_REPORT_SECONDS:
-                    logger.info(
-                        "Research agent exceeded %ss (elapsed: %ss), forcing intermediate report generation",
-                        RESEARCH_AGENT_FORCE_REPORT_SECONDS,
-                        format(elapsed_seconds, ".1f"),
-                    )
-                    break
-
-                if research_cycle_count == MAX_RESEARCH_CYCLES:
-                    # Auto-generate report on last cycle
-                    logger.debug("Auto-generating intermediate report on last cycle.")
-                    break
-
-                tools_by_name = {tool.name: tool for tool in current_tools}
-
-                tools_description = generate_tools_description(current_tools)
-
-                internal_search_tip = (
-                    INTERNAL_SEARCH_GUIDANCE
-                    if any(isinstance(tool, SearchTool) for tool in current_tools)
-                    else ""
-                )
-                web_search_tip = (
-                    WEB_SEARCH_TOOL_DESCRIPTION
-                    if any(isinstance(tool, WebSearchTool) for tool in current_tools)
-                    else ""
-                )
-                open_urls_tip = (
-                    OPEN_URLS_TOOL_DESCRIPTION
-                    if any(isinstance(tool, OpenURLTool) for tool in current_tools)
-                    else ""
-                )
-                if is_reasoning_model and open_urls_tip:
-                    open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
-
-                system_prompt_template = (
-                    RESEARCH_AGENT_PROMPT_REASONING
-                    if is_reasoning_model
-                    else RESEARCH_AGENT_PROMPT
-                )
-                system_prompt_str = system_prompt_template.format(
-                    available_tools=tools_description,
-                    current_datetime=get_current_llm_day_time(full_sentence=False),
-                    current_cycle_count=research_cycle_count,
-                    optional_internal_search_tool_description=internal_search_tip,
-                    optional_web_search_tool_description=web_search_tip,
-                    optional_open_url_tool_description=open_urls_tip,
-                )
-
-                system_prompt = ChatMessageSimple(
-                    message=system_prompt_str,
-                    token_count=token_counter(system_prompt_str),
-                    message_type=MessageType.SYSTEM,
-                )
-
-                if just_ran_web_search:
-                    reminder_message = ChatMessageSimple(
-                        message=OPEN_URL_REMINDER_RESEARCH_AGENT,
-                        token_count=100,
-                        message_type=MessageType.USER,
-                    )
-                else:
-                    reminder_message = None
-
-                constructed_history = construct_message_history(
-                    system_prompt=system_prompt,
-                    custom_agent_prompt=None,
-                    simple_chat_history=msg_history,
-                    reminder_message=reminder_message,
-                    context_files=None,
-                    available_tokens=llm.config.max_input_tokens,
-                )
-
-                research_agent_tools = get_research_agent_additional_tool_definitions(
-                    include_think_tool=not is_reasoning_model
-                )
-                # Use think tool processor for non-reasoning models to convert
-                # think_tool calls to reasoning content (same as dr_loop.py)
-                custom_processor = (
-                    create_think_tool_token_processor()
-                    if not is_reasoning_model
-                    else None
-                )
-
-                llm_step_result, has_reasoned = run_llm_step(
-                    emitter=emitter,
-                    history=constructed_history,
-                    tool_definitions=[tool.tool_definition() for tool in current_tools]
-                    + research_agent_tools,
-                    tool_choice=ToolChoiceOptions.REQUIRED,
-                    llm=llm,
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=llm_cycle_count + reasoning_cycles,
-                    ),
-                    citation_processor=None,
-                    state_container=None,
-                    reasoning_effort=ReasoningEffort.LOW,
-                    final_documents=None,
-                    user_identity=user_identity,
-                    custom_token_processor=custom_processor,
-                    use_existing_tab_index=True,
-                    is_deep_research=True,
-                    # In case the model is tripped up by the long context and gets into an endless loop of
-                    # things like null tokens, we set a max token limit here. The call will likely not be valid
-                    # in these situations but it at least allows a chance of recovery. None of the tool calls should
-                    # be this long.
-                    max_tokens=1000,
-                )
-                if has_reasoned:
-                    reasoning_cycles += 1
-
-                tool_responses: list[ToolResponse] = []
-                tool_calls = llm_step_result.tool_calls or []
-
-                # TODO handle the restriction of only 1 tool call type per turn
-                # This is a problem right now because of the Placement system not allowing for
-                # differentiating sub-tool calls.
-                # Filter tool calls to only include the first tool type used
-                # This prevents mixing different tool types in the same batch
-                if tool_calls:
-                    first_tool_type = tool_calls[0].tool_name
-                    tool_calls = [
-                        tc for tc in tool_calls if tc.tool_name == first_tool_type
-                    ]
-
-                just_ran_web_search = False
-
-                special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
-                if special_tool_calls.generate_report_tool_call:
-                    final_report = generate_intermediate_report(
-                        research_topic=research_topic,
-                        history=msg_history,
-                        llm=llm,
-                        token_counter=token_counter,
-                        citation_processor=citation_processor,
-                        user_identity=user_identity,
-                        emitter=emitter,
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                        ),
-                    )
-                    span.span_data.output = final_report if final_report else None
-                    return ResearchAgentCallResult(
-                        intermediate_report=final_report,
-                        citation_mapping=citation_processor.get_seen_citations(),
-                    )
-                elif special_tool_calls.think_tool_call:
-                    think_tool_call = special_tool_calls.think_tool_call
-                    tool_call_message = think_tool_call.to_msg_str()
-                    tool_call_token_count = token_counter(tool_call_message)
-
-                    with function_span("think_tool") as think_span:
-                        think_span.span_data.input = str(think_tool_call.tool_args)
-
-                        # Create ASSISTANT message with tool_calls (OpenAI parallel format)
-                        think_tool_simple = ToolCallSimple(
-                            tool_call_id=think_tool_call.tool_call_id,
-                            tool_name=think_tool_call.tool_name,
-                            tool_arguments=think_tool_call.tool_args,
-                            token_count=tool_call_token_count,
-                        )
-                        think_assistant_msg = ChatMessageSimple(
-                            message="",
-                            token_count=tool_call_token_count,
-                            message_type=MessageType.ASSISTANT,
-                            tool_calls=[think_tool_simple],
-                            image_files=None,
-                        )
-                        msg_history.append(think_assistant_msg)
-
-                        think_tool_response_msg = ChatMessageSimple(
-                            message=THINK_TOOL_RESPONSE_MESSAGE,
-                            token_count=THINK_TOOL_RESPONSE_TOKEN_COUNT,
-                            message_type=MessageType.TOOL_CALL_RESPONSE,
-                            tool_call_id=think_tool_call.tool_call_id,
-                            image_files=None,
-                        )
-                        msg_history.append(think_tool_response_msg)
-                        think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
-                    reasoning_cycles += 1
-                    most_recent_reasoning = llm_step_result.reasoning
-                    continue
-                else:
-                    parallel_tool_call_results = run_tool_calls(
-                        tool_calls=tool_calls,
-                        tools=current_tools,
-                        message_history=msg_history,
-                        user_memory_context=None,
-                        user_info=None,
-                        citation_mapping=citation_mapping,
-                        next_citation_num=citation_processor.get_next_citation_number(),
-                        # Packets currently cannot differentiate between parallel calls in a nested level
-                        # so we just cannot show parallel calls in the UI. This should not happen for deep research anyhow.
-                        max_concurrent_tools=1,
-                        # May be better to not do this step, hard to say, needs to be tested
-                        skip_search_query_expansion=False,
-                        url_snippet_map=extract_url_snippet_map(
-                            [
-                                search_doc
-                                for tool_call in state_container.get_tool_calls()
-                                if tool_call.search_docs
-                                for search_doc in tool_call.search_docs
-                            ]
-                        ),
-                    )
-                    tool_responses = parallel_tool_call_results.tool_responses
-                    citation_mapping = (
-                        parallel_tool_call_results.updated_citation_mapping
-                    )
-
-                    if tool_calls and not tool_responses:
-                        failure_messages = create_tool_call_failure_messages(
-                            tool_calls, token_counter
-                        )
-                        msg_history.extend(failure_messages)
-
-                        # If there is a failure like this, we still increment to avoid potential infinite loops
-                        research_cycle_count += 1
-                        llm_cycle_count += 1
-                        continue
-
-                    # Filter to only responses with valid tool_call references
-                    valid_tool_responses = [
-                        tr for tr in tool_responses if tr.tool_call is not None
-                    ]
-
-                    # Build ONE ASSISTANT message with all tool calls (OpenAI parallel format)
-                    if valid_tool_responses:
-                        tool_calls_simple: list[ToolCallSimple] = []
-                        for tool_response in valid_tool_responses:
-                            tc = tool_response.tool_call
-                            assert tc is not None  # Already filtered above
-                            tool_call_message = tc.to_msg_str()
-                            tool_call_token_count = token_counter(tool_call_message)
-                            tool_calls_simple.append(
-                                ToolCallSimple(
-                                    tool_call_id=tc.tool_call_id,
-                                    tool_name=tc.tool_name,
-                                    tool_arguments=tc.tool_args,
-                                    token_count=tool_call_token_count,
-                                )
-                            )
-
-                        total_tool_call_tokens = sum(
-                            tc.token_count for tc in tool_calls_simple
-                        )
-                        assistant_with_tools = ChatMessageSimple(
-                            message="",
-                            token_count=total_tool_call_tokens,
-                            message_type=MessageType.ASSISTANT,
-                            tool_calls=tool_calls_simple,
-                            image_files=None,
-                        )
-                        msg_history.append(assistant_with_tools)
-
-                    # Now add tool call info and TOOL_CALL_RESPONSE messages for each
-                    for tool_response in valid_tool_responses:
-                        tc = tool_response.tool_call
-                        assert tc is not None  # Already filtered above
-                        tool_call_tab_index = tc.placement.tab_index
-
-                        tool = tools_by_name.get(tc.tool_name)
-                        if not tool:
-                            raise ValueError(
-                                f"Tool '{tc.tool_name}' not found in tools list"
-                            )
-
-                        search_docs = None
-                        displayed_docs = None
-                        if isinstance(tool_response.rich_response, SearchDocsResponse):
-                            search_docs = tool_response.rich_response.search_docs
-                            displayed_docs = tool_response.rich_response.displayed_docs
-
-                            # Add ALL search docs to state container for DB persistence
-                            if search_docs:
-                                state_container.add_search_docs(search_docs)
-
-                            # This is used for the Open URL reminder in the next cycle
-                            # only do this if the web search tool yielded results
-                            if search_docs and tc.tool_name == WebSearchTool.NAME:
-                                just_ran_web_search = True
-
-                        # Makes sure the citation processor is updated with all the possible docs
-                        # and citation numbers so that it's populated when passed in to report generation.
-                        update_citation_processor_from_tool_response(
-                            tool_response=tool_response,
-                            citation_processor=citation_processor,
-                        )
-
-                        # Research Agent is a top level tool call but the tools called by the research
-                        # agent are sub-tool calls.
-                        tool_call_info = ToolCallInfo(
-                            parent_tool_call_id=parent_tool_call_id,
-                            # At the DB save level, there is only a turn index, no sub-turn etc.
-                            # This is implied by the parent tool call's turn index and the depth
-                            # of the tree traversal.
-                            turn_index=llm_cycle_count + reasoning_cycles,
-                            tab_index=tool_call_tab_index,
-                            tool_name=tc.tool_name,
-                            tool_call_id=tc.tool_call_id,
-                            tool_id=tool.id,
-                            reasoning_tokens=llm_step_result.reasoning
-                            or most_recent_reasoning,
-                            tool_call_arguments=tc.tool_args,
-                            tool_call_response=tool_response.llm_facing_response,
-                            search_docs=displayed_docs or search_docs,
-                            generated_images=None,
-                        )
-                        state_container.add_tool_call(tool_call_info)
-
-                        tool_response_message = tool_response.llm_facing_response
-                        tool_response_token_count = token_counter(tool_response_message)
-
-                        tool_response_msg = ChatMessageSimple(
-                            message=tool_response_message,
-                            token_count=tool_response_token_count,
-                            message_type=MessageType.TOOL_CALL_RESPONSE,
-                            tool_call_id=tc.tool_call_id,
-                            image_files=None,
-                        )
-                        msg_history.append(tool_response_msg)
-
-                # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
-                most_recent_reasoning = None
-                llm_cycle_count += 1
-                research_cycle_count += 1
-
-            # If we've run out of cycles, just try to generate a report from everything so far
-            final_report = generate_intermediate_report(
-                research_topic=research_topic,
-                history=msg_history,
-                llm=llm,
-                token_counter=token_counter,
-                citation_processor=citation_processor,
-                user_identity=user_identity,
-                emitter=emitter,
-                placement=Placement(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
-                ),
-            )
-            span.span_data.output = final_report if final_report else None
-            return ResearchAgentCallResult(
-                intermediate_report=final_report,
-                citation_mapping=citation_processor.get_seen_citations(),
-            )
-
-        except Exception as e:
-            logger.error("Error running research agent call: %s", e)
-            emitter.emit(
-                Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
-                    obj=PacketException(type=StreamingType.ERROR.value, exception=e),
-                )
-            )
-            return None
+    return ResearchAgent(
+        kickoff=research_agent_call,
+        emitter=emitter,
+        llm=llm,
+        token_counter=token_counter,
+        user_identity=user_identity,
+        parent_tool_call_id=parent_tool_call_id,
+        tools=tools,
+        state_container=state_container,
+    ).run()
 
 
 def _on_research_agent_timeout(
