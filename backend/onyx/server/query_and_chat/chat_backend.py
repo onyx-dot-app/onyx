@@ -403,7 +403,6 @@ def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
     # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
@@ -414,12 +413,13 @@ def rename_chat_session(
     user_id = user.id
 
     if name:
-        update_chat_session(
-            db_session=db_session,
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-            description=name,
-        )
+        with get_session_with_current_tenant() as db_session:
+            update_chat_session(
+                db_session=db_session,
+                user_id=user_id,
+                chat_session_id=chat_session_id,
+                description=name,
+            )
         return RenameChatSessionResponse(new_name=name)
 
     llm = get_default_llm(
@@ -428,29 +428,28 @@ def rename_chat_session(
         )
     )
 
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
-    )
-
-    full_history = create_chat_history_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
+    # Read-phase short session: usage check + history fetch. Closed before the
+    # LLM call so the underlying pool connection is fully released for the
+    # 2-10s generation window. (db_session.close() alone is insufficient in
+    # multi-tenant mode where the session is bound to an explicit Connection
+    # held by get_session_with_tenant's outer with-block.)
+    with get_session_with_current_tenant() as db_session:
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=llm.config.api_key,
+        )
+        full_history = create_chat_history_chain(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
 
     token_counter = get_llm_token_counter(llm)
-
     simple_chat_history = convert_chat_history_basic(
         chat_history=full_history,
         token_counter=token_counter,
         max_individual_message_tokens=max_tokens_for_naming,
         max_total_tokens=max_tokens_for_naming,
     )
-
-    # Release the request-scoped connection back to the pool before the LLM
-    # call. Holding it across litellm.invoke() (2-10s) puts it at risk of
-    # idle-timeout drops by load balancers / PgBouncer.
-    db_session.close()
 
     with ensure_trace(
         "chat_session_naming",
@@ -462,9 +461,9 @@ def rename_chat_session(
     ):
         new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
-    with get_session_with_current_tenant() as write_db_session:
+    with get_session_with_current_tenant() as db_session:
         update_chat_session(
-            db_session=write_db_session,
+            db_session=db_session,
             user_id=user_id,
             chat_session_id=chat_session_id,
             description=new_name,
