@@ -17,7 +17,7 @@ depends_on = None
 
 
 CODING_AGENT_TOOL = {
-    "name": "CodingAgentTool",
+    "name": "coding_agent",
     "display_name": "Coding Agent",
     "description": (
         "Investigate and answer a coding question against a specific GitHub "
