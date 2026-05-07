@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -38,6 +39,7 @@ import {
   SvgAlertCircle,
 } from "@opal/icons";
 import { useContentEditable } from "@/hooks/useContentEditable";
+import { useUser } from "@/providers/UserProvider";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -163,6 +165,7 @@ const InputBar = memo(
     ) => {
       const router = useRouter();
       const demoDataEnabled = useDemoDataEnabled();
+      const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -172,10 +175,19 @@ const InputBar = memo(
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
-        insertTextAtCursor,
+        pasteText,
+        handleCopy,
+        handleCut,
         setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
@@ -227,9 +239,10 @@ const InputBar = memo(
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
-          insertTextAtCursor(text);
+
+          pasteText(text);
         },
-        [disabled, uploadFiles, insertTextAtCursor]
+        [disabled, uploadFiles, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -261,6 +274,8 @@ const InputBar = memo(
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
+          if (handleTileKeyDown(event)) return;
+
           // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
@@ -271,7 +286,7 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit]
+        [handleSubmit, handleTileKeyDown]
       );
 
       const canSubmit =
@@ -350,6 +365,10 @@ const InputBar = memo(
                 aria-placeholder={placeholder}
                 data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
               />
             </div>
 
@@ -406,6 +425,14 @@ const InputBar = memo(
               </div>
             </div>
           </div>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
         </Disabled>
       );
     }

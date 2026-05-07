@@ -13,7 +13,7 @@ import {
   LLMProviderFormProps,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { getProvider } from "@/lib/llmConfig";
+import { getProvider } from "@/lib/languageModels";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";

@@ -9,7 +9,7 @@ export interface ImageGenerationConfigView {
   model_configuration_id: number;
   model_name: string;
   llm_provider_id: number;
-  llm_provider_name: string;
+  llm_provider_name: string | null;
   is_default: boolean;
 }
 

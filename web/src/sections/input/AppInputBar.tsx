@@ -21,6 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -141,6 +142,7 @@ const AppInputBar = React.memo(
     const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
       number | null
     >(null);
+    const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
     const inputWrapperRef = useRef<HTMLDivElement>(null);
     const {
@@ -151,17 +153,25 @@ const AppInputBar = React.memo(
       handleInput,
       handleCompositionStart,
       handleCompositionEnd,
-      insertTextAtCursor,
+      pasteText,
+      handleCopy,
+      handleCut,
       setCursorToEnd,
+      handleTileMouseDown,
+      handleTileClick,
+      handleTileKeyDown,
+      tilePopover,
+      dismissTilePopover,
+      updateTileText,
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
+      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
     });
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { user, isAdmin } = useUser();
     const { state } = useQueryController();
     const isClassifying = state.phase === "classifying";
     const isSearchActive =
@@ -355,7 +365,8 @@ const AppInputBar = React.memo(
       event.preventDefault();
       const text = event.clipboardData.getData("text/plain");
       if (!text) return;
-      insertTextAtCursor(text);
+
+      pasteText(text);
     }
 
     const handleRemoveMessageFile = useCallback(
@@ -811,6 +822,10 @@ const AppInputBar = React.memo(
                       contentEditable={!disabled}
                       suppressContentEditableWarning
                       onPaste={handlePaste}
+                      onCopy={handleCopy}
+                      onCut={handleCut}
+                      onMouseDown={handleTileMouseDown}
+                      onClick={handleTileClick}
                       onBlur={() => setHighlightedQueueIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
@@ -838,6 +853,8 @@ const AppInputBar = React.memo(
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
+                        if (handleTileKeyDown(event)) return;
+
                         // Queue navigation mode
                         if (highlightedQueueIndex !== null) {
                           if (event.key === "Enter") {
@@ -1019,6 +1036,14 @@ const AppInputBar = React.memo(
                   }}
                 />
               </div>
+            )}
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+              />
             )}
           </div>
         </Disabled>

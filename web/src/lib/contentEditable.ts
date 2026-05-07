@@ -1,6 +1,5 @@
-/**
- * Move cursor to end of a contentEditable element.
- */
+// ─── Cursor Utilities ───────────────────────────────────────────────────────
+
 export function setCursorToEnd(element: HTMLElement): void {
   const selection = window.getSelection();
   if (!selection) return;
@@ -11,11 +10,28 @@ export function setCursorToEnd(element: HTMLElement): void {
   selection.addRange(range);
 }
 
-/**
- * Insert a plain-text string at the current cursor position within a
- * contentEditable element. If the element doesn't have focus or a valid
- * selection, appends to the end. Returns the element's new text content.
- */
+export function setCursorAfterNode(node: Node): void {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.setStartAfter(node);
+  range.setEndAfter(node);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+export function setCursorBeforeNode(node: Node): void {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.setStartBefore(node);
+  range.setEndBefore(node);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+// ─── Text Insertion ─────────────────────────────────────────────────────────
+
 export function insertTextAtCursor(element: HTMLElement, text: string): string {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
@@ -48,10 +64,32 @@ export function insertTextAtCursor(element: HTMLElement, text: string): string {
   return getTextContent(element);
 }
 
-/**
- * Read the plain-text content of a contentEditable element, converting
- * <br> elements to newlines via DOM traversal (avoids innerText reflow).
- */
+export function insertNodeAtCursor(element: HTMLElement, node: Node): void {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    element.appendChild(node);
+    setCursorAfterNode(node);
+    element.normalize();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+
+  if (!element.contains(range.commonAncestorContainer)) {
+    element.appendChild(node);
+    setCursorAfterNode(node);
+    element.normalize();
+    return;
+  }
+
+  range.deleteContents();
+  range.insertNode(node);
+  setCursorAfterNode(node);
+  element.normalize();
+}
+
+// ─── Text Content Extraction ────────────────────────────────────────────────
+
 const BLOCK_TAGS = new Set([
   "DIV",
   "P",
@@ -74,7 +112,9 @@ export function getTextContent(element: HTMLElement): string {
       parts.push(node.textContent ?? "");
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
-      if (el.tagName === "BR") {
+      if (el.hasAttribute("data-rich-tile")) {
+        parts.push(el.getAttribute("data-text") ?? "");
+      } else if (el.tagName === "BR") {
         parts.push("\n");
       } else {
         if (i > 0 && BLOCK_TAGS.has(el.tagName)) {

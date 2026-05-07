@@ -24,6 +24,7 @@ interface PaginationConfig {
   query?: string;
   filter?: Record<string, string | boolean | number | string[] | Date>;
   refreshIntervalInMs?: number;
+  disableUrlSync?: boolean;
 }
 
 interface PaginatedHookReturnData<T extends PaginatedType> {
@@ -44,6 +45,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   query,
   filter,
   refreshIntervalInMs = 5000,
+  disableUrlSync = false,
 }: PaginationConfig): PaginatedHookReturnData<T> {
   const router = useRouter();
   const currentPath = usePathname();
@@ -51,7 +53,7 @@ function usePaginatedFetch<T extends PaginatedType>({
 
   // State to initialize and hold the current page number
   const [currentPage, setCurrentPage] = useState(() =>
-    parseInt(searchParams?.get("page") || "1", 10)
+    disableUrlSync ? 1 : parseInt(searchParams?.get("page") || "1", 10)
   );
   const [currentPageData, setCurrentPageData] = useState<T[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -146,15 +148,14 @@ function usePaginatedFetch<T extends PaginatedType>({
   // Updates the URL with the current page number
   const updatePageUrl = useCallback(
     (page: number) => {
-      if (currentPath && searchParams) {
-        const params = new URLSearchParams(searchParams);
-        params.set("page", page.toString());
-        router.replace(`${currentPath}?${params.toString()}` as Route, {
-          scroll: false,
-        });
-      }
+      if (disableUrlSync || !currentPath || !searchParams) return;
+      const params = new URLSearchParams(searchParams);
+      params.set("page", page.toString());
+      router.replace(`${currentPath}?${params.toString()}` as Route, {
+        scroll: false,
+      });
     },
-    [currentPath, router, searchParams]
+    [disableUrlSync, currentPath, router, searchParams]
   );
 
   // Updates the current page
@@ -235,9 +236,9 @@ function usePaginatedFetch<T extends PaginatedType>({
   useEffect(() => {
     setCachedBatches({});
     setTotalItems(0);
-    goToPage(1);
+    setCurrentPage(1);
     setError(null);
-  }, [currentPath, query, filter]);
+  }, [currentPath, query, filter, itemsPerPage]);
 
   return {
     currentPage,

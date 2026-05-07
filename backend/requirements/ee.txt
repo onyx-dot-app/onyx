@@ -794,6 +794,10 @@ h11==0.16.0 \
     # via
     #   httpcore
     #   uvicorn
+h2==4.3.0 \
+    --hash=sha256:6c59efe4323fa18b47a632221a1888bd7fde6249819beda254aeca909f221bf1 \
+    --hash=sha256:c438f029a25f7945c69e0ccf0fb951dc3f73a5f6412981daee861431b70e2bdd
+    # via httpx
 hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' \
     --hash=sha256:0392c79b7cf48418cd61478c1a925246cf10639f4cd9d94368d8ca1e8df9ea07 \
     --hash=sha256:1feb0f3abeacee143367c326a128a2e2b60868ec12a36c225afb1d6c5a05e6d2 \
@@ -821,6 +825,10 @@ hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or 
     --hash=sha256:e23717ce4186b265f69afa66e6f0069fe7efbf331546f5c313d00e123dc84583 \
     --hash=sha256:fc360b70c815bf340ed56c7b8c63aacf11762a4b099b2fe2c9bd6d6068668c08
     # via huggingface-hub
+hpack==4.1.0 \
+    --hash=sha256:157ac792668d995c657d93111f46b4535ed114f0c9c8d672271bbec7eae1b496 \
+    --hash=sha256:ec5eca154f7056aa06f196a557655c5b009b382873ac8d1e66e79e87535f1dca
+    # via h2
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
     --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
@@ -845,6 +853,10 @@ huggingface-hub==1.12.0 \
     --hash=sha256:7c3fe85e24b652334e5d456d7a812cd9a071e75630fac4365d9165ab5e4a34b6 \
     --hash=sha256:d74939969585ee35748bd66de09baf84099d461bda7287cd9043bfb99b0e424d
     # via tokenizers
+hyperframe==6.1.0 \
+    --hash=sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5 \
+    --hash=sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08
+    # via h2
 idna==3.11 \
     --hash=sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea \
     --hash=sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902
@@ -856,7 +868,9 @@ idna==3.11 \
 importlib-metadata==8.7.0 \
     --hash=sha256:d13b81ad223b890aa16c5471f2ac3056cf76c5f10f82d6f9292f0b415f389000 \
     --hash=sha256:e5dd1551894c77868a30651cef00984d50e1002d06942a7101d34870c5f02afd
-    # via litellm
+    # via
+    #   google-api-core
+    #   litellm
 jinja2==3.1.6 \
     --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
@@ -962,9 +976,9 @@ kubernetes==31.0.0 \
     --hash=sha256:28945de906c8c259c1ebe62703b56a03b714049372196f854105afe4e6d014c0 \
     --hash=sha256:bf141e2d380c8520eada8b351f4e319ffee9636328c137aa432bc486ca1200e1
     # via onyx
-litellm==1.83.0 \
-    --hash=sha256:860bebc76c4bb27b4cf90b4a77acd66dba25aced37e3db98750de8a1766bfb7a \
-    --hash=sha256:88c536d339248f3987571493015784671ba3f193a328e1ea6780dbebaa2094a8
+litellm==1.83.14 \
+    --hash=sha256:24aef9b47cdc424c833e32f3727f411741c690832cd1fe4405e0077144fe09c9 \
+    --hash=sha256:92b11ba2a32cf80707ddf388d18526696c7999a21b418c5e3b6eda1243d2cfdb
     # via onyx
 markdown-it-py==4.0.0 \
     --hash=sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147 \

@@ -35,7 +35,7 @@ export function buildLlmOptions(
         seenKeys.add(key);
 
         options.push({
-          name: llmProvider.name,
+          name: llmProvider.name ?? "",
           provider: llmProvider.provider,
           providerDisplayName:
             llmProvider.provider_display_name || llmProvider.provider,

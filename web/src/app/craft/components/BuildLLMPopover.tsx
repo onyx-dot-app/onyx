@@ -18,7 +18,7 @@ import {
   isRecommendedModel,
 } from "@/app/craft/onboarding/constants";
 import { ToggleWarningModal } from "./ToggleWarningModal";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
@@ -114,7 +114,7 @@ export function BuildLLMPopover({
         visibleModels.forEach((model) => {
           options.push({
             providerKey: provider.provider,
-            providerName: provider.name,
+            providerName: provider.name ?? "",
             providerDisplayName:
               provider.provider_display_name || provider.provider,
             modelName: model.name,

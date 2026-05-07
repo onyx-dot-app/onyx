@@ -28,6 +28,7 @@ from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -36,6 +37,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -448,23 +450,6 @@ def put_llm_provider(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
-    # Check name constraints
-    # TODO: Once port from name to id is complete, unique name will no longer be required
-    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Renaming providers is not currently supported",
-        )
-
-    found_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
-    if found_provider is not None and found_provider is not existing_provider:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"Provider with name={llm_provider_upsert_request.name} already exists",
-        )
-
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
@@ -770,6 +755,33 @@ def get_valid_model_names_for_persona(
     return valid_models
 
 
+def get_valid_model_configuration_ids_for_persona(
+    persona: Persona,
+    user: User,
+    db_session: Session,
+) -> set[int]:
+    """Get the set of ModelConfiguration IDs that a user can access for this persona.
+
+    Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
+    multiple providers expose a model with the same name.
+    """
+    is_admin = user.role == UserRole.ADMIN
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    valid_ids: set[int] = set()
+    for llm_provider_model in all_providers:
+        if can_user_access_llm_provider(
+            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+        ):
+            for model_config in llm_provider_model.model_configurations:
+                if model_config.is_visible and model_config.id is not None:
+                    valid_ids.add(model_config.id)
+    return valid_ids
+
+
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,
@@ -825,45 +837,25 @@ def list_llm_providers_for_persona(
         format(duration, ".2f"),
     )
 
-    # Get the default model and vision model for the persona
-    # TODO: Port persona's over to use ID
-    persona_default_provider = persona.llm_model_provider_override
-    persona_default_model = persona.llm_model_version_override
-
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
 
-    # Build default_text and default_vision using persona overrides when available,
-    # falling back to the global defaults.
+    # Build default_text and default_vision using the persona's model config FK when
+    # available, falling back to the global defaults.
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
-    if persona_default_provider:
-        provider = fetch_existing_llm_provider(persona_default_provider, db_session)
-        if provider and can_user_access_llm_provider(
-            provider, user_group_ids, persona, is_admin=is_admin
+    if persona.default_model_configuration_id:
+        model_config = fetch_model_configuration_by_id(
+            db_session, persona.default_model_configuration_id
+        )
+        if model_config and can_user_access_llm_provider(
+            model_config.llm_provider, user_group_ids, persona, is_admin=is_admin
         ):
-            if persona_default_model:
-                # Persona specifies both provider and model — use them directly
-                default_text = DefaultModel(
-                    provider_id=provider.id,
-                    model_name=persona_default_model,
-                )
-            else:
-                # Persona specifies only the provider — pick a visible (public) model,
-                # falling back to any model on this provider
-                visible_model = next(
-                    (mc for mc in provider.model_configurations if mc.is_visible),
-                    None,
-                )
-                fallback_model = visible_model or next(
-                    iter(provider.model_configurations), None
-                )
-                if fallback_model:
-                    default_text = DefaultModel(
-                        provider_id=provider.id,
-                        model_name=fallback_model.name,
-                    )
+            default_text = DefaultModel(
+                provider_id=model_config.llm_provider_id,
+                model_name=model_config.name,
+            )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
@@ -911,7 +903,7 @@ def get_provider_contextual_cost(
             cost = get_llm_contextual_cost(llm)
             costs.append(
                 LLMCost(
-                    provider=provider.name,
+                    provider_name=provider.name or provider.provider,
                     model_name=model_configuration.name,
                     cost=cost,
                 )

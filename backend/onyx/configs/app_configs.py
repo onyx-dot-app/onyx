@@ -86,6 +86,17 @@ CACHE_BACKEND = CacheBackendType(
     os.environ.get("CACHE_BACKEND", CacheBackendType.REDIS)
 )
 
+# Cache query embeddings in the configured cache backend so identical queries
+# (across users / agentic sub-queries) don't re-hit the embedding provider.
+QUERY_EMBEDDING_CACHE_ENABLED = (
+    os.environ.get("QUERY_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
+)
+assert (
+    QUERY_EMBEDDING_CACHE_TTL_S := int(
+        os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900")
+    )
+) > 0, "QUERY_EMBEDDING_CACHE_TTL_S must be positive."
+
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
 
@@ -882,8 +893,10 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
     os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
 
-# Maximum file size in a document to be indexed
-MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
+# Maximum number of characters in a single document before it is skipped during indexing.
+# Documents exceeding this limit will surface a visible error rather than being silently dropped.
+# Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
+MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes

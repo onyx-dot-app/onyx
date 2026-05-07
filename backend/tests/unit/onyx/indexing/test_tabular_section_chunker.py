@@ -630,6 +630,38 @@ class TestTabularChunkerChunkSection:
         assert [p.is_continuation for p in out.payloads] == [False, True, True]
 
 
+class TestTabularChunkerMalformedCsv:
+    def test_bare_cr_normalized_and_parsed(self) -> None:
+        """A bare \\r (old Mac line ending) is normalized inside
+        parse_csv_string, so rows are recovered and the chunker never
+        sees an error."""
+        # "value1,line1\rline2" normalizes to two rows:
+        #   row 2: col1=value1, col2=line1
+        #   row 3: col1=line2  (short row — col2 absent, skipped by zip)
+        csv_with_bare_cr = "col1,col2\nvalue1,line1\rline2"
+        section = _tabular_section(csv_with_bare_cr)
+        chunker = _make_chunker_no_metadata()
+        result = chunker.chunk_section(
+            section, AccumulatorState(), content_token_limit=500
+        )
+        assert len(result.payloads) > 0
+        texts = [p.text for p in result.payloads]
+        assert any("col1=value1" in t for t in texts)
+
+    def test_bare_cr_with_metadata_chunker(self) -> None:
+        """With ignore_metadata_chunks=False, bare-\\r CSVs produce both
+        row chunks and descriptor chunks after normalization."""
+        csv_with_bare_cr = "col1,col2\nvalue1,line1\rline2"
+        section = _tabular_section(csv_with_bare_cr)
+        chunker = _make_chunker_with_metadata()
+        result = chunker.chunk_section(
+            section, AccumulatorState(), content_token_limit=500
+        )
+        assert len(result.payloads) > 0
+        texts = [p.text for p in result.payloads]
+        assert any("col1" in t for t in texts)
+
+
 class TestBuildSheetDescriptorChunks:
     """Direct tests of `build_sheet_descriptor_chunks` — the per-section
     descriptor builder that backs the metadata chunks emitted by

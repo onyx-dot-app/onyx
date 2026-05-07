@@ -77,9 +77,12 @@ def assert_response_is_equivalent(
             "version": parsed.version,
         }
 
-    # Compare model configurations by name (order-independent)
+    # Compare model configurations by name (order-independent).
+    # Strip `id` from the actual — it's a DB-assigned primary key that the
+    # expected dict doesn't include and is not part of the business logic being tested.
     actual_by_name = {
-        config["name"]: config for config in provider_data["model_configurations"]
+        config["name"]: {k: v for k, v in config.items() if k != "id"}
+        for config in provider_data["model_configurations"]
     }
     expected_by_name = {
         config.name: fill_max_input_tokens_and_supports_image_input(config)
@@ -640,10 +643,13 @@ def test_delete_default_vision_provider_clears_vision_default(
     assert text_default["provider_id"] == text_provider["id"]
 
 
-def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
-    """Creating a provider with a name that already exists should return 400."""
+def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
+    """Creating multiple providers with the same display name should succeed.
+
+    Display names are now purely cosmetic — the integer PK is the unique identifier.
+    """
     admin_user = UserManager.create(name="admin_user")
-    provider_name = f"unique-provider-{uuid.uuid4()}"
+    provider_name = f"shared-name-{uuid.uuid4()}"
 
     base_payload = {
         "name": provider_name,
@@ -665,23 +671,28 @@ def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
         json=base_payload,
     )
     assert response.status_code == 200
+    first_id = response.json()["id"]
 
-    # Second creation with the same name is rejected
+    # Second creation with the same display name also succeeds — names are not unique
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=base_payload,
     )
-    assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
+    assert response.status_code == 200
+    second_id = response.json()["id"]
+
+    # They are distinct providers identified by their integer PKs
+    assert first_id != second_id
 
 
-def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
-    """Renaming a provider is not currently supported and should return 400."""
+def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
+    """Renaming a provider should succeed and the updated name should be visible."""
     admin_user = UserManager.create(name="admin_user")
+    original_name = f"original-name-{uuid.uuid4()}"
 
     create_payload = {
-        "name": f"original-name-{uuid.uuid4()}",
+        "name": original_name,
         "provider": LlmProviderNames.OPENAI,
         "api_key": "sk-000000000000000000000000000000000000000000000000",
         "model_configurations": [
@@ -701,7 +712,7 @@ def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
     assert response.status_code == 200
     provider_id = response.json()["id"]
 
-    # Attempt to rename — should be rejected
+    # Rename the provider — should succeed
     new_name = f"renamed-provider-{uuid.uuid4()}"
     update_payload = {**create_payload, "id": provider_id, "name": new_name}
     response = requests.put(
@@ -709,21 +720,13 @@ def test_rename_provider_rejected(reset: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=update_payload,
     )
-    assert response.status_code == 400
-    assert "not currently supported" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["name"] == new_name
 
-    # Verify no duplicate was created — only the original provider should exist
+    # Verify the name was updated in place — same ID, new name
     provider = _get_provider_by_id(admin_user, provider_id)
     assert provider is not None
-    assert provider["name"] == create_payload["name"]
-
-    all_response = requests.get(
-        f"{API_SERVER_URL}/admin/llm/provider",
-        headers=admin_user.headers,
-    )
-    assert all_response.status_code == 200
-    all_names = [p["name"] for p in all_response.json()["providers"]]
-    assert new_name not in all_names
+    assert provider["name"] == new_name
 
 
 def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001

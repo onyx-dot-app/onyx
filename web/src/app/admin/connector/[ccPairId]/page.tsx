@@ -26,6 +26,8 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
+import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -115,12 +117,20 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const { currentPageData: indexAttemptErrorsPage } =
-    usePaginatedFetch<IndexAttemptError>({
-      itemsPerPage: 10,
-      pagesPerBatch: 1,
-      endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-    });
+  const [errorsItemsPerPage, setErrorsItemsPerPage] = useState(10);
+
+  const {
+    currentPageData: indexAttemptErrorsPage,
+    totalPages: indexAttemptErrorsTotalPages,
+    totalItems: indexAttemptErrorsTotalItems,
+    currentPage: indexAttemptErrorsCurrentPage,
+    goToPage: goToIndexAttemptErrorsPage,
+  } = usePaginatedFetch<IndexAttemptError>({
+    itemsPerPage: errorsItemsPerPage,
+    pagesPerBatch: 1,
+    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    disableUrlSync: true,
+  });
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
@@ -136,10 +146,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const indexAttemptErrors = indexAttemptErrorsPage
-    ? {
-        items: indexAttemptErrorsPage,
-        total_items: indexAttemptErrorsPage.length,
-      }
+    ? { items: indexAttemptErrorsPage }
     : null;
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -411,6 +418,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {showIndexAttemptErrors && indexAttemptErrors && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
+          totalPages={indexAttemptErrorsTotalPages}
+          currentPage={indexAttemptErrorsCurrentPage}
+          onPageChange={goToIndexAttemptErrorsPage}
+          onPageSizeChange={setErrorsItemsPerPage}
           onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
             setShowIndexAttemptErrors(false);
@@ -553,7 +564,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       )}
 
-      {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
+      {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
         <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
           <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
           <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
@@ -726,18 +737,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
               </>
             )}
 
-            <Title size="md" className="mt-6 mb-2">
-              Indexing Attempts
-            </Title>
-            {indexAttempts && (
-              <IndexAttemptsTable
-                ccPair={ccPair}
-                indexAttempts={indexAttempts}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={goToPage}
-              />
-            )}
+            {indexAttempts &&
+              (ccPair.access_type === "sync" ? (
+                <Section height="auto" alignItems="stretch" className="mt-6">
+                  <SyncAttemptsTabs
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    indexCurrentPage={currentPage}
+                    indexTotalPages={totalPages}
+                    onIndexPageChange={goToPage}
+                  />
+                </Section>
+              ) : (
+                <>
+                  <Title size="md" className="mt-6 mb-2">
+                    Indexing Attempts
+                  </Title>
+                  <IndexAttemptsTable
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={goToPage}
+                  />
+                </>
+              ))}
           </div>
         )}
       </div>

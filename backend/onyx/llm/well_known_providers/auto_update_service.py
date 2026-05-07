@@ -132,9 +132,11 @@ def sync_llm_models_from_github(
         )
 
         if changes > 0:
-            results[provider.name] = changes
+            results[str(provider.id)] = changes
             logger.info(
-                "Applied %s model changes to provider '%s'", changes, provider.name
+                "Applied %s model changes to provider '%s'",
+                changes,
+                provider.name or provider.provider,
             )
 
     _set_cached_last_updated_at(config.updated_at)
