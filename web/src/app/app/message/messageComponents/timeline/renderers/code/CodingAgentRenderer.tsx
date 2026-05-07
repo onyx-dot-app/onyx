@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { JSX, useMemo } from "react";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -17,11 +17,14 @@ import {
   CodingAgentThinkingDelta,
   PacketType,
 } from "@/app/app/services/streamingModels";
-import { MessageRenderer } from "@/app/app/message/messageComponents/interfaces";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/interfaces";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 // Lazy registration for bash highlighting
 function ensureBashHljsRegistered() {
@@ -58,7 +61,7 @@ function IoBlockLabel({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-1">
       <SvgArrowExchange className="w-3 h-3 text-text-02" />
-      <Text text04 secondaryBody>
+      <Text font="secondary-body" color="text-04">
         {label}
       </Text>
     </div>
@@ -154,11 +157,76 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
       supportsCollapsible={true}
     >
       <div className="pl-[var(--timeline-common-text-padding)]">
-        <Text as="p" text02 mainUiMuted>
+        <Text as="p" font="main-ui-muted" color="text-02">
           {step.content}
         </Text>
       </div>
     </StepContainer>
+  );
+}
+
+function bashStepHeader(call: BashStepView): string {
+  if (!call.isComplete) return "Bash · running…";
+  if (call.timed_out) return "Bash · timed out";
+  return `Bash · exit ${call.exit_code ?? 0}`;
+}
+
+function bashStepIcon(call: BashStepView) {
+  if (!call.isComplete) return SvgTerminal;
+  const failed = call.exit_code !== null && call.exit_code !== 0;
+  return failed || call.timed_out ? SvgXCircle : SvgCheckCircle;
+}
+
+function BashStepBody({ call }: { call: BashStepView }) {
+  const hasStdout = call.stdout.length > 0;
+  const hasStderr = call.stderr.length > 0;
+  const hasResponse = hasStdout || hasStderr || call.isComplete;
+  const isStreaming = !call.isComplete;
+
+  return (
+    <div className="flex flex-col gap-3 pl-[var(--timeline-common-text-padding)]">
+      {/* Request: bash command */}
+      <div>
+        <IoBlockLabel label="Request" />
+        <div className="prose max-w-full">
+          <CodeBlock
+            className="font-secondary-mono"
+            codeText={call.cmd}
+            noPadding
+          >
+            <HighlightedBashCode code={call.cmd} />
+          </CodeBlock>
+        </div>
+      </div>
+
+      {/* Response: stdout / stderr, capped to 3 lines and expandable */}
+      {hasResponse && (
+        <div className="flex flex-col gap-2">
+          <IoBlockLabel label="Response" />
+          {hasStdout && (
+            <ExpandableTextDisplay
+              title="stdout"
+              content={call.stdout}
+              maxLines={3}
+              isStreaming={isStreaming}
+            />
+          )}
+          {hasStderr && (
+            <ExpandableTextDisplay
+              title="stderr"
+              content={call.stderr}
+              maxLines={3}
+              isStreaming={isStreaming}
+            />
+          )}
+          {!hasStdout && !hasStderr && call.isComplete && (
+            <Text as="p" font="main-ui-muted" color="text-04">
+              No output
+            </Text>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -169,76 +237,17 @@ interface BashCallStepProps {
 }
 
 function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
-  const failed = call.exit_code !== null && call.exit_code !== 0;
-  const stepIcon = !call.isComplete
-    ? SvgTerminal
-    : failed || call.timed_out
-      ? SvgXCircle
-      : SvgCheckCircle;
-  const hasStdout = call.stdout.length > 0;
-  const hasStderr = call.stderr.length > 0;
-  const hasResponse = hasStdout || hasStderr || call.isComplete;
-  const isStreaming = !call.isComplete;
-
-  const headerText = !call.isComplete
-    ? "Bash · running…"
-    : call.timed_out
-      ? "Bash · timed out"
-      : `Bash · exit ${call.exit_code ?? 0}`;
-
   return (
     <StepContainer
-      stepIcon={stepIcon}
-      header={headerText}
+      stepIcon={bashStepIcon(call)}
+      header={bashStepHeader(call)}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
       supportsCollapsible={true}
       noPaddingRight={true}
     >
-      <div className="flex flex-col gap-3 pl-[var(--timeline-common-text-padding)]">
-        {/* Request: bash command */}
-        <div>
-          <IoBlockLabel label="Request" />
-          <div className="prose max-w-full">
-            <CodeBlock
-              className="font-secondary-mono"
-              codeText={call.cmd}
-              noPadding
-            >
-              <HighlightedBashCode code={call.cmd} />
-            </CodeBlock>
-          </div>
-        </div>
-
-        {/* Response: stdout / stderr, capped to 3 lines and expandable */}
-        {hasResponse && (
-          <div className="flex flex-col gap-2">
-            <IoBlockLabel label="Response" />
-            {hasStdout && (
-              <ExpandableTextDisplay
-                title="stdout"
-                content={call.stdout}
-                maxLines={3}
-                isStreaming={isStreaming}
-              />
-            )}
-            {hasStderr && (
-              <ExpandableTextDisplay
-                title="stderr"
-                content={call.stderr}
-                maxLines={3}
-                isStreaming={isStreaming}
-              />
-            )}
-            {!hasStdout && !hasStderr && call.isComplete && (
-              <Text as="p" text04 mainUiMuted>
-                No output
-              </Text>
-            )}
-          </div>
-        )}
-      </div>
+      <BashStepBody call={call} />
     </StepContainer>
   );
 }
@@ -247,6 +256,7 @@ function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
 
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   packets,
+  renderType,
   stopPacketSeen,
   isHover = false,
   children,
@@ -269,6 +279,108 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       : startPacket.query
     : "";
 
+  // Condensed modes show only the latest active item — falling back to the
+  // task when no thinking/bash step has streamed yet.
+  const isCompact = renderType === RenderType.COMPACT;
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
+  const latestStep = steps[steps.length - 1];
+
+  if (isHighlight) {
+    let content: JSX.Element;
+    if (latestStep?.kind === "bash") {
+      content = (
+        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
+          <Text as="p" font="main-ui-muted" color="text-04">
+            {bashStepHeader(latestStep)}
+          </Text>
+          <BashStepBody call={latestStep} />
+        </div>
+      );
+    } else if (latestStep?.kind === "thinking") {
+      content = (
+        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
+          <Text as="p" font="main-ui-muted" color="text-04">
+            Thinking
+          </Text>
+          <Text as="p" font="main-ui-muted" color="text-02">
+            {latestStep.content}
+          </Text>
+        </div>
+      );
+    } else if (taskText) {
+      content = (
+        <div className="flex flex-col gap-1 pl-[var(--timeline-common-text-padding)]">
+          <Text as="p" font="main-ui-muted" color="text-04">
+            Coding Task
+          </Text>
+          <Text as="p" font="main-ui-muted" color="text-03">
+            {taskText}
+          </Text>
+        </div>
+      );
+    } else {
+      content = <></>;
+    }
+    return children([
+      {
+        icon: null,
+        status: null,
+        content,
+        supportsCollapsible: true,
+        timelineLayout: "content",
+      },
+    ]);
+  }
+
+  if (isCompact) {
+    let content: JSX.Element;
+    if (latestStep?.kind === "bash") {
+      content = (
+        <BashCallStep
+          call={latestStep}
+          isLastStep={!stopPacketSeen && !isComplete}
+          isHover={isHover}
+        />
+      );
+    } else if (latestStep?.kind === "thinking") {
+      content = (
+        <ThinkingStep
+          step={latestStep}
+          isLastStep={!stopPacketSeen && !isComplete}
+          isHover={isHover}
+        />
+      );
+    } else if (startPacket) {
+      content = (
+        <StepContainer
+          stepIcon={SvgCircle}
+          header="Coding Task"
+          collapsible={true}
+          isLastStep={!stopPacketSeen && !isComplete}
+          isFirstStep={true}
+          isHover={isHover}
+        >
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <Text as="p" font="main-ui-muted" color="text-02">
+              {taskText}
+            </Text>
+          </div>
+        </StepContainer>
+      );
+    } else {
+      content = <></>;
+    }
+    return children([
+      {
+        icon: null,
+        status: null,
+        content,
+        supportsCollapsible: true,
+        timelineLayout: "content",
+      },
+    ]);
+  }
+
   return children([
     {
       icon: null,
@@ -285,7 +397,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
               isHover={isHover}
             >
               <div className="pl-[var(--timeline-common-text-padding)]">
-                <Text as="p" text02 mainUiMuted>
+                <Text as="p" font="main-ui-muted" color="text-02">
                   {taskText}
                 </Text>
               </div>

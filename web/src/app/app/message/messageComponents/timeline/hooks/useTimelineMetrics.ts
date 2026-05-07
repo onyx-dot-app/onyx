@@ -15,8 +15,8 @@ export interface TimelineMetrics {
   lastTurnGroup: TurnGroup | undefined;
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
+  lastStepIsCodingAgent: boolean;
   lastStepSupportsCollapsedStreaming: boolean;
-  containsCodingAgent: boolean;
 }
 
 /**
@@ -30,17 +30,8 @@ export function useTimelineMetrics(
   return useMemo(() => {
     // Compute in single pass
     let totalSteps = 0;
-    let containsCodingAgent = false;
     for (const tg of turnGroups) {
       totalSteps += tg.steps.length;
-      if (!containsCodingAgent) {
-        for (const step of tg.steps) {
-          if (isCodingAgentPackets(step.packets)) {
-            containsCodingAgent = true;
-            break;
-          }
-        }
-      }
     }
 
     const lastTurnGroup = turnGroups[turnGroups.length - 1];
@@ -49,6 +40,9 @@ export function useTimelineMetrics(
     // Analyze last step packets once
     const lastStepIsResearchAgent = lastStep
       ? isResearchAgentPackets(lastStep.packets)
+      : false;
+    const lastStepIsCodingAgent = lastStep
+      ? isCodingAgentPackets(lastStep.packets)
       : false;
     const lastStepSupportsCollapsedStreaming = lastStep
       ? stepSupportsCollapsedStreaming(lastStep.packets)
@@ -60,8 +54,8 @@ export function useTimelineMetrics(
       lastTurnGroup,
       lastStep,
       lastStepIsResearchAgent,
+      lastStepIsCodingAgent,
       lastStepSupportsCollapsedStreaming,
-      containsCodingAgent,
     };
   }, [turnGroups, userStopped]);
 }
