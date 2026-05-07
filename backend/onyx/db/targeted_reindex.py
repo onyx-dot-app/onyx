@@ -23,8 +23,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import DocumentFailure
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
@@ -286,22 +289,39 @@ def get_index_attempts_for_targeted_reindex_job(
 def resolve_failure_derived_targets(
     db_session: Session,
     job_id: int,
+    landed_keys: set[tuple[int, str]] | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Mark `IndexAttemptError` rows resolved for every target whose
-    `source_error_id` is set. Returns `(resolved_count, summary)`.
+    """Mark `IndexAttemptError` rows resolved for every failure-derived
+    target. Returns `(resolved_count, summary)`.
+
+    `landed_keys` gates the resolution set as `(cc_pair_id, document_id)`
+    tuples. The pair is required (not just `document_id`) because the
+    same Drive doc can be a target across multiple cc_pairs — landing
+    it on cc_pair A does NOT clear an error filed against cc_pair B
+    where the doc is still failing. When `landed_keys` is None (caller
+    has no per-doc outcome) every failure-derived target resolves —
+    that matches the stub-task behavior the C PR shipped before the
+    connector wiring landed.
 
     `summary` is a snapshot of the cleared error rows captured before
     we update them, so it survives the eventual retention cleanup of
     `index_attempt_errors`.
     """
-    target_rows = (
-        db_session.query(TargetedReindexJobTarget)
-        .filter(
-            TargetedReindexJobTarget.targeted_reindex_job_id == job_id,
-            TargetedReindexJobTarget.source_error_id.isnot(None),
+    base_filters = [
+        TargetedReindexJobTarget.targeted_reindex_job_id == job_id,
+        TargetedReindexJobTarget.source_error_id.isnot(None),
+    ]
+    if landed_keys is not None:
+        if not landed_keys:
+            return 0, []
+        base_filters.append(
+            tuple_(
+                TargetedReindexJobTarget.cc_pair_id,
+                TargetedReindexJobTarget.document_id,
+            ).in_(landed_keys)
         )
-        .all()
-    )
+
+    target_rows = db_session.query(TargetedReindexJobTarget).filter(*base_filters).all()
     if not target_rows:
         return 0, []
 
@@ -333,3 +353,47 @@ def resolve_failure_derived_targets(
         e.is_resolved = True
 
     return len(error_rows), summary
+
+
+def targets_to_connector_failures(
+    targets: Sequence[TargetedReindexJobTarget],
+    db_session: Session,
+) -> list[ConnectorFailure]:
+    """Build the `ConnectorFailure` list `Resolver.reindex` expects.
+
+    Targets carrying a `source_error_id` are rehydrated from the
+    original `IndexAttemptError` so the connector sees the same
+    failure context (message, link) it failed on. Arbitrary targets
+    (no source error) are synthesized with a generic
+    `failure_message` — `Resolver.reindex` only consumes
+    `failed_document.document_id`, so the message body is informational.
+    """
+    error_ids = [t.source_error_id for t in targets if t.source_error_id is not None]
+    error_rows: dict[int, IndexAttemptError] = {}
+    if error_ids:
+        rows = (
+            db_session.query(IndexAttemptError)
+            .filter(IndexAttemptError.id.in_(error_ids))
+            .all()
+        )
+        error_rows = {r.id: r for r in rows}
+
+    failures: list[ConnectorFailure] = []
+    for t in targets:
+        err = (
+            error_rows.get(t.source_error_id) if t.source_error_id is not None else None
+        )
+        failures.append(
+            ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=t.document_id,
+                    document_link=err.document_link if err else None,
+                ),
+                failure_message=(
+                    err.failure_message
+                    if err
+                    else "Targeted reindex requested by admin (no prior failure)"
+                ),
+            )
+        )
+    return failures

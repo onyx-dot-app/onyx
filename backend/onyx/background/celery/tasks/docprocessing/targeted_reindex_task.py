@@ -1,38 +1,21 @@
 """Celery task for executing a targeted reindex.
 
 This task wires the job-and-target rows persisted by the API to the
-synthetic IndexAttempt(s) that drive per-cc-pair execution. It handles
-lifecycle transitions, batches per-cc-pair execution, and updates
-resolution tracking on `index_attempt_errors` for targets that came
-in as failure-derived retries.
-
-The actual connector invocation and indexing pipeline call still
-need to be plumbed — that's the follow-up. This task currently:
-
-  - loads the job + targets, groups them by cc_pair
-  - transitions each linked synthetic IndexAttempt through
-    NOT_STARTED → IN_PROGRESS → SUCCESS
-  - marks every `IndexAttemptError` referenced by a target's
-    `source_error_id` as resolved at completion (preserves the
-    contract the FE polls)
-  - snapshots `resolved_summary` for audit
-  - updates `resolved_count` / `still_failing_count` / `skipped_count`
-    on the job row
-  - transitions the job to a terminal state
-
-The follow-up adds the `connector.reindex()` call inside the per-cc-pair
-loop and pipes yielded `Document` objects through
-`index_doc_batch_with_handler`.
+synthetic IndexAttempt(s) that drive per-cc-pair execution. Lifecycle
++ counter aggregation + resolution-tracking gating live here; per-cc-pair
+connector invocation + indexing pipeline plumbing live in
+`onyx.background.indexing.run_targeted_reindex`.
 """
 
 import datetime
 import logging
-from collections import defaultdict
 
 from celery import shared_task
 from celery import Task
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.indexing.run_targeted_reindex import group_targets_by_cc_pair
+from onyx.background.indexing.run_targeted_reindex import process_targets_for_cc_pair
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
@@ -40,6 +23,7 @@ from onyx.db.targeted_reindex import get_index_attempts_for_targeted_reindex_job
 from onyx.db.targeted_reindex import get_targeted_reindex_job
 from onyx.db.targeted_reindex import get_targets_for_job
 from onyx.db.targeted_reindex import resolve_failure_derived_targets
+from shared_configs.contextvars import get_current_tenant_id
 
 _TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes
 _TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
@@ -83,11 +67,11 @@ def run_targeted_reindex(
         still_failing_count = 0
         runtime_skipped = 0
         try:
+            tenant_id = get_current_tenant_id()
+
             # 2. group targets by cc_pair (the unit of connector invocation).
             target_rows = get_targets_for_job(db_session, targeted_reindex_job_id)
-            by_cc_pair: dict[int, list] = defaultdict(list)
-            for t in target_rows:
-                by_cc_pair[t.cc_pair_id].append(t)
+            by_cc_pair = group_targets_by_cc_pair(target_rows)
 
             log.info(
                 "Targeted reindex starting: %d cc_pair(s), %d target(s)",
@@ -95,16 +79,54 @@ def run_targeted_reindex(
                 len(target_rows),
             )
 
-            # 3. per-cc-pair work. Connector.reindex() and pipeline integration
-            #    are the follow-up; for now we simply count what was requested
-            #    and let the lifecycle code below mark the job complete.
-            total_attempted = len(target_rows)
+            # 3. per-cc-pair connector fetch + pipeline run. Track
+            # outcomes at (cc_pair_id, document_id) granularity — the
+            # same doc can be a target across multiple cc_pairs and
+            # landing it for one must not clear an error filed against
+            # another.
+            landed_keys: set[tuple[int, str]] = set()
+            failed_keys: set[tuple[int, str]] = set()
+            for cc_pair_id, cc_targets in by_cc_pair.items():
+                try:
+                    result = process_targets_for_cc_pair(
+                        cc_pair_id=cc_pair_id,
+                        targets=cc_targets,
+                        attempts=attempts,
+                        tenant_id=tenant_id,
+                        db_session=db_session,
+                    )
+                except Exception:
+                    # One bad cc_pair must not poison the rest of the
+                    # job — log, mark its targets still_failing, and
+                    # carry on to the next cc_pair.
+                    log.exception(
+                        "process_targets_for_cc_pair raised for cc_pair_id=%s",
+                        cc_pair_id,
+                    )
+                    failed_keys.update((cc_pair_id, t.document_id) for t in cc_targets)
+                    continue
+                landed_keys.update(
+                    (cc_pair_id, doc_id) for doc_id in result.landed_doc_ids
+                )
+                failed_keys.update(
+                    (cc_pair_id, doc_id) for doc_id in result.failed_doc_ids
+                )
+                if result.unsupported:
+                    log.info(
+                        "cc_pair_id=%s connector does not support targeted reindex",
+                        cc_pair_id,
+                    )
 
-            # 4. resolution tracking: walk failure-derived targets and clear
-            #    their error rows.
+            # 4. resolution tracking: clear error rows only for the
+            #    (cc_pair, doc) pairs that actually landed. Errors
+            #    whose target failed to land stay open so the admin can
+            #    retry.
             resolved_count, summary = resolve_failure_derived_targets(
-                db_session, targeted_reindex_job_id
+                db_session, targeted_reindex_job_id, landed_keys
             )
+
+            still_failing_count = len(failed_keys)
+            total_attempted = len(target_rows)
 
             # 5. terminal state on synthetic IndexAttempts.
             for attempt in attempts:
@@ -112,13 +134,11 @@ def run_targeted_reindex(
                 attempt.time_updated = datetime.datetime.now(datetime.timezone.utc)
 
             # 6. terminal state on the job + counters + summary snapshot.
-            # `still_failing_count` stays 0 here; the connector-invocation
-            # follow-up bumps it when the connector yields ConnectorFailure.
-            # `runtime_skipped` is whatever fell through the per-target
-            # loop without resolving or still-failing. It is added on top
-            # of the create-time skipped_count (dedup + upstream errors
-            # the API already counted) so the three counters always reflect
-            # the total skip universe across both phases.
+            # `runtime_skipped` covers the residual: targets that neither
+            # resolved (landed + had a source error) nor failed (connector/
+            # pipeline rejected). Added on top of the create-time
+            # skipped_count (dedup + upstream errors the API already
+            # counted) so counters reflect total skip universe.
             runtime_skipped = max(
                 0, total_attempted - resolved_count - still_failing_count
             )
