@@ -54,15 +54,19 @@ jobs:
         run: |
           ods openapi all
 
-      - name: Cache mypy cache
-        if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
-        with:
-          path: .mypy_cache
-          key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'pyproject.toml') }}
-          restore-keys: |
-            mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-
-            mypy-${{ runner.os }}-
+      # We've disabled the mypy cache because we saw that the cache was poisoned
+      # for release/v3.2, but we no longer use mypy as of v3.3, so just don't
+      # rely on the cache at the expense of CI time for cherry-picks to this
+      # release branch.
+      # - name: Cache mypy cache
+      #   if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
+      #   uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
+      #   with:
+      #     path: .mypy_cache
+      #     key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'pyproject.toml') }}
+      #     restore-keys: |
+      #       mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-
+      #       mypy-${{ runner.os }}-
 
       - name: Run MyPy
         env:
