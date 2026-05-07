@@ -376,10 +376,20 @@ def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> Non
     INSERT/UPDATE in the same transaction so the seat count cannot change
     between this check and the write.
 
-    Self-hosted: locks the local row, then runs ``check_seat_availability``.
-    Cloud (multi-tenant): the lock acquisition is a no-op (the seat count
-    lives in Stripe, not the local DB) — but the cloud auto-bill path is
-    inherently serialized per-tenant by the Stripe idempotency key.
+    Self-hosted: locks the local tenant on ``db_session``, then runs
+    ``check_seat_availability`` against the same session.
+
+    Cloud (multi-tenant): this wrapper is a best-effort pre-flight only —
+    the local advisory lock is NOT acquired (cloud seat state lives in
+    Stripe + ``UserTenantMapping`` in the shared schema, not the
+    tenant-scoped ``db_session``). The seat-consuming write itself runs
+    later in ``add_users_to_tenant``, which calls
+    ``enforce_cloud_seat_limit(db_session=shared_session)`` — that path
+    DOES acquire the tenant-scoped advisory lock on the shared-schema
+    session and holds it across {count, Stripe modify, mapping insert}.
+    The Stripe idempotency key is retry-safe but NOT a concurrency
+    serializer; the lock in ``add_users_to_tenant`` is what enforces the
+    seat cap under concurrency.
     """
     if not MULTI_TENANT:
         fetch_ee_implementation_or_noop("onyx.db.license", "acquire_seat_lock", None)(
@@ -392,20 +402,17 @@ def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> Non
 def _user_currently_counts_toward_seats(user: User) -> bool:
     """Return whether ``user`` is currently counted by ``get_used_seats``.
 
-    Delegates to the canonical predicate in ``ee/onyx/db/license.py`` so
-    the two definitions cannot drift. The local fallback below is only
-    reached on CE / non-EE deployments where the EE module is absent.
+    Single delegating call to the canonical EE predicate
+    ``ee/onyx/db/license.py:user_counts_toward_seats`` — the only source
+    of truth for the seat-count filter. On CE / non-EE deployments the
+    no-op returns ``False``, which is the seat-conservative answer
+    (callers in CE never enforce a seat cap because no license is
+    present, so the predicate's value is moot).
     """
-    canonical = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "user_counts_toward_seats", None
-    )(user)
-    if canonical is not None:
-        return bool(canonical)
-    return (
-        bool(user.is_active)
-        and user.role != UserRole.EXT_PERM_USER
-        and user.email != ANONYMOUS_USER_EMAIL
-        and user.account_type != AccountType.SERVICE_ACCOUNT
+    return bool(
+        fetch_ee_implementation_or_noop(
+            "onyx.db.license", "user_counts_toward_seats", False
+        )(user)
     )
 
 

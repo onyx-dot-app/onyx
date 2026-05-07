@@ -26,6 +26,7 @@ from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
+from shared_configs.contextvars import get_current_tenant_id
 
 logger_base = setup_logger()
 
@@ -324,12 +325,25 @@ def handle_message(
             # of the branches above already pre-checked, so this is purely a
             # defense-in-depth guard against a future caller that forgets to
             # check first.
+            #
+            # Acquire the per-tenant advisory lock on the SAME session that
+            # add_slack_user_if_not_exists will commit, so the check + the
+            # promotion write run under one tenant-scoped lock. Without this,
+            # two concurrent Slack workers each promoting a different
+            # EXT_PERM_USER at exactly the seat limit would both pass and
+            # both commit, breaching the cap.
             def _slack_seat_enforcer(session: Session, seats_needed: int) -> None:
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
                 check_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",
                     "check_seat_availability",
                     None,
                 )
+                acquire_lock_fn(session, get_current_tenant_id())
                 result = check_fn(session, seats_needed=seats_needed)
                 if result is not None and not result.available:
                     raise OnyxError(

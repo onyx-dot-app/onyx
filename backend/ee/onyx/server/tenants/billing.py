@@ -185,9 +185,24 @@ def attempt_seat_billing_increase(
     so the caller fails closed rather than silently allowing a signup that
     bypasses billing.
 
-    Idempotent: if the existing Stripe subscription quantity is already
-    >= ``target_quantity``, the call is a no-op and returns success without
-    reissuing the modify.
+    Idempotent on retry: passing the same ``(tenant_id, target_quantity)``
+    twice generates the same Stripe ``idempotency_key``, so a retried HTTP
+    request will not double-charge. If the existing subscription quantity
+    is already ``>= target_quantity``, the call is a no-op and returns
+    success without reissuing the modify.
+
+    .. warning::
+       The idempotency key is RETRY-SAFE, NOT a concurrency serializer.
+       Two concurrent signups that both compute ``target = N + 1`` and
+       reuse the same key will both receive Stripe success responses,
+       and Stripe will only bill ``N + 1`` (not ``N + 2``). Callers that
+       need cap enforcement under concurrency MUST hold a per-tenant
+       advisory lock across the {count, this call, seat-consuming
+       insert} window — use ``enforce_cloud_seat_limit(db_session=...)``,
+       which acquires that lock and only releases it on the caller's
+       commit. Direct calls to this function from outside the wrapper
+       bypass cap enforcement and should be limited to retry / repair
+       paths.
     """
     try:
         response = fetch_tenant_stripe_information(tenant_id)
