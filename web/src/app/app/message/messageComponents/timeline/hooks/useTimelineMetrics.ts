@@ -4,6 +4,7 @@ import {
   TransformedStep,
 } from "@/app/app/message/messageComponents/timeline/transformers";
 import {
+  isCodingAgentPackets,
   isResearchAgentPackets,
   stepSupportsCollapsedStreaming,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
@@ -15,6 +16,7 @@ export interface TimelineMetrics {
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
   lastStepSupportsCollapsedStreaming: boolean;
+  containsCodingAgent: boolean;
 }
 
 /**
@@ -28,8 +30,17 @@ export function useTimelineMetrics(
   return useMemo(() => {
     // Compute in single pass
     let totalSteps = 0;
+    let containsCodingAgent = false;
     for (const tg of turnGroups) {
       totalSteps += tg.steps.length;
+      if (!containsCodingAgent) {
+        for (const step of tg.steps) {
+          if (isCodingAgentPackets(step.packets)) {
+            containsCodingAgent = true;
+            break;
+          }
+        }
+      }
     }
 
     const lastTurnGroup = turnGroups[turnGroups.length - 1];
@@ -50,6 +61,7 @@ export function useTimelineMetrics(
       lastStep,
       lastStepIsResearchAgent,
       lastStepSupportsCollapsedStreaming,
+      containsCodingAgent,
     };
   }, [turnGroups, userStopped]);
 }

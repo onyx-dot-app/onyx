@@ -145,6 +145,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStep,
     lastStepIsResearchAgent,
     lastStepSupportsCollapsedStreaming,
+    containsCodingAgent,
   } = useTimelineMetrics(turnGroups, userStopped);
 
   // Extract memory text, operation, and whether this is a memory-only timeline
@@ -158,7 +159,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   );
 
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
-    useTimelineExpansion(stopPacketSeen, turnGroups, hasDisplayContent);
+    useTimelineExpansion(
+      stopPacketSeen,
+      turnGroups,
+      containsCodingAgent,
+      hasDisplayContent
+    );
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();

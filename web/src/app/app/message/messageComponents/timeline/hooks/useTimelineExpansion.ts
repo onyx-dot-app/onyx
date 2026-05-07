@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { TurnGroup } from "../transformers";
-import { isCodingAgentPackets } from "../packetHelpers";
 
 export interface TimelineExpansionState {
   isExpanded: boolean;
@@ -22,16 +21,9 @@ export interface TimelineExpansionState {
 export function useTimelineExpansion(
   stopPacketSeen: boolean,
   turnGroups: TurnGroup[],
+  containsCodingAgent: boolean,
   hasDisplayContent: boolean = false
 ): TimelineExpansionState {
-  const containsCodingAgent = useMemo(
-    () =>
-      turnGroups.some((group) =>
-        group.steps.some((step) => isCodingAgentPackets(step.packets))
-      ),
-    [turnGroups]
-  );
-
   const lastTurnGroup =
     turnGroups.length > 0 ? turnGroups[turnGroups.length - 1] : undefined;
 
