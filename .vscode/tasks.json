@@ -41,6 +41,20 @@
     },
     {
       "type": "shell",
+      "label": "start frontend (remote backend)",
+      "detail": "Loads INTERNAL_URL and DEBUG_AUTH_COOKIE from .vscode/.env. See web/README.md.",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "web", "dev"]
+    },
+    {
+      "type": "shell",
       "label": "Generate Onyx OpenAPI Python client",
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.env",
