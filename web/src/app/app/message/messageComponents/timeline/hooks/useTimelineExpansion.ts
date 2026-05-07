@@ -11,23 +11,13 @@ export interface TimelineExpansionState {
 /**
  * Manages expansion state for the timeline.
  * Auto-collapses when streaming completes or message content starts, and syncs parallel tab selection.
- *
- * Note: coding-agent detection scans *all* turn groups, not just the last —
- * the agent's final-answer streams as a separate MESSAGE_DELTA group at
- * turn_index + 1, so the last group is typically the chat bubble, not the
- * agent. Auto-collapse keying off only the last group would dismiss the
- * agent's timeline as soon as the first answer token arrives.
  */
 export function useTimelineExpansion(
   stopPacketSeen: boolean,
-  turnGroups: TurnGroup[],
-  containsCodingAgent: boolean,
+  lastTurnGroup: TurnGroup | undefined,
   hasDisplayContent: boolean = false
 ): TimelineExpansionState {
-  const lastTurnGroup =
-    turnGroups.length > 0 ? turnGroups[turnGroups.length - 1] : undefined;
-
-  const [isExpanded, setIsExpanded] = useState(containsCodingAgent);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [parallelActiveTab, setParallelActiveTab] = useState<string>("");
   const userHasToggled = useRef(false);
 
@@ -36,27 +26,12 @@ export function useTimelineExpansion(
     setIsExpanded((prev) => !prev);
   }, []);
 
-  // Default to expanded as soon as a coding-agent group appears anywhere in
-  // the timeline.
-  useEffect(() => {
-    if (containsCodingAgent && !userHasToggled.current) {
-      setIsExpanded(true);
-    }
-  }, [containsCodingAgent]);
-
   // Auto-collapse when streaming completes or message content starts
-  // BUT respect user intent - if they've manually toggled, don't auto-collapse.
-  // Skip auto-collapse when any group is a coding-agent so the tab UI stays
-  // visible alongside the streaming chat answer.
   useEffect(() => {
-    if (
-      (stopPacketSeen || hasDisplayContent) &&
-      !userHasToggled.current &&
-      !containsCodingAgent
-    ) {
+    if ((stopPacketSeen || hasDisplayContent) && !userHasToggled.current) {
       setIsExpanded(false);
     }
-  }, [stopPacketSeen, hasDisplayContent, containsCodingAgent]);
+  }, [stopPacketSeen, hasDisplayContent]);
 
   // Sync active tab when parallel turn group changes
   useEffect(() => {

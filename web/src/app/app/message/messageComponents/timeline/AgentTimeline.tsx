@@ -159,12 +159,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   );
 
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
-    useTimelineExpansion(
-      stopPacketSeen,
-      turnGroups,
-      containsCodingAgent,
-      hasDisplayContent
-    );
+    useTimelineExpansion(stopPacketSeen, lastTurnGroup, hasDisplayContent);
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
