@@ -288,6 +288,7 @@ class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_docs_synced: int
     docs_with_permission_errors: int
     time_created: str
@@ -302,6 +303,7 @@ class DocPermissionSyncAttemptSnapshot(BaseModel):
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_docs_synced=attempt.total_docs_synced or 0,
             docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
             time_created=attempt.time_created.isoformat(),
@@ -318,6 +320,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
@@ -333,6 +336,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,

@@ -1,4 +1,5 @@
 import time
+import traceback
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -629,6 +630,7 @@ def connector_permission_sync_generator_task(
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
+        full_exception_trace = traceback.format_exc()
 
         task_logger.warning(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id} {error_msg}"
@@ -639,7 +641,10 @@ def connector_permission_sync_generator_task(
 
         with get_session_with_current_tenant() as db_session:
             mark_doc_permission_sync_attempt_failed(
-                attempt_id, db_session, error_message=error_msg
+                attempt_id,
+                db_session,
+                error_message=error_msg,
+                full_exception_trace=full_exception_trace,
             )
 
         redis_connector.permissions.generator_clear()
