@@ -1,13 +1,3 @@
-"""Generic agentic-loop driver shared by research / coding / future agents.
-
-Subclasses provide the per-agent bits (initial user message, system prompt
-template, tool definitions, real-tool dispatch, finalize step, …) by
-implementing the abstract methods. The base class owns the loop control flow:
-cycle counting, wall-clock force-finalize, the LLM step + packet drain,
-special-tool dispatch (think / finalize), tracing span, and the standard
-exception → ``PacketException`` shell.
-"""
-
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -47,12 +37,7 @@ ResultT = TypeVar("ResultT")
 
 
 class AgenticAgentBase(ABC, Generic[ResultT]):
-    """Abstract base for agentic-loop tools.
-
-    Class attributes ``agent_name``, ``max_cycles``, ``force_finalize_seconds``,
-    ``finalize_tool_name``, and ``max_step_tokens`` are required. Subclasses
-    that target deep-research-style infra should set ``is_deep_research = True``.
-    """
+    """Abstract base for agentic-loop tools."""
 
     agent_name: ClassVar[str]
     max_cycles: ClassVar[int]
@@ -82,21 +67,17 @@ class AgenticAgentBase(ABC, Generic[ResultT]):
         self.msg_history: list[ChatMessageSimple] = []
         self.most_recent_reasoning: str | None = None
 
-    # ── Required overrides ────────────────────────────────────────────────
-
     @abstractmethod
     def initial_user_message(self) -> ChatMessageSimple:
         """Build the first USER message, seeded into ``msg_history``."""
 
     @abstractmethod
     def render_system_prompt(self, cycle: int) -> str:
-        """Render the system prompt for this cycle (template selection +
-        formatting)."""
+        """Render the system prompt for this cycle."""
 
     @abstractmethod
     def tool_definitions(self) -> list[dict[str, Any]]:
-        """Tool definitions passed to the LLM step (typically include the
-        think tool only for non-reasoning models)."""
+        """Tool definitions passed to the LLM step."""
 
     @abstractmethod
     def execute_tool_calls(
@@ -105,78 +86,46 @@ class AgenticAgentBase(ABC, Generic[ResultT]):
         step_result: LlmStepResult,
         step_placement: Placement,
     ) -> bool:
-        """Dispatch the non-special tool calls and append assistant +
-        ``TOOL_CALL_RESPONSE`` messages to ``self.msg_history``.
-
-        ``step_result`` exposes the LLM step's reasoning / tokens for
-        bookkeeping (e.g. attaching to ``ToolCallInfo``); ``step_placement``
-        is the same placement used for the LLM step (its ``sub_turn_index``
-        is the loop's per-cycle counter).
-
-        Returns ``True`` to continue the loop, ``False`` to break out and
-        finalize (e.g. when the model emits unexpected tool types).
-        """
+        """Dispatch non-special tool calls; returns False to break the loop."""
 
     @abstractmethod
     def finalize(self) -> ResultT:
-        """Generate the user-facing answer / report and emit any closing
-        packets. Called after the loop exits for any reason (finalize
-        sentinel, max cycles, force-finalize timeout, no-tool-calls)."""
-
-    # ── Optional overrides ────────────────────────────────────────────────
+        """Generate the user-facing answer and emit closing packets."""
 
     @contextmanager
     def setup(self) -> Iterator[None]:
-        """Pre-loop setup / post-loop teardown. Default: no-op.
-
-        Override to acquire per-run resources (sessions, clients, …). The
-        loop body runs inside this context.
-        """
+        """Pre-loop setup / post-loop teardown. Default: no-op."""
         yield
 
     def emit_start(self) -> None:
-        """Emit a start packet at the agent's root placement before the loop
-        begins. Default: no-op."""
+        """Emit a start packet before the loop begins. Default: no-op."""
         return None
 
     def transform_step_packet(
         self, packet: Packet, step_placement: Placement  # noqa: ARG002
     ) -> Packet | None:
-        """Transform a packet streaming out of ``run_llm_step_pkt_generator``
-        before emit. Return ``None`` to drop. Default: pass through."""
+        """Transform a step packet before emit; return None to drop."""
         return packet
 
     def reminder_message(self) -> ChatMessageSimple | None:
-        """Optional USER reminder message threaded into history each cycle.
-        Default: ``None``."""
+        """Optional USER reminder message threaded into history each cycle."""
         return None
 
     def filter_tool_calls(
         self, tool_calls: list[ToolCallKickoff]
     ) -> list[ToolCallKickoff]:
-        """Filter tool calls before special-tool detection. Default: identity.
-
-        Override to enforce per-agent constraints (e.g. research keeps only
-        the first tool type in a batch because its placement system can't
-        differentiate sub-tool calls of mixed types).
-        """
+        """Filter tool calls before special-tool detection."""
         return tool_calls
 
     def custom_token_processor(self) -> Callable[..., Any] | None:
-        """Token processor passed to the LLM step. Default: think-tool
-        processor for non-reasoning models, ``None`` for reasoning models."""
+        """Token processor passed to the LLM step."""
         return (
             create_think_tool_token_processor() if not self.is_reasoning_model else None
         )
 
-    # ── Helpers exposed to subclasses ─────────────────────────────────────
-
     @property
     def root_placement(self) -> Placement:
-        """Placement at the agent's top level (no ``sub_turn_index``)."""
         return Placement(turn_index=self.turn_index, tab_index=self.tab_index)
-
-    # ── Loop driver ───────────────────────────────────────────────────────
 
     def run(self) -> ResultT | None:
         with function_span(self.agent_name) as span:
@@ -260,13 +209,10 @@ class AgenticAgentBase(ABC, Generic[ResultT]):
                 )
                 return None
 
-    # ── Internal ──────────────────────────────────────────────────────────
-
     def _run_llm_step(
         self, step_placement: Placement, cycle: int
     ) -> tuple[LlmStepResult, bool]:
-        """Run one LLM step: render prompt, construct history, drain packets
-        through ``transform_step_packet``, return the (result, has_reasoned) tuple."""
+        """Run one LLM step and return ``(result, has_reasoned)``."""
         system_prompt_str = self.render_system_prompt(cycle)
         system_prompt = ChatMessageSimple(
             message=system_prompt_str,

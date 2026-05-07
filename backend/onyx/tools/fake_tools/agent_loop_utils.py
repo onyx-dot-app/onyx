@@ -1,12 +1,3 @@
-"""Shared helpers for agentic-loop tools (research agent, coding agent, …).
-
-These extract patterns that both agents implement identically: detecting the
-think / finalize sentinel tool calls, appending the canned think-tool message
-pair, building an OpenAI parallel-tool-calls assistant message, the wall-clock
-force-finalize check, and the standard try/except shell that surfaces failures
-as a streaming-friendly PacketException.
-"""
-
 import time
 from collections.abc import Callable
 
@@ -30,13 +21,6 @@ logger = setup_logger()
 
 
 class SpecialToolCalls(BaseModel):
-    """Sentinel tool calls every agentic loop watches for.
-
-    `finalize_tool_call` is the per-agent break-the-loop sentinel
-    (``generate_answer`` for coding, ``generate_report`` for research).
-    `think_tool_call` is the cross-agent reasoning sentinel.
-    """
-
     think_tool_call: ToolCallKickoff | None = None
     finalize_tool_call: ToolCallKickoff | None = None
 
@@ -45,11 +29,7 @@ def find_special_tool_calls(
     tool_calls: list[ToolCallKickoff],
     finalize_tool_name: str,
 ) -> SpecialToolCalls:
-    """Scan ``tool_calls`` for the think and finalize sentinels.
-
-    The think tool name is shared across agents; ``finalize_tool_name`` varies
-    (``GENERATE_ANSWER_TOOL_NAME`` / ``GENERATE_REPORT_TOOL_NAME`` / …).
-    """
+    """Scan ``tool_calls`` for the think and finalize sentinels."""
     think: ToolCallKickoff | None = None
     finalize: ToolCallKickoff | None = None
     for tc in tool_calls:
@@ -65,12 +45,7 @@ def append_think_tool_messages(
     think_tool_call: ToolCallKickoff,
     token_counter: Callable[[str], int],
 ) -> None:
-    """Append the standard assistant tool-call + canned tool-response pair.
-
-    Mutates ``history`` in place. The think tool's response is a fixed sentinel
-    string with a known token count; the assistant message carries only the
-    tool-call invocation.
-    """
+    """Append the assistant tool-call + canned tool-response pair to ``history``."""
     msg_str = think_tool_call.to_msg_str()
     tool_call_token_count = token_counter(msg_str)
     history.append(
@@ -104,11 +79,7 @@ def build_assistant_with_tool_calls(
     tool_calls: list[ToolCallKickoff],
     token_counter: Callable[[str], int],
 ) -> ChatMessageSimple:
-    """Build a single ASSISTANT message bundling N tool calls.
-
-    Mirrors OpenAI's parallel-tool-calls form: one assistant turn carries every
-    tool call, then ``TOOL_CALL_RESPONSE`` messages follow one-per-call.
-    """
+    """Build a single ASSISTANT message bundling N tool calls."""
     tool_calls_simple: list[ToolCallSimple] = []
     for tc in tool_calls:
         msg_str = tc.to_msg_str()
@@ -134,11 +105,7 @@ def should_force_finalize(
     timeout_seconds: float,
     agent_name: str,
 ) -> bool:
-    """Wall-clock guard: returns True once the loop has run too long.
-
-    Logs at INFO when the limit trips so operators can correlate forced
-    finalizations with elapsed time.
-    """
+    """Returns True once the loop has run past ``timeout_seconds``."""
     elapsed = time.monotonic() - start_time
     if elapsed > timeout_seconds:
         logger.info(
