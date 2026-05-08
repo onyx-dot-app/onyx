@@ -119,8 +119,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const [errorsItemsPerPage, setErrorsItemsPerPage] = useState(10);
-
   const {
     currentPageData: indexAttemptErrorsPage,
     totalPages: indexAttemptErrorsTotalPages,
@@ -128,7 +126,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     currentPage: indexAttemptErrorsCurrentPage,
     goToPage: goToIndexAttemptErrorsPage,
   } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: errorsItemsPerPage,
+    itemsPerPage: 10,
     pagesPerBatch: 1,
     endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
     disableUrlSync: true,
@@ -423,7 +421,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
           totalPages={indexAttemptErrorsTotalPages}
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
-          onPageSizeChange={setErrorsItemsPerPage}
           onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
             setShowIndexAttemptErrors(false);
