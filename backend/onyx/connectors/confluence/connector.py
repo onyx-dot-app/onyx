@@ -935,7 +935,30 @@ class ConfluenceConnector(
             seen_page_ids.add(_get_page_id(page, allow_missing=True))
             yield from self._yield_ancestor_hierarchy_nodes(page)
             doc_or_failure = self._convert_page_to_document(page)
-            if include_permissions and isinstance(doc_or_failure, Document):
+            if isinstance(doc_or_failure, ConnectorFailure):
+                # _convert_page_to_document keys its DocumentFailure on the
+                # numeric page id. Targeted reindex callers do set-difference
+                # against the URL doc_ids that came in via `errors`, so we
+                # rewrite the failure to use the URL.
+                webui = page.get("_links", {}).get("webui")
+                page_url = (
+                    build_confluence_document_id(self.wiki_base, webui, self.is_cloud)
+                    if webui
+                    else None
+                )
+                if page_url:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=page_url,
+                            document_link=page_url,
+                        ),
+                        failure_message=doc_or_failure.failure_message,
+                        exception=doc_or_failure.exception,
+                    )
+                else:
+                    yield doc_or_failure
+                continue
+            if include_permissions:
                 space_key = page.get("space", {}).get("key") or ""
                 doc_or_failure.external_access = get_page_restrictions(
                     self.confluence_client,
