@@ -10,6 +10,7 @@ from datetime import timezone
 from typing import Any
 
 from celery import Celery
+from celery import current_app
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -88,7 +89,6 @@ from onyx.db.index_attempt_metrics import IndexAttemptStage
 from onyx.db.index_attempt_metrics import safe_record_single_event
 from onyx.db.index_attempt_metrics import time_stage
 from onyx.db.indexing_coordination import CoordinationStatus
-from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
@@ -136,10 +136,14 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger()
 
-DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+# How long a NOT_STARTED attempt must sit before we scan the broker.
+# After this window we check Redis directly — if the task is still there we
+# leave it alone, so this threshold does not cause false positives for
+# legitimately queued tasks under heavy load.
+NOT_STARTED_SCAN_THRESHOLD_HOURS = 6
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
@@ -324,6 +328,66 @@ def validate_active_indexing_attempts(
                     f"Failed to mark attempt {fresh_attempt.id} as failed due to heartbeat timeout"
                 )
 
+        # Separately handle NOT_STARTED attempts. Their heartbeat_counter never
+        # advances (the task hasn't started), so the heartbeat loop above cannot
+        # be used. Docfetching tasks have no expires= so a task can legitimately
+        # sit in the queue for hours under heavy load — we gate on
+        # NOT_STARTED_SCAN_THRESHOLD_HOURS before scanning Redis, then confirm
+        # the Celery task is truly gone before marking failed.
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            hours=NOT_STARTED_SCAN_THRESHOLD_HOURS
+        )
+        stale_not_started = (
+            db_session.execute(
+                select(IndexAttempt).where(
+                    IndexAttempt.status == IndexingStatus.NOT_STARTED,
+                    IndexAttempt.celery_task_id.isnot(None),
+                    IndexAttempt.time_created < cutoff,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if stale_not_started:
+            redis_celery = celery_get_broker_client(current_app)
+            unacked_ids = set(
+                celery_get_unacked_task_ids(
+                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+                )
+            )
+            for attempt in stale_not_started:
+                lock_beat.reacquire()
+                if attempt.celery_task_id is None:
+                    continue
+                task_exists = celery_find_task(
+                    attempt.celery_task_id,
+                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+                    redis_celery,
+                )
+                if task_exists or attempt.celery_task_id in unacked_ids:
+                    continue
+                # Brief sleep to rule out the race where the task was just
+                # dequeued but the status flip to IN_PROGRESS hasn't committed.
+                time.sleep(1)
+                fresh = get_index_attempt(db_session, attempt.id)
+                if not fresh or fresh.status != IndexingStatus.NOT_STARTED:
+                    continue
+                task_logger.error(
+                    f"Attempt {attempt.id} has been NOT_STARTED for over "
+                    f"{NOT_STARTED_SCAN_THRESHOLD_HOURS}h and its Celery task "
+                    f"{attempt.celery_task_id} no longer exists — marking failed."
+                )
+                try:
+                    mark_attempt_failed(
+                        attempt.id,
+                        db_session,
+                        failure_reason="Task never started — Celery task lost before pickup",
+                    )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to mark lost NOT_STARTED attempt {attempt.id} as failed"
+                    )
+
 
 class ConnectorIndexingLogBuilder:
     def __init__(self, ctx: DocProcessingContext):
@@ -347,7 +411,7 @@ class ConnectorIndexingLogBuilder:
 
 
 def monitor_indexing_attempt_progress(
-    attempt: IndexAttempt, tenant_id: str, db_session: Session, task: Task
+    attempt: IndexAttempt, tenant_id: str, db_session: Session
 ) -> None:
     """
     TODO: rewrite this docstring
@@ -411,9 +475,7 @@ def monitor_indexing_attempt_progress(
 
     # Check task completion using Celery
     try:
-        check_indexing_completion(
-            attempt.id, coordination_status, storage, tenant_id, task
-        )
+        check_indexing_completion(attempt.id, coordination_status, storage, tenant_id)
     except Exception as e:
         logger.exception(
             "Failed to monitor document processing completion: attempt=%s error=%s",
@@ -463,7 +525,6 @@ def check_indexing_completion(
     coordination_status: CoordinationStatus,
     storage: DocumentBatchStorage,
     tenant_id: str,
-    task: Task,
 ) -> None:
     logger.info(
         "Checking for indexing completion: attempt=%s tenant=%s",
@@ -487,94 +548,6 @@ def check_indexing_completion(
         coordination_status.total_chunks,
         coordination_status.total_failures,
     )
-
-    # Update progress tracking and check for stalls
-    with get_session_with_current_tenant() as db_session:
-        stalled_timeout_hours = INDEXING_PROGRESS_TIMEOUT_HOURS
-        # Two phases get the generous stalling timeout, since neither produces
-        # forward motion in `batches_processed`:
-        #   1. Docfetching is still running (batches_total is None). A slow-but-
-        #      alive connector (large directory walks, paginated APIs, big
-        #      checkpoint resumption) can legitimately go hours before queueing
-        #      its first batch.
-        #   2. Docfetching has finished but no batches have been processed yet
-        #      (batches_total set, batches_processed == 0). This is the existing
-        #      "waiting between docfetching and docprocessing" case.
-        if batches_total is None or batches_processed == 0:
-            stalled_timeout_hours = (
-                stalled_timeout_hours * DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER
-            )
-
-        timed_out = not IndexingCoordination.update_progress_tracking(
-            db_session,
-            index_attempt_id,
-            batches_processed,
-            timeout_hours=stalled_timeout_hours,
-        )
-
-        # Check for stalls. Only applies to in-progress attempts. The actual
-        # window is `stalled_timeout_hours / 2` to `stalled_timeout_hours`.
-        attempt = get_index_attempt(db_session, index_attempt_id)
-        if attempt and timed_out:
-            if attempt.status == IndexingStatus.IN_PROGRESS:
-                logger.error(
-                    "Indexing attempt %s has been indexing for %s-%s hours without progress. Marking it as failed.",
-                    index_attempt_id,
-                    stalled_timeout_hours // 2,
-                    stalled_timeout_hours,
-                )
-                mark_attempt_failed(
-                    index_attempt_id, db_session, failure_reason="Stalled indexing"
-                )
-            elif (
-                attempt.status == IndexingStatus.NOT_STARTED and attempt.celery_task_id
-            ):
-                # Check if the task exists in the celery queue
-                # This handles the case where Redis dies after task creation but before task execution
-                redis_celery = celery_get_broker_client(task.app)
-                task_exists = celery_find_task(
-                    attempt.celery_task_id,
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-                    redis_celery,
-                )
-                unacked_task_ids = celery_get_unacked_task_ids(
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
-                )
-
-                if not task_exists and attempt.celery_task_id not in unacked_task_ids:
-                    # there is a race condition where the docfetching task has been taken off
-                    # the queues (i.e. started) but the indexing attempt still has a status of
-                    # Not Started because the switch to in progress takes like 0.1 seconds.
-                    # sleep a bit and confirm that the attempt is still not in progress.
-                    time.sleep(1)
-                    attempt = get_index_attempt(db_session, index_attempt_id)
-                    if attempt and attempt.status == IndexingStatus.NOT_STARTED:
-                        logger.error(
-                            "Task %s attached to indexing attempt %s does not exist in the queue. Marking indexing attempt as failed.",
-                            attempt.celery_task_id,
-                            index_attempt_id,
-                        )
-                        mark_attempt_failed(
-                            index_attempt_id,
-                            db_session,
-                            failure_reason="Task not in queue",
-                        )
-            else:
-                logger.info(
-                    "Indexing attempt %s is %s. %s-%s hours without heartbeat but task is in the queue. Likely underprovisioned docfetching worker.",
-                    index_attempt_id,
-                    attempt.status,
-                    stalled_timeout_hours // 2,
-                    stalled_timeout_hours,
-                )
-                # Update last progress time so we won't time out again for
-                # another `stalled_timeout_hours / 2` window.
-                IndexingCoordination.update_progress_tracking(
-                    db_session,
-                    index_attempt_id,
-                    batches_processed,
-                    force_update_progress=True,
-                )
 
     # check again on the next check_for_indexing task
     # TODO: on the cloud this is currently 25 minutes at most, which
@@ -1193,9 +1166,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
             for attempt in active_attempts:
                 try:
-                    monitor_indexing_attempt_progress(
-                        attempt, tenant_id, db_session, self
-                    )
+                    monitor_indexing_attempt_progress(attempt, tenant_id, db_session)
                 except Exception:
                     task_logger.exception(f"Error monitoring attempt {attempt.id}")
 
