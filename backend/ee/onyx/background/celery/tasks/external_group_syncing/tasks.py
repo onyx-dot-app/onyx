@@ -1,4 +1,5 @@
 import time
+import traceback
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -613,7 +614,10 @@ def _timed_perform_external_group_sync(
 
             # Mark as failed (this also updates progress to show partial progress)
             mark_external_group_sync_attempt_failed(
-                attempt_id, db_session, error_message=str(e)
+                attempt_id,
+                db_session,
+                error_message=str(e),
+                full_exception_trace=traceback.format_exc(),
             )
 
             # TODO: add some notification to the admins here

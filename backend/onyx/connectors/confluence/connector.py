@@ -1055,6 +1055,66 @@ class ConfluenceConnector(
                     "Invalid Confluence space key provided"
                 ) from e
 
+    def probe_rest_space_permissions_admin_access(self) -> None:
+        """For Confluence DC 9.1+, probe the REST space-permissions endpoint
+        to surface "bot account is not a Confluence/space admin" at perm-sync
+        validation time rather than mid-sync per-space.
+
+        The motivating quirk is CONFSERVER-99908: that endpoint returns 500
+        (instead of 403) for non-admin callers, so a regular permission-sync
+        run produces an unactionable 500-bubble-up instead of a clear
+        "you need admin rights" signal. This probe intentionally lives in
+        validate_perm_sync (not validate_connector_settings) so that
+        connectors without permission sync don't have admin rights forced
+        on them.
+
+        No-ops for Cloud (different API surface) and for DC < 9.1.0 (no
+        REST endpoint -- the legacy JSON-RPC path is on a different
+        permission model and is validated via its own failure modes
+        during sync).
+        """
+        client = self.low_timeout_confluence_client
+        if not client.supports_rest_space_permissions():
+            return
+
+        # Pick any visible space; the 500-vs-200 distinction is global to
+        # the credential, not per-space, so the cheapest visible space works.
+        try:
+            spaces_iter = client.retrieve_confluence_spaces(limit=1)
+            first_space = next(spaces_iter, None)
+        except Exception as e:
+            logger.warning(
+                "Skipping REST space-permissions admin probe; could not "
+                "list any space to probe against: %s",
+                e,
+            )
+            return
+        if not first_space:
+            return
+        first_space_key = first_space.get("key")
+        if not first_space_key:
+            return
+
+        try:
+            # InsufficientPermissionsError on 500 (CONFSERVER-99908); we
+            # let it propagate -- that *is* the validation failure we want.
+            client.get_all_space_permissions_server_rest(
+                space_key=first_space_key,
+            )
+        except InsufficientPermissionsError:
+            raise
+        except Exception as e:
+            # Any other failure here is unexpected but not necessarily a
+            # blocker for setup. Log it and let the sync surface the real
+            # error if there is one; we don't want a flaky network call to
+            # block connector creation.
+            logger.warning(
+                "REST space-permissions admin probe against space %s "
+                "failed with non-permission error: %s. Skipping.",
+                first_space_key,
+                e,
+            )
+
 
 if __name__ == "__main__":
     import os

@@ -150,8 +150,17 @@ def mark_doc_permission_sync_attempt_failed(
     attempt_id: int,
     db_session: Session,
     error_message: str,
+    full_exception_trace: str | None = None,
 ) -> None:
-    """Mark a doc permission sync attempt as failed."""
+    """Mark a doc permission sync attempt as failed.
+
+    ``full_exception_trace`` is optional so call sites that fail with a
+    synthesized error message (e.g. fence missing, payload invalid) and
+    have no live exception in scope can omit it. When the failure
+    originates from an ``except`` block, callers should pass
+    ``traceback.format_exc()`` so the full stack is persisted alongside
+    the short ``error_message``.
+    """
     try:
         attempt = db_session.execute(
             select(DocPermissionSyncAttempt)
@@ -164,6 +173,7 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.status = PermissionSyncStatus.FAILED
         attempt.time_finished = func.now()
         attempt.error_message = error_message
+        attempt.full_exception_trace = full_exception_trace
         db_session.commit()
 
         # Add telemetry for permission sync attempt status change
@@ -416,8 +426,17 @@ def mark_external_group_sync_attempt_failed(
     attempt_id: int,
     db_session: Session,
     error_message: str,
+    full_exception_trace: str | None = None,
 ) -> None:
-    """Mark an external group sync attempt as failed."""
+    """Mark an external group sync attempt as failed.
+
+    ``full_exception_trace`` is optional so call sites that fail with a
+    synthesized error message (e.g. missing sync config) and have no
+    live exception in scope can omit it. When the failure originates
+    from an ``except`` block, callers should pass
+    ``traceback.format_exc()`` so the full stack is persisted alongside
+    the short ``error_message``.
+    """
     try:
         attempt = db_session.execute(
             select(ExternalGroupPermissionSyncAttempt)
@@ -430,6 +449,7 @@ def mark_external_group_sync_attempt_failed(
         attempt.status = PermissionSyncStatus.FAILED
         attempt.time_finished = func.now()
         attempt.error_message = error_message
+        attempt.full_exception_trace = full_exception_trace
         db_session.commit()
 
         # Add telemetry for permission sync attempt status change

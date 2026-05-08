@@ -42,6 +42,7 @@ from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.factory import get_default_llm
@@ -55,6 +56,11 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
+from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
@@ -271,6 +277,56 @@ def _validate_llm_provider_change(
         )
 
 
+def _validate_and_normalize_vertex_auth(
+    provider: str,
+    custom_config: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Enforce vertex_ai auth-method invariants and strip incompatible fields.
+
+    - Workload Identity (ADC) requires an explicit vertex_project and must not
+      carry a vertex_credentials blob (LiteLLM would otherwise try to use it).
+    - Service account JSON mode requires vertex_credentials.
+    - Missing vertex_auth_method is treated as service_account_json for
+      backwards compatibility with providers created before this field existed.
+    """
+    if provider != LlmProviderNames.VERTEX_AI or custom_config is None:
+        return custom_config
+
+    auth_method = custom_config.get(
+        VERTEX_AUTH_METHOD_KWARG, VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+    )
+
+    if auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY:
+        if MULTI_TENANT:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Workload Identity is not supported in multi-tenant deployments; "
+                "use Service Account JSON instead.",
+            )
+        if not (custom_config.get(VERTEX_PROJECT_KWARG) or "").strip():
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "vertex_project is required when using Workload Identity authentication",
+            )
+        # Don't persist a stale credentials blob alongside a WIF config.
+        return {
+            k: v for k, v in custom_config.items() if k != VERTEX_CREDENTIALS_FILE_KWARG
+        }
+
+    if auth_method == VERTEX_AUTH_METHOD_SERVICE_ACCOUNT:
+        if not (custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG) or "").strip():
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "vertex_credentials is required when using Service Account JSON authentication",
+            )
+        return custom_config
+
+    raise OnyxError(
+        OnyxErrorCode.VALIDATION_ERROR,
+        f"Unsupported vertex_auth_method: {auth_method}",
+    )
+
+
 @admin_router.get("/custom-provider-names")
 def fetch_custom_provider_names(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -350,6 +406,11 @@ def test_llm_configuration(
             )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
+
+    test_custom_config = _validate_and_normalize_vertex_auth(
+        provider=test_llm_request.provider,
+        custom_config=test_custom_config,
+    )
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -506,6 +567,11 @@ def put_llm_provider(
         )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
+
+    llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
+        provider=llm_provider_upsert_request.provider,
+        custom_config=llm_provider_upsert_request.custom_config,
+    )
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (

@@ -288,8 +288,8 @@ def mark_attempt_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
-        # TODO(@bo): in PR 2, cross-check DB terminal status before acting on
-        # stale counters in case cleanup() failed and left them behind.
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
         try:
             RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
         except Exception:
@@ -328,8 +328,8 @@ def mark_attempt_partially_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
-        # TODO(@bo): in PR 2, cross-check DB terminal status before acting on
-        # stale counters in case cleanup() failed and left them behind.
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
         try:
             RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
         except Exception:
@@ -371,8 +371,8 @@ def mark_attempt_canceled(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
-        # TODO(@bo): in PR 2, cross-check DB terminal status before acting on
-        # stale counters in case cleanup() failed and left them behind.
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
         try:
             RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
         except Exception:
@@ -416,8 +416,8 @@ def mark_attempt_failed(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
-        # TODO(@bo): in PR 2, cross-check DB terminal status before acting on
-        # stale counters in case cleanup() failed and left them behind.
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
         try:
             RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
         except Exception:

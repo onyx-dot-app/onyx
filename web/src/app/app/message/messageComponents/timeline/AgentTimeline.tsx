@@ -144,6 +144,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
+    lastStepIsCodingAgent,
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
@@ -247,9 +248,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
+    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
     return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
+  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
 
   // Header selection based on UI state
   const renderHeader = useCallback(() => {

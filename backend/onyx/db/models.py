@@ -4972,8 +4972,9 @@ class DocPermissionSyncAttempt(Base):
     total_docs_synced: Mapped[int | None] = mapped_column(Integer, default=0)
     docs_with_permission_errors: Mapped[int | None] = mapped_column(Integer, default=0)
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -5041,8 +5042,9 @@ class ExternalGroupPermissionSyncAttempt(Base):
         Integer, default=0
     )
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(

@@ -7,17 +7,15 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import { InputBar } from "@tests/e2e/chat/InputBar";
 
 export class ChatPage {
   readonly page: Page;
+  readonly inputBar: InputBar;
 
   // Layout containers
   readonly container: Locator;
   readonly scrollContainer: Locator;
-
-  // Input
-  readonly chatInputTextarea: Locator;
-  readonly sendButton: Locator;
 
   // Message collections
   readonly humanMessages: Locator;
@@ -25,10 +23,9 @@ export class ChatPage {
 
   constructor(page: Page) {
     this.page = page;
+    this.inputBar = new InputBar(page);
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
-    this.chatInputTextarea = page.locator("#onyx-chat-input-textbox");
-    this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.humanMessages = page.locator("#onyx-human-message");
     this.aiMessages = page.getByTestId("onyx-ai-message");
   }
@@ -44,7 +41,7 @@ export class ChatPage {
   async goto(): Promise<void> {
     await this.page.goto("/app");
     await this.page.waitForLoadState("networkidle");
-    await this.chatInputTextarea.waitFor({ state: "visible", timeout: 15000 });
+    await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
@@ -76,5 +73,17 @@ export class ChatPage {
 
     await this.scrollTo("bottom");
     await expectElementScreenshot(this.container, { name: `${name}-bottom` });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Message assertions
+  // ---------------------------------------------------------------------------
+
+  async expectHumanMessage(text: string, index = 0): Promise<void> {
+    await expect(this.humanMessage(index)).toContainText(text);
+  }
+
+  async expectNoHumanMessages(): Promise<void> {
+    await expect(this.humanMessages).toHaveCount(0);
   }
 }

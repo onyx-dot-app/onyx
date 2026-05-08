@@ -246,16 +246,14 @@ def handle_regular_answer(
         slack_context_str: str | None,
         onyx_user: User,
     ) -> ChatBasicResponse:
-        with get_session_with_current_tenant() as db_session:
-            packets = handle_stream_message_objects(
-                new_msg_req=new_message_request,
-                user=onyx_user,
-                db_session=db_session,
-                bypass_acl=False,
-                additional_context=slack_context_str,
-                slack_context=message_info.slack_context,
-            )
-            answer = gather_stream(packets)
+        packets = handle_stream_message_objects(
+            new_msg_req=new_message_request,
+            user=onyx_user,
+            bypass_acl=False,
+            additional_context=slack_context_str,
+            slack_context=message_info.slack_context,
+        )
+        answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)

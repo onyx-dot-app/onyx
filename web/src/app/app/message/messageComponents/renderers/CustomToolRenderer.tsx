@@ -11,16 +11,12 @@ import {
 import { MessageRenderer, RenderType } from "../interfaces";
 import { buildImgUrl } from "../../../components/files/images/utils";
 import Text from "@/refresh-components/texts/Text";
-import {
-  SvgActions,
-  SvgArrowExchange,
-  SvgDownload,
-  SvgExternalLink,
-} from "@opal/icons";
+import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
+import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
 
 // Lazy registration for hljs JSON language
 function ensureHljsRegistered() {
@@ -173,12 +169,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* Tool arguments */}
         {toolArgsJson && (
           <div>
-            <div className="flex items-center gap-1">
-              <SvgArrowExchange className="w-3 h-3 text-text-02" />
-              <Text text04 secondaryBody>
-                Request
-              </Text>
-            </div>
+            <IoBlockLabel label="Request" />
             <div className="prose max-w-full">
               <CodeBlock
                 className="font-secondary-mono"
@@ -231,12 +222,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* JSON/Text responses */}
         {!error && data !== undefined && data !== null && (
           <div>
-            <div className="flex items-center gap-1">
-              <SvgArrowExchange className="w-3 h-3 text-text-02" />
-              <Text text04 secondaryBody>
-                Response
-              </Text>
-            </div>
+            <IoBlockLabel label="Response" />
             <div className="prose max-w-full">
               {dataJson ? (
                 <CodeBlock

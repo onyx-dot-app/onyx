@@ -1,7 +1,6 @@
 import contextlib
 from collections.abc import Generator
 
-from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
@@ -17,6 +16,7 @@ from onyx.db.document import update_docs_chunk_count__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.models import ChunkEnrichmentContext
@@ -35,17 +35,17 @@ class DocumentIndexingBatchAdapter:
     """Default adapter: handles DB prep, locking, metadata enrichment, and finalize.
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
+    Each phase opens its own short-lived session so no connection is held idle
+    during the long embedding and Vespa-write phases.
     """
 
     def __init__(
         self,
-        db_session: Session,
         connector_id: int,
         credential_id: int,
         tenant_id: str,
         index_attempt_metadata: IndexAttemptMetadata,
     ):
-        self.db_session = db_session
         self.connector_id = connector_id
         self.credential_id = credential_id
         self.tenant_id = tenant_id
@@ -54,43 +54,55 @@ class DocumentIndexingBatchAdapter:
     def prepare(
         self, documents: list[Document], ignore_time_skip: bool
     ) -> DocumentBatchPrepareContext | None:
-        """Upsert docs, map CC pairs, return context or mark as indexed if no-op."""
-        context = index_doc_batch_prepare(
-            documents=documents,
-            index_attempt_metadata=self.index_attempt_metadata,
-            db_session=self.db_session,
-            ignore_time_skip=ignore_time_skip,
-        )
+        """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
-        if not context:
-            # even though we didn't actually index anything, we should still
-            # mark them as "completed" for the CC Pair in order to make the
-            # counts match
-            mark_document_as_indexed_for_cc_pair__no_commit(
-                connector_id=self.index_attempt_metadata.connector_id,
-                credential_id=self.index_attempt_metadata.credential_id,
-                document_ids=[doc.id for doc in documents],
-                db_session=self.db_session,
+        Opens and closes its own short-lived session so the caller holds no
+        connection after this method returns.
+        """
+        with get_session_with_current_tenant() as db_session:
+            context = index_doc_batch_prepare(
+                documents=documents,
+                index_attempt_metadata=self.index_attempt_metadata,
+                db_session=db_session,
+                ignore_time_skip=ignore_time_skip,
             )
-            self.db_session.commit()
+
+            if not context:
+                # even though we didn't actually index anything, we should still
+                # mark them as "completed" for the CC Pair in order to make the
+                # counts match
+                mark_document_as_indexed_for_cc_pair__no_commit(
+                    connector_id=self.index_attempt_metadata.connector_id,
+                    credential_id=self.index_attempt_metadata.credential_id,
+                    document_ids=[doc.id for doc in documents],
+                    db_session=db_session,
+                )
+            db_session.commit()
 
         return context
 
     @contextlib.contextmanager
-    def lock_context(
-        self, documents: list[Document]
-    ) -> Generator[TransactionalContext, None, None]:
-        """Acquire transaction/row locks on docs for the critical section."""
-        with prepare_to_modify_documents(
-            db_session=self.db_session, document_ids=[doc.id for doc in documents]
-        ) as transaction:
-            yield transaction
+    def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
+        """Acquire transaction/row locks on docs and yield the session.
+
+        Commits once after the caller's body returns (still inside the
+        prepare_to_modify_documents begin() block), then closes the session.
+        The single commit both flushes post_index's writes and releases the lock.
+        """
+        with get_session_with_current_tenant() as db_session:
+            with prepare_to_modify_documents(
+                db_session=db_session,
+                document_ids=[doc.id for doc in documents],
+            ):
+                yield db_session
+                db_session.commit()
 
     def prepare_enrichment(
         self,
         context: DocumentBatchPrepareContext,
         tenant_id: str,
         chunks: list[DocAwareChunk],
+        db_session: Session,
     ) -> "DocumentChunkEnricher":
         """Do all DB lookups once and return a per-chunk enricher."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
@@ -112,23 +124,23 @@ class DocumentIndexingBatchAdapter:
 
         return DocumentChunkEnricher(
             doc_id_to_access_info=get_access_for_documents(
-                document_ids=updatable_ids, db_session=self.db_session
+                document_ids=updatable_ids, db_session=db_session
             ),
             doc_id_to_document_set={
                 document_id: document_sets
                 for document_id, document_sets in fetch_document_sets_for_documents(
-                    document_ids=updatable_ids, db_session=self.db_session
+                    document_ids=updatable_ids, db_session=db_session
                 )
             },
             doc_id_to_ancestor_ids=self._get_ancestor_ids_for_documents(
-                context.updatable_docs, tenant_id
+                context.updatable_docs, tenant_id, db_session
             ),
             id_to_boost_map=context.id_to_boost_map,
             doc_id_to_previous_chunk_cnt={
                 document_id: chunk_count
                 for document_id, chunk_count in fetch_chunk_counts_for_documents(
                     document_ids=updatable_ids,
-                    db_session=self.db_session,
+                    db_session=db_session,
                 )
             },
             doc_id_to_new_chunk_cnt=dict(doc_id_to_new_chunk_cnt),
@@ -140,6 +152,7 @@ class DocumentIndexingBatchAdapter:
         self,
         documents: list[Document],
         tenant_id: str,
+        db_session: Session,
     ) -> dict[str, list[int]]:
         """
         Get ancestor hierarchy node IDs for a batch of documents.
@@ -163,7 +176,7 @@ class DocumentIndexingBatchAdapter:
                 redis_client=redis_client,
                 source=doc.source,
                 parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
-                db_session=self.db_session,
+                db_session=db_session,
             )
             result[doc.id] = ancestors
 
@@ -175,6 +188,7 @@ class DocumentIndexingBatchAdapter:
         updatable_chunk_data: list[UpdatableChunkData],
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
+        db_session: Session,
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
@@ -189,17 +203,17 @@ class DocumentIndexingBatchAdapter:
             ids_to_new_updated_at[doc.id] = doc.doc_updated_at
 
         update_docs_updated_at__no_commit(
-            ids_to_new_updated_at=ids_to_new_updated_at, db_session=self.db_session
+            ids_to_new_updated_at=ids_to_new_updated_at, db_session=db_session
         )
 
         update_docs_last_modified__no_commit(
-            document_ids=last_modified_ids, db_session=self.db_session
+            document_ids=last_modified_ids, db_session=db_session
         )
 
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
             doc_id_to_chunk_count=enrichment.doc_id_to_new_chunk_cnt,
-            db_session=self.db_session,
+            db_session=db_session,
         )
 
         # these documents can now be counted as part of the CC Pairs
@@ -211,15 +225,13 @@ class DocumentIndexingBatchAdapter:
             connector_id=self.index_attempt_metadata.connector_id,
             credential_id=self.index_attempt_metadata.credential_id,
             document_ids=[doc.id for doc in filtered_documents],
-            db_session=self.db_session,
+            db_session=db_session,
         )
 
         # save the chunk boost components to postgres
         update_chunk_boost_components__no_commit(
-            chunk_data=updatable_chunk_data, db_session=self.db_session
+            chunk_data=updatable_chunk_data, db_session=db_session
         )
-
-        self.db_session.commit()
 
 
 class DocumentChunkEnricher:

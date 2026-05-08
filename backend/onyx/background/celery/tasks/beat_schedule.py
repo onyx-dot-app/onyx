@@ -81,6 +81,7 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale checkpoints to clean.
             "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -92,6 +93,7 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale index attempts.
             "skip_gated": False,
+            "work_gated": True,
         },
     },
     {

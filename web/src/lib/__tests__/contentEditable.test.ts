@@ -8,7 +8,6 @@ import {
   getPasteTilePreview,
   getPasteTileMeta,
   PASTE_TILE_THRESHOLD_CHARS,
-  PASTE_TILE_THRESHOLD_LINES,
 } from "@/lib/richInputTile";
 
 describe("shouldCreatePasteTile", () => {

@@ -1110,22 +1110,33 @@ def prepare_to_modify_documents(
 
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
+        yielded = False
         try:
             with db_session.begin() as transaction:
                 lock_acquired = acquire_document_locks(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    yielded = True
                     yield transaction
-                    break
-        except OperationalError as e:
+                    return
+        except Exception as e:
+            if yielded:
+                # Exception came from the caller's body (after yield), not from
+                # lock acquisition. Re-raise regardless of type so the generator
+                # terminates — looping would cause a second yield and
+                # "RuntimeError: generator didn't stop after throw()".
+                raise
+            if not isinstance(e, OperationalError):
+                raise
             logger.warning(
                 "Failed to acquire locks for documents on attempt %s, retrying. Error: %s",
                 i,
                 e,
             )
 
-        time.sleep(retry_delay)
+        if i < _NUM_LOCK_ATTEMPTS - 1:
+            time.sleep(retry_delay)
 
     if not lock_acquired:
         raise RuntimeError(
