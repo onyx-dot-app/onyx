@@ -1,7 +1,7 @@
 """seed_coding_agent_tool
 
 Revision ID: f3c9e59c3b07
-Revises: 74379b447d4c
+Revises: 1c36b3dc2f4e
 Create Date: 2026-05-05 14:18:31.451207
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "f3c9e59c3b07"
-down_revision = "74379b447d4c"
+down_revision = "1c36b3dc2f4e"
 branch_labels = None
 depends_on = None
 
