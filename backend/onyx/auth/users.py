@@ -420,10 +420,23 @@ def _upgrade_will_add_seat(user_before: User, will_become_active: bool) -> bool:
     """Return whether upgrading ``user_before`` to STANDARD/web-login will
     flip them from uncounted to counted (i.e. consume an additional seat).
 
-    After upgrade: account_type=STANDARD, role=BASIC/ADMIN — so post-upgrade
-    seat-counted-status depends only on whether the user will be active and
-    is not the anonymous account.
+    Self-hosted: seat counting is per-User filtered by role/account_type.
+    Upgrades that change role/account_type can shift the count, so we
+    compare the canonical predicate before vs the post-upgrade state.
+    Post-upgrade: account_type=STANDARD, role=BASIC/ADMIN — so the
+    post-upgrade seat-counted-status depends only on activeness and the
+    email not being anonymous.
+
+    Multi-tenant cloud: seat counting is per-``UserTenantMapping`` row,
+    NOT per-User. A role/account_type upgrade does not add a mapping —
+    the user must already have an active mapping to be promoting in the
+    first place — so the upgrade is seat-neutral by ``get_tenant_count``.
+    Return ``False`` so the cloud billing path is not triggered with a
+    target quantity that the mapping count will never reach (which would
+    over-bill the tenant by one seat per promotion).
     """
+    if MULTI_TENANT:
+        return False
     will_be_counted = will_become_active and user_before.email != ANONYMOUS_USER_EMAIL
     return will_be_counted and not _user_currently_counts_toward_seats(user_before)
 

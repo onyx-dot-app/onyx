@@ -182,6 +182,21 @@ class TestUpgradeWillAddSeat:
         )
         assert not _upgrade_will_add_seat(before, will_become_active=True)
 
+    def test_multi_tenant_upgrade_is_seat_neutral(self) -> None:
+        """Cloud counts UserTenantMapping rows, not User attributes —
+        an EXT_PERM_USER upgrade leaves the mapping count unchanged, so
+        ``_upgrade_will_add_seat`` must return ``False`` to avoid
+        over-billing the tenant on every promotion."""
+        from onyx.auth.schemas import UserRole
+
+        before = _user(
+            is_active=True,
+            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        with patch("onyx.auth.users.MULTI_TENANT", True):
+            assert not _upgrade_will_add_seat(before, will_become_active=True)
+
 
 class TestCEDelegationFallback:
     """When the EE predicate is unavailable (CE build / noop fetch),
