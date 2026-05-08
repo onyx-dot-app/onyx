@@ -57,12 +57,8 @@ from onyx.llm.well_known_providers.auto_update_service import (
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import (
-    VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
-)
-from onyx.llm.well_known_providers.constants import (
-    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
-)
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 from onyx.llm.well_known_providers.llm_provider_options import (
