@@ -141,6 +141,18 @@ DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
 DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
 DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
 
+# All Microsoft cloud SharePoint host suffixes. Used to recognize valid
+# SharePoint URLs that don't include a /sites/ or /teams/ segment (e.g. tenant
+# root URLs). Covers commercial, GCC High, DoD, China (21Vianet), and the
+# legacy Germany cloud.
+SHAREPOINT_HOST_SUFFIXES: tuple[str, ...] = (
+    ".sharepoint.com",
+    ".sharepoint.us",
+    ".sharepoint-mil.us",
+    ".sharepoint.cn",
+    ".sharepoint.de",
+)
+
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -1087,16 +1099,14 @@ class SharepointConnector(
         # Ensure sites are sharepoint urls. Tenant root URLs
         # (e.g. https://tenant.sharepoint.com or https://tenant.sharepoint.com/<drive>)
         # are also accepted: Graph resolves them via /sites/{hostname} and the
-        # parser below treats the trailing path as drive_name/folder_path.
+        # parser below treats the trailing path as drive_name/folder_path. The
+        # host-suffix check covers all Microsoft sovereign clouds, not just the
+        # commercial .sharepoint.com domain.
         for site_url in self.sites:
-            is_root_site = (
-                site_url.startswith("https://")
-                and ".sharepoint.com" in site_url
-                and "/sites/" not in site_url
-                and "/teams/" not in site_url
-            )
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url or is_root_site
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or any(suffix in site_url for suffix in SHAREPOINT_HOST_SUFFIXES)
             ):
                 raise ConnectorValidationError(
                     "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team, or the tenant root https://your-tenant.sharepoint.com)"

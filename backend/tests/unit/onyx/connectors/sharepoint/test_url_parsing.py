@@ -67,3 +67,18 @@ def test_extract_site_and_drive_info_tenant_root_url_no_drive() -> None:
     assert descriptor.url == "https://tenant.sharepoint.com"
     assert descriptor.drive_name is None
     assert descriptor.folder_path is None
+
+
+def test_extract_site_and_drive_info_sovereign_cloud_root_url() -> None:
+    """Tenant root URL on a non-commercial Microsoft cloud (e.g. GCC High,
+    DoD, 21Vianet) — the parser is host-agnostic, so the same root-site
+    handling applies."""
+    url = "https://tenant.sharepoint.us/Shared%20Documents/Folder"
+
+    site_descriptors = SharepointConnector._extract_site_and_drive_info([url])
+
+    assert len(site_descriptors) == 1
+    descriptor = site_descriptors[0]
+    assert descriptor.url == "https://tenant.sharepoint.us"
+    assert descriptor.drive_name == "Shared Documents"
+    assert descriptor.folder_path == "Folder"
