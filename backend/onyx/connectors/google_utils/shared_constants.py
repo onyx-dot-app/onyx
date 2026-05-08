@@ -13,6 +13,11 @@ GOOGLE_SCOPES = {
     ],
     DocumentSource.GMAIL: [
         "https://www.googleapis.com/auth/gmail.readonly",
+        # gmail.send added for operator-brain action-execution outbound. Onyx's
+        # native Gmail connector only reads, so this scope is unused server-side
+        # by Onyx itself; the operator-brain action layer reads the issued
+        # OAuth token from the Onyx credential table and uses it to send.
+        "https://www.googleapis.com/auth/gmail.send",
         "https://www.googleapis.com/auth/admin.directory.user.readonly",
         "https://www.googleapis.com/auth/admin.directory.group.readonly",
     ],
