@@ -107,7 +107,7 @@ web/lib/opal/
 ├── tsconfig.json         # Source typecheck config
 ├── tsconfig.build.json   # Used by tsup to emit dist/
 ├── tsup.config.ts
-├── tailwind-preset.js
+├── tailwind-preset.cjs
 └── README.md
 ```
 

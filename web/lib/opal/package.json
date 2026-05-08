@@ -15,7 +15,7 @@
   ],
   "files": [
     "dist",
-    "tailwind-preset.js",
+    "tailwind-preset.cjs",
     "README.md"
   ],
   "main": "./dist/components/index.js",
@@ -50,7 +50,7 @@
       "import": "./dist/utils.js"
     },
     "./styles.css": "./dist/styles.css",
-    "./tailwind-preset": "./tailwind-preset.js"
+    "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {
     "build": "tsup && node scripts/bundle-css.mjs",

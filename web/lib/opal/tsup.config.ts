@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { preserveDirectivesPlugin } from "esbuild-plugin-preserve-directives";
 
 export default defineConfig({
   entry: [
@@ -30,9 +31,13 @@ export default defineConfig({
     "rehype-sanitize",
     /\.css$/,
   ],
-  banner: {
-    js: '"use client";',
-  },
+  esbuildPlugins: [
+    preserveDirectivesPlugin({
+      directives: ["use client"],
+      include: /\.(jsx?|tsx?)$/,
+      exclude: /node_modules/,
+    }),
+  ],
   esbuildOptions(options) {
     options.jsx = "automatic";
   },

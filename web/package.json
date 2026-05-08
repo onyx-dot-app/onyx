@@ -137,6 +137,7 @@
     "@typescript/native-preview": "^7.0.0-dev.20260424.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "baseline-browser-mapping": "^2.9.19",
+    "esbuild-plugin-preserve-directives": "^0.0.11",
     "eslint": "^9.39.1",
     "eslint-config-next": "16.2.6",
     "eslint-plugin-unused-imports": "^4.1.4",
