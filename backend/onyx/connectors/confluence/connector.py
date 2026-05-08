@@ -887,11 +887,6 @@ class ConfluenceConnector(
         errors: list[ConnectorFailure],
         include_permissions: bool = False,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
-        # Confluence permission data is attached on the slim-doc/perm-sync path,
-        # not the full doc fetch path. Targeted reindex re-fetches body+metadata;
-        # any permission delta lands on the next perm-sync pass.
-        del include_permissions
-
         url_to_page_id: dict[str, str] = {}
         for failure in errors:
             if failure.failed_document is None:
@@ -917,17 +912,39 @@ class ConfluenceConnector(
 
         yield from self._yield_space_hierarchy_nodes()
 
+        space_level_access: dict[str, ExternalAccess] = (
+            get_all_space_permissions(
+                self.confluence_client, self.is_cloud, add_prefix=True
+            )
+            if include_permissions
+            else {}
+        )
+
+        expand_fields = list(_PAGE_EXPANSION_FIELDS)
+        if include_permissions:
+            expand_fields.extend(_RESTRICTIONS_EXPANSION_FIELDS)
+
         quoted_ids = ",".join("'%s'" % pid for pid in url_to_page_id.values())
         cql = "type=page and id IN (%s)" % quoted_ids
 
         seen_page_ids: set[str] = set()
         for page in self.confluence_client.paginated_cql_retrieval(
             cql=cql,
-            expand=",".join(_PAGE_EXPANSION_FIELDS),
+            expand=",".join(expand_fields),
         ):
             seen_page_ids.add(_get_page_id(page, allow_missing=True))
             yield from self._yield_ancestor_hierarchy_nodes(page)
-            yield self._convert_page_to_document(page)
+            doc_or_failure = self._convert_page_to_document(page)
+            if include_permissions and isinstance(doc_or_failure, Document):
+                space_key = page.get("space", {}).get("key") or ""
+                doc_or_failure.external_access = get_page_restrictions(
+                    self.confluence_client,
+                    doc_or_failure.id,
+                    page.get("restrictions") or {},
+                    page.get("ancestors", []),
+                    add_prefix=True,
+                ) or space_level_access.get(space_key)
+            yield doc_or_failure
 
         for doc_id, page_id in url_to_page_id.items():
             if page_id not in seen_page_ids:
