@@ -85,7 +85,7 @@ import {
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
 import type { LLMOption } from "@/refresh-components/popovers/interfaces";
 import type { RichStr } from "@opal/types";

@@ -1,11 +1,10 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import Popover from "./Popover";
-import { Button } from "@opal/components";
+import { Popover, Button } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof Popover> = {
-  title: "refresh-components/Popover",
+  title: "opal/components/Popover",
   component: Popover,
   tags: ["autodocs"],
   parameters: {

@@ -14,7 +14,7 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
-import Separator, { SeparatorProps } from "@/refresh-components/Separator";
+import { Separator, type SeparatorProps } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 
 // ============================================================================
