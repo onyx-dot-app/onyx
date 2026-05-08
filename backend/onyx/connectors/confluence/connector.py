@@ -924,6 +924,9 @@ class ConfluenceConnector(
         if include_permissions:
             expand_fields.extend(_RESTRICTIONS_EXPANSION_FIELDS)
 
+        # TODO(nikg): chunk this into multiple CQL queries once
+        # MAX_TARGETS_PER_REQUEST grows past Confluence's URL length /
+        # IN-clause practical limits. Bounded at 100 ids today.
         quoted_ids = ",".join("'%s'" % pid for pid in url_to_page_id.values())
         cql = "type=page and id IN (%s)" % quoted_ids
 
