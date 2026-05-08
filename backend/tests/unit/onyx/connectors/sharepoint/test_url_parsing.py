@@ -27,3 +27,43 @@ def test_extract_site_and_drive_info_standard_url() -> None:
     assert descriptor.url == "https://tenant.sharepoint.com/sites/SampleSite"
     assert descriptor.drive_name == "Shared Documents"
     assert descriptor.folder_path == "Nested/Path"
+
+
+def test_extract_site_and_drive_info_tenant_root_url() -> None:
+    """Tenant root URL (no /sites/ or /teams/) resolves to the root site
+    with the trailing path treated as drive_name + folder_path."""
+    url = "https://tenant.sharepoint.com/Shared%20Documents/Nested/Path"
+
+    site_descriptors = SharepointConnector._extract_site_and_drive_info([url])
+
+    assert len(site_descriptors) == 1
+    descriptor = site_descriptors[0]
+    assert descriptor.url == "https://tenant.sharepoint.com"
+    assert descriptor.drive_name == "Shared Documents"
+    assert descriptor.folder_path == "Nested/Path"
+
+
+def test_extract_site_and_drive_info_tenant_root_url_drive_only() -> None:
+    """Tenant root URL with only a drive name (no folder path)."""
+    url = "https://tenant.sharepoint.com/Shared%20Documents"
+
+    site_descriptors = SharepointConnector._extract_site_and_drive_info([url])
+
+    assert len(site_descriptors) == 1
+    descriptor = site_descriptors[0]
+    assert descriptor.url == "https://tenant.sharepoint.com"
+    assert descriptor.drive_name == "Shared Documents"
+    assert descriptor.folder_path is None
+
+
+def test_extract_site_and_drive_info_tenant_root_url_no_drive() -> None:
+    """Bare tenant root URL: no drive, no folder."""
+    url = "https://tenant.sharepoint.com"
+
+    site_descriptors = SharepointConnector._extract_site_and_drive_info([url])
+
+    assert len(site_descriptors) == 1
+    descriptor = site_descriptors[0]
+    assert descriptor.url == "https://tenant.sharepoint.com"
+    assert descriptor.drive_name is None
+    assert descriptor.folder_path is None

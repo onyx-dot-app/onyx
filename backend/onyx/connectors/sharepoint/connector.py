@@ -1084,13 +1084,22 @@ class SharepointConnector(
                 "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
             )
 
-        # Ensure sites are sharepoint urls
+        # Ensure sites are sharepoint urls. Tenant root URLs
+        # (e.g. https://tenant.sharepoint.com or https://tenant.sharepoint.com/<drive>)
+        # are also accepted: Graph resolves them via /sites/{hostname} and the
+        # parser below treats the trailing path as drive_name/folder_path.
         for site_url in self.sites:
+            is_root_site = (
+                site_url.startswith("https://")
+                and ".sharepoint.com" in site_url
+                and "/sites/" not in site_url
+                and "/teams/" not in site_url
+            )
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url or "/teams/" in site_url or is_root_site
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team, or the tenant root https://your-tenant.sharepoint.com)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1325,7 +1334,32 @@ class SharepointConnector(
                     site_type_index = lower_parts.index(site_token)
                     break
 
-            if site_type_index is None or len(parts) <= site_type_index + 1:
+            if site_type_index is None:
+                # Tenant root site: no /sites/<name> or /teams/<name> segment.
+                # Graph resolves base_url via sites.get_by_url(<hostname>) to
+                # the root site; the remaining path is treated as
+                # drive_name (+ optional folder_path).
+                site_url = base_url
+                if parts:
+                    drive_name = unquote(parts[0])
+                    folder_path = (
+                        "/".join(unquote(part) for part in parts[1:])
+                        if len(parts) > 1
+                        else None
+                    )
+                else:
+                    drive_name = None
+                    folder_path = None
+                site_data_list.append(
+                    SiteDescriptor(
+                        url=site_url,
+                        drive_name=drive_name,
+                        folder_path=folder_path,
+                    )
+                )
+                continue
+
+            if len(parts) <= site_type_index + 1:
                 logger.warning(
                     "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
                     url,
