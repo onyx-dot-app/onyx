@@ -121,7 +121,7 @@ When stdin is not a TTY (the universal signal for "an agent or script is calling
 - Block waiting for user interaction
 - Produce output that assumes a terminal (ANSI escape codes, cursor movement, spinners)
 
-When stdin IS a TTY, current interactive behavior is preserved. The `--interactive` / `--no-interactive` flag provides an explicit override in either direction.
+When stdin IS a TTY, current interactive behavior is preserved.
 
 #### R1.2: Agent-optimized default output
 
@@ -146,7 +146,7 @@ Agents must not be able to configure the CLI — they cannot set the Onyx URL, A
 Agents can see all CLI commands, but human-only commands are gated behind the TUI (no TTY = not usable):
 
 - **Agent-usable commands** (available without TTY): commands for searching knowledge, getting LLM answers, listing agents/personas, and validating configuration. The exact command names and whether search and answer are one command or two is an implementation decision (see Part 3).
-- **Human-only commands** (require TTY or `--interactive`): the TUI, interactive configuration, SSH server, session browser.
+- **Human-only commands** (require TTY): the TUI, interactive configuration, SSH server, session browser.
 - **Setup commands** (one-time, not for agents): skill installation for agent harnesses.
 - Invoking a human-only command without a TTY produces a clear error, not a hang or crash.
 
@@ -174,8 +174,7 @@ The CLI's `install-skill` command installs a `SKILL.md` for agent harnesses (Cla
 ### Key Challenges
 
 - **Breaking change for existing CLI users**: This refactor will break existing onyx-cli workflows. Developers who use it interactively today will see different default behavior. Backwards compatibility is not a design constraint — we are not preserving the old UX — but be aware this is a breaking change and documentation/changelog should call it out.
-- **TTY detection edge cases**: Some CI environments and container runtimes report TTY presence inconsistently. The `--interactive` / `--no-interactive` override must exist and be documented.
-- **Output format evolution**: The current `--json` output on `ask` emits raw NDJSON stream events. For agent use, a cleaner "final result" JSON shape may be needed alongside the streaming format.
+- **Output format**: Agents consume the default plain-text stdout. The existing `--json` flag (NDJSON stream events) is left unchanged — it serves programmatic consumers, not agents.
 
 ---
 
