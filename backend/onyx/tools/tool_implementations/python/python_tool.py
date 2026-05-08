@@ -263,7 +263,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         onyx_file_id = file_store.save_file(
                             content=BytesIO(file_content),
                             display_name=filename,
-                            file_origin=FileOrigin.CHAT_UPLOAD,
+                            file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             file_type=mime_type,
                         )
 
