@@ -52,9 +52,17 @@ def confluence_connector(
 
 
 def _crawl_doc_ids(connector: ConfluenceConnector) -> list[str]:
-    """Run a normal crawl and collect every page doc_id (URL)."""
+    """Run a normal crawl and collect every page doc_id (URL).
+
+    Resets `seen_hierarchy_node_raw_ids` after the crawl. Production
+    instantiates a fresh connector per task, so the dedup set starts
+    empty for the reindex flow; without this reset the same in-test
+    instance would skip every hierarchy node on the subsequent reindex
+    call and `assert len(nodes) >= 1` would silently fail.
+    """
     connector.set_allow_images(False)
     result = load_all_from_connector(connector, 0, time.time())
+    connector.seen_hierarchy_node_raw_ids = set()
     return [doc.id for doc in result.documents]
 
 
