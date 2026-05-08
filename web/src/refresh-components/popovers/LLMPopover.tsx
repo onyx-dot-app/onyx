@@ -127,7 +127,7 @@ export default function LLMPopover({
       llmManager.updateCurrentLlm({
         modelName: option.modelName,
         provider: option.provider,
-        name: option.name,
+        name: option.name ?? "",
       } as LlmDescriptor);
       onSelect?.(
         structureValue(option.name, option.provider, option.modelName)
