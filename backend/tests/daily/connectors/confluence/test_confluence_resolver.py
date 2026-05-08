@@ -122,7 +122,11 @@ def test_reindex_multiple_pages(
     page_doc_ids = [
         d for d in _crawl_doc_ids(confluence_connector) if _PAGE_DOC_ID_RE.search(d)
     ]
-    assert len(page_doc_ids) >= 2, "Test space needs at least two /pages/ documents"
+    if len(page_doc_ids) < 2:
+        pytest.skip(
+            "Test space has fewer than two /pages/ documents (space-homepage "
+            "docs are filtered out and don't count)"
+        )
 
     results = list(confluence_connector.reindex(_build_failures(page_doc_ids)))
 
