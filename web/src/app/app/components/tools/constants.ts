@@ -1,6 +1,6 @@
 import type { IconProps } from "@opal/types";
 import {
-  SvgCode,
+  SvgCpu,
   SvgGlobe,
   SvgImage,
   SvgLink,
@@ -32,7 +32,7 @@ export const SYSTEM_TOOL_ICONS: Record<
   [SEARCH_TOOL_ID]: SvgSearch,
   [WEB_SEARCH_TOOL_ID]: SvgGlobe,
   [IMAGE_GENERATION_TOOL_ID]: SvgImage,
-  [PYTHON_TOOL_ID]: SvgCode,
+  [PYTHON_TOOL_ID]: SvgTerminal,
   [OPEN_URL_TOOL_ID]: SvgLink,
-  [CODING_AGENT_TOOL_ID]: SvgTerminal,
+  [CODING_AGENT_TOOL_ID]: SvgCpu,
 };
