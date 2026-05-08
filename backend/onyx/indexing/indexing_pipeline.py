@@ -11,12 +11,17 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.agent_wiki.tasks import push_to_agent_wiki
+from onyx.configs.app_configs import AGENT_WIKI_ENABLED
+from onyx.configs.app_configs import AGENT_WIKI_MAX_DOC_CHARS
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.constants import CELERY_AGENT_WIKI_PUSH_TASK_EXPIRES
+from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -31,10 +36,12 @@ from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -89,6 +96,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -1089,6 +1097,76 @@ def _apply_document_ingestion_hook(
     return result
 
 
+def _maybe_enqueue_agent_wiki_push(
+    adapter: IndexingBatchAdapter,
+    filtered_documents: list[Document],
+    insertion_records: list[DocumentInsertionRecord],
+) -> None:
+    # Agent-wiki is single-tenant; pushing from a multi-tenant deployment would
+    # mix documents from different organizations into a shared instance.
+    if not AGENT_WIKI_ENABLED or MULTI_TENANT:
+        return
+
+    connector_id = getattr(adapter, "connector_id", None)
+    credential_id = getattr(adapter, "credential_id", None)
+    if connector_id is None or credential_id is None:
+        return
+
+    successfully_indexed = {r.document_id for r in insertion_records}
+    if not successfully_indexed:
+        return
+
+    with get_session_with_current_tenant() as db_session:
+        cc_pair = get_connector_credential_pair(db_session, connector_id, credential_id)
+        if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
+            return
+
+    doc_map = {doc.id: doc for doc in filtered_documents}
+    for doc_id in successfully_indexed:
+        doc = doc_map.get(doc_id)
+        if doc is None:
+            continue
+        content = " ".join(
+            s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+        )
+        if len(content) > AGENT_WIKI_MAX_DOC_CHARS:
+            logger.debug(
+                "Skipping agent-wiki push for doc_id=%s: content length %d exceeds limit %d",
+                doc_id,
+                len(content),
+                AGENT_WIKI_MAX_DOC_CHARS,
+            )
+            continue
+        try:
+            push_to_agent_wiki.apply_async(
+                queue=OnyxCeleryQueues.AGENT_WIKI_PUSH,
+                expires=CELERY_AGENT_WIKI_PUSH_TASK_EXPIRES,
+                kwargs=dict(
+                    doc_id=doc_id,
+                    source=str(doc.source.value) if doc.source else "unknown",
+                    title=doc.title or doc.semantic_identifier,
+                    content=content,
+                    url=next(
+                        (
+                            s.link
+                            for s in doc.sections
+                            if isinstance(s, TextSection) and s.link
+                        ),
+                        None,
+                    ),
+                    doc_updated_at=(
+                        doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+                    ),
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to enqueue agent-wiki push for doc_id=%s; skipping",
+                doc_id,
+                exc_info=True,
+            )
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -1300,6 +1378,13 @@ def index_doc_batch(
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
+
+    _maybe_enqueue_agent_wiki_push(
+        adapter=adapter,
+        filtered_documents=filtered_documents,
+        insertion_records=primary_doc_idx_insertion_records,
+    )
+
     return IndexingPipelineResult(
         new_docs=sum(
             1 for r in primary_doc_idx_insertion_records if not r.already_existed

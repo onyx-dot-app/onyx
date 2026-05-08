@@ -158,6 +158,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.opensearch_migration",
+            "onyx.background.celery.tasks.agent_wiki",
             # Sandbox cleanup tasks (isolated in build feature)
             "onyx.server.features.build.sandbox.tasks",
         ]

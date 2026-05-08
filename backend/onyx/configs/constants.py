@@ -196,6 +196,11 @@ USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
 CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 
+# How long a queued agent-wiki push task remains valid before workers discard it.
+# A new indexing run will produce a fresher task, so there's no value in executing
+# a push that has been waiting longer than this.
+CELERY_AGENT_WIKI_PUSH_TASK_EXPIRES = 6 * 3600  # 6 hours (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -440,6 +445,9 @@ class OnyxCeleryQueues:
 
     OPENSEARCH_MIGRATION = "opensearch_migration"
 
+    # Agent Wiki push queue
+    AGENT_WIKI_PUSH = "agent_wiki_push"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -643,6 +651,9 @@ class OnyxCeleryTask:
     MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
         "migrate_chunks_from_vespa_to_opensearch_task"
     )
+
+    # Agent Wiki push task
+    PUSH_TO_AGENT_WIKI = "push_to_agent_wiki"
 
 
 # this needs to correspond to the matching entry in supervisord

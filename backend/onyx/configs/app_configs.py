@@ -1173,6 +1173,15 @@ API_KEY_HASH_ROUNDS = (
 )
 
 #####
+# Agent Wiki Configs
+#####
+AGENT_WIKI_ENABLED = os.environ.get("AGENT_WIKI_ENABLED", "").lower() == "true"
+AGENT_WIKI_BASE_URL = os.environ.get("AGENT_WIKI_BASE_URL", "").rstrip("/")
+AGENT_WIKI_API_KEY = os.environ.get("AGENT_WIKI_API_KEY", "")
+# Documents whose concatenated text exceeds this limit are skipped, not truncated.
+AGENT_WIKI_MAX_DOC_CHARS = int(os.environ.get("AGENT_WIKI_MAX_DOC_CHARS", 100_000))
+
+#####
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
