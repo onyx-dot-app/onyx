@@ -180,6 +180,10 @@ def validate_active_indexing_attempts(
                 select(IndexAttempt).where(
                     IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
                     IndexAttempt.celery_task_id.isnot(None),
+                    # Synthetic attempts spawned by the targeted-reindex flow
+                    # have their own lifecycle owner and do not increment
+                    # the docprocessing heartbeat counter.
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
             )
             .scalars()
@@ -1126,6 +1130,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                         ),
                         IndexAttempt.celery_task_id.is_(None),
+                        IndexAttempt.targeted_reindex_job_id.is_(None),
                     )
                 )
                 .scalars()
@@ -1184,7 +1189,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     select(IndexAttempt).where(
                         IndexAttempt.status.in_(
                             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        )
+                        ),
+                        IndexAttempt.targeted_reindex_job_id.is_(None),
                     )
                 )
                 .scalars()

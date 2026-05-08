@@ -68,6 +68,8 @@ import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
+import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
+import { SWR_KEYS } from "@/lib/swr-keys";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -155,6 +157,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
+    useState(false);
+  const [targetedReindexJustSubmitted, setTargetedReindexJustSubmitted] =
     useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
@@ -422,13 +426,34 @@ function Main({ ccPairId }: { ccPairId: number }) {
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
           onPageSizeChange={setErrorsItemsPerPage}
-          onClose={() => setShowIndexAttemptErrors(false)}
-          onResolveAll={async () => {
+          onClose={() => {
             setShowIndexAttemptErrors(false);
-            setShowIsResolvingKickoffLoader(true);
-            await triggerReIndex(true);
+            setTargetedReindexJustSubmitted(false);
           }}
-          isResolvingErrors={isResolvingErrors}
+          onResolveAll={async () => {
+            try {
+              const result = await resolveAllErrorsForCCPair(ccPairId);
+              if (result.total_error_ids === 0) {
+                toast.success("No unresolved errors to retry.");
+                return;
+              }
+              setTargetedReindexJustSubmitted(true);
+              toast.success(
+                `Targeted reindex submitted for ${result.total_error_ids} ${
+                  result.total_error_ids === 1 ? "document" : "documents"
+                }. Errors will clear from the list as documents finish reindexing.`
+              );
+              mutate(
+                (key) =>
+                  typeof key === "string" &&
+                  key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
+              );
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              toast.error(`Targeted reindex failed: ${message}`);
+            }
+          }}
+          isResolvingErrors={isResolvingErrors || targetedReindexJustSubmitted}
         />
       )}
 

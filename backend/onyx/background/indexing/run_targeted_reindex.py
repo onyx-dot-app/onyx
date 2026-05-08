@@ -15,6 +15,7 @@ are reported as still-failing so the admin sees clearly that targeted
 reindex isn't supported yet for that source.
 """
 
+import datetime
 from collections import defaultdict
 from collections.abc import Iterable
 from collections.abc import Sequence
@@ -153,6 +154,14 @@ def _flush_batch(
             failed_ids.add(f.failed_document.document_id)
 
     landed_ids = {d.id for d in documents} - failed_ids
+
+    attempt.total_docs_indexed = (attempt.total_docs_indexed or 0) + result.total_docs
+    attempt.new_docs_indexed = (attempt.new_docs_indexed or 0) + result.new_docs
+    attempt.total_chunks = (attempt.total_chunks or 0) + result.total_chunks
+    attempt.completed_batches = (attempt.completed_batches or 0) + 1
+    attempt.last_progress_time = datetime.datetime.now(datetime.timezone.utc)
+    db_session.commit()
+
     return landed_ids, failed_ids
 
 

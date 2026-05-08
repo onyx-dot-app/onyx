@@ -159,3 +159,35 @@ export interface PaginatedIndexAttemptErrors {
   items: IndexAttemptError[];
   total_items: number;
 }
+
+/** Request body for `POST /manage/admin/indexing/targeted-reindex`. */
+export interface TargetedReindexRequest {
+  error_ids?: number[];
+  targets?: { cc_pair_id: number; document_id: string }[];
+}
+
+/** Response from `POST /manage/admin/indexing/targeted-reindex`. */
+export interface TargetedReindexResponse {
+  targeted_reindex_job_id: number;
+  queued_count: number;
+  skipped_count: number;
+}
+
+/** Job status payload from `GET /manage/admin/indexing/targeted-reindex/{job_id}`. */
+export interface TargetedReindexJobStatus {
+  id: number;
+  status:
+    | "not_started"
+    | "in_progress"
+    | "success"
+    | "failed"
+    | "completed_with_errors"
+    | "canceled";
+  requested_at: string;
+  completed_at: string | null;
+  target_count: number;
+  resolved_count: number;
+  still_failing_count: number;
+  skipped_count: number;
+  resolved_summary: { id: number; document_id: string }[];
+}
