@@ -129,7 +129,6 @@ def _flush_batch(
         batch_num=batch_num,
     )
     adapter = DocumentIndexingBatchAdapter(
-        db_session=db_session,
         connector_id=attempt.connector_credential_pair.connector.id,
         credential_id=attempt.connector_credential_pair.credential.id,
         tenant_id=tenant_id,

@@ -91,7 +91,6 @@ def test_stream_chat_with_answer(
         answer_stream = submit_query(
             query=query,
             chat_session_id=chat_session.id,
-            db_session=db_session,
             user=test_user,
         )
 
@@ -135,7 +134,6 @@ def test_stream_chat_with_answer_create_chat(
         answer_stream = submit_query(
             query=query,
             chat_session_id=None,
-            db_session=db_session,
             user=test_user,
         )
 
@@ -222,7 +220,7 @@ def test_stream_chat_with_search_and_openurl_tools(
     ]
 
     REASONING_RESPONSE_3 = (
-        "I now know everything that I need to know. " "I can now answer the question."
+        "I now know everything that I need to know. I can now answer the question."
     )
 
     ANSWER_RESPONSE_1 = (
@@ -243,7 +241,6 @@ def test_stream_chat_with_search_and_openurl_tools(
         answer_stream = submit_query(
             query=QUERY,
             chat_session_id=chat_session.id,
-            db_session=db_session,
             user=test_user,
         )
 
@@ -441,7 +438,6 @@ def test_image_generation_tool_no_reasoning(
         answer_stream = submit_query(
             query=QUERY,
             chat_session_id=chat_session.id,
-            db_session=db_session,
             user=test_user,
         )
 
@@ -767,7 +763,6 @@ def test_parallel_internal_and_web_search_tool_calls(
         answer_stream = submit_query(
             query=QUERY,
             chat_session_id=chat_session.id,
-            db_session=db_session,
             user=test_user,
         )
 

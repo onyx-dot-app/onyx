@@ -35,7 +35,6 @@ def test_mock_llm_response_requires_integration_mode() -> None:
             process_message.handle_stream_message_objects(
                 new_msg_req=request,
                 user=mock_user,
-                db_session=Mock(),
             )
         )
 

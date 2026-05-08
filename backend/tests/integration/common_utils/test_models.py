@@ -288,6 +288,7 @@ class DATestTool(BaseModel):
     description: str
     display_name: str
     in_code_tool_id: str | None
+    enabled: bool
 
 
 # Discord Bot Models

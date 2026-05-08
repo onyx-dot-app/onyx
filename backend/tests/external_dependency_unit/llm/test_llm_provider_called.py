@@ -179,7 +179,6 @@ def test_user_sends_message_to_private_provider(
             answer_stream = submit_query(
                 query="Hello, how are you?",
                 chat_session_id=chat_session_id,
-                db_session=db_session,
                 user=admin_user,
                 llm_override=LLMOverride(
                     model_provider="private-provider",
@@ -211,7 +210,6 @@ def test_user_sends_message_to_private_provider(
             answer_stream = submit_query(
                 query="I'm good, thank you!",
                 chat_session_id=chat_session_id,
-                db_session=db_session,
                 user=admin_user,
                 llm_override=LLMOverride(
                     model_provider="private-provider",

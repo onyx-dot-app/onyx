@@ -18,7 +18,7 @@ from shared_configs.model_server_models import Embedding
 
 if TYPE_CHECKING:
     from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from sqlalchemy.engine.util import TransactionalContext
+from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from onyx.db.models import SearchSettings
@@ -257,16 +257,15 @@ class IndexingBatchAdapter(Protocol):
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager
-    def lock_context(
-        self, documents: list[Document]
-    ) -> Generator[TransactionalContext, None, None]:
-        """Provide a transaction/row-lock context for critical updates."""
+    def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
+        """Acquire row locks and yield the session for the critical section."""
 
     def prepare_enrichment(
         self,
         context: "DocumentBatchPrepareContext",
         tenant_id: str,
         chunks: list[DocAwareChunk],
+        db_session: Session,
     ) -> ChunkEnrichmentContext:
         """Prepare per-chunk enrichment data (access, document sets, boost, etc.).
 
@@ -282,4 +281,5 @@ class IndexingBatchAdapter(Protocol):
         updatable_chunk_data: list[UpdatableChunkData],
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
+        db_session: Session,
     ) -> None: ...

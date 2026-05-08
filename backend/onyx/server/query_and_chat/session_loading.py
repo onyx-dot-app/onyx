@@ -9,6 +9,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
+from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY
+from onyx.coding_agent.mock_tools import CODING_AGENT_REPO_KEY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -22,6 +24,8 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import CodingAgentFinal
+from onyx.server.query_and_chat.streaming_models import CodingAgentStart
 from onyx.server.query_and_chat.streaming_models import CustomToolArgs
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
@@ -50,6 +54,9 @@ from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -315,6 +322,46 @@ def create_research_agent_packets(
             obj=SectionEnd(),
         )
     )
+
+    return packets
+
+
+def create_coding_agent_packets(
+    query: str,
+    repo: str,
+    answer: str | None,
+    turn_index: int,
+    tab_index: int = 0,
+) -> list[Packet]:
+    """Recreate the packet stream for a saved coding-agent tool call.
+
+    Mirrors what the live ``CodingAgentTool`` emits:
+    - ``CodingAgentStart(query, repo)`` opens the agent's section.
+    - ``CodingAgentFinal(answer)`` carries the inner agent's answer for the
+      timeline's completion marker (when available).
+    - ``SectionEnd`` marks completion.
+
+    The agent's user-visible answer text is *not* emitted here — it lands in
+    a separate group via ``create_message_packets`` at ``max_tool_turn + 1``,
+    which is what renders as the chat bubble. Splitting placements (live
+    streaming does the same — see ``_generate_final_answer``) keeps the
+    timeline ("what the agent did") distinct from the chat answer ("what the
+    agent said").
+
+    Bash sub-calls aren't persisted (they're not top-level tool calls), so
+    they aren't replayed here — the renderer shows "Coding Task" only.
+    """
+    placement = Placement(turn_index=turn_index, tab_index=tab_index)
+    packets: list[Packet] = [
+        Packet(placement=placement, obj=CodingAgentStart(query=query, repo=repo)),
+    ]
+
+    if answer:
+        packets.append(
+            Packet(placement=placement, obj=CodingAgentFinal(answer=answer)),
+        )
+
+    packets.append(Packet(placement=placement, obj=SectionEnd()))
 
     return packets
 
@@ -615,6 +662,27 @@ def translate_assistant_message_to_packets(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
+                                turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
+                            )
+                        )
+
+                    elif tool.in_code_tool_id == CodingAgentTool.__name__:
+                        coding_query = cast(
+                            str,
+                            tool_call.tool_call_arguments.get(CODING_AGENT_QUERY_KEY)
+                            or "",
+                        )
+                        coding_repo = cast(
+                            str,
+                            tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
+                            or "",
+                        )
+                        turn_tool_packets.extend(
+                            create_coding_agent_packets(
+                                query=coding_query,
+                                repo=coding_repo,
+                                answer=tool_call.tool_call_response,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
                             )

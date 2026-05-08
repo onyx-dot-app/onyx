@@ -1210,11 +1210,7 @@ def test_code_interpreter_receives_chat_files(
 
         ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
         try:
-            list(
-                handle_stream_message_objects(
-                    new_msg_req=msg_req, user=user, db_session=db_session
-                )
-            )
+            list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
         finally:
             ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
 
@@ -1279,9 +1275,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
         try:
             handler = StreamTestBuilder(llm_controller=mock_llm)
 
-            stream = handle_stream_message_objects(
-                new_msg_req=msg_req, user=user, db_session=db_session
-            )
+            stream = handle_stream_message_objects(new_msg_req=msg_req, user=user)
             # First packet is always MessageResponseIDInfo
             next(stream)
 
@@ -1425,9 +1419,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
         ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
         try:
             packets = list(
-                handle_stream_message_objects(
-                    new_msg_req=msg_req, user=user, db_session=db_session
-                )
+                handle_stream_message_objects(new_msg_req=msg_req, user=user)
             )
         finally:
             ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults

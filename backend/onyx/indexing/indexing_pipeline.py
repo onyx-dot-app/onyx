@@ -36,6 +36,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -338,7 +339,6 @@ def index_doc_batch_with_handler(
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
-    db_session: Session,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
     enable_contextual_rag: bool = False,
@@ -352,7 +352,6 @@ def index_doc_batch_with_handler(
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
-            db_session=db_session,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
             enable_contextual_rag=enable_contextual_rag,
@@ -964,13 +963,15 @@ def _verify_indexing_completeness(
 
 def _apply_document_ingestion_hook(
     documents: list[Document],
-    db_session: Session,
 ) -> list[Document]:
     """Apply the Document Ingestion hook to each document in the batch.
 
     - HookSkipped / HookSoftFailed → document passes through unchanged.
     - Response with sections=None → document is dropped (logged).
     - Response with sections → document sections are replaced with the hook's output.
+
+    Opens its own short-lived session so the caller holds no connection during
+    this call.
     """
 
     def _build_payload(doc: Document) -> DocumentIngestionPayload:
@@ -1056,35 +1057,36 @@ def _apply_document_ingestion_hook(
     if not documents:
         return documents
 
-    # Run the hook for the first document. If it returns HookSkipped the hook
-    # is not configured — skip the remaining N-1 DB lookups.
-    first_doc = documents[0]
-    first_payload = _build_payload(first_doc).model_dump()
-    first_hook_result = execute_hook(
-        db_session=db_session,
-        hook_point=HookPoint.DOCUMENT_INGESTION,
-        payload=first_payload,
-        response_type=DocumentIngestionResponse,
-    )
-    if isinstance(first_hook_result, HookSkipped):
-        return documents
-
-    result: list[Document] = []
-    first_applied = _apply_result(first_doc, first_hook_result)
-    if first_applied is not None:
-        result.append(first_applied)
-
-    for doc in documents[1:]:
-        payload = _build_payload(doc).model_dump()
-        hook_result = execute_hook(
+    with get_session_with_current_tenant() as db_session:
+        # Run the hook for the first document. If it returns HookSkipped the hook
+        # is not configured — skip the remaining N-1 DB lookups.
+        first_doc = documents[0]
+        first_payload = _build_payload(first_doc).model_dump()
+        first_hook_result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.DOCUMENT_INGESTION,
-            payload=payload,
+            payload=first_payload,
             response_type=DocumentIngestionResponse,
         )
-        applied = _apply_result(doc, hook_result)
-        if applied is not None:
-            result.append(applied)
+        if isinstance(first_hook_result, HookSkipped):
+            return documents
+
+        result: list[Document] = []
+        first_applied = _apply_result(first_doc, first_hook_result)
+        if first_applied is not None:
+            result.append(first_applied)
+
+        for doc in documents[1:]:
+            payload = _build_payload(doc).model_dump()
+            hook_result = execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.DOCUMENT_INGESTION,
+                payload=payload,
+                response_type=DocumentIngestionResponse,
+            )
+            applied = _apply_result(doc, hook_result)
+            if applied is not None:
+                result.append(applied)
 
     return result
 
@@ -1098,7 +1100,6 @@ def index_doc_batch(
     document_indices: list[DocumentIndex],
     request_id: str | None,
     tenant_id: str,
-    db_session: Session,
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
@@ -1137,7 +1138,7 @@ def index_doc_batch(
     )
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
-    filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
+    filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
@@ -1226,11 +1227,12 @@ def index_doc_batch(
         # Acquires a lock on the documents so that no other process can modify
         # them.  Not needed until here, since this is when the actual race
         # condition with vector db can occur.
-        with adapter.lock_context(context.updatable_docs):
+        with adapter.lock_context(context.updatable_docs) as db_session:
             enricher = adapter.prepare_enrichment(
                 context=context,
                 tenant_id=tenant_id,
                 chunks=embedded_chunks,
+                db_session=db_session,
             )
 
             index_batch_params = IndexBatchParams(
@@ -1295,6 +1297,7 @@ def index_doc_batch(
                     updatable_chunk_data=updatable_chunk_data,
                     filtered_documents=filtered_documents,
                     enrichment=enricher,
+                    db_session=db_session,
                 )
 
     assert primary_doc_idx_insertion_records is not None
@@ -1317,14 +1320,18 @@ def run_indexing_pipeline(
     request_id: str | None,
     embedder: IndexingEmbedder,
     document_indices: list[DocumentIndex],
-    db_session: Session,
+    db_session: Session | None = None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    all_search_settings = get_active_search_settings(db_session)
+    if db_session is not None:
+        all_search_settings = get_active_search_settings(db_session)
+    else:
+        with get_session_with_current_tenant() as _sess:
+            all_search_settings = get_active_search_settings(_sess)
     if (
         all_search_settings.secondary
         and all_search_settings.secondary.status == IndexModelStatus.FUTURE
@@ -1361,7 +1368,6 @@ def run_indexing_pipeline(
         document_batch=document_batch,
         request_id=request_id,
         tenant_id=tenant_id,
-        db_session=db_session,
         adapter=adapter,
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,
