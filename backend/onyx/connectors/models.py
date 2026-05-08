@@ -373,6 +373,7 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
             file_id=base.file_id,
+            external_access=base.external_access,
         )
 
     def __sizeof__(self) -> int:

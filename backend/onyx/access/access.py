@@ -36,11 +36,17 @@ def _get_access_for_document(
         db_session=db_session,
         document_id=document_id,
     )
+    external_emails = (
+        db_session.execute(
+            select(Document.external_user_emails).where(Document.id == document_id)
+        ).scalar()
+        or []
+    )
 
     doc_access = DocumentAccess.build(
         user_emails=info[1] if info and info[1] else [],
         user_groups=[],
-        external_user_emails=[],
+        external_user_emails=external_emails,
         external_user_group_ids=[],
         is_public=info[2] if info else False,
     )
@@ -76,6 +82,13 @@ def _get_access_for_documents(
         db_session=db_session,
         document_ids=document_ids,
     )
+    external_emails_by_id: dict[str, list[str]] = dict(
+        db_session.execute(
+            select(Document.id, Document.external_user_emails).where(
+                Document.id.in_(document_ids)
+            )
+        ).all()
+    )
     doc_access = {}
     for document_id, user_emails, is_public in document_access_info:
         doc_access[document_id] = DocumentAccess.build(
@@ -83,7 +96,7 @@ def _get_access_for_documents(
             # MIT version will wipe all groups and external groups on update
             user_groups=[],
             is_public=is_public,
-            external_user_emails=[],
+            external_user_emails=external_emails_by_id.get(document_id) or [],
             external_user_group_ids=[],
         )
 
