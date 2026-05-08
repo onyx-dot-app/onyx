@@ -8,6 +8,12 @@ on:
 jobs:
   npm:
     runs-on: ubuntu-latest
+    # Pin Node by image digest. The container ships with Node baked in, so the workflow
+    # never invokes `actions/setup-node` and the runner toolcache is never restored —
+    # mitigates zizmor's cache-poisoning class of finding at the source rather than
+    # suppressing it. Bumping Node = bump the digest.
+    container:
+      image: node:24@sha256:3a198147c320bc4cc357b418955beb48413c0ea5ba60f9ec1568913631df33aa
     environment:
       name: release-opal
     permissions:
@@ -22,23 +28,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # NOTE: actions/setup-node has no equivalent of setup-uv's `enable-cache: false`.
-      # `cache: ""` only disables npm/yarn/pnpm dep caching — the Node toolchain itself is
-      # always restored from the runner toolcache, which zizmor's cache-poisoning rule flags
-      # on every release-publishing workflow. The risk requires compromising the
-      # GitHub-hosted runner image, which is well outside this repo's threat model.
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4 # zizmor: ignore[cache-poisoning]
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-          check-latest: false
-          cache: ""
+      - name: Configure npm registry
+        run: |
+          printf 'registry=https://registry.npmjs.org/\n' > "$HOME/.npmrc"
 
       - name: Verify tag matches package.json version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
           PKG_VERSION=$(node -p "require('./package.json').version")
-          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($PKG_VERSION)"
             exit 1
           fi
