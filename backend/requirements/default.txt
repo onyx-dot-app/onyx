@@ -1533,9 +1533,13 @@ kubernetes==31.0.0 \
     --hash=sha256:28945de906c8c259c1ebe62703b56a03b714049372196f854105afe4e6d014c0 \
     --hash=sha256:bf141e2d380c8520eada8b351f4e319ffee9636328c137aa432bc486ca1200e1
     # via onyx
-langchain-core==1.2.28 \
-    --hash=sha256:271a3d8bd618f795fdeba112b0753980457fc90537c46a0c11998516a74dc2cb \
-    --hash=sha256:80764232581eaf8057bcefa71dbf8adc1f6a28d257ebd8b95ba9b8b452e8c6ac
+langchain-core==1.3.3 \
+    --hash=sha256:18aae8506f37da7f74398492279a7d6efcee4f8e23c4c41c7af080eeb7ef7bd1 \
+    --hash=sha256:fa510a5db8efdc0c6ff41c0939fb5c00a0183c11f6b84233e892e3227ff69182
+langchain-protocol==0.0.15 \
+    --hash=sha256:461eb794358f83d5e42635a5797799ffec7b4702314e34edf73ac21e75d3ef79 \
+    --hash=sha256:9ab2d11ee73944754f10e037e717098d3a6796f0e58afa9cadda6154e7655ade
+    # via langchain-core
 langdetect==1.0.9 \
     --hash=sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0
     # via unstructured
@@ -3616,6 +3620,7 @@ typing-extensions==4.15.0 \
     #   huggingface-hub
     #   jira
     #   langchain-core
+    #   langchain-protocol
     #   mcp
     #   mypy-boto3-s3
     #   office365-rest-python-client
