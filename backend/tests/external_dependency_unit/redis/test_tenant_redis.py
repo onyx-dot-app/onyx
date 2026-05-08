@@ -254,6 +254,40 @@ class TestScanIter:
         }
         assert returned == keys
 
+    def test_scan_iter_no_match_does_not_leak_other_tenant_keys(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        # Regression: `scan_iter()` with no `match` argument must scope to the
+        # caller's tenant. Previously it forwarded `match=None` to redis-py,
+        # which scans every key in the deployment, and the un-stripped
+        # foreign-tenant keys leaked back through the else branch.
+        my_key = _unique_key("mine")
+        tenant_redis.set(my_key, "mine")
+
+        other_tenant = _unique_tenant()
+        other = redis_pool.get_client(other_tenant)
+        other_key = _unique_key("theirs")
+        other.set(other_key, "theirs")
+
+        try:
+            returned = {
+                k.decode() if isinstance(k, bytes) else k
+                for k in tenant_redis.scan_iter()
+            }
+            # We see our own key, unprefixed.
+            assert my_key in returned
+            # We do not see the other tenant's key in any form — neither
+            # under its bare name nor with the foreign tenant prefix bolted
+            # on (the pre-fix leak shape).
+            assert other_key not in returned
+            assert f"{other_tenant}:{other_key}" not in returned
+            # And nothing in our result still wears the other tenant's prefix.
+            assert not any(k.startswith(f"{other_tenant}:") for k in returned)
+        finally:
+            raw = get_raw_redis_client()
+            for k in raw.scan_iter(match=f"{other_tenant}:*"):
+                raw.delete(k)
+
 
 # ------------------------------------------------------------------------------
 # BLPOP — input prefixing, return-key un-prefixing, multi-key, isolation

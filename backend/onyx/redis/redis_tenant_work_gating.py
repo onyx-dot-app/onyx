@@ -23,8 +23,8 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-# Unprefixed key. `TenantRedisClient._prefix_key` prepends `cloud:` at call
-# time so the full rendered key is `cloud:active_tenants`.
+# Unprefixed key. `TenantRedisClient` prepends `cloud:` at call time so the
+# full rendered key is `cloud:active_tenants`.
 _SET_KEY = "active_tenants"
 
 
