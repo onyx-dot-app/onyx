@@ -337,16 +337,14 @@ def create_coding_agent_packets(
 
     Mirrors what the live ``CodingAgentTool`` emits:
     - ``CodingAgentStart(query, repo)`` opens the agent's section.
-    - ``CodingAgentFinal(answer)`` carries the inner agent's answer for the
-      timeline's completion marker (when available).
+    - ``CodingAgentFinal(answer)`` carries the inner agent's answer, which
+      the renderer displays as the agent's "Response" step.
     - ``SectionEnd`` marks completion.
 
-    The agent's user-visible answer text is *not* emitted here — it lands in
-    a separate group via ``create_message_packets`` at ``max_tool_turn + 1``,
-    which is what renders as the chat bubble. Splitting placements (live
-    streaming does the same — see ``_generate_final_answer``) keeps the
-    timeline ("what the agent did") distinct from the chat answer ("what the
-    agent said").
+    The outer chat-message bubble (rendered from ``chat_message.message`` via
+    ``create_message_packets`` at ``max_tool_turn + 1``) is the regular chat
+    agent's answer — separate from the coding agent's response, which stays
+    inside the agent's own timeline section.
 
     Bash sub-calls aren't persisted (they're not top-level tool calls), so
     they aren't replayed here — the renderer shows "Coding Task" only.
