@@ -470,13 +470,8 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
-    # Check seat availability for new users. Must run before the counter
-    # reservation below — a seat-limit failure must not burn trial quota.
-    # Uses the locked variant so concurrent invite + signup flows for this
-    # tenant are serialized: the advisory lock is held until ``db_session``
-    # commits, which is the same transaction that writes the invitation
-    # rows further down, so no other request can slip in seats between the
-    # check and the write.
+    # Must run before the trial counter reservation — a seat-limit
+    # failure must not burn trial quota.
     if emails_needing_seats:
         enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
@@ -726,9 +721,6 @@ def activate_user_api(
         logger.warning("%s is already activated", user_to_activate.email)
         return
 
-    # Check seat availability before activating. Locked variant so the
-    # advisory lock is held until ``activate_user``'s commit on the same
-    # session — concurrent activate/signup requests are serialized.
     enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)

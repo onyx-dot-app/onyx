@@ -28,34 +28,22 @@ logger = setup_logger()
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
-# Namespace prefix for the seat-allocation advisory lock. Hashed together
-# with the tenant ID so the lock is scoped per-tenant (unrelated tenants
-# never block each other) and cannot collide with unrelated advisory locks.
+# Namespaced + tenant-hashed so unrelated tenants don't block each other
+# and the lock id can't collide with other advisory locks in the codebase.
 _SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
 
 
 def seat_lock_id_for_tenant(tenant_id: str) -> int:
-    """Derive a stable 64-bit signed int lock id for this tenant's seat lock.
-
-    Used by ``acquire_seat_lock`` and the SCIM seat-availability check to
-    serialize concurrent seat-allocation operations within a tenant.
-    """
     digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
-    # pg_advisory_xact_lock takes a signed 8-byte int; unpack as such.
+    # pg_advisory_xact_lock takes a signed 8-byte int.
     return struct.unpack("q", digest[:8])[0]
 
 
 def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None:
-    """Acquire a transaction-scoped advisory lock on this tenant's seat slot.
+    """Tenant-scoped advisory lock; released on the caller's commit/rollback.
 
-    The lock is released automatically on COMMIT or ROLLBACK of the caller's
-    transaction. Callers MUST run the seat check AND the subsequent INSERT /
-    UPDATE in the same transaction so the lock guards both: see
-    ``check_seat_availability`` for the check, and the surrounding callers
-    for the write.
-
-    Concurrent requests for the same tenant block here; concurrent requests
-    for different tenants proceed in parallel.
+    Caller must run the seat check AND the seat-consuming write in the
+    same transaction.
     """
     lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
     db_session.execute(
@@ -142,13 +130,10 @@ def delete_license(db_session: Session) -> bool:
 
 
 def user_counts_toward_seats(user: User) -> bool:
-    """Whether a single user row would be counted by ``get_used_seats``.
+    """Per-user predicate matching ``get_used_seats``'s SQL filter below.
 
-    Mirrors the filter below; canonical predicate for any caller that
-    needs to know whether a write (e.g. an EXT_PERM_USER → STANDARD
-    upgrade) flips an uncounted user into a counted one. Keep in sync
-    with ``get_used_seats`` — adding or removing a clause there must
-    update this function in lockstep.
+    Self-hosted only — cloud counts ``UserTenantMapping`` rows instead.
+    Keep in sync with ``get_used_seats``.
     """
     return (
         bool(user.is_active)
@@ -162,17 +147,11 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     """
     Get current seat usage directly from database.
 
-    For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users.
+    Multi-tenant: counts active UserTenantMapping rows. Self-hosted:
+    counts active users excluding SERVICE_ACCOUNT, EXT_PERM_USER, and
+    the anonymous user. BOT is counted (real humans).
 
-    Only human accounts count toward seat limits.
-    SERVICE_ACCOUNT (API key dummy users), EXT_PERM_USER, and the
-    anonymous system user are excluded. BOT (Slack users) ARE counted
-    because they represent real humans and get upgraded to STANDARD
-    when they log in via web.
-
-    The ``user_counts_toward_seats`` helper above mirrors this filter
-    for callers that need a per-user predicate; keep them in sync.
+    Per-user predicate ``user_counts_toward_seats`` mirrors this filter.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count

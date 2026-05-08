@@ -336,23 +336,14 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
 
 
 def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
-    """Raise OnyxError(SEAT_LIMIT_EXCEEDED) if adding users would exceed the limit.
+    """Raise ``OnyxError(SEAT_LIMIT_EXCEEDED)`` if seats would be exceeded.
 
-    Self-hosted: runs ``check_seat_availability`` against the local license.
-    Cloud (multi-tenant): delegates to the EE control-plane billing helper,
-    which attempts to auto-bill the new seat(s) and rejects on Stripe failure.
-    No-op for CE deployments without an EE license.
-
-    Callers that follow this with an INSERT in the same transaction should
-    use ``enforce_seat_limit_locked`` instead — it acquires a tenant-scoped
-    advisory lock so concurrent requests cannot each pass the check and
-    over-insert.
+    Self-hosted runs ``check_seat_availability``; cloud delegates to
+    ``enforce_cloud_seat_limit`` which auto-bills via Stripe. Use
+    ``enforce_seat_limit_locked`` when followed by a write in the same
+    transaction.
     """
     if MULTI_TENANT:
-        # Default to a no-op so CE / non-EE deployments do not blow up if
-        # someone enables MULTI_TENANT without the EE billing module on the
-        # import path. The real EE implementation rejects via OnyxError
-        # when Stripe declines.
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.billing",
             "enforce_cloud_seat_limit",
@@ -369,27 +360,14 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
 
 
 def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> None:
-    """Acquire the tenant seat lock on ``db_session``, then enforce the limit.
+    """Self-hosted: take the tenant advisory lock on ``db_session`` then
+    enforce. Lock holds until caller commits — so the check and the
+    write share one transaction.
 
-    The advisory lock is transaction-scoped: it is released when the caller's
-    transaction commits or rolls back. The caller MUST run the subsequent
-    INSERT/UPDATE in the same transaction so the seat count cannot change
-    between this check and the write.
-
-    Self-hosted: locks the local tenant on ``db_session``, then runs
-    ``check_seat_availability`` against the same session.
-
-    Cloud (multi-tenant): this wrapper is a best-effort pre-flight only —
-    the local advisory lock is NOT acquired (cloud seat state lives in
-    Stripe + ``UserTenantMapping`` in the shared schema, not the
-    tenant-scoped ``db_session``). The seat-consuming write itself runs
-    later in ``add_users_to_tenant``, which calls
-    ``enforce_cloud_seat_limit(db_session=shared_session)`` — that path
-    DOES acquire the tenant-scoped advisory lock on the shared-schema
-    session and holds it across {count, Stripe modify, mapping insert}.
-    The Stripe idempotency key is retry-safe but NOT a concurrency
-    serializer; the lock in ``add_users_to_tenant`` is what enforces the
-    seat cap under concurrency.
+    Cloud: best-effort pre-flight only. The cap is actually enforced
+    inside ``add_users_to_tenant``, which calls
+    ``enforce_cloud_seat_limit(db_session=shared_session)`` and holds
+    the advisory lock across {count, Stripe modify, mapping insert}.
     """
     if not MULTI_TENANT:
         fetch_ee_implementation_or_noop("onyx.db.license", "acquire_seat_lock", None)(
@@ -400,15 +378,7 @@ def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> Non
 
 
 def _user_currently_counts_toward_seats(user: User) -> bool:
-    """Return whether ``user`` is currently counted by ``get_used_seats``.
-
-    Single delegating call to the canonical EE predicate
-    ``ee/onyx/db/license.py:user_counts_toward_seats`` — the only source
-    of truth for the seat-count filter. On CE / non-EE deployments the
-    no-op returns ``False``, which is the seat-conservative answer
-    (callers in CE never enforce a seat cap because no license is
-    present, so the predicate's value is moot).
-    """
+    """Delegate to canonical ``ee/onyx/db/license.py:user_counts_toward_seats``."""
     return bool(
         fetch_ee_implementation_or_noop(
             "onyx.db.license", "user_counts_toward_seats", False
@@ -417,23 +387,11 @@ def _user_currently_counts_toward_seats(user: User) -> bool:
 
 
 def _upgrade_will_add_seat(user_before: User, will_become_active: bool) -> bool:
-    """Return whether upgrading ``user_before`` to STANDARD/web-login will
-    flip them from uncounted to counted (i.e. consume an additional seat).
+    """Whether promoting to STANDARD will consume a seat.
 
-    Self-hosted: seat counting is per-User filtered by role/account_type.
-    Upgrades that change role/account_type can shift the count, so we
-    compare the canonical predicate before vs the post-upgrade state.
-    Post-upgrade: account_type=STANDARD, role=BASIC/ADMIN — so the
-    post-upgrade seat-counted-status depends only on activeness and the
-    email not being anonymous.
-
-    Multi-tenant cloud: seat counting is per-``UserTenantMapping`` row,
-    NOT per-User. A role/account_type upgrade does not add a mapping —
-    the user must already have an active mapping to be promoting in the
-    first place — so the upgrade is seat-neutral by ``get_tenant_count``.
-    Return ``False`` so the cloud billing path is not triggered with a
-    target quantity that the mapping count will never reach (which would
-    over-bill the tenant by one seat per promotion).
+    Cloud counts ``UserTenantMapping`` rows, not user attributes — an
+    upgrade leaves the mapping count unchanged, so always seat-neutral
+    in MT. Self-hosted compares the per-user predicate before vs after.
     """
     if MULTI_TENANT:
         return False
@@ -442,12 +400,7 @@ def _upgrade_will_add_seat(user_before: User, will_become_active: bool) -> bool:
 
 
 def _invalidate_license_cache_after_seat_change() -> None:
-    """Invalidate the license metadata cache so the middleware re-reads
-    ``used_seats`` on the next request.
-
-    Safe no-op on CE / cache outage; cache TTL bounds the staleness either
-    way.
-    """
+    """Invalidate license cache so middleware re-reads ``used_seats``."""
     fetch_ee_implementation_or_noop(
         "onyx.db.license", "invalidate_license_cache", None
     )()
@@ -581,10 +534,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             UserRole.ADMIN
                         )
 
-                # Check seat availability for new users. Runs in the SAME
-                # async-session transaction as the subsequent insert so the
-                # advisory lock acquired here is held until that insert
-                # commits — closes the TOCTOU race against concurrent signups.
+                # Lock + check on the same session that does the insert.
                 existing = await self.user_db.session.run_sync(
                     lambda s: get_user_by_email(user_create.email, s)
                 )
@@ -706,15 +656,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_id: uuid.UUID,
         user_create: UserCreate,
     ) -> None:
-        """Upgrade a non-web user to STANDARD and assign default groups atomically.
+        """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
-        All writes happen in a single sync transaction so neither the field
-        update nor the group assignment is visible without the other.
-
-        If the upgrade flips the user from uncounted to counted (e.g.
-        EXT_PERM_USER → STANDARD), enforce the seat limit inside the same
-        transaction so the advisory lock is held until commit and the
-        promotion cannot push the tenant past its seat cap.
+        Enforces the seat limit inside the same transaction when the
+        upgrade flips an uncounted user (EXT_PERM_USER, SERVICE_ACCOUNT)
+        into a counted one.
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
@@ -724,8 +670,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 .first()
             )
             if sync_user:
-                # The upgrade keeps is_active unchanged; seat-count flip is
-                # purely about the role/account_type change.
                 if _upgrade_will_add_seat(
                     sync_user, will_become_active=bool(sync_user.is_active)
                 ):
@@ -865,11 +809,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 except exceptions.UserNotExists:
                     verify_email_domain(account_email, is_registration=True)
 
-                    # Lock + seat check inside the same async-session
-                    # transaction as the subsequent insert so the lock
-                    # blocks concurrent OAuth signups until this insert
-                    # commits — closes the TOCTOU race against /auth/register
-                    # and other OAuth callbacks.
+                    # Lock + check on the same session that does the insert.
                     await self.user_db.session.run_sync(
                         lambda s: enforce_seat_limit_locked(s, seats_needed=1)
                     )
@@ -922,11 +862,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
-                # Lock + seat check + upgrade all in one sync transaction.
-                # The advisory lock is released on commit/rollback, so the
-                # seat-counted-status flip (inactive→active and/or
-                # non-web-login→STANDARD) is serialized against concurrent
-                # signup/upgrade requests for this tenant.
+                # Lock + check + upgrade in one transaction.
                 was_inactive = not user.is_active
                 seat_added = False
                 with get_session_with_current_tenant() as sync_db:

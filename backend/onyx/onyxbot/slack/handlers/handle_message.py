@@ -291,11 +291,8 @@ def handle_message(
                 logger.info("Reactivated inactive Slack user %s", message_info.email)
 
             elif existing_user.account_type == AccountType.EXT_PERM_USER:
-                # EXT_PERM_USER is excluded from the seat count; promotion to
-                # BOT inside add_slack_user_if_not_exists would silently bump
-                # used_seats. Pre-check here so we can surface a user-facing
-                # message; the defense-in-depth enforcer below also guards
-                # against missed code paths.
+                # Pre-check so the user gets a Slack-side message; the
+                # locked enforcer below is defense-in-depth.
                 check_seat_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",
                     "check_seat_availability",
@@ -320,18 +317,8 @@ def handle_message(
                     )
                     return False
 
-            # The optional enforcer fires inside add_slack_user_if_not_exists
-            # only when the call would convert an EXT_PERM_USER to BOT. Each
-            # of the branches above already pre-checked, so this is purely a
-            # defense-in-depth guard against a future caller that forgets to
-            # check first.
-            #
-            # Acquire the per-tenant advisory lock on the SAME session that
-            # add_slack_user_if_not_exists will commit, so the check + the
-            # promotion write run under one tenant-scoped lock. Without this,
-            # two concurrent Slack workers each promoting a different
-            # EXT_PERM_USER at exactly the seat limit would both pass and
-            # both commit, breaching the cap.
+            # Defense-in-depth: locks + checks on the same session that
+            # commits the EXT_PERM_USER -> BOT promotion.
             def _slack_seat_enforcer(session: Session, seats_needed: int) -> None:
                 acquire_lock_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",

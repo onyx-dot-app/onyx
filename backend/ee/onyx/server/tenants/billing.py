@@ -124,9 +124,6 @@ def register_tenant_users(
     """
     Update the number of seats for a tenant's subscription.
     Preserves the existing price (monthly, annual, or grandfathered).
-
-    When ``idempotency_key`` is provided, retried HTTP requests will not
-    double-charge — Stripe deduplicates by the key for ~24 h.
     """
     response = fetch_tenant_stripe_information(tenant_id)
     stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
@@ -158,12 +155,7 @@ def register_tenant_users(
 
 
 def _seat_billing_idempotency_key(tenant_id: str, target_quantity: int) -> str:
-    """Stable idempotency key for an auto-bill seat increase.
-
-    Same ``(tenant_id, target_quantity)`` produces the same key, so retried
-    HTTP requests for the same logical operation are deduplicated by Stripe
-    (~24h window).
-    """
+    """Stable per-(tenant, target) key so HTTP retries don't double-bill."""
     return f"seat-bill-{tenant_id}-{target_quantity}"
 
 
@@ -171,38 +163,20 @@ def attempt_seat_billing_increase(
     tenant_id: str,
     target_quantity: int,
 ) -> tuple[bool, str | None]:
-    """Attempt to set the tenant's Stripe seat quantity to ``target_quantity``.
+    """Set Stripe seat quantity to ``target_quantity``.
 
-    Returns ``(True, None)`` on success.
+    Returns ``(False, reason)`` for billing declines the caller should
+    surface as signup failures:
+      - ``"card_declined"`` — Stripe ``CardError``
+      - ``"subscription_invalid"`` — Stripe ``InvalidRequestError``
 
-    Returns ``(False, reason)`` for billing-side declines that should reject
-    the originating signup:
-      - ``"card_declined"`` — Stripe ``CardError`` (insufficient funds, etc.)
-      - ``"subscription_invalid"`` — Stripe ``InvalidRequestError`` (e.g.,
-        no active subscription for this tenant)
+    Other Stripe errors propagate (fail closed). No-op when current
+    quantity already ``>= target_quantity``.
 
-    Other Stripe errors (network, rate-limit, auth, generic API) propagate
-    so the caller fails closed rather than silently allowing a signup that
-    bypasses billing.
-
-    Idempotent on retry: passing the same ``(tenant_id, target_quantity)``
-    twice generates the same Stripe ``idempotency_key``, so a retried HTTP
-    request will not double-charge. If the existing subscription quantity
-    is already ``>= target_quantity``, the call is a no-op and returns
-    success without reissuing the modify.
-
-    .. warning::
-       The idempotency key is RETRY-SAFE, NOT a concurrency serializer.
-       Two concurrent signups that both compute ``target = N + 1`` and
-       reuse the same key will both receive Stripe success responses,
-       and Stripe will only bill ``N + 1`` (not ``N + 2``). Callers that
-       need cap enforcement under concurrency MUST hold a per-tenant
-       advisory lock across the {count, this call, seat-consuming
-       insert} window — use ``enforce_cloud_seat_limit(db_session=...)``,
-       which acquires that lock and only releases it on the caller's
-       commit. Direct calls to this function from outside the wrapper
-       bypass cap enforcement and should be limited to retry / repair
-       paths.
+    NOT a concurrency serializer — the idempotency key only dedupes
+    HTTP retries. For cap enforcement under concurrency call
+    ``enforce_cloud_seat_limit(db_session=...)``, which holds the
+    per-tenant advisory lock across {count, bill, insert}.
     """
     try:
         response = fetch_tenant_stripe_information(tenant_id)
@@ -243,48 +217,29 @@ def enforce_cloud_seat_limit(
     tenant_id: str | None = None,
     db_session: Session | None = None,
 ) -> None:
-    """Cloud (multi-tenant) signup-time seat enforcer.
+    """Cloud signup-time seat enforcer. Auto-bills via Stripe; raises
+    ``OnyxError(SEAT_LIMIT_EXCEEDED)`` on decline.
 
-    Computes ``target_quantity = current_active_users + seats_needed`` for
-    the target tenant and asks the control plane (via Stripe) to bill the
-    new total. Raises ``OnyxError(SEAT_LIMIT_EXCEEDED)`` when the auto-bill
-    is declined; returns silently on success.
+    Pass ``db_session`` (shared-schema) to hold the advisory lock across
+    {count, bill, caller's insert} — the only mode that closes the
+    cloud TOCTOU. Without it, lock is held only across {count, bill}.
 
-    Concurrency: when ``db_session`` is the shared-schema session that the
-    caller will commit after inserting the seat-consuming row(s), the
-    ``pg_advisory_xact_lock`` acquired here is held until that commit. Two
-    concurrent signups for the same tenant therefore serialize across the
-    full count → bill → insert window, closing the TOCTOU gap that the
-    Stripe idempotency key alone does not.
-
-    Without ``db_session`` the lock is taken on a short-lived shared-schema
-    session and released as soon as the bill returns — best-effort: it
-    serializes the count + bill against other holders of the same lock,
-    but the caller's later insert is not protected. Use the ``db_session``
-    overload from any path that performs the seat-consuming write.
-
-    Trial tenants short-circuit — the trial-invite cap in
-    ``bulk_invite_users`` is the only seat backstop for trial accounts.
+    Trial tenants short-circuit; ``NUM_FREE_TRIAL_USER_INVITES`` is the
+    only trial backstop.
     """
     tenant = tenant_id or get_current_tenant_id()
     if is_tenant_on_trial_fn(tenant):
         return
 
-    # Local import keeps the billing module loadable on environments that
-    # don't have the EE tenant package on the import path (e.g., CE tests
-    # that import billing only via ``fetch_ee_implementation_or_noop``).
+    # Local import — billing module must load on CE without EE tenants on path.
     from ee.onyx.server.tenants.user_mapping import get_tenant_count
 
     if db_session is not None:
-        # Lock the caller's transaction for this tenant. The lock will be
-        # released by the caller's commit/rollback, after their insert.
         acquire_seat_lock(db_session, tenant)
         current_count = get_tenant_count(tenant)
         target_quantity = current_count + seats_needed
         success, reason = attempt_seat_billing_increase(tenant, target_quantity)
     else:
-        # Best-effort fallback: serialize the count + bill on a short-lived
-        # shared-schema session. The caller's later insert is unprotected.
         with get_session_with_shared_schema() as locked_session:
             acquire_seat_lock(locked_session, tenant)
             current_count = get_tenant_count(tenant)

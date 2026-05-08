@@ -347,12 +347,9 @@ def add_slack_user_if_not_exists(
 ) -> User:
     """Look up or create the Slack-bot user for ``email``.
 
-    If ``enforce_seat_check`` is provided, it is invoked inside this
-    function's transaction whenever the call would convert an uncounted
-    user (EXT_PERM_USER) into a counted one (BOT). The check must raise
-    on overage; on success the conversion proceeds and is committed.
-    Callers that have already enforced the seat limit upstream may pass
-    ``None`` to opt out.
+    ``enforce_seat_check`` (optional): invoked inside this function's
+    transaction when the call would promote an EXT_PERM_USER (uncounted)
+    to BOT (counted). Must raise on overage.
     """
     email = email.lower()
     user = get_user_by_email(email, db_session)

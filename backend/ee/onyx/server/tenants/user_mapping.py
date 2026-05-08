@@ -68,16 +68,11 @@ def user_owns_a_tenant(email: str) -> bool:
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
-    Add users to a tenant with proper transaction handling.
-    Checks if users already have a tenant mapping to avoid duplicates.
+    Add users to a tenant. If a user has an active mapping elsewhere,
+    they get an inactive (invitation) mapping until they accept.
 
-    If a user already has an active mapping to a different tenant, they receive
-    an inactive mapping (invitation) to this tenant. They can accept the
-    invitation later to switch tenants.
-
-    Defense-in-depth: before inserting any new ACTIVE mapping (a brand-new
-    seat for this tenant), call ``enforce_cloud_seat_limit`` so a missed
-    upstream check still fails closed via Stripe auto-billing.
+    Calls ``enforce_cloud_seat_limit`` before inserting any new active
+    mapping so Stripe auto-billing fails the request closed on decline.
     """
     unique_emails = set(emails)
     if not unique_emails:
@@ -112,9 +107,8 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             )
             emails_with_active_mapping = {m.email for m in active_mappings}
 
-            # Determine which emails will produce a NEW ACTIVE mapping for
-            # this tenant. Inactive (invitation) mappings to other tenants
-            # don't count — they don't consume a seat until accepted.
+            # Emails that will produce a NEW active mapping (consume a
+            # seat). Invitations to other tenants don't count.
             new_active_seat_emails = [
                 email
                 for email in unique_emails
@@ -125,14 +119,8 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             if new_active_seat_emails:
                 from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
 
-                # Pass ``db_session`` so the advisory lock is held across
-                # the Stripe call AND the mapping inserts below — closes the
-                # cloud TOCTOU window that a Stripe-only idempotency key
-                # cannot. Pass ``tenant_id`` explicitly (not via context var)
-                # to bill the correct tenant if the caller's context differs.
-                # Raises OnyxError(SEAT_LIMIT_EXCEEDED) on Stripe decline;
-                # the outer ``except Exception`` rolls the transaction back
-                # so no mappings are persisted on failure.
+                # Lock + bill held across the inserts below; rolled back
+                # on Stripe decline by the outer ``except Exception``.
                 enforce_cloud_seat_limit(
                     seats_needed=len(new_active_seat_emails),
                     tenant_id=tenant_id,
