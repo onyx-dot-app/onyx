@@ -22,8 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_broker_client
+from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -350,21 +350,16 @@ def validate_active_indexing_attempts(
         )
         if stale_not_started:
             redis_celery = celery_get_broker_client(current_app)
-            unacked_ids = set(
-                celery_get_unacked_task_ids(
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
-                )
+            queued_ids = celery_get_queued_task_ids(
+                OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
             )
+            unacked_ids = celery_get_unacked_task_ids(
+                OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+            )
+            live_ids = queued_ids | unacked_ids
             for attempt in stale_not_started:
                 lock_beat.reacquire()
-                if attempt.celery_task_id is None:
-                    continue
-                task_exists = celery_find_task(
-                    attempt.celery_task_id,
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-                    redis_celery,
-                )
-                if task_exists or attempt.celery_task_id in unacked_ids:
+                if not attempt.celery_task_id or attempt.celery_task_id in live_ids:
                     continue
                 # Brief sleep to rule out the race where the task was just
                 # dequeued but the status flip to IN_PROGRESS hasn't committed.
