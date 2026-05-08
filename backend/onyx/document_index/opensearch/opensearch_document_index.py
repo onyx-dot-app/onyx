@@ -916,12 +916,18 @@ class OpenSearchIndexPair(DocumentIndex):
         secondary_embedding_dim: int | None = None,
         secondary_embedding_precision: EmbeddingPrecision | None = None,
     ) -> None:
-        if (secondary is None) != (
-            secondary_embedding_dim is None and secondary_embedding_precision is None
-        ):
+        # All three secondary fields must be set together or all None — checked
+        # independently so a partially-set state surfaces here rather than
+        # deferring to a less informative assertion in verify_and_create.
+        secondary_set = secondary is not None
+        dim_set = secondary_embedding_dim is not None
+        precision_set = secondary_embedding_precision is not None
+        if not (secondary_set == dim_set == precision_set):
             raise ValueError(
-                "Bug: secondary OpenSearchDocumentIndex and its embedding info "
-                "must both be set or both be None."
+                "Bug: secondary OpenSearchDocumentIndex, secondary_embedding_dim, "
+                "and secondary_embedding_precision must all be set together or "
+                f"all be None. Got: secondary={secondary_set}, "
+                f"embedding_dim={dim_set}, embedding_precision={precision_set}."
             )
         self._primary = primary
         self._secondary = secondary

@@ -1127,12 +1127,17 @@ class VespaDocumentIndex(DocumentIndex):
                     res = future.result()
                     try:
                         res.raise_for_status()
-                    except requests.HTTPError as e:
-                        failure_msg = (
-                            f"Failed to update document "
-                            f"{future_to_document_id[future]}\nResponse: {res.text}"
+                    except httpx.HTTPStatusError:
+                        # http_client is httpx.Client, so raise_for_status raises
+                        # httpx.HTTPStatusError; logging here is the only way to
+                        # attach the doc id, since the canonical exception
+                        # propagates unchanged for callers.
+                        logger.error(
+                            "Failed to update document %s. Response: %s",
+                            future_to_document_id[future],
+                            res.text,
                         )
-                        raise requests.HTTPError(failure_msg) from e
+                        raise
 
     def kg_chunk_updates(
         self,
@@ -1204,10 +1209,20 @@ class VespaIndexPair(DocumentIndex):
         secondary_embedding_dim: int | None,
         secondary_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
-        if (secondary is None) != (secondary_index_name is None):
+        # All four secondary fields must be set together or all None — checked
+        # independently so a partially-set state surfaces here rather than
+        # deferring to a less informative ValueError inside deploy_vespa_schemas.
+        secondary_set = secondary is not None
+        name_set = secondary_index_name is not None
+        dim_set = secondary_embedding_dim is not None
+        precision_set = secondary_embedding_precision is not None
+        if not (secondary_set == name_set == dim_set == precision_set):
             raise ValueError(
-                "Bug: secondary VespaDocumentIndex and secondary_index_name "
-                "must both be set or both be None."
+                "Bug: secondary VespaDocumentIndex, secondary_index_name, "
+                "secondary_embedding_dim, and secondary_embedding_precision "
+                "must all be set together or all be None. Got: "
+                f"secondary={secondary_set}, index_name={name_set}, "
+                f"embedding_dim={dim_set}, embedding_precision={precision_set}."
             )
         self._primary = primary
         self._secondary = secondary

@@ -31,6 +31,7 @@ from onyx.setup import setup_document_indices
 from onyx.setup import setup_postgres
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 
 logger = setup_logger()
@@ -334,7 +335,7 @@ def reset_vespa() -> None:
     primary = VespaDocumentIndex(
         index_name=index_name,
         tenant_state=TenantState(
-            tenant_id="public",
+            tenant_id=POSTGRES_DEFAULT_SCHEMA,
             multitenant=MULTI_TENANT,
         ),
         large_chunks_enabled=multipass_config.enable_large_chunks,
@@ -350,7 +351,6 @@ def reset_vespa() -> None:
             )
         ],
         index_setting=IndexingSetting.from_db_model(search_settings),
-        secondary_index_setting=None,
     )
     if not success:
         raise RuntimeError("Could not connect to Vespa within the specified timeout.")
@@ -414,7 +414,6 @@ def reset_vespa_multitenant() -> None:
                 )
             ],
             index_setting=IndexingSetting.from_db_model(search_settings),
-            secondary_index_setting=None,
         )
 
         if not success:

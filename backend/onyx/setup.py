@@ -136,11 +136,6 @@ def setup_onyx(
         success = setup_document_indices(
             document_indices,
             IndexingSetting.from_db_model(search_settings),
-            (
-                IndexingSetting.from_db_model(secondary_search_settings)
-                if secondary_search_settings
-                else None
-            ),
         )
         if not success:
             raise RuntimeError(
@@ -189,7 +184,6 @@ def mark_reindex_flag(db_session: Session) -> None:
 def setup_document_indices(
     document_indices: list[DocumentIndex],
     index_setting: IndexingSetting,
-    secondary_index_setting: IndexingSetting | None,  # noqa: ARG001
     num_attempts: int = VESPA_NUM_ATTEMPTS_ON_STARTUP,
 ) -> bool:
     """Sets up all input document indices.
