@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "opal-v*.*.*"
-  workflow_dispatch:
 
 jobs:
   npm:
@@ -23,10 +22,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4 # zizmor: ignore[cache-poisoning]
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#opal-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
 
       - name: Install workspace deps
         run: npm ci
