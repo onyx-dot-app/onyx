@@ -13,6 +13,18 @@ Why a separate connector instead of extending ``JiraConnector``:
     (https://github.com/onyx-dot-app/onyx/issues/2281#issuecomment-2322316167)
     explicitly asked for a separate connector.
 
+Incremental sync caveat:
+    The JSM ``/request`` endpoint does not expose a true "last modified"
+    timestamp. ``poll_source`` therefore filters on ``updated_at``, which is
+    the most-recent of ``createdDate``, ``currentStatus.statusDate`` and
+    ``resolutionDate`` (see ``utils._derive_updated_at``). That captures
+    creation, status moves and resolutions — the events most workflows care
+    about — but pure description / comment / custom-field edits on
+    already-stable tickets are **not** seen by incremental polls. Run
+    ``load_from_state`` (full sync) periodically to pick those up, or open
+    a follow-up to round-trip to ``/rest/api/3/issue/{key}.fields.updated``
+    when the maintainer signals appetite for the extra request volume.
+
 Resolves: https://github.com/onyx-dot-app/onyx/issues/2281
 """
 
@@ -23,6 +35,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+import requests
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -81,7 +94,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         self._credentials = credentials
         return None
 
-    def _session(self):
+    def _session(self) -> requests.Session:
         if self._credentials is None:
             raise ConnectorMissingCredentialError("JSM credentials not loaded")
         return build_jsm_session(
@@ -153,12 +166,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 "organization_ids": ",".join(request.organization_ids),
             },
         )
-
-    def _flush(
-        self, batch: list[Document]
-    ) -> Iterable[list[Document]]:
-        if batch:
-            yield batch
 
     def _yield_in_batches(
         self, requests: Iterable[JsmRequest]
