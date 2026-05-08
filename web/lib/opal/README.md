@@ -86,7 +86,37 @@ function MyComponent() {
 | `@onyx-ai/opal/styles.css`      | Bundled component CSS                                |
 | `@onyx-ai/opal/tailwind-preset` | Tailwind preset with tokens                          |
 
+## Structure
+
+```
+web/lib/opal/
+├── src/
+│   ├── core/             # Low-level primitives (Interactive, Hoverable, Disabled)
+│   ├── components/       # High-level components (Button, Popover, Tooltip, Table, ...)
+│   ├── layouts/          # Layout primitives (Content, ContentAction, Section, ...)
+│   ├── icons/            # SVG icon components
+│   ├── illustrations/    # Larger SVG illustrations
+│   ├── logos/            # Brand / product logos
+│   ├── types.ts          # Shared types (RichStr, IconProps, etc.)
+│   ├── utils.ts          # cn, markdown helpers
+│   ├── shared.ts
+│   └── root.css          # Library-owned design tokens
+├── scripts/
+│   └── bundle-css.mjs    # Concatenates root.css + leaf component CSS into dist/styles.css
+├── package.json
+├── tsconfig.json         # Source typecheck config
+├── tsconfig.build.json   # Used by tsup to emit dist/
+├── tsup.config.ts
+├── tailwind-preset.js
+└── README.md
+```
+
 ## Local development (inside the Onyx repo)
+
+Opal reuses `/web/node_modules` — it does not have its own `node_modules`. To add a runtime
+dependency, declare it under `peerDependencies` in `web/lib/opal/package.json` AND add the
+matching version in the root `web/package.json` `dependencies` block, then run `npm i` in `/web`
+so Onyx's web app keeps building.
 
 The package is consumed by `web/` as a workspace via `web/package.json`'s `"@onyx-ai/opal":
 "./lib/opal"`. During Onyx development, `web/` resolves Opal source through the `@opal/*`
@@ -100,15 +130,13 @@ cd web/lib/opal
 npm run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
-Adding a runtime dependency: declare it under `peerDependencies` (so consumers control the
-version) and ensure the matching version is also declared in the root `web/package.json`
-`dependencies` block so Onyx's web app keeps building.
-
 ## Conventions
 
-- Component dirs: `web/lib/opal/src/components/<kebab-name>/` containing `components.tsx`,
-  `README.md`, `styles.css` (when needed), and `<PascalName>.stories.tsx` (when applicable).
+- Component directories are kebab-case (e.g. `select-button/`, `open-button/`,
+  `content-action/`).
+- Each component dir contains `components.tsx`, `README.md`, `styles.css` (when needed), and
+  a `<PascalName>.stories.tsx` (when applicable).
 - Imports inside the lib use the `@opal/` path alias; never `@/`.
-- Types/interfaces declared at the top of `components.tsx` without `export`; everything is
+- Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.
 - See `web/AGENTS.md` for broader frontend standards.
