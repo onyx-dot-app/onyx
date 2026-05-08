@@ -1,0 +1,39 @@
+name: Release Opal
+
+on:
+  push:
+    tags:
+      - "opal-v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    environment:
+      name: release-opal
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web/lib/opal
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install workspace deps
+        run: npm ci
+        working-directory: web
+
+      - name: Build opal
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
