@@ -205,7 +205,7 @@ export default function MessageToolbar({
         const mc = p.model_configurations.find((m) => m.id === id);
         if (mc) {
           const llmDescriptor = {
-            name: p.name ?? "",
+            name: p.name ?? p.provider,
             provider: p.provider,
             modelName: mc.name,
           };

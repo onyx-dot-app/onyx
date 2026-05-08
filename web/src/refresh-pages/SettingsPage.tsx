@@ -799,12 +799,12 @@ function ChatPreferencesSettings() {
         const mc = p.model_configurations.find((m) => m.id === id);
         if (mc) {
           llmManager.updateCurrentLlm({
-            name: p.name ?? "",
+            name: p.name ?? p.provider,
             provider: p.provider,
             modelName: mc.name,
           });
           void updateUserDefaultModel(
-            structureValue(p.name ?? "", p.provider, mc.name)
+            structureValue(p.name ?? String(p.id), p.provider, mc.name)
           );
           break;
         }
