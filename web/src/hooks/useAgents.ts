@@ -177,6 +177,10 @@ export function usePinnedAgents() {
  * 1. URL param `agentId`
  * 2. Chat session's `persona_id`
  * 3. Falls back to null if neither is present
+ *
+ * Strict — sidebar/breadcrumb consumers rely on null to mean "nothing
+ * explicitly active." For an empty-state default suitable for the home
+ * Suggestions hero, use {@link useActiveOrDefaultAgent}.
  */
 export function useCurrentAgent(): MinimalPersonaSnapshot | null {
   const { agents } = useAgents();
@@ -199,6 +203,64 @@ export function useCurrentAgent(): MinimalPersonaSnapshot | null {
   }, [agents, agentIdRaw, currentChatSession?.persona_id]);
 
   return currentAgent;
+}
+
+/**
+ * Same priority as {@link useCurrentAgent} (URL param > chat session)
+ * but, if both are absent, falls back to the user's default agent —
+ * `chosen_assistants[0]` then `pinned_assistants[0]` then the first
+ * non-builtin featured agent.
+ *
+ * Only call sites that legitimately want to show *something* on the
+ * empty-state home (e.g. the Suggestions hero) should use this.
+ */
+export function useActiveOrDefaultAgent(): MinimalPersonaSnapshot | null {
+  const { agents } = useAgents();
+  const { user } = useUser();
+  const searchParams = useSearchParams();
+
+  const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const { currentChatSession } = useChatSessions();
+
+  return useMemo(() => {
+    if (agents.length === 0) return null;
+
+    if (agentIdRaw) {
+      const found = agents.find((a) => a.id === parseInt(agentIdRaw));
+      if (found) return found;
+    }
+
+    if (currentChatSession?.persona_id) {
+      const found = agents.find(
+        (a) => a.id === currentChatSession.persona_id
+      );
+      if (found) return found;
+    }
+
+    const chosenId = user?.preferences.chosen_assistants?.[0];
+    if (chosenId !== undefined) {
+      const found = agents.find((a) => a.id === chosenId);
+      if (found) return found;
+    }
+
+    const pinnedId = user?.preferences.pinned_assistants?.[0];
+    if (pinnedId !== undefined) {
+      const found = agents.find((a) => a.id === pinnedId);
+      if (found) return found;
+    }
+
+    // Last resort — first non-builtin featured agent. Mirrors the
+    // implicit-default behaviour of usePinnedAgents() above.
+    return (
+      agents.find((a) => a.is_featured && a.id !== 0) ?? null
+    );
+  }, [
+    agents,
+    agentIdRaw,
+    currentChatSession?.persona_id,
+    user?.preferences.chosen_assistants,
+    user?.preferences.pinned_assistants,
+  ]);
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 
 export default function useAgentController({
   selectedChatSession,
@@ -19,6 +20,9 @@ export default function useAgentController({
   const { agents: availableAgents } = useAgents();
   const { pinnedAgents: pinnedAgents } = usePinnedAgents();
   const combinedSettings = useSettingsContext();
+  const { user } = useUser();
+  const userHasHiddenUnifiedAgent =
+    user?.preferences.hidden_assistants?.includes(0) ?? false;
 
   const defaultAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const defaultAgentId = defaultAgentIdRaw
@@ -54,24 +58,35 @@ export default function useAgentController({
     const disableDefaultAssistant =
       combinedSettings?.settings?.disable_default_assistant ?? false;
 
-    if (disableDefaultAssistant) {
-      // Skip unified assistant (ID 0), go straight to pinned/available
-      // Filter out ID 0 from both pinned and available assistants
+    // Skip the unified assistant (id=0) when either the workspace setting
+    // is on OR the *current user* has explicitly hidden it via
+    // `hidden_assistants`. Without the per-user check the home page falls
+    // back to id=0 — which has no starter messages — even when the user has
+    // a personal pinned agent that should be the default.
+    const skipUnified = disableDefaultAssistant || userHasHiddenUnifiedAgent;
+
+    if (skipUnified) {
       const nonDefaultPinned = pinnedAgents.filter((a) => a.id !== 0);
       const nonDefaultAvailable = availableAgents.filter((a) => a.id !== 0);
 
-      return (
-        nonDefaultPinned[0] || nonDefaultAvailable[0] || availableAgents[0] // Last resort fallback
-      );
+      // Don't fall back to `availableAgents[0]` — it can be the very id=0
+      // the user just hid. If they have no non-default pinned/available,
+      // return undefined so the caller renders the empty state instead of
+      // silently re-selecting the hidden agent.
+      return nonDefaultPinned[0] || nonDefaultAvailable[0];
     }
 
-    // Try to use the unified assistant (ID 0) as default
     const unifiedAgent = availableAgents.find((a) => a.id === 0);
     if (unifiedAgent) return unifiedAgent;
 
-    // Fall back to pinned or available assistants
     return pinnedAgents[0] || availableAgents[0];
-  }, [selectedAgent, pinnedAgents, availableAgents, combinedSettings]);
+  }, [
+    selectedAgent,
+    pinnedAgents,
+    availableAgents,
+    combinedSettings,
+    userHasHiddenUnifiedAgent,
+  ]);
 
   const setSelectedAgentFromId = useCallback(
     (agentId: number | null | undefined) => {

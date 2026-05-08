@@ -1,38 +1,48 @@
 "use client";
 
-import { useCurrentAgent } from "@/hooks/useAgents";
+import { useActiveOrDefaultAgent } from "@/hooks/useAgents";
 import { OnSubmitProps } from "@/hooks/useChatController";
 
 export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
 }
 
+const SUGGESTION_CARD_LIMIT = 3;
+
 /**
  * Home-page suggested-prompt grid.
  *
- * Reads the active agent's `starter_messages` (no change to the data
- * flow) and renders them as a 3-up card grid matching the redesigned
- * landing hero. Each starter message becomes one card:
+ * Reads the active agent's `starter_messages` and renders the first
+ * three as a 3-up card grid matching the redesigned landing hero.
+ * Each starter message becomes one card:
  *
  *   - the optional `name` shows as a small uppercase category label,
  *   - the `message` is the card's primary title and the prompt that
  *     fires onClick.
  *
- * Cards beyond the first three wrap onto a second row on the same
- * grid; this is intentional — the agent author controls how many
- * starter messages exist.
+ * The active-agent lookup falls back to the user's default agent
+ * (chosen_assistants[0] / pinned_assistants[0] / first featured) so
+ * the bare empty-state home (no `?agentId=` param, no chat session)
+ * still surfaces the user's persona starters. Sidebar consumers use
+ * the strict `useCurrentAgent` and remain null in that state.
+ *
+ * Capped at three because the redesigned grid is `lg:grid-cols-3`;
+ * a fourth card wraps to a second row and breaks the hero proportions.
+ * Agent authors can ship more than three starter messages — they're
+ * still served via the persona payload, just not surfaced here.
  *
  * Returns null when no starter messages are available, matching the
  * prior component's contract.
  */
 export default function Suggestions({ onSubmit }: SuggestionsProps) {
-  const currentAgent = useCurrentAgent();
+  const currentAgent = useActiveOrDefaultAgent();
 
-  if (
-    !currentAgent ||
-    !currentAgent.starter_messages ||
-    currentAgent.starter_messages.length === 0
-  ) {
+  const visibleStarters = (currentAgent?.starter_messages ?? []).slice(
+    0,
+    SUGGESTION_CARD_LIMIT
+  );
+
+  if (!currentAgent || visibleStarters.length === 0) {
     return null;
   }
 
@@ -53,7 +63,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
         <span className="flex-1 h-px bg-neutral-100" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {currentAgent.starter_messages.map(({ message, name }, index) => (
+        {visibleStarters.map(({ message, name }, index) => (
           <button
             key={index}
             type="button"
