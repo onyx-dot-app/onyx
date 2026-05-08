@@ -159,10 +159,9 @@ Agents use both exit codes and error messages. Exit codes tell the agent (and sc
 
 #### R1.6: Version and capability discovery
 
-The CLI should support a machine-readable capability check so that agents (or Craft session setup) can verify:
+The CLI should support a machine-readable health check so that agents (or Craft session setup) can verify:
 - CLI version
 - Backend version and reachability
-- Whether the search endpoint is available (feature detection, not just version comparison)
 - Available authentication (is a PAT configured? does it have valid permissions?)
 
 This supports Part 4's need to validate the CLI is properly configured at session start.
