@@ -4,10 +4,10 @@ import React from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 
-export type FlexDirection = "row" | "column";
-export type JustifyContent = "start" | "center" | "end" | "between";
-export type AlignItems = "start" | "center" | "end" | "stretch";
-export type Length = "auto" | "fit" | "full" | number;
+type FlexDirection = "row" | "column";
+type JustifyContent = "start" | "center" | "end" | "between";
+type AlignItems = "start" | "center" | "end" | "stretch";
+type Length = "auto" | "fit" | "full" | number;
 
 const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
@@ -25,24 +25,18 @@ const alignClassMap: Record<AlignItems, string> = {
   end: "items-end",
   stretch: "items-stretch",
 };
-export const widthClassmap: Record<Exclude<Length, number>, string> = {
+const widthClassmap: Record<Exclude<Length, number>, string> = {
   auto: "w-auto flex-shrink-0",
   fit: "w-fit flex-shrink-0",
   full: "w-full",
 };
-export const heightClassmap: Record<Exclude<Length, number>, string> = {
+const heightClassmap: Record<Exclude<Length, number>, string> = {
   auto: "h-auto",
   fit: "h-fit",
   full: "h-full min-h-0",
 };
 
-/**
- * Section - A flexible container component for grouping related content
- *
- * Provides a standardized layout container with configurable direction and spacing.
- * Uses flexbox layout with customizable gap between children. Defaults to column layout.
- */
-export interface SectionProps
+interface SectionProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
   className?: string;
   flexDirection?: FlexDirection;
@@ -60,11 +54,7 @@ export interface SectionProps
   ref?: React.Ref<HTMLDivElement>;
 }
 
-/**
- * `<Disabled>` from `@opal/core` uses `display: contents` — it can safely
- * wrap a `Section` without affecting layout.
- */
-export function Section({
+function Section({
   className,
   flexDirection = "column",
   justifyContent = "center",
@@ -105,3 +95,14 @@ export function Section({
     />
   );
 }
+
+export {
+  Section,
+  widthClassmap,
+  heightClassmap,
+  type SectionProps,
+  type FlexDirection,
+  type JustifyContent,
+  type AlignItems,
+  type Length,
+};

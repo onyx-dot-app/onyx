@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { cn } from "@opal/utils";
 
-export interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Background color to use for the shadow gradients.
    * Defaults to --background-neutral-00
@@ -53,7 +53,7 @@ export interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
  *   <div>Content...</div>
  * </ShadowDiv>
  */
-export default function ShadowDiv({
+function ShadowDiv({
   backgroundColor = "var(--background-neutral-00)",
   shadowHeight = "1.5rem",
   scrollContainerRef,
@@ -144,3 +144,5 @@ export default function ShadowDiv({
     </div>
   );
 }
+
+export { ShadowDiv, type ShadowDivProps };
