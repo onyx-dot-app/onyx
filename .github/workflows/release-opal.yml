@@ -22,7 +22,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
+      # NOTE: actions/setup-node has no equivalent of setup-uv's `enable-cache: false`.
+      # `cache: ""` only disables npm/yarn/pnpm dep caching — the Node toolchain itself is
+      # always restored from the runner toolcache, which zizmor's cache-poisoning rule flags
+      # on every release-publishing workflow. The risk requires compromising the
+      # GitHub-hosted runner image, which is well outside this repo's threat model.
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4 # zizmor: ignore[cache-poisoning]
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
