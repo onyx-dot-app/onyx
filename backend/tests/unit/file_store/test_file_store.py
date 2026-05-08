@@ -36,7 +36,9 @@ class FileRecord(DBBaseTest):
     file_id: Mapped[str] = mapped_column(String, primary_key=True)
 
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_origin: Mapped[FileOrigin] = mapped_column(Enum(FileOrigin, native_enum=False), nullable=False)
+    file_origin: Mapped[FileOrigin] = mapped_column(
+        Enum(FileOrigin, native_enum=False), nullable=False
+    )
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
 
     # External storage support (S3, MinIO, Azure Blob, etc.)
@@ -44,8 +46,12 @@ class FileRecord(DBBaseTest):
     object_key: Mapped[str] = mapped_column(String, nullable=False)
 
     # Timestamps for external storage
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 @pytest.fixture
@@ -128,7 +134,9 @@ class TestExternalStorageFileStore:
 
     def test_s3_bucket_name_configuration(self) -> None:
         """Test S3 bucket name configuration"""
-        with patch("onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "my-test-bucket"):
+        with patch(
+            "onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "my-test-bucket"
+        ):
             file_store = S3BackedFileStore(bucket_name="my-test-bucket")
             bucket_name: str = file_store._get_bucket_name()
             assert bucket_name == "my-test-bucket"
@@ -155,7 +163,9 @@ class TestExternalStorageFileStore:
                 return_value="test-tenant",
             ),
         ):
-            file_store = S3BackedFileStore(bucket_name="test-bucket", s3_prefix="custom-prefix")
+            file_store = S3BackedFileStore(
+                bucket_name="test-bucket", s3_prefix="custom-prefix"
+            )
             s3_key: str = file_store._get_s3_key("test-file.txt")
             assert s3_key == "custom-prefix/test-tenant/test-file.txt"
 
@@ -206,7 +216,9 @@ class TestExternalStorageFileStore:
         mock_db_session.rollback = Mock()
 
         with (
-            patch("onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "test-bucket"),
+            patch(
+                "onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "test-bucket"
+            ),
             patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"),
             patch("onyx.file_store.file_store.S3_AWS_ACCESS_KEY_ID", "test-key"),
             patch("onyx.file_store.file_store.S3_AWS_SECRET_ACCESS_KEY", "test-secret"),
@@ -381,7 +393,9 @@ class TestGCSFileStore:
             client = file_store._get_gcs_client()
 
             mock_from_file.assert_called_once_with("/path/to/key.json")
-            mock_client_cls.assert_called_once_with(credentials=mock_credentials, project="my-project")
+            mock_client_cls.assert_called_once_with(
+                credentials=mock_credentials, project="my-project"
+            )
             assert client == mock_client_instance
 
     def test_gcs_client_initialization_with_key_json(self) -> None:
@@ -408,7 +422,9 @@ class TestGCSFileStore:
 
             mock_from_info.assert_called_once()
             # project_id should be extracted from the JSON when not explicitly set
-            mock_client_cls.assert_called_once_with(credentials=mock_credentials, project="json-project")
+            mock_client_cls.assert_called_once_with(
+                credentials=mock_credentials, project="json-project"
+            )
             assert client == mock_client_instance
 
     def test_gcs_object_key_generation(self) -> None:
@@ -427,7 +443,9 @@ class TestGCSFileStore:
             "onyx.file_store.gcs_file_store.get_current_tenant_id",
             return_value="test-tenant",
         ):
-            file_store = GCSBackedFileStore(bucket_name="test-bucket", gcs_prefix="custom-prefix")
+            file_store = GCSBackedFileStore(
+                bucket_name="test-bucket", gcs_prefix="custom-prefix"
+            )
             key: str = file_store._get_object_key("test-file.txt")
             assert key == "custom-prefix/test-tenant/test-file.txt"
 
@@ -477,7 +495,9 @@ class TestGCSFileStore:
 
     def test_gcs_read_file_mock(self, sample_content: bytes) -> None:
         """Test GCS read_file returns BytesIO with blob content"""
-        mock_record = Mock(bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt")
+        mock_record = Mock(
+            bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt"
+        )
         mock_blob = Mock()
         mock_blob.download_as_bytes.return_value = sample_content
         mock_bucket = Mock()
@@ -500,9 +520,13 @@ class TestGCSFileStore:
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
             file_store._gcs_client = mock_client
 
-            result = file_store.read_file(file_id="test-file.txt", db_session=mock_db_session)
+            result = file_store.read_file(
+                file_id="test-file.txt", db_session=mock_db_session
+            )
 
-            mock_get_record.assert_called_once_with(file_id="test-file.txt", db_session=mock_db_session)
+            mock_get_record.assert_called_once_with(
+                file_id="test-file.txt", db_session=mock_db_session
+            )
             mock_client.bucket.assert_called_once_with("test-bucket")
             mock_bucket.blob.assert_called_once_with("onyx-files/public/test-file.txt")
             mock_blob.download_as_bytes.assert_called_once()
@@ -510,7 +534,9 @@ class TestGCSFileStore:
 
     def test_gcs_read_file_with_tempfile(self, sample_content: bytes) -> None:
         """Test GCS read_file with use_tempfile=True downloads to a temp file"""
-        mock_record = Mock(bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt")
+        mock_record = Mock(
+            bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt"
+        )
         mock_blob = Mock()
 
         def fake_download_to_file(fp: Any) -> None:
@@ -549,7 +575,9 @@ class TestGCSFileStore:
 
     def test_gcs_delete_file_mock(self) -> None:
         """Test GCS delete_file removes blob and DB record"""
-        mock_record = Mock(bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt")
+        mock_record = Mock(
+            bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt"
+        )
         mock_blob = Mock()
         mock_bucket = Mock()
         mock_bucket.blob.return_value = mock_blob
@@ -567,7 +595,9 @@ class TestGCSFileStore:
                 "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
                 return_value=mock_record,
             ),
-            patch("onyx.file_store.gcs_file_store.delete_filerecord_by_file_id") as mock_delete_record,
+            patch(
+                "onyx.file_store.gcs_file_store.delete_filerecord_by_file_id"
+            ) as mock_delete_record,
         ):
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
             file_store._gcs_client = mock_client
@@ -575,14 +605,18 @@ class TestGCSFileStore:
             file_store.delete_file(file_id="test-file.txt", db_session=mock_db_session)
 
             mock_blob.delete.assert_called_once()
-            mock_delete_record.assert_called_once_with(file_id="test-file.txt", db_session=mock_db_session)
+            mock_delete_record.assert_called_once_with(
+                file_id="test-file.txt", db_session=mock_db_session
+            )
             mock_db_session.commit.assert_called_once()
 
     def test_gcs_delete_file_blob_not_found_in_gcs(self) -> None:
         """Test GCS delete_file proceeds with DB cleanup when blob is missing in GCS"""
         from google.api_core.exceptions import NotFound
 
-        mock_record = Mock(bucket_name="test-bucket", object_key="onyx-files/public/missing.txt")
+        mock_record = Mock(
+            bucket_name="test-bucket", object_key="onyx-files/public/missing.txt"
+        )
         mock_blob = Mock()
         mock_blob.delete.side_effect = NotFound("blob not found")
         mock_bucket = Mock()
@@ -601,14 +635,18 @@ class TestGCSFileStore:
                 "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
                 return_value=mock_record,
             ),
-            patch("onyx.file_store.gcs_file_store.delete_filerecord_by_file_id") as mock_delete_record,
+            patch(
+                "onyx.file_store.gcs_file_store.delete_filerecord_by_file_id"
+            ) as mock_delete_record,
         ):
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
             file_store._gcs_client = mock_client
 
             file_store.delete_file(file_id="missing.txt", db_session=mock_db_session)
 
-            mock_delete_record.assert_called_once_with(file_id="missing.txt", db_session=mock_db_session)
+            mock_delete_record.assert_called_once_with(
+                file_id="missing.txt", db_session=mock_db_session
+            )
             mock_db_session.commit.assert_called_once()
 
     def test_gcs_delete_file_missing_record_raises(self) -> None:
@@ -628,7 +666,9 @@ class TestGCSFileStore:
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
 
             with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-                file_store.delete_file(file_id="missing.txt", db_session=mock_db_session)
+                file_store.delete_file(
+                    file_id="missing.txt", db_session=mock_db_session
+                )
 
             mock_db_session.rollback.assert_called_once()
 
@@ -687,7 +727,9 @@ class TestGCSFileStore:
                 return_value=mock_record,
             ),
             patch("onyx.file_store.gcs_file_store.upsert_filerecord") as mock_upsert,
-            patch("onyx.file_store.gcs_file_store.delete_filerecord_by_file_id") as mock_delete_record,
+            patch(
+                "onyx.file_store.gcs_file_store.delete_filerecord_by_file_id"
+            ) as mock_delete_record,
             patch(
                 "onyx.file_store.gcs_file_store.get_current_tenant_id",
                 return_value="public",
@@ -703,12 +745,16 @@ class TestGCSFileStore:
             )
 
             new_key = "onyx-files/public/new-id"
-            mock_source_bucket.copy_blob.assert_called_once_with(mock_source_blob, mock_dest_bucket, new_key)
+            mock_source_bucket.copy_blob.assert_called_once_with(
+                mock_source_blob, mock_dest_bucket, new_key
+            )
             mock_upsert.assert_called_once()
             assert mock_upsert.call_args.kwargs["file_id"] == "new-id"
             assert mock_upsert.call_args.kwargs["bucket_name"] == "test-bucket"
             assert mock_upsert.call_args.kwargs["object_key"] == new_key
-            mock_delete_record.assert_called_once_with(file_id="old-id", db_session=mock_db_session)
+            mock_delete_record.assert_called_once_with(
+                file_id="old-id", db_session=mock_db_session
+            )
             mock_db_session.commit.assert_called_once()
             mock_source_blob.delete.assert_called_once()
             # Source blob deletion must happen after the DB commit
@@ -717,7 +763,9 @@ class TestGCSFileStore:
 
     def test_gcs_get_file_size_mock(self) -> None:
         """Test GCS get_file_size returns the blob size"""
-        mock_record = Mock(bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt")
+        mock_record = Mock(
+            bucket_name="test-bucket", object_key="onyx-files/public/test-file.txt"
+        )
         mock_blob = Mock()
         mock_blob.size = 1234
         mock_bucket = Mock()
@@ -740,7 +788,9 @@ class TestGCSFileStore:
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
             file_store._gcs_client = mock_client
 
-            size = file_store.get_file_size(file_id="test-file.txt", db_session=mock_db_session)
+            size = file_store.get_file_size(
+                file_id="test-file.txt", db_session=mock_db_session
+            )
 
             mock_blob.reload.assert_called_once()
             assert size == 1234
@@ -761,7 +811,9 @@ class TestGCSFileStore:
         ):
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
 
-            size = file_store.get_file_size(file_id="missing.txt", db_session=mock_db_session)
+            size = file_store.get_file_size(
+                file_id="missing.txt", db_session=mock_db_session
+            )
 
             assert size is None
 
