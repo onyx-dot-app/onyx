@@ -1,5 +1,7 @@
 # Onyx Search Tool for Craft
 
+> Related: [search-design.md](search-design.md)
+
 ## Objective
 
 Replace the legacy `files/` corpus sync with a first-party HTTP search tool that the Craft sandbox can call. The tool must mirror the regular Onyx app's search behavior — same hybrid pipeline, same permission model, same citation shape — but run inside the sandbox boundary and produce results that are safe to feed to the agent. This is the foundation that lets us delete the per-session corpus dump (which never scaled, never matched permissions, and was a constant source of drift between Onyx data and what the agent could see).
@@ -29,6 +31,12 @@ V1 collapses these into one retrieval path: the Craft sandbox calls `company_sea
 - **Available sources are described to the agent at session setup.** The skill's `SKILL.md` is templated like `AGENTS.md` — at sandbox setup the backend queries the user's accessible connectors and renders the list (e.g. "Google Drive — internal docs, Slack — #eng / #sales / ..., Linear — eng tickets") into the skill doc. The list is fixed for the duration of the session; we don't refresh it mid-session.
 - **Return format is a single markdown blob to stdout.** The skill prints the formatted text the LLM sees and exits. We do not write a parallel JSON file to disk in V1 — the agent reads markdown, not JSON, and there is no other consumer in the sandbox today. Stable IDs (`document_id`, `chunk_ind`) are inlined into the markdown so they're still recoverable if a future tool needs them. The endpoint itself returns both `llm_facing_text` and the structured `results`/`citation_mapping` (matching the chat tool's `rich_response`/`llm_facing_response` split) — the structured part is for server-side audit and any future non-skill consumer.
 - **Backwards compatibility is not a goal.** Existing Craft sessions, sandboxes, and `files/` content can be deleted as part of this change. See the main plan: V1 has no migration story.
+
+---
+
+> **Note (2026-05-08):** Everything below this line is from the first iteration of the search tool design. It is kept for documentation purposes only. The current design — including the chosen approach (onyx-cli), rationale, and implementation plan — lives in [`search-design.md`](search-design.md).
+
+---
 
 ## Approaches Considered
 

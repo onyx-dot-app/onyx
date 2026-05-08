@@ -390,7 +390,7 @@ Validation rejects: missing `SKILL.md`, frontmatter without `name`/`description`
 
 ### `SkillRenderContext`
 
-Built-ins reference well-known fields (`user_name`, `accessible_sources`, ...) via Mustache-style placeholders. Consumers populate the model before calling `materialize_skills`. The Craft consumer fills in `accessible_sources` via the same `get_connector_credential_pairs_for_user` call described in `search.md`. Unknown placeholders in templates are left in place and logged.
+Built-ins reference well-known fields (`user_name`, `accessible_sources`, ...) via Mustache-style placeholders. Consumers populate the model before calling `materialize_skills`. The Craft consumer fills in `accessible_sources` via the same `get_connector_credential_pairs_for_user` call described in `search-design.md`. Unknown placeholders in templates are left in place and logged.
 
 ## Built-in Skills (V1 set)
 
@@ -415,7 +415,7 @@ The callable should be **fast and cheap** (it runs per session start) and **side
 
 `SkillRenderContext` placeholders used by V1 built-ins:
 
-- `company-search` — `{{accessible_sources}}` (rendered list of the user's CC pairs; see `search.md`).
+- `company-search` — `{{accessible_sources}}` (rendered list of the user's CC pairs; see `search-design.md`).
 - Future built-ins — extend `SkillRenderContext` (well-known fields) or use `extra: dict[str, str]` for consumer-specific keys.
 
 ## UI
