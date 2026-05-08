@@ -80,6 +80,7 @@ from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
+from onyx.db.index_attempt import get_stale_not_started_index_attempts
 from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
@@ -143,7 +144,7 @@ HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 # After this window we check Redis directly — if the task is still there we
 # leave it alone, so this threshold does not cause false positives for
 # legitimately queued tasks under heavy load.
-NOT_STARTED_SCAN_THRESHOLD_HOURS = 6
+NOT_STARTED_SCAN_THRESHOLD_HOURS = 12
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
@@ -337,17 +338,7 @@ def validate_active_indexing_attempts(
         cutoff = datetime.now(timezone.utc) - timedelta(
             hours=NOT_STARTED_SCAN_THRESHOLD_HOURS
         )
-        stale_not_started = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.status == IndexingStatus.NOT_STARTED,
-                    IndexAttempt.celery_task_id.isnot(None),
-                    IndexAttempt.time_created < cutoff,
-                )
-            )
-            .scalars()
-            .all()
-        )
+        stale_not_started = get_stale_not_started_index_attempts(db_session, cutoff)
         if stale_not_started:
             redis_celery = celery_get_broker_client(current_app)
             queued_ids = celery_get_queued_task_ids(
