@@ -69,7 +69,6 @@ EXPECTED_TOOLS = {
         display_name="Coding Agent",
         in_code_tool_id="CodingAgentTool",
         user_id=None,
-        enabled=False,
     ),
 }
 
@@ -153,5 +152,4 @@ def test_tool_seeding_migration() -> None:
         # Check MemoryTool
         validate_tool(EXPECTED_TOOLS["MemoryTool"])
 
-        # Check CodingAgentTool (seeded disabled by default)
         validate_tool(EXPECTED_TOOLS["CodingAgentTool"])
