@@ -146,16 +146,15 @@ Steps:
 
    ```sh
    git switch main && git pull
-   git tag opal-v0.1.1
-   git push origin opal-v0.1.1
+   git tag opal/v0.1.1
+   git push origin opal/v0.1.1
    ```
 
 4. The workflow runs automatically on tag push. It builds (`tsup` + CSS barrel) and runs
    `npm publish --provenance --access public`. Watch the run under the Actions tab; verify
    the new version on https://www.npmjs.com/package/@onyx-ai/opal.
 
-The tag pattern must match `opal-v*.*.*` for the workflow to fire. Manual one-off runs are
-also possible via `workflow_dispatch` from the Actions tab.
+The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 
 ## Conventions
 
