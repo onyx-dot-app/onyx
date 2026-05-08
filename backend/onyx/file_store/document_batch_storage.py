@@ -207,7 +207,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
     def delete_batch_by_name(self, batch_file_name: str) -> None:
         """Delete a specific batch from FileStore."""
-        self.file_store.delete_file(batch_file_name)
+        self.file_store.delete_file(batch_file_name, error_on_missing=False)
         logger.debug("Deleted batch %s from FileStore", batch_file_name)
 
     def delete_batch_by_num(self, batch_num: int) -> None:

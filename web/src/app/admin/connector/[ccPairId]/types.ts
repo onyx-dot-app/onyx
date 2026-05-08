@@ -88,6 +88,7 @@ export interface DocPermissionSyncAttemptSnapshot {
   id: number;
   status: PermissionSyncStatusEnum;
   error_message: string | null;
+  full_exception_trace: string | null;
   total_docs_synced: number;
   docs_with_permission_errors: number;
   time_created: string;
@@ -106,6 +107,7 @@ export interface ExternalGroupSyncAttemptSnapshot {
   id: number;
   status: PermissionSyncStatusEnum;
   error_message: string | null;
+  full_exception_trace: string | null;
   total_users_processed: number;
   total_groups_processed: number;
   total_group_memberships_synced: number;

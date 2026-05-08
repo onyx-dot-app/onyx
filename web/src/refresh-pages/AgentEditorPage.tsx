@@ -35,6 +35,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -575,6 +576,9 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
+  const codingAgentTool = availableTools?.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
+  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
@@ -666,6 +670,12 @@ export default function AgentEditorPage({
       !!codeInterpreterTool &&
       (existingAgent?.tools?.some(
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
+    coding_agent:
+      !!codingAgentTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
       ) ??
         false),
     // MCP servers - dynamically add fields for each server with nested tool fields
@@ -805,6 +815,9 @@ export default function AgentEditorPage({
       }
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
+      }
+      if (values.coding_agent && codingAgentTool) {
+        toolIds.push(codingAgentTool.id);
       }
 
       // Collect enabled MCP tool IDs
@@ -1477,6 +1490,22 @@ export default function AgentEditorPage({
                                   <SwitchField
                                     name="code_interpreter"
                                     disabled={!codeInterpreterTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
+
+                            <Disabled disabled={!codingAgentTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="coding_agent"
+                                  title="Coding Agent"
+                                  description="Investigate a GitHub repository and answer questions about its code."
+                                  disabled={!codingAgentTool}
+                                >
+                                  <SwitchField
+                                    name="coding_agent"
+                                    disabled={!codingAgentTool}
                                   />
                                 </InputHorizontal>
                               </Card>

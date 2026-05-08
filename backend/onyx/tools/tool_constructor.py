@@ -30,6 +30,9 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -293,6 +296,16 @@ def _construct_tools_impl(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle Coding Agent Tool
+            elif tool_cls.__name__ == CodingAgentTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    CodingAgentTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        llm=llm,
+                    )
                 ]
 
             # Handle File Reader Tool

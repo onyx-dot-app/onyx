@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.session import TransactionalContext
 
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
@@ -79,20 +78,19 @@ class UserFileIndexingAdapter:
         )
 
     @contextlib.contextmanager
-    def lock_context(
-        self, documents: list[Document]
-    ) -> Generator[TransactionalContext, None, None]:
+    def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
         self.db_session.commit()  # ensure that we're not in a transaction
         lock_acquired = False
         for i in range(_NUM_LOCK_ATTEMPTS):
             try:
-                with self.db_session.begin() as transaction:
+                with self.db_session.begin():
                     lock_acquired = _acquire_user_file_locks(
                         db_session=self.db_session,
                         user_file_ids=[doc.id for doc in documents],
                     )
                     if lock_acquired:
-                        yield transaction
+                        yield self.db_session
+                        self.db_session.commit()
                         break
             except OperationalError as e:
                 logger.warning(
@@ -113,6 +111,7 @@ class UserFileIndexingAdapter:
         context: DocumentBatchPrepareContext,
         tenant_id: str,
         chunks: list[DocAwareChunk],
+        db_session: Session,
     ) -> UserFileChunkEnricher:
         """Do all DB lookups and pre-compute file metadata from chunks."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
@@ -133,21 +132,21 @@ class UserFileIndexingAdapter:
 
         user_file_id_to_project_ids = fetch_user_project_ids_for_user_files(
             user_file_ids=updatable_ids,
-            db_session=self.db_session,
+            db_session=db_session,
         )
         user_file_id_to_persona_ids = fetch_persona_ids_for_user_files(
             user_file_ids=updatable_ids,
-            db_session=self.db_session,
+            db_session=db_session,
         )
         user_file_id_to_access: dict[str, DocumentAccess] = get_access_for_user_files(
             user_file_ids=updatable_ids,
-            db_session=self.db_session,
+            db_session=db_session,
         )
         user_file_id_to_previous_chunk_cnt: dict[str, int] = {
             user_file_id: chunk_count
             for user_file_id, chunk_count in fetch_chunk_counts_for_user_files(
                 user_file_ids=updatable_ids,
-                db_session=self.db_session,
+                db_session=db_session,
             )
         }
 
@@ -192,7 +191,7 @@ class UserFileIndexingAdapter:
         )
 
     def _notify_assistant_owners_if_files_ready(
-        self, user_files: list[UserFile]
+        self, user_files: list[UserFile], db_session: Session
     ) -> None:
         """
         Check if all files for associated assistants are processed and notify owners.
@@ -217,7 +216,7 @@ class UserFileIndexingAdapter:
                         create_notification(
                             user_id=assistant.user_id,
                             notif_type=NotificationType.ASSISTANT_FILES_READY,
-                            db_session=self.db_session,
+                            db_session=db_session,
                             title="Your files are ready!",
                             description=f"All files for agent {assistant.name} have been processed and are now available.",
                             additional_data={
@@ -233,12 +232,13 @@ class UserFileIndexingAdapter:
         updatable_chunk_data: list[UpdatableChunkData],  # noqa: ARG002
         filtered_documents: list[Document],  # noqa: ARG002
         enrichment: ChunkEnrichmentContext,
+        db_session: Session,
     ) -> None:
         assert isinstance(enrichment, UserFileChunkEnricher)
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
         user_files = (
-            self.db_session.query(UserFile)
+            db_session.query(UserFile)
             .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
             .filter(UserFile.id.in_(user_file_ids))
             .all()
@@ -258,9 +258,7 @@ class UserFileIndexingAdapter:
             ]
 
         # Notify assistant owners if all their files are now processed
-        self._notify_assistant_owners_if_files_ready(user_files)
-
-        self.db_session.commit()
+        self._notify_assistant_owners_if_files_ready(user_files, db_session)
 
         # Store the plaintext in the file store for faster retrieval
         # NOTE: this creates its own session to avoid committing the overall

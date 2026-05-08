@@ -111,6 +111,7 @@ from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
@@ -136,9 +137,8 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 logger = setup_logger()
 
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
-DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 48
-# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
-# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
+# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
+# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
@@ -232,14 +232,6 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if (
-                fresh_attempt.total_batches
-                and fresh_attempt.completed_batches < fresh_attempt.total_batches
-            ):
-                heartbeat_timeout_seconds = (
-                    HEARTBEAT_TIMEOUT_SECONDS
-                    * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
-                )
             cutoff_time = datetime.now(timezone.utc) - timedelta(
                 seconds=heartbeat_timeout_seconds
             )
@@ -251,13 +243,66 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            # No heartbeat for too long - mark as failed
-            failure_reason = (
-                f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
-            )
+            # Heartbeat is stale. If docfetching has finished (total_batches is
+            # set), use the Redis counters to decide whether to invalidate:
+            #
+            #   in_flight > 0               → workers crashed holding batches → invalidate
+            #   in_flight = 0, pending > 0  → batches in queue, no crash → wait
+            #   in_flight = 0, pending = 0  → no work anywhere, stuck → invalidate
+            #
+            # If total_batches is not set yet, docfetching is still running;
+            # fall through to immediate invalidation (base timeout elapsed).
+            if fresh_attempt.total_batches is not None:
+                in_flight = 0
+                pending = 0
+                try:
+                    r = get_redis_client()
+                    rd = RedisDocprocessing(fresh_attempt.id, r)
+                    in_flight = rd.in_flight()
+                    pending = rd.pending()
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to read batch counters for attempt {fresh_attempt.id}, "
+                        f"falling back to invalidation"
+                    )
+
+                task_logger.warning(
+                    f"Stale heartbeat for attempt {fresh_attempt.id}: "
+                    f"in_flight={in_flight} pending={pending} "
+                    f"completed={fresh_attempt.completed_batches}/{fresh_attempt.total_batches}"
+                )
+
+                if in_flight == 0 and pending > 0:
+                    # Batches are sitting in the queue waiting for workers —
+                    # no crash, just backlog. Do not invalidate.
+                    task_logger.info(
+                        f"Attempt {fresh_attempt.id} has {pending} batches in queue, "
+                        f"no workers crashed — waiting for workers to free up"
+                    )
+                    continue
+
+                if in_flight > 0:
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"{in_flight} in-flight batches — workers crashed holding batches"
+                    )
+                else:
+                    # in_flight == 0, pending == 0: no work anywhere, no forward
+                    # progress possible — all batches either failed or were lost.
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"no pending or in-flight batches — all batches failed or lost"
+                    )
+            else:
+                # total_batches is None: docfetching is still running but the
+                # worker process died. The heartbeat thread runs independently
+                # of rate limiting, so a stale heartbeat here means a real crash.
+                failure_reason = (
+                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
+                )
 
             task_logger.warning(
-                f"Heartbeat timeout for attempt {fresh_attempt.id}: "
+                f"Invalidating attempt {fresh_attempt.id}: "
                 f"last_heartbeat_time={last_check_time} "
                 f"cutoff_time={cutoff_time} "
                 f"counter={current_counter}"
@@ -1611,6 +1656,8 @@ def _docprocessing_task(
             },
         )
 
+        # Phase 1: fast DB reads to set up the pipeline. Session closes before
+        # the slow embedding + Vespa work begins, returning the connection to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(
@@ -1669,48 +1716,51 @@ def _docprocessing_task(
                 batch_num=batch_num,
             )
 
-            # Process documents through indexing pipeline
-            connector_source = (
+            # Capture primitives needed after session close
+            connector_source: str = (
                 index_attempt.connector_credential_pair.connector.source.value
             )
-            task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline: "
-                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
-                f"batch_num={batch_num}"
-            )
+            search_settings_id: int = index_attempt.search_settings.id
 
-            adapter = DocumentIndexingBatchAdapter(
-                db_session=db_session,
-                connector_id=index_attempt.connector_credential_pair.connector.id,
-                credential_id=index_attempt.connector_credential_pair.credential.id,
-                tenant_id=tenant_id,
-                index_attempt_metadata=index_attempt_metadata,
-            )
+        # Session is now closed; no connection held during embedding.
 
-            # Setup is complete. Record DOCPROCESSING_SETUP (everything from the
-            # top of the task minus BATCH_LOAD, which is tracked separately).
-            # BATCH_TOTAL starts immediately after; it spans run_indexing_pipeline
-            # plus all post-indexing bookkeeping in this try block.
-            setup_total_ms = max(0, int((time.monotonic() - setup_start) * 1000))
-            docprocessing_setup_ms = max(0, setup_total_ms - batch_load_ms)
-            safe_record_single_event(
-                IndexAttemptStage.DOCPROCESSING_SETUP,
-                index_attempt_id,
-                docprocessing_setup_ms,
-            )
-            batch_total_start = time.monotonic()
+        task_logger.info(
+            f"Processing {len(documents)} documents through indexing pipeline: "
+            f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+            f"batch_num={batch_num}"
+        )
 
-            # real work happens here!
-            index_pipeline_result = run_indexing_pipeline(
-                embedder=embedding_model,
-                document_indices=document_indices,
-                ignore_time_skip=True,  # Documents are already filtered during extraction
-                db_session=db_session,
-                tenant_id=tenant_id,
-                document_batch=documents,
-                request_id=index_attempt_metadata.request_id,
-                adapter=adapter,
-            )
+        # The adapter manages its own short-lived sessions per phase.
+        adapter = DocumentIndexingBatchAdapter(
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            tenant_id=tenant_id,
+            index_attempt_metadata=index_attempt_metadata,
+        )
+
+        # Setup is complete. Record DOCPROCESSING_SETUP (everything from the
+        # top of the task minus BATCH_LOAD, which is tracked separately).
+        # BATCH_TOTAL starts immediately after; it spans run_indexing_pipeline
+        # plus all post-indexing bookkeeping in this try block.
+        setup_total_ms = max(0, int((time.monotonic() - setup_start) * 1000))
+        docprocessing_setup_ms = max(0, setup_total_ms - batch_load_ms)
+        safe_record_single_event(
+            IndexAttemptStage.DOCPROCESSING_SETUP,
+            index_attempt_id,
+            docprocessing_setup_ms,
+        )
+        batch_total_start = time.monotonic()
+
+        # real work happens here!
+        index_pipeline_result = run_indexing_pipeline(
+            embedder=embedding_model,
+            document_indices=document_indices,
+            ignore_time_skip=True,  # Documents are already filtered during extraction
+            tenant_id=tenant_id,
+            document_batch=documents,
+            request_id=index_attempt_metadata.request_id,
+            adapter=adapter,
+        )
 
         # Track chunk indexing usage for cloud usage limits
         if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
@@ -1785,7 +1835,7 @@ def _docprocessing_task(
                 "cc_pair_id": cc_pair_id,
                 "current_docs_indexed": coordination_status.total_docs,
                 "current_chunks_indexed": coordination_status.total_chunks,
-                "source": index_attempt.connector_credential_pair.connector.source.value,
+                "source": connector_source,
                 "completed_batches": coordination_status.completed_batches,
                 "total_batches": coordination_status.total_batches,
             },
@@ -1829,7 +1879,7 @@ def _docprocessing_task(
             f"Completed document batch processing: "
             f"index_attempt={index_attempt_id} "
             f"cc_pair={cc_pair_id} "
-            f"search_settings={index_attempt.search_settings.id} "
+            f"search_settings={search_settings_id} "
             f"batch_num={batch_num} "
             f"docs={len(index_pipeline_result.failures) + index_pipeline_result.total_docs} "
             f"chunks={index_pipeline_result.total_chunks} "
