@@ -1,6 +1,7 @@
 """Tests for ConfluenceConnector.reindex against a real Confluence space."""
 
 import os
+import re
 import time
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -17,6 +18,13 @@ from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
+
+# Confluence's full crawl yields some documents whose `_links.webui`
+# points at a space-level URL (e.g. /spaces/KEY/overview) rather than a
+# /pages/<id>/<title> path. Targeted reindex parses page ids out of doc
+# URLs, so those non-page docs are out of scope and the test inputs
+# filter them out.
+_PAGE_DOC_ID_RE = re.compile(r"/pages/\d+(?:/|$)")
 
 pytestmark = pytest.mark.secrets(TestSecret.CONFLUENCE_ACCESS_TOKEN)
 
@@ -84,9 +92,11 @@ def test_reindex_single_page(
     mock_api_key: MagicMock,  # noqa: ARG001
     confluence_connector: ConfluenceConnector,
 ) -> None:
-    doc_ids = _crawl_doc_ids(confluence_connector)
-    assert doc_ids, "Test space must contain at least one page"
-    target = doc_ids[0]
+    page_doc_ids = [
+        d for d in _crawl_doc_ids(confluence_connector) if _PAGE_DOC_ID_RE.search(d)
+    ]
+    assert page_doc_ids, "Test space must contain at least one /pages/ document"
+    target = page_doc_ids[0]
 
     results = list(confluence_connector.reindex(_build_failures([target])))
 
@@ -109,16 +119,18 @@ def test_reindex_multiple_pages(
     mock_api_key: MagicMock,  # noqa: ARG001
     confluence_connector: ConfluenceConnector,
 ) -> None:
-    doc_ids = _crawl_doc_ids(confluence_connector)
-    assert len(doc_ids) >= 2, "Test space needs at least two pages for this test"
+    page_doc_ids = [
+        d for d in _crawl_doc_ids(confluence_connector) if _PAGE_DOC_ID_RE.search(d)
+    ]
+    assert len(page_doc_ids) >= 2, "Test space needs at least two /pages/ documents"
 
-    results = list(confluence_connector.reindex(_build_failures(doc_ids)))
+    results = list(confluence_connector.reindex(_build_failures(page_doc_ids)))
 
     docs = [r for r in results if isinstance(r, Document)]
     failures = [r for r in results if isinstance(r, ConnectorFailure)]
 
     assert len(failures) == 0
-    assert {d.id for d in docs} == set(doc_ids)
+    assert {d.id for d in docs} == set(page_doc_ids)
 
 
 @patch(
