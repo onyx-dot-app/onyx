@@ -11,6 +11,7 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
+import { useCurrentAgent } from "@/hooks/useAgents";
 
 /**
  * Fetches configured LLM providers accessible to the current user.
@@ -25,15 +26,18 @@ import {
  * unwraps `.providers` for convenience while still exposing the defaults.
  *
  * **Endpoints:**
- * - No `personaId` → `GET /api/llm/provider`
+ * - No active agent → `GET /api/llm/provider`
  *   Returns all public providers plus restricted providers the user can
  *   access via group membership.
- * - With `personaId` → `GET /api/llm/persona/{personaId}/providers`
- *   Returns providers scoped to a specific persona, respecting RBAC
- *   restrictions. Use this when displaying model options for a particular
- *   assistant.
+ * - Active agent detected → `GET /api/llm/persona/{agentId}/providers`
+ *   Returns providers scoped to that agent, respecting RBAC restrictions.
  *
- * @param personaId - Optional persona ID for RBAC-scoped providers.
+ * Agent detection is automatic via `useCurrentAgent()` (URL param or active
+ * chat session). Pass an explicit `personaId` to override — e.g. when
+ * `useLlmManager` needs to scope to a specific persona independently of the
+ * URL/session state.
+ *
+ * @param personaId - Explicit override; if omitted, the active agent is used.
  *
  * @returns
  * - `llmProviders` — The array of provider descriptors, or `undefined`
@@ -45,9 +49,12 @@ import {
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
 export function useLLMProviders(personaId?: number) {
+  const currentAgent = useCurrentAgent();
+  const effectivePersonaId = personaId ?? currentAgent?.id;
+
   const url =
-    personaId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(personaId)
+    effectivePersonaId !== undefined
+      ? SWR_KEYS.llmProvidersForPersona(effectivePersonaId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike

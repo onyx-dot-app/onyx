@@ -33,7 +33,7 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import ModelPickerPopover from "@/refresh-components/popovers/ModelPickerPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
@@ -781,7 +781,7 @@ function ChatPreferencesSettings() {
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
 
-  // Convert the active LlmDescriptor to a model_configuration_id for ModelPickerPopover.
+  // Convert the active LlmDescriptor to a model_configuration_id for ModelSelector.
   const currentModelConfigId = useMemo((): number | null => {
     const { provider, modelName, name } = llmManager.currentLlm;
     for (const p of llmManager.llmProviders ?? []) {
@@ -893,7 +893,7 @@ function ChatPreferencesSettings() {
             description="This model will be used by Onyx by default in your chats."
             withLabel
           >
-            <ModelPickerPopover
+            <ModelSelector
               value={currentModelConfigId}
               onChange={handleModelPickerChange}
               temperature={llmManager.temperature}

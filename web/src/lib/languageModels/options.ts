@@ -1,39 +1,48 @@
+import type { IconFunctionComponent } from "@opal/types";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { getModelIcon } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
-import { LLMOption, LLMOptionGroup } from "./interfaces";
 
-/**
- * Build a flat list of LLM options from provider descriptors.
- * Pure utility — no React dependencies. Used by ModelSelector,
- * useMultiModelChat, ChatUI, and ModelPickerPopover.
- */
+export interface LLMOption {
+  name: string;
+  provider: string;
+  providerDisplayName: string;
+  modelName: string;
+  modelConfigurationId?: number | null;
+  displayName: string;
+  description?: string;
+  vendor: string | null;
+  maxInputTokens?: number | null;
+  region?: string | null;
+  version?: string | null;
+  supportsReasoning?: boolean;
+  supportsImageInput?: boolean;
+  /** Stable FK to `model_configuration.id`. Null for locally-constructed (non-persisted) configs. */
+  modelConfigId: number | null;
+}
+
+export interface LLMOptionGroup {
+  key: string;
+  displayName: string;
+  options: LLMOption[];
+  Icon: IconFunctionComponent;
+}
+
 export function buildLlmOptions(
   llmProviders: LLMProviderDescriptor[] | undefined,
   currentModelName?: string
 ): LLMOption[] {
-  if (!llmProviders) {
-    return [];
-  }
+  if (!llmProviders) return [];
 
-  // Track seen combinations of provider + exact model name to avoid true duplicates
-  // (same model appearing from multiple LLM provider configs with same provider type)
   const seenKeys = new Set<string>();
   const options: LLMOption[] = [];
 
   llmProviders.forEach((llmProvider) => {
     llmProvider.model_configurations
-      .filter(
-        (modelConfiguration) =>
-          modelConfiguration.is_visible ||
-          modelConfiguration.name === currentModelName
-      )
-      .forEach((modelConfiguration) => {
-        // Deduplicate by exact provider + model name combination
-        const key = `${llmProvider.provider}:${modelConfiguration.name}`;
-        if (seenKeys.has(key)) {
-          return;
-        }
+      .filter((mc) => mc.is_visible || mc.name === currentModelName)
+      .forEach((mc) => {
+        const key = `${llmProvider.provider}:${mc.name}`;
+        if (seenKeys.has(key)) return;
         seenKeys.add(key);
 
         options.push({
@@ -41,17 +50,16 @@ export function buildLlmOptions(
           provider: llmProvider.provider,
           providerDisplayName:
             llmProvider.provider_display_name || llmProvider.provider,
-          modelName: modelConfiguration.name,
-          modelConfigurationId: modelConfiguration.id ?? null,
-          displayName:
-            modelConfiguration.display_name || modelConfiguration.name,
-          vendor: modelConfiguration.vendor || null,
-          maxInputTokens: modelConfiguration.max_input_tokens,
-          region: modelConfiguration.region || null,
-          version: modelConfiguration.version || null,
-          supportsReasoning: modelConfiguration.supports_reasoning || false,
-          supportsImageInput: modelConfiguration.supports_image_input || false,
-          modelConfigId: modelConfiguration.id ?? null,
+          modelName: mc.name,
+          modelConfigurationId: mc.id ?? null,
+          displayName: mc.display_name || mc.name,
+          vendor: mc.vendor || null,
+          maxInputTokens: mc.max_input_tokens,
+          region: mc.region || null,
+          version: mc.version || null,
+          supportsReasoning: mc.supports_reasoning || false,
+          supportsImageInput: mc.supports_image_input || false,
+          modelConfigId: mc.id ?? null,
         });
       });
   });
@@ -74,7 +82,6 @@ export function groupLlmOptions(
 
     if (!groups.has(groupKey)) {
       let displayName: string;
-
       if (isAggregator && option.vendor) {
         const vendorDisplayName =
           option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
@@ -82,7 +89,6 @@ export function groupLlmOptions(
       } else {
         displayName = option.providerDisplayName;
       }
-
       groups.set(groupKey, {
         displayName,
         options: [],
@@ -97,13 +103,8 @@ export function groupLlmOptions(
     groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
   );
 
-  return sortedKeys.map((key) => {
-    const group = groups.get(key)!;
-    return {
-      key,
-      displayName: group.displayName,
-      options: group.options,
-      Icon: group.Icon,
-    };
-  });
+  return sortedKeys.map((key) => ({
+    key,
+    ...groups.get(key)!,
+  }));
 }

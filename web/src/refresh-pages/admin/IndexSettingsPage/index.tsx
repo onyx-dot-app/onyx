@@ -82,7 +82,7 @@ import {
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
-import ModelPickerPopover from "@/refresh-components/popovers/ModelPickerPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
 import type { RichStr } from "@opal/types";
@@ -701,7 +701,7 @@ export default function IndexSettingsPage() {
     [llmProviders]
   );
 
-  // Resolve defaultVision → model_configuration_id for ModelPickerPopover.
+  // Resolve defaultVision → model_configuration_id for ModelSelector.
   const captioningModelConfigId = useMemo((): number | null => {
     if (!defaultVision || !llmProviders) return null;
     for (const p of llmProviders) {
@@ -1398,7 +1398,7 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <ModelPickerPopover
+                              <ModelSelector
                                 value={
                                   values.contextual_rag_model_configuration_id
                                 }
@@ -1471,7 +1471,7 @@ export default function IndexSettingsPage() {
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
-                              <ModelPickerPopover
+                              <ModelSelector
                                 value={captioningModelConfigId}
                                 onChange={handleCaptioningModelChangeById}
                                 disabled={!imageProcessingEnabled}

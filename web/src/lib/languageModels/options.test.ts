@@ -1,9 +1,8 @@
-import { buildLlmOptions, groupLlmOptions } from "./llmUtils";
-import { LLMOption } from "./interfaces";
+import { buildLlmOptions, groupLlmOptions, LLMOption } from "./options";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
-describe("LLMPopover helpers", () => {
+describe("LLM option helpers", () => {
   test("deduplicates identical provider+model combinations across provider entries", () => {
     const providers: LLMProviderDescriptor[] = [
       makeProvider({

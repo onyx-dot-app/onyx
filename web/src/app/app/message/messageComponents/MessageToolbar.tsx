@@ -17,17 +17,17 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import ModelPickerPopover from "@/refresh-components/popovers/ModelPickerPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
-import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button, SelectButton } from "@opal/components";
+import { Button, OpenButton, SelectButton } from "@opal/components";
 import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
@@ -177,7 +177,7 @@ export default function MessageToolbar({
     [currentFeedback, modal.isOpen, feedbackModalProps, messageId]
   );
 
-  // Resolve message-specific model name to model_configuration_id for ModelPickerPopover.
+  // Resolve message-specific model name to model_configuration_id for ModelSelector.
   const messageModelConfigId = useMemo((): number | null => {
     const modelName =
       currentModelName?.trim() || llmManager?.currentLlm.modelName;
@@ -338,10 +338,14 @@ export default function MessageToolbar({
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <ModelPickerPopover
+                  <ModelSelector
                     value={messageModelConfigId}
                     onChange={handleRegenerateWithModel}
-                    foldable
+                    renderTrigger={(currentOption) => (
+                      <OpenButton foldable icon={SvgRefreshCw}>
+                        {currentOption?.displayName ?? "Select a model"}
+                      </OpenButton>
+                    )}
                   />
                 </div>
               )}

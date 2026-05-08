@@ -46,7 +46,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { eeGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { Section } from "@/layouts/general-layouts";
 
 const SearchUI = eeGated(EESearchUI);
@@ -504,8 +504,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 >
                   <WelcomeMessage isDefaultAgent />
                   {liveAgent && !llmManager.isLoadingProviders && (
-                    <ModelSelector
-                      llmManager={llmManager}
+                    <MultiModelSelector
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
                       onRemove={multiModel.removeModel}
@@ -527,8 +526,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             >
               {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
                 <div className="pb-1">
-                  <ModelSelector
-                    llmManager={llmManager}
+                  <MultiModelSelector
                     selectedModels={multiModel.selectedModels}
                     onAdd={multiModel.addModel}
                     onRemove={multiModel.removeModel}

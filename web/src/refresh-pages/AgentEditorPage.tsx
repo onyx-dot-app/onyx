@@ -21,7 +21,7 @@ import {
   InputVertical,
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import ModelPickerPopover from "@/refresh-components/popovers/ModelPickerPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -1560,7 +1560,7 @@ export default function AgentEditorPage({
                                   title="Default Model"
                                   description="This model will be used by Onyx by default in your chats."
                                 >
-                                  <ModelPickerPopover
+                                  <ModelSelector
                                     value={
                                       values.default_model_configuration_id
                                     }
@@ -1570,7 +1570,6 @@ export default function AgentEditorPage({
                                         id
                                       );
                                     }}
-                                    personaId={existingAgent?.id}
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal
