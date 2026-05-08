@@ -290,6 +290,11 @@ def process_targets_for_cc_pair(
             tenant_id=tenant_id,
             db_session=db_session,
         )
+        logger.debug(
+            "Persisted and cached %s hierarchy nodes for cc_pair_id=%s",
+            len(hierarchy_nodes),
+            cc_pair_id,
+        )
 
     # Per-attempt pipeline run. Each attempt commits to its own
     # search_settings's document_indices.
