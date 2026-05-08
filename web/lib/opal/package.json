@@ -1,6 +1,6 @@
 {
   "name": "@onyx-ai/opal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opal — Onyx's Typescript component library and design system.",
   "license": "MIT",
   "repository": {
