@@ -255,11 +255,18 @@ def handle_message(
                 not existing_user.is_active
                 and existing_user.account_type == AccountType.BOT
             ):
+                # Lock + check on the same session that commits activate_user.
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
                 check_seat_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",
                     "check_seat_availability",
                     None,
                 )
+                acquire_lock_fn(db_session, get_current_tenant_id())
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
