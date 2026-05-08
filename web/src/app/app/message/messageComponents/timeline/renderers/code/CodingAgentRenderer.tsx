@@ -396,7 +396,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       return wrap(
         <ResponseStep
           answer={finalPacket.answer}
-          isLastStep={false}
+          isLastStep={true}
           isHover={isHover}
         />
       );
