@@ -20,7 +20,10 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ValidationError
+from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.interfaces import Resolver
+from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import (
@@ -401,7 +404,19 @@ def get_cc_pair_full_info(
             if latest_permission_sync_attempt
             else None
         ),
+        supports_targeted_reindex=_connector_supports_targeted_reindex(
+            cc_pair.connector.source, cc_pair.connector.input_type
+        ),
     )
+
+
+def _connector_supports_targeted_reindex(
+    source: DocumentSource, input_type: InputType
+) -> bool:
+    try:
+        return issubclass(identify_connector_class(source, input_type), Resolver)
+    except Exception:
+        return False
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/status", tags=PUBLIC_API_TAGS)

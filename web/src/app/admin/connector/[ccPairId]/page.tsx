@@ -158,8 +158,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
-  const [targetedReindexJustSubmitted, setTargetedReindexJustSubmitted] =
-    useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
@@ -419,30 +417,33 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
-      {showIndexAttemptErrors && indexAttemptErrors && (
+      {showIndexAttemptErrors && indexAttemptErrors && ccPair && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
           totalPages={indexAttemptErrorsTotalPages}
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
           onPageSizeChange={setErrorsItemsPerPage}
-          onClose={() => {
-            setShowIndexAttemptErrors(false);
-            setTargetedReindexJustSubmitted(false);
-          }}
+          onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
+            setShowIndexAttemptErrors(false);
+            if (!ccPair.supports_targeted_reindex) {
+              setShowIsResolvingKickoffLoader(true);
+              await triggerReIndex(true);
+              return;
+            }
+            setShowIsResolvingKickoffLoader(true);
             try {
               const result = await resolveAllErrorsForCCPair(ccPairId);
               if (result.total_error_ids === 0) {
                 toast.success("No unresolved errors to retry.");
-                return;
+              } else {
+                toast.success(
+                  `Targeted reindex submitted for ${result.total_error_ids} ${
+                    result.total_error_ids === 1 ? "document" : "documents"
+                  }. Errors will clear from the list as documents finish reindexing.`
+                );
               }
-              setTargetedReindexJustSubmitted(true);
-              toast.success(
-                `Targeted reindex submitted for ${result.total_error_ids} ${
-                  result.total_error_ids === 1 ? "document" : "documents"
-                }. Errors will clear from the list as documents finish reindexing.`
-              );
               mutate(
                 (key) =>
                   typeof key === "string" &&
@@ -451,9 +452,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               toast.error(`Targeted reindex failed: ${message}`);
+            } finally {
+              setShowIsResolvingKickoffLoader(false);
             }
           }}
-          isResolvingErrors={isResolvingErrors || targetedReindexJustSubmitted}
+          supportsTargetedReindex={ccPair.supports_targeted_reindex}
         />
       )}
 

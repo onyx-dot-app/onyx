@@ -27,7 +27,8 @@ export interface IndexAttemptErrorsModalProps {
   onPageSizeChange: (size: number) => void;
   onClose: () => void;
   onResolveAll: () => void;
-  isResolvingErrors?: boolean;
+  // True if the connector implements targeted reindex; controls description copy.
+  supportsTargetedReindex: boolean;
 }
 
 export default function IndexAttemptErrorsModal({
@@ -38,7 +39,7 @@ export default function IndexAttemptErrorsModal({
   onPageSizeChange,
   onClose,
   onResolveAll,
-  isResolvingErrors = false,
+  supportsTargetedReindex,
 }: IndexAttemptErrorsModalProps) {
   const observerRef = useRef<ResizeObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,27 +89,21 @@ export default function IndexAttemptErrorsModal({
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Indexing Errors"
-          description={
-            isResolvingErrors
-              ? "Targeted reindex submitted. Errors clear from this list as documents finish reindexing."
-              : undefined
-          }
           onClose={onClose}
           height="fit"
         />
         <Modal.Body height="full">
-          {!isResolvingErrors && (
-            <div className="flex flex-col gap-2 flex-shrink-0">
-              <Text as="p">
-                Below are the errors encountered during indexing. Each row
-                represents a failed document or entity.
-              </Text>
-              <Text as="p">
-                Click the button below to re-fetch only the failing documents
-                via a targeted reindex. Much faster than a full re-crawl.
-              </Text>
-            </div>
-          )}
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            <Text as="p">
+              Below are the errors encountered during indexing. Each row
+              represents a failed document or entity.
+            </Text>
+            <Text as="p">
+              {supportsTargetedReindex
+                ? "Click the button below to re-fetch only the failing documents. Much faster than a full re-index."
+                : "Click the button below to kick off a full re-index to try and resolve these errors. This full re-index may take much longer than a normal update."}
+            </Text>
+          </div>
 
           <div
             ref={tableContainerRef}
@@ -187,7 +182,7 @@ export default function IndexAttemptErrorsModal({
           )}
         </Modal.Body>
         <Modal.Footer>
-          {hasUnresolvedErrors && !isResolvingErrors && (
+          {hasUnresolvedErrors && (
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button onClick={onResolveAll} className="ml-4 whitespace-nowrap">
               Resolve All

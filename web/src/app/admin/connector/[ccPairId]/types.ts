@@ -67,6 +67,10 @@ export interface CCPairFullInfo {
   permission_syncing: boolean;
   last_permission_sync_attempt_finished: string | null;
   last_permission_sync_attempt_error_message: string | null;
+
+  // True if the connector implements `Resolver.reindex` (targeted reindex).
+  // False -> Resolve All falls back to a full connector reindex.
+  supports_targeted_reindex: boolean;
 }
 
 export interface PaginatedIndexAttempts {
