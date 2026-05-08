@@ -28,9 +28,13 @@ from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
+from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
+from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import TargetedReindexJobTarget
 from onyx.db.targeted_reindex import targets_to_connector_failures
@@ -41,8 +45,12 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 
 logger = setup_logger()
 
@@ -164,6 +172,41 @@ def _flush_batch(
     return landed_ids, failed_ids
 
 
+def _persist_hierarchy_nodes(
+    *,
+    nodes: list[HierarchyNode],
+    cc_pair: ConnectorCredentialPair,
+    tenant_id: str,
+    db_session: Session,
+) -> None:
+    """Mirror the docfetching hierarchy upsert path for the targeted
+    reindex flow. Without this, ancestor folders/spaces yielded by a
+    Resolver during reindex would never land in Postgres or the redis
+    cache, so KG ancestor lookups for newly-reindexed docs would fall
+    back to "source-type root" until the next full crawl.
+    """
+    sanitized = sanitize_hierarchy_nodes_for_postgres(nodes)
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=sanitized,
+        source=cc_pair.connector.source,
+        commit=True,
+        is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[n.id for n in upserted],
+        connector_id=cc_pair.connector.id,
+        credential_id=cc_pair.credential.id,
+        commit=True,
+    )
+    cache_hierarchy_nodes_batch(
+        redis_client=get_redis_client(tenant_id=tenant_id),
+        source=cc_pair.connector.source,
+        entries=[HierarchyNodeCacheEntry.from_db_model(n) for n in upserted],
+    )
+
+
 def process_targets_for_cc_pair(
     *,
     cc_pair_id: int,
@@ -224,6 +267,7 @@ def process_targets_for_cc_pair(
     # Materialize the connector output once. MAX_TARGETS_PER_REQUEST caps
     # the universe at 100 docs total per job, so this is bounded.
     docs: list[Document] = []
+    hierarchy_nodes: list[HierarchyNode] = []
     failed_from_connector: set[str] = set()
     for item in connector.reindex(
         errors=failures, include_permissions=include_permissions
@@ -235,13 +279,17 @@ def process_targets_for_cc_pair(
         if isinstance(item, Document):
             docs.append(item)
             continue
-        # TODO(targeted-reindex follow-up): plumb HierarchyNode yields
-        # through the same path the indexing pipeline uses for full
-        # crawls. Skipping is safe today (a missing ancestor folder
-        # node falls back to "source-type root" in KG selection), but
-        # for cases like "admin restored a folder's permissions and
-        # reindexed its docs" the new ancestor relationship would
-        # otherwise stay missing until the next full crawl.
+        if isinstance(item, HierarchyNode):
+            hierarchy_nodes.append(item)
+            continue
+
+    if hierarchy_nodes:
+        _persist_hierarchy_nodes(
+            nodes=hierarchy_nodes,
+            cc_pair=cc_pair,
+            tenant_id=tenant_id,
+            db_session=db_session,
+        )
 
     # Per-attempt pipeline run. Each attempt commits to its own
     # search_settings's document_indices.
