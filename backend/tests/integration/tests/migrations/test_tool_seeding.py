@@ -50,6 +50,7 @@ EXPECTED_TOOLS = {
         display_name="Research Agent",
         in_code_tool_id="ResearchAgent",
         user_id=None,
+        enabled=False,
     ),
     "FileReaderTool": ToolSeedingExpectedResult(
         name="read_file",
