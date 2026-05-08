@@ -610,6 +610,9 @@ class TenantRedisPipeline:
         nx: bool = False,
         xx: bool = False,
         keepttl: bool = False,
+        get: bool = False,
+        exat: int | None = None,
+        pxat: int | None = None,
     ) -> "TenantRedisPipeline":
         self._p.set(
             _prefix_key(self._prefix, name),
@@ -619,6 +622,9 @@ class TenantRedisPipeline:
             nx=nx,
             xx=xx,
             keepttl=keepttl,
+            get=get,
+            exat=exat,
+            pxat=pxat,
         )
         return self
 
@@ -630,8 +636,18 @@ class TenantRedisPipeline:
         self._p.incr(_prefix_key(self._prefix, name), amount)
         return self
 
-    def expire(self, name: KeyArg, time: int) -> "TenantRedisPipeline":
-        self._p.expire(_prefix_key(self._prefix, name), time)
+    def expire(
+        self,
+        name: KeyArg,
+        time: int,
+        nx: bool = False,
+        xx: bool = False,
+        gt: bool = False,
+        lt: bool = False,
+    ) -> "TenantRedisPipeline":
+        self._p.expire(
+            _prefix_key(self._prefix, name), time, nx=nx, xx=xx, gt=gt, lt=lt
+        )
         return self
 
     def sadd(
