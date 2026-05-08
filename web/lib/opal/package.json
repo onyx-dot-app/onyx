@@ -1,34 +1,85 @@
 {
-  "name": "@onyx/opal",
-  "version": "0.0.1",
+  "name": "@onyx-ai/opal",
+  "version": "0.1.0",
+  "description": "Opal — Onyx's Typescript component library and design system.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onyx-dot-app/onyx.git",
+    "directory": "web/lib/opal"
+  },
+  "homepage": "https://github.com/onyx-dot-app/onyx/tree/main/web/lib/opal",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "tailwind-preset.js",
+    "README.md"
+  ],
+  "main": "./dist/components/index.js",
+  "types": "./dist/components/index.d.ts",
   "exports": {
     "./components": {
-      "types": "./src/components/index.ts",
-      "default": "./src/components/index.ts"
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
     },
     "./layouts": {
-      "types": "./src/layouts/index.ts",
-      "default": "./src/layouts/index.ts"
+      "types": "./dist/layouts/index.d.ts",
+      "import": "./dist/layouts/index.js"
     },
     "./core": {
-      "types": "./src/core/index.ts",
-      "default": "./src/core/index.ts"
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
     },
     "./icons": {
-      "types": "./src/icons/index.ts",
-      "default": "./src/icons/index.ts"
+      "types": "./dist/icons/index.d.ts",
+      "import": "./dist/icons/index.js"
     },
     "./illustrations": {
-      "types": "./src/illustrations/index.ts",
-      "default": "./src/illustrations/index.ts"
+      "types": "./dist/illustrations/index.d.ts",
+      "import": "./dist/illustrations/index.js"
     },
     "./types": {
-      "types": "./src/types.ts",
-      "default": "./src/types.ts"
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
     },
     "./utils": {
-      "types": "./src/utils.ts",
-      "default": "./src/utils.ts"
-    }
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./tailwind-preset": "./tailwind-preset.js"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/bundle-css.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@dnd-kit/core": "^6.0.0",
+    "@dnd-kit/modifiers": "^7.0.0 || ^8.0.0",
+    "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.0.0",
+    "@radix-ui/react-popover": "^1.0.0",
+    "@radix-ui/react-separator": "^1.0.0",
+    "@radix-ui/react-slot": "^1.0.0",
+    "@radix-ui/react-tooltip": "^1.0.0",
+    "@tanstack/react-table": "^8.0.0",
+    "formik": "^2.0.0",
+    "next": ">=14.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "react-markdown": "^9.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.0.0"
   }
 }

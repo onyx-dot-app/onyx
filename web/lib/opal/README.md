@@ -1,49 +1,114 @@
 # Opal
 
-A Typescript component library for Onyx.
+Onyx's TypeScript component library and design system.
+
+## Install
+
+```sh
+npm install @onyx-ai/opal
+```
+
+Peer dependencies (install whichever the lib actually exercises in your usage):
+
+```sh
+npm install react react-dom next \
+  @radix-ui/react-popover @radix-ui/react-separator \
+  @radix-ui/react-slot @radix-ui/react-tooltip \
+  @dnd-kit/core @dnd-kit/sortable @dnd-kit/modifiers @dnd-kit/utilities \
+  @tanstack/react-table formik \
+  react-markdown remark-gfm rehype-sanitize
+```
+
+## Setup
+
+### 1. Import the design tokens once
+
+In your app's root entry (e.g. Next.js `app/layout.tsx`):
+
+```tsx
+import "@onyx-ai/opal/styles.css";
+```
+
+The CSS file defines the custom properties (`--text-01`, `--background-neutral-00`, etc.) that
+the Tailwind preset references.
+
+### 2. Wire up the Tailwind preset
+
+In your `tailwind.config.js`:
+
+```js
+module.exports = {
+  presets: [require("@onyx-ai/opal/tailwind-preset")],
+  content: [
+    "./src/**/*.{ts,tsx}",
+    "./node_modules/@onyx-ai/opal/dist/**/*.{js,mjs}",
+  ],
+};
+```
+
+The `content` glob ensures Tailwind picks up the classes used inside Opal components.
+
+You also need to define the underlying CSS variables (`--text-01`, etc.) in your own
+`colors.css` or import a copy from Onyx. The preset references them but does not define them —
+they live with the consumer so the consumer controls the palette.
 
 ## Usage
 
 ```tsx
-import { Button } from "@opal/components";
+import { Button, Text } from "@onyx-ai/opal/components";
+import { Content } from "@onyx-ai/opal/layouts";
+import SvgPlus from "@onyx-ai/opal/icons/plus";
 
 function MyComponent() {
-  return <Button onClick={() => console.log("Clicked!")}>Click me</Button>;
+  return (
+    <Content
+      icon={SvgPlus}
+      title="Hello"
+      description="World"
+      sizePreset="main-ui"
+      variant="section"
+    />
+  );
 }
 ```
 
-## Build
+## Subpath imports
 
-Opal is built in such a way that it _reuses_ the `/web/node_modules` directory.
-Therefore, builds don't incur duplicate space-costs (i.e., what would have happened if Opal had its own `node_modules`).
-If you want to add dependencies to Opal, define that dependency inside of `/web/lib/opal/package.json` under `peerDependencies`.
-Then, go to `/web` and run the install:
+| Subpath                         | Contents                                             |
+| ------------------------------- | ---------------------------------------------------- |
+| `@onyx-ai/opal/components`      | Buttons, Text, Tag, Tooltip, Popover, Table, etc.    |
+| `@onyx-ai/opal/layouts`         | Content, ContentAction, IllustrationContent, Section |
+| `@onyx-ai/opal/core`            | Interactive primitives, Hoverable, Disabled          |
+| `@onyx-ai/opal/icons`           | SVG icon components                                  |
+| `@onyx-ai/opal/illustrations`   | Larger SVG illustrations                             |
+| `@onyx-ai/opal/types`           | Shared types (`RichStr`, `IconProps`, etc.)          |
+| `@onyx-ai/opal/utils`           | `cn`, `markdown` helpers                             |
+| `@onyx-ai/opal/styles.css`      | Bundled component CSS                                |
+| `@onyx-ai/opal/tailwind-preset` | Tailwind preset with tokens                          |
+
+## Local development (inside the Onyx repo)
+
+The package is consumed by `web/` as a workspace via `web/package.json`'s `"@onyx-ai/opal":
+"./lib/opal"`. During Onyx development, `web/` resolves Opal source through the `@opal/*`
+TypeScript path alias (defined in `web/tsconfig.json`), so changes are picked up live without
+running `npm run build`.
+
+To produce the published artifact:
 
 ```sh
-npm i
-
-# Or, if you prefer `bun`
-bun i
+cd web/lib/opal
+npm run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
-Those dependencies will then install inside of `/web/node_modules` and be available to Opal.
-
-## Structure
-
-```
-/web/lib/opal/
-├── src/
-│   ├── core/           # Low-level primitives (Interactive, Hoverable)
-│   ├── components/     # High-level React components (Button, SelectButton, OpenButton, Tag)
-│   ├── layouts/        # Layout primitives (Content, ContentAction, IllustrationContent)
-│   └── index.ts        # Main export file
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+Adding a runtime dependency: declare it under `peerDependencies` (so consumers control the
+version) and ensure the matching version is also declared in the root `web/package.json`
+`dependencies` block so Onyx's web app keeps building.
 
 ## Conventions
 
-- **Directory names** are kebab-case (e.g. `select-button/`, `open-button/`, `content-action/`)
-- **Each component directory** contains `components.tsx`, `styles.css` (if needed), and `README.md`
-- **Imports** use `@opal/` path aliases (e.g. `@opal/components`, `@opal/core`)
+- Component dirs: `web/lib/opal/src/components/<kebab-name>/` containing `components.tsx`,
+  `README.md`, `styles.css` (when needed), and `<PascalName>.stories.tsx` (when applicable).
+- Imports inside the lib use the `@opal/` path alias; never `@/`.
+- Types/interfaces declared at the top of `components.tsx` without `export`; everything is
+  re-exported from a single `export { Foo, type FooProps };` block at the bottom.
+- See `web/AGENTS.md` for broader frontend standards.
