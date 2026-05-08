@@ -886,7 +886,7 @@ def project_sync_user_file_impl(
 
     try:
         # Phase 1: short read session — extract all data needed for Vespa, then
-        # release the connection before the network-bound update_single calls.
+        # release the connection before the network-bound update calls.
         retry_document_indices: list[RetryDocumentIndex] = []
         project_ids: list[int] = []
         persona_ids: list[int] = []
