@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import re
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
@@ -33,6 +34,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.jira.access import get_project_permissions
@@ -63,6 +65,11 @@ _MAX_RESULTS_FETCH_IDS = 5000
 _JIRA_FULL_PAGE_SIZE = 50
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
+
+# Jira document_id is the issue browse URL: <base>/browse/PROJ-123. Issue
+# keys are uppercase letters/digits/underscores then a hyphen and the
+# numeric counter.
+_ISSUE_KEY_FROM_URL_RE = re.compile(r"/browse/([A-Z][A-Z0-9_]+-\d+)(?:/|$|\?|#)")
 
 # Constants for Jira field names
 _FIELD_REPORTER = "reporter"
@@ -511,9 +518,15 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
     seen_hierarchy_node_ids: list[str] = []
 
 
+def _extract_issue_key_from_url(doc_id: str) -> str | None:
+    match = _ISSUE_KEY_FROM_URL_RE.search(doc_id)
+    return match.group(1) if match else None
+
+
 class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     def __init__(
         self,
@@ -979,6 +992,116 @@ class JiraConnector(
 
         if slim_doc_batch:
             yield slim_doc_batch
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        url_to_issue_key: dict[str, str] = {}
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            doc_id = failure.failed_document.document_id
+            issue_key = _extract_issue_key_from_url(doc_id)
+            if issue_key is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Cannot extract issue key from doc URL '%s'; targeted "
+                        "reindex expects /browse/<KEY>." % doc_id
+                    ),
+                )
+                continue
+            url_to_issue_key[doc_id] = issue_key
+
+        if not url_to_issue_key:
+            return
+
+        issues = bulk_fetch_issues(self.jira_client, list(url_to_issue_key.values()))
+
+        seen_hierarchy_node_ids: set[str] = set()
+        found_keys: set[str] = set()
+
+        for issue in issues:
+            found_keys.add(issue.key)
+            page_url = build_jira_url(self.jira_base, issue.key)
+
+            project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+            project_key = project.key if project else None
+            project_name = project.name if project else None
+            if not project_key:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=page_url,
+                        document_link=page_url,
+                    ),
+                    failure_message=(
+                        "Issue %s has no project; cannot place in hierarchy."
+                        % issue.key
+                    ),
+                )
+                continue
+
+            yield from self._yield_project_hierarchy_node(
+                project_key, project_name, seen_hierarchy_node_ids
+            )
+            parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+            if parent:
+                yield from self._yield_parent_hierarchy_node_if_epic(
+                    parent, project_key, seen_hierarchy_node_ids
+                )
+            if self._is_epic(issue):
+                yield from self._yield_epic_hierarchy_node(
+                    issue, project_key, seen_hierarchy_node_ids
+                )
+
+            parent_hierarchy_raw_node_id = self._get_parent_hierarchy_raw_node_id(
+                issue, project_key
+            )
+            document = process_jira_issue(
+                jira_base_url=self.jira_base,
+                issue=issue,
+                comment_email_blacklist=self.comment_email_blacklist,
+                labels_to_skip=self.labels_to_skip,
+                parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            )
+            if document is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=page_url,
+                        document_link=page_url,
+                    ),
+                    failure_message=(
+                        "Issue %s skipped during conversion (label-skip or "
+                        "exceeds max ticket size)." % issue.key
+                    ),
+                )
+                continue
+
+            if include_permissions:
+                document.external_access = self._get_project_permissions(
+                    project_key,
+                    add_prefix=True,
+                )
+            yield document
+
+        for doc_id, issue_key in url_to_issue_key.items():
+            if issue_key not in found_keys:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Jira returned no issue for key=%s during targeted "
+                        "reindex (deleted, moved, or no longer accessible)." % issue_key
+                    ),
+                )
 
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
