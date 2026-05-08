@@ -269,6 +269,18 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
+  // Track whether this renderer was ever actively animating during its
+  // lifetime. `animate` flips false the moment the stop packet arrives
+  // (AgentMessage passes `animate={!stopPacketSeen}`), but the typewriter
+  // keeps draining for some time after — so checking `animate` at the
+  // moment `streamFullyDisplayed` fires would always be false for the
+  // active stream. Historical mounts start with animate=false, so this
+  // ref stays false for them.
+  const wasEverAnimatingRef = useRef(animate);
+  if (animate && !wasEverAnimatingRef.current) {
+    wasEverAnimatingRef.current = true;
+  }
+
   // Fire onComplete exactly once per mount. `onComplete` is an inline
   // arrow in AgentMessage so its identity changes on every parent render;
   // without this guard, each new identity would re-fire the effect once
@@ -278,21 +290,16 @@ export const MessageTextRenderer: MessageRenderer<
     if (streamFullyDisplayed && !onCompleteFiredRef.current) {
       onCompleteFiredRef.current = true;
       onComplete();
-      // Only the actively-animating renderer signals "latest message
-      // rendered" to the chat-session gate. Historical mounts have
-      // animate=false and would otherwise flip the flag while a newer
-      // stream is still in flight.
-      if (animate) {
+      // Only the renderer that was actively streaming (ever had
+      // animate=true) flips the chat-session gate back to "rendered".
+      // Historical mounts leave the flag alone so they don't release the
+      // queue while a newer stream is still in flight.
+      if (wasEverAnimatingRef.current) {
         const sid = useChatSessionStore.getState().currentSessionId;
         if (sid) setLatestMessageRenderComplete(sid, true);
       }
     }
-  }, [
-    streamFullyDisplayed,
-    onComplete,
-    animate,
-    setLatestMessageRenderComplete,
-  ]);
+  }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
 
   const processedContent = useMemo(
     () => processContent(displayedContent),
