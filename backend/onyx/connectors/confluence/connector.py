@@ -1,4 +1,5 @@
 import copy
+import re
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
@@ -40,6 +41,7 @@ from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
@@ -82,6 +84,15 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
+# Confluence document_id is the page URL. Reindex inputs come from
+# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
+#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
+#   - /pages/viewpage.action?pageId=<id> (legacy Server)
+_PAGE_ID_FROM_URL_PATTERNS = [
+    re.compile(r"/pages/(\d+)(?:/|$)"),
+    re.compile(r"[?&]pageId=(\d+)"),
+]
+
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
@@ -98,11 +109,20 @@ class ConfluenceCheckpoint(ConnectorCheckpoint):
     next_page_url: str | None
 
 
+def _extract_page_id_from_url(doc_id: str) -> str | None:
+    for pat in _PAGE_ID_FROM_URL_PATTERNS:
+        match = pat.search(doc_id)
+        if match:
+            return match.group(1)
+    return None
+
+
 class ConfluenceConnector(
     CheckpointedConnector[ConfluenceCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
     CredentialsConnector,
+    Resolver,
 ):
     def __init__(
         self,
@@ -860,6 +880,67 @@ class ConfluenceConnector(
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:
         return ConfluenceCheckpoint.model_validate_json(checkpoint_json)
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        # Confluence permission data is attached on the slim-doc/perm-sync path,
+        # not the full doc fetch path. Targeted reindex re-fetches body+metadata;
+        # any permission delta lands on the next perm-sync pass.
+        del include_permissions
+
+        url_to_page_id: dict[str, str] = {}
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            doc_id = failure.failed_document.document_id
+            page_id = _extract_page_id_from_url(doc_id)
+            if page_id is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Cannot extract page id from doc URL '%s'; targeted reindex "
+                        "supports /pages/<id>/ and pageId=<id> URL shapes." % doc_id
+                    ),
+                )
+                continue
+            url_to_page_id[doc_id] = page_id
+
+        if not url_to_page_id:
+            return
+
+        yield from self._yield_space_hierarchy_nodes()
+
+        quoted_ids = ",".join("'%s'" % pid for pid in url_to_page_id.values())
+        cql = "type=page and id IN (%s)" % quoted_ids
+
+        seen_page_ids: set[str] = set()
+        for page in self.confluence_client.paginated_cql_retrieval(
+            cql=cql,
+            expand=",".join(_PAGE_EXPANSION_FIELDS),
+        ):
+            seen_page_ids.add(_get_page_id(page, allow_missing=True))
+            yield from self._yield_ancestor_hierarchy_nodes(page)
+            yield self._convert_page_to_document(page)
+
+        for doc_id, page_id in url_to_page_id.items():
+            if page_id not in seen_page_ids:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Confluence returned no page for id=%s during targeted "
+                        "reindex (deleted, moved, or no longer accessible)." % page_id
+                    ),
+                )
 
     @override
     def retrieve_all_slim_docs(
