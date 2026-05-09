@@ -172,7 +172,9 @@ def test_resolver_yields_all_docs_lands_them_all(
     )
     stub = _StubResolver(yields=[_doc("d1"), _doc("d2")])
 
-    fake_pipeline_result = MagicMock(failures=[])
+    fake_pipeline_result = MagicMock(
+        failures=[], total_docs=2, new_docs=2, total_chunks=2
+    )
 
     with (
         patch(
@@ -217,7 +219,9 @@ def test_connector_failure_yields_route_to_failed_doc_ids(
             ),
         ],
     )
-    fake_pipeline_result = MagicMock(failures=[])
+    fake_pipeline_result = MagicMock(
+        failures=[], total_docs=1, new_docs=1, total_chunks=1
+    )
 
     with (
         patch(
@@ -257,7 +261,9 @@ def test_doc_never_yielded_is_marked_failed(
     )
     # Stub yields only d1.
     stub = _StubResolver(yields=[_doc("d1")])
-    fake_pipeline_result = MagicMock(failures=[])
+    fake_pipeline_result = MagicMock(
+        failures=[], total_docs=1, new_docs=1, total_chunks=1
+    )
 
     with (
         patch(

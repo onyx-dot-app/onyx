@@ -1,0 +1,52 @@
+name: Release Opal
+
+on:
+  push:
+    tags:
+      - "opal/v*.*.*"
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    # Pin Node by image digest. The container ships with Node baked in, so the workflow
+    # never invokes `actions/setup-node` and the runner toolcache is never restored —
+    # mitigates zizmor's cache-poisoning class of finding at the source rather than
+    # suppressing it. Bumping Node = bump the digest.
+    container:
+      image: node:24@sha256:3a198147c320bc4cc357b418955beb48413c0ea5ba60f9ec1568913631df33aa
+    environment:
+      name: release-opal
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web/lib/opal
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure npm registry
+        run: |
+          printf 'registry=https://registry.npmjs.org/\n' > "$HOME/.npmrc"
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Install workspace deps
+        run: npm ci
+        working-directory: web
+
+      - name: Build opal
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public

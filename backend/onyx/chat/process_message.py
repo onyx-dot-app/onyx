@@ -1733,22 +1733,17 @@ def llm_loop_completion_handle(
         )
         total_tokens = calculate_total_history_tokens(updated_chat_history)
 
-        compression_params = get_compression_params(
-            max_input_tokens=llm.config.max_input_tokens,
-            current_history_tokens=total_tokens,
-            reserved_tokens=reserved_tokens,
+    compression_params = get_compression_params(
+        max_input_tokens=llm.config.max_input_tokens,
+        current_history_tokens=total_tokens,
+        reserved_tokens=reserved_tokens,
+    )
+    if compression_params.should_compress:
+        compress_chat_history(
+            chat_history=updated_chat_history,
+            llm=llm,
+            compression_params=compression_params,
         )
-        if compression_params.should_compress:
-            all_tools = get_tools(db_session)
-            tool_id_to_name = {tool.id: tool.name for tool in all_tools}
-
-            compress_chat_history(
-                db_session=db_session,
-                chat_history=updated_chat_history,
-                llm=llm,
-                compression_params=compression_params,
-                tool_id_to_name=tool_id_to_name,
-            )
 
 
 _CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")

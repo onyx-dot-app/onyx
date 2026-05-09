@@ -108,6 +108,24 @@ def get_index_attempt(
     return db_session.scalars(stmt).first()
 
 
+def get_stale_not_started_index_attempts(
+    db_session: Session,
+    cutoff: datetime,
+) -> list[IndexAttempt]:
+    """Returns NOT_STARTED attempts with a task ID that were created before cutoff."""
+    return list(
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.status == IndexingStatus.NOT_STARTED,
+                IndexAttempt.celery_task_id.isnot(None),
+                IndexAttempt.time_created < cutoff,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
 def count_error_rows_for_index_attempt(
     index_attempt_id: int,
     db_session: Session,

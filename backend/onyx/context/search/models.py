@@ -51,8 +51,7 @@ class SavedSearchSettings(IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
-            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+            contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
 
 

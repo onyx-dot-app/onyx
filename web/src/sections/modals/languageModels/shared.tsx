@@ -54,7 +54,11 @@ import { getProvider } from "@/lib/languageModels";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
-export function DisplayNameField() {
+export interface DisplayNameFieldProps {
+  disabled?: boolean;
+}
+
+export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
   return (
     <InputPadder>
       <InputVertical
@@ -63,7 +67,11 @@ export function DisplayNameField() {
         suffix="optional"
         subDescription="Used to identify this provider in the app."
       >
-        <InputTypeInField name="name" placeholder="Display Name" />
+        <InputTypeInField
+          name="name"
+          placeholder="Display Name"
+          variant={disabled ? "disabled" : undefined}
+        />
       </InputVertical>
     </InputPadder>
   );

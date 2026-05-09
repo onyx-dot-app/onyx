@@ -11,7 +11,6 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
@@ -24,22 +23,21 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.search_settings import set_new_search_settings
 from onyx.server.manage.search_settings import update_saved_search_settings
 
-TEST_CONTEXTUAL_RAG_LLM_NAME = "test-contextual-model"
-TEST_CONTEXTUAL_RAG_LLM_PROVIDER = "test-contextual-provider"
+TEST_PROVIDER_NAME = "test-contextual-provider"
+TEST_MODEL_NAME = "test-contextual-model"
 
-UPDATED_CONTEXTUAL_RAG_LLM_NAME = "updated-contextual-model"
-UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER = "updated-contextual-provider"
+UPDATED_PROVIDER_NAME = "updated-contextual-provider"
+UPDATED_MODEL_NAME = "updated-contextual-model"
 
 
 def _create_llm_provider_and_model(
     db_session: Session,
     provider_name: str,
     model_name: str,
-) -> None:
-    """Insert an LLM provider with a single visible model configuration."""
-    if fetch_existing_llm_provider(name=provider_name, db_session=db_session):
-        return
-    upsert_llm_provider(
+) -> int:
+    """Insert an LLM provider with a single visible model configuration.
+    Returns the model_configuration_id of the created model."""
+    provider_view = upsert_llm_provider(
         LLMProviderUpsertRequest(
             name=provider_name,
             provider="openai",
@@ -54,11 +52,17 @@ def _create_llm_provider_and_model(
         ),
         db_session=db_session,
     )
+    mc = next(
+        (mc for mc in provider_view.model_configurations if mc.name == model_name),
+        None,
+    )
+    if not mc or mc.id is None:
+        raise ValueError(f"Could not find model config for {model_name}")
+    return mc.id
 
 
 def _make_creation_request(
-    llm_name: str = TEST_CONTEXTUAL_RAG_LLM_NAME,
-    llm_provider: str = TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+    model_configuration_id: int | None = None,
     enable_contextual_rag: bool = True,
 ) -> SearchSettingsCreationRequest:
     return SearchSettingsCreationRequest(
@@ -73,14 +77,12 @@ def _make_creation_request(
         embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
-        contextual_rag_llm_name=llm_name,
-        contextual_rag_llm_provider=llm_provider,
+        contextual_rag_model_configuration_id=model_configuration_id,
     )
 
 
 def _make_saved_search_settings(
-    llm_name: str = TEST_CONTEXTUAL_RAG_LLM_NAME,
-    llm_provider: str = TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+    model_configuration_id: int | None = None,
     enable_contextual_rag: bool = True,
 ) -> SavedSearchSettings:
     return SavedSearchSettings(
@@ -95,8 +97,7 @@ def _make_saved_search_settings(
         embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
-        contextual_rag_llm_name=llm_name,
-        contextual_rag_llm_provider=llm_provider,
+        contextual_rag_model_configuration_id=model_configuration_id,
     )
 
 
@@ -143,8 +144,7 @@ def baseline_search_settings(
     update_default_contextual_model(
         db_session=db_session,
         enable_contextual_rag=baseline.enable_contextual_rag,
-        contextual_rag_llm_provider=baseline.contextual_rag_llm_provider,
-        contextual_rag_llm_name=baseline.contextual_rag_llm_name,
+        model_configuration_id=None,
     )
 
 
@@ -165,14 +165,14 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     """After creating FUTURE settings and swapping to PRESENT,
     fetch_default_contextual_rag_model should match the PRESENT settings
     and run_indexing_pipeline should call get_llm_for_contextual_rag."""
-    _create_llm_provider_and_model(
+    mc_id = _create_llm_provider_and_model(
         db_session=db_session,
-        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+        provider_name=TEST_PROVIDER_NAME,
+        model_name=TEST_MODEL_NAME,
     )
 
     set_new_search_settings(
-        search_settings_new=_make_creation_request(),
+        search_settings_new=_make_creation_request(model_configuration_id=mc_id),
         _=MagicMock(),
         db_session=db_session,
     )
@@ -189,14 +189,11 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     # Now PRESENT has contextual RAG enabled, default should match
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is not None
-    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
+    assert default_model.name == TEST_MODEL_NAME
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(
-        TEST_CONTEXTUAL_RAG_LLM_NAME,
-        TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-    )
+    mock_get_llm.assert_called_once_with(mc_id)
 
 
 @patch("onyx.db.swap_index.get_all_document_indices")
@@ -215,21 +212,21 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 ) -> None:
     """After creating FUTURE settings, swapping to PRESENT, then updating
     via update_saved_search_settings, run_indexing_pipeline should use
-    the updated LLM names."""
-    _create_llm_provider_and_model(
+    the updated model configuration ID."""
+    mc_id = _create_llm_provider_and_model(
         db_session=db_session,
-        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+        provider_name=TEST_PROVIDER_NAME,
+        model_name=TEST_MODEL_NAME,
     )
-    _create_llm_provider_and_model(
+    updated_mc_id = _create_llm_provider_and_model(
         db_session=db_session,
-        provider_name=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
-        model_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
+        provider_name=UPDATED_PROVIDER_NAME,
+        model_name=UPDATED_MODEL_NAME,
     )
 
     # Create FUTURE settings with contextual RAG enabled
     set_new_search_settings(
-        search_settings_new=_make_creation_request(),
+        search_settings_new=_make_creation_request(model_configuration_id=mc_id),
         _=MagicMock(),
         db_session=db_session,
     )
@@ -246,13 +243,12 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     # Now PRESENT has contextual RAG enabled, default should match
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is not None
-    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
+    assert default_model.name == TEST_MODEL_NAME
 
-    # Update the PRESENT LLM names
+    # Update the PRESENT model configuration
     update_saved_search_settings(
         search_settings=_make_saved_search_settings(
-            llm_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
-            llm_provider=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
+            model_configuration_id=updated_mc_id,
         ),
         _=MagicMock(),
         db_session=db_session,
@@ -260,14 +256,11 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is not None
-    assert default_model.name == UPDATED_CONTEXTUAL_RAG_LLM_NAME
+    assert default_model.name == UPDATED_MODEL_NAME
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(
-        UPDATED_CONTEXTUAL_RAG_LLM_NAME,
-        UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
-    )
+    mock_get_llm.assert_called_once_with(updated_mc_id)
 
 
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
@@ -284,14 +277,17 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
 ) -> None:
     """When contextual RAG is disabled in search settings,
     get_llm_for_contextual_rag should not be called."""
-    _create_llm_provider_and_model(
+    mc_id = _create_llm_provider_and_model(
         db_session=db_session,
-        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+        provider_name=TEST_PROVIDER_NAME,
+        model_name=TEST_MODEL_NAME,
     )
 
     set_new_search_settings(
-        search_settings_new=_make_creation_request(enable_contextual_rag=False),
+        search_settings_new=_make_creation_request(
+            model_configuration_id=mc_id,
+            enable_contextual_rag=False,
+        ),
         _=MagicMock(),
         db_session=db_session,
     )

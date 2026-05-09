@@ -139,8 +139,7 @@ export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
   enable_contextual_rag: boolean;
-  contextual_rag_llm_name: string | null;
-  contextual_rag_llm_provider: string | null;
+  contextual_rag_model_configuration_id: number | null;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;

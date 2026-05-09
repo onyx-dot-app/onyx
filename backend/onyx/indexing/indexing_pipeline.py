@@ -11,8 +11,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
@@ -1347,11 +1345,16 @@ def run_indexing_pipeline(
     )
     llm = None
     if enable_contextual_rag:
-        llm = get_llm_for_contextual_rag(
-            search_settings.contextual_rag_llm_name or DEFAULT_CONTEXTUAL_RAG_LLM_NAME,
-            search_settings.contextual_rag_llm_provider
-            or DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER,
-        )
+        mc_id = search_settings.contextual_rag_model_configuration_id
+        if mc_id is None:
+            # Fall back to the global default contextual RAG model (LLMModelFlow).
+            from onyx.db.llm import fetch_default_contextual_rag_model
+
+            with get_session_with_current_tenant() as fallback_session:
+                mc = fetch_default_contextual_rag_model(fallback_session)
+            mc_id = mc.id if mc else None
+        if mc_id is not None:
+            llm = get_llm_for_contextual_rag(mc_id)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

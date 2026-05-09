@@ -87,8 +87,7 @@ def _perform_index_swap(
         update_default_contextual_model(
             db_session=db_session,
             enable_contextual_rag=new_search_settings.enable_contextual_rag,
-            contextual_rag_llm_provider=new_search_settings.contextual_rag_llm_provider,
-            contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
+            model_configuration_id=new_search_settings.contextual_rag_model_configuration_id,
         )
     except ValueError as e:
         logger.error("Model not found, defaulting to no contextual model: %s", e)
@@ -96,8 +95,7 @@ def _perform_index_swap(
             db_session=db_session,
         )
         new_search_settings.enable_contextual_rag = False
-        new_search_settings.contextual_rag_llm_provider = None
-        new_search_settings.contextual_rag_llm_name = None
+        new_search_settings.contextual_rag_model_configuration_id = None
         db_session.commit()
 
     # This flow is for checking and possibly creating an index so we get all

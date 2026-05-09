@@ -9,7 +9,7 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";

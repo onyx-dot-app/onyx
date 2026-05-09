@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useRef, useState, JSX } from "react";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { Tooltip } from "@opal/components";
 export interface Option<T> {
   name: string;

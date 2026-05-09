@@ -1,162 +1,22 @@
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import type { WithoutStyles } from "@opal/types";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 import React from "react";
 
-export type FlexDirection = "row" | "column";
-export type JustifyContent = "start" | "center" | "end" | "between";
-export type AlignItems = "start" | "center" | "end" | "stretch";
-export type Length = "auto" | "fit" | "full" | number;
+export {
+  Section,
+  widthClassmap,
+  heightClassmap,
+  type FlexDirection,
+  type JustifyContent,
+  type AlignItems,
+  type Length,
+  type SectionProps,
+} from "@opal/layouts/general/components";
 
-const flexDirectionClassMap: Record<FlexDirection, string> = {
-  row: "flex-row",
-  column: "flex-col",
-};
-const justifyClassMap: Record<JustifyContent, string> = {
-  start: "justify-start",
-  center: "justify-center",
-  end: "justify-end",
-  between: "justify-between",
-};
-const alignClassMap: Record<AlignItems, string> = {
-  start: "items-start",
-  center: "items-center",
-  end: "items-end",
-  stretch: "items-stretch",
-};
-export const widthClassmap: Record<Length, string> = {
-  auto: "w-auto flex-shrink-0",
-  fit: "w-fit flex-shrink-0",
-  full: "w-full",
-};
-export const heightClassmap: Record<Length, string> = {
-  auto: "h-auto",
-  fit: "h-fit",
-  full: "h-full min-h-0",
-};
-
-/**
- * Section - A flexible container component for grouping related content
- *
- * Provides a standardized layout container with configurable direction and spacing.
- * Uses flexbox layout with customizable gap between children. Defaults to column layout.
- *
- * @param flexDirection - Flex direction. Default: "column".
- * @param justifyContent - Justify content along the main axis. Default: "center".
- * @param alignItems - Align items along the cross axis. Default: "center".
- * @param width - Width of the container: "auto", "fit", or "full". Default: "full".
- * @param height - Height of the container: "auto", "fit", or "full". Default: "full".
- * @param gap - Gap in REM units between children. Default: 1 (translates to gap-4 in Tailwind)
- * @param padding - Padding in REM units. Default: 0
- * @param wrap - If true, enables flex-wrap. Default: false
- * @param dbg - If true, adds a debug red border for visual debugging. Default: false
- *
- * @example
- * ```tsx
- * import * as GeneralLayouts from "@/layouts/general-layouts";
- *
- * // Column section with default gap - centered
- * <GeneralLayouts.Section>
- *   <Card>First item</Card>
- *   <Card>Second item</Card>
- * </GeneralLayouts.Section>
- *
- * // Row section aligned to the left and vertically centered
- * <GeneralLayouts.Section flexDirection="row" justifyContent="start" alignItems="center">
- *   <Button>Cancel</Button>
- *   <Button>Save</Button>
- * </GeneralLayouts.Section>
- *
- * // Column section with items aligned to the right
- * <GeneralLayouts.Section alignItems="end" gap={2}>
- *   <InputTypeIn label="Name" />
- *   <InputTypeIn label="Email" />
- * </GeneralLayouts.Section>
- *
- * // Row section centered both ways
- * <GeneralLayouts.Section flexDirection="row" justifyContent="center" alignItems="center">
- *   <Text>Centered content</Text>
- * </GeneralLayouts.Section>
- *
- * // Section with fit width
- * <GeneralLayouts.Section width="fit">
- *   <Button>Fit to content</Button>
- * </GeneralLayouts.Section>
- * ```
- *
- * @remarks
- * - The component defaults to column layout when no direction is specified
- * - Full width and height by default
- * - Accepts className for additional styling; style prop is not available
- * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
- */
-export interface SectionProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
-  className?: string;
-  flexDirection?: FlexDirection;
-  justifyContent?: JustifyContent;
-  alignItems?: AlignItems;
-  width?: Length;
-  height?: Length;
-
-  gap?: number;
-  padding?: number;
-  wrap?: boolean;
-
-  // Debugging utilities
-  dbg?: boolean;
-
-  ref?: React.Ref<HTMLDivElement>;
-}
-
-/**
- * `<Disabled>` from `@opal/core` uses `display: contents` — it can safely
- * wrap a `Section` without affecting layout.
- */
-function Section({
-  className,
-  flexDirection = "column",
-  justifyContent = "center",
-  alignItems = "center",
-  width = "full",
-  height = "full",
-  gap = 1,
-  padding = 0,
-  wrap,
-  dbg,
-  ref,
-  ...rest
-}: SectionProps) {
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "flex",
-
-        flexDirectionClassMap[flexDirection],
-        justifyClassMap[justifyContent],
-        alignClassMap[alignItems],
-        typeof width === "string" && widthClassmap[width],
-        typeof height === "string" && heightClassmap[height],
-        typeof height === "number" && "overflow-hidden",
-
-        wrap && "flex-wrap",
-        dbg && "dbg-red",
-        className
-      )}
-      style={{
-        gap: `${gap}rem`,
-        padding: `${padding}rem`,
-        ...(typeof width === "number" && { width: `${width}rem` }),
-        ...(typeof height === "number" && { height: `${height}rem` }),
-      }}
-      {...rest}
-    />
-  );
-}
+import { Section } from "@opal/layouts/general/components";
 
 export interface AttachmentItemLayoutProps {
   title: string;
@@ -220,30 +80,6 @@ function AttachmentItemLayout({
   );
 }
 
-/**
- * CardItemLayout - A layout for card headers with icon, title, description, and actions
- *
- * Structure:
- *   Column [
- *     Row [
- *       Row [ Icon (18px), Title ],
- *       rightChildren (action buttons)
- *     ],
- *     Description (optional, 2-line clamp)
- *   ]
- *
- * Used for card components that display an entity with:
- * - An icon on the left (18px, controlled by this layout)
- * - A title next to the icon
- * - Optional action buttons on the right
- * - Optional description below (2-line max)
- *
- * @param icon - Icon component to render on the left. Receives `size` prop from layout.
- *               Use a callback for custom components: `(props) => <AgentAvatar {...props} />`
- * @param title - The main title text
- * @param description - Optional description text below the title row (clamped to 2 lines)
- * @param rightChildren - Optional content on the right (typically action buttons)
- */
 export interface CardItemLayoutProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
@@ -288,4 +124,5 @@ function CardItemLayout({
     </div>
   );
 }
-export { Section, CardItemLayout, AttachmentItemLayout };
+
+export { CardItemLayout, AttachmentItemLayout };

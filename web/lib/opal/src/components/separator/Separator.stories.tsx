@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import Separator from "./Separator";
+import { Separator } from "@opal/components";
 
 const meta: Meta<typeof Separator> = {
-  title: "refresh-components/Separator",
+  title: "opal/components/Separator",
   component: Separator,
   tags: ["autodocs"],
 };

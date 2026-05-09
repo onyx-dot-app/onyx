@@ -367,6 +367,7 @@ class TokenRateLimitScope(str, Enum):
 class FileStoreType(str, Enum):
     S3 = "s3"
     POSTGRES = "postgres"
+    GCS = "gcs"
 
 
 class FileOrigin(str, Enum):

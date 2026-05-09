@@ -28,7 +28,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
