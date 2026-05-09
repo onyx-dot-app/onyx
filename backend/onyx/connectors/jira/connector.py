@@ -1022,73 +1022,99 @@ class JiraConnector(
         if not url_to_issue_key:
             return
 
-        issues = bulk_fetch_issues(self.jira_client, list(url_to_issue_key.values()))
+        # bulk_fetch_issues posts to /issue/bulkfetch which is v3-only
+        # (Cloud). Server/Data Center has no equivalent, so fall back to a
+        # JQL `key in (...)` search through the standard jira-library
+        # `search_issues`.
+        issue_keys = list(url_to_issue_key.values())
+        if _is_cloud_client(self.jira_client):
+            issues: list[Issue] = bulk_fetch_issues(self.jira_client, issue_keys)
+        else:
+            quoted_keys = ",".join("'%s'" % k for k in issue_keys)
+            jql = "key in (%s)" % quoted_keys
+            issues = list(
+                self.jira_client.search_issues(
+                    jql_str=jql,
+                    maxResults=len(issue_keys),
+                )
+            )
 
         seen_hierarchy_node_ids: set[str] = set()
         found_keys: set[str] = set()
 
         for issue in issues:
-            found_keys.add(issue.key)
-            page_url = build_jira_url(self.jira_base, issue.key)
+            issue_key = issue.key
+            page_url = build_jira_url(self.jira_base, issue_key)
+            try:
+                found_keys.add(issue_key)
 
-            project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
-            project_key = project.key if project else None
-            project_name = project.name if project else None
-            if not project_key:
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+                if not project_key:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=page_url,
+                            document_link=page_url,
+                        ),
+                        failure_message=(
+                            "Issue %s has no project; cannot place in hierarchy."
+                            % issue_key
+                        ),
+                    )
+                    continue
+
+                yield from self._yield_project_hierarchy_node(
+                    project_key, project_name, seen_hierarchy_node_ids
+                )
+                parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                if parent:
+                    yield from self._yield_parent_hierarchy_node_if_epic(
+                        parent, project_key, seen_hierarchy_node_ids
+                    )
+                if self._is_epic(issue):
+                    yield from self._yield_epic_hierarchy_node(
+                        issue, project_key, seen_hierarchy_node_ids
+                    )
+
+                parent_hierarchy_raw_node_id = self._get_parent_hierarchy_raw_node_id(
+                    issue, project_key
+                )
+                document = process_jira_issue(
+                    jira_base_url=self.jira_base,
+                    issue=issue,
+                    comment_email_blacklist=self.comment_email_blacklist,
+                    labels_to_skip=self.labels_to_skip,
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                )
+                if document is None:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=page_url,
+                            document_link=page_url,
+                        ),
+                        failure_message=(
+                            "Issue %s skipped during conversion (label-skip or "
+                            "exceeds max ticket size)." % issue_key
+                        ),
+                    )
+                    continue
+
+                if include_permissions:
+                    document.external_access = self._get_project_permissions(
+                        project_key,
+                        add_prefix=True,
+                    )
+                yield document
+            except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=page_url,
                         document_link=page_url,
                     ),
-                    failure_message=(
-                        "Issue %s has no project; cannot place in hierarchy."
-                        % issue.key
-                    ),
+                    failure_message="Failed to process Jira issue: %s" % str(e),
+                    exception=e,
                 )
-                continue
-
-            yield from self._yield_project_hierarchy_node(
-                project_key, project_name, seen_hierarchy_node_ids
-            )
-            parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
-            if parent:
-                yield from self._yield_parent_hierarchy_node_if_epic(
-                    parent, project_key, seen_hierarchy_node_ids
-                )
-            if self._is_epic(issue):
-                yield from self._yield_epic_hierarchy_node(
-                    issue, project_key, seen_hierarchy_node_ids
-                )
-
-            parent_hierarchy_raw_node_id = self._get_parent_hierarchy_raw_node_id(
-                issue, project_key
-            )
-            document = process_jira_issue(
-                jira_base_url=self.jira_base,
-                issue=issue,
-                comment_email_blacklist=self.comment_email_blacklist,
-                labels_to_skip=self.labels_to_skip,
-                parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-            )
-            if document is None:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=page_url,
-                        document_link=page_url,
-                    ),
-                    failure_message=(
-                        "Issue %s skipped during conversion (label-skip or "
-                        "exceeds max ticket size)." % issue.key
-                    ),
-                )
-                continue
-
-            if include_permissions:
-                document.external_access = self._get_project_permissions(
-                    project_key,
-                    add_prefix=True,
-                )
-            yield document
 
         for doc_id, issue_key in url_to_issue_key.items():
             if issue_key not in found_keys:
