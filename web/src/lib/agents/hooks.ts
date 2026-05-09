@@ -7,7 +7,6 @@ import {
   FullAgent,
   MinimalAgent,
   Agent,
-  UseAdminAgentsOptions,
   PaginatedAgentsResponse,
 } from "@/lib/agents/types";
 import {
@@ -83,15 +82,13 @@ export function useAgent(agentId: number | null) {
  * paginated and totalItems reflects the full count; otherwise all agents are
  * returned in a flat array.
  */
-export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
-  const {
-    includeDeleted = false,
-    getEditable = false,
-    includeDefault = false,
-    pageNum,
-    pageSize,
-  } = options;
-
+export function useAdminAgents(
+  includeDeleted = false,
+  getEditable = false,
+  includeDefault = false,
+  pageNum?: number,
+  pageSize?: number
+) {
   const usePagination = pageNum !== undefined && pageSize !== undefined;
 
   const url = usePagination

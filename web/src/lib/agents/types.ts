@@ -124,14 +124,6 @@ export interface AgentUpsertRequest {
   document_ids: string[];
 }
 
-export interface UseAdminAgentsOptions {
-  includeDeleted?: boolean;
-  getEditable?: boolean;
-  includeDefault?: boolean;
-  pageNum?: number;
-  pageSize?: number;
-}
-
 export interface PaginatedAgentsResponse {
   items: Agent[];
   total_items: number;

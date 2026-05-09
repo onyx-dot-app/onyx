@@ -157,9 +157,11 @@ export default function Page({ params }: Props) {
     error: channelsError,
     refreshChannels,
   } = useDiscordChannels(guildId);
-  const { agents, isLoading: personasLoading } = useAdminAgents({
-    includeDefault: true,
-  });
+  const { agents, isLoading: personasLoading } = useAdminAgents(
+    false,
+    false,
+    true
+  );
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Local state for channel configurations
