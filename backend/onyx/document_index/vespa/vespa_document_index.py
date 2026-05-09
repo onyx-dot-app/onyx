@@ -949,7 +949,28 @@ class VespaDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError
+        # Ported from the legacy Vespa admin_retrieval: pure-keyword search over
+        # weakAnd(userInput) plus a content_summary userInput pass for
+        # highlighting (n-gram highlighting is broken / not behaving as
+        # desired). Hidden documents are included so admin search can surface
+        # them.
+        vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
+        yql = (
+            YQL_BASE.format(index_name=self._index_name)
+            + vespa_where_clauses
+            + '({grammar: "weakAnd"}userInput(@query) '
+            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+        )
+
+        params: dict[str, str | int] = {
+            "yql": yql,
+            "query": query,
+            "hits": num_to_retrieve,
+            "ranking.profile": "admin_search",
+            "timeout": VESPA_TIMEOUT,
+        }
+
+        return cleanup_content_for_chunks(query_vespa(params))
 
     def semantic_retrieval(
         self,

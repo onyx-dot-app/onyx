@@ -25,6 +25,8 @@ def wipe_vespa_index() -> bool:
     should_continue = True
     RETRIES = 3
 
+    endpoint = DOCUMENT_ID_ENDPOINT.format(index_name=DOCUMENT_INDEX_NAME)
+
     while should_continue:
         params = {"selection": "true", "cluster": DOCUMENT_INDEX_NAME}
         if continuation:
@@ -32,7 +34,7 @@ def wipe_vespa_index() -> bool:
 
         for attempt in range(RETRIES):
             try:
-                response = requests.delete(DOCUMENT_ID_ENDPOINT, params=params)
+                response = requests.delete(endpoint, params=params)
                 response.raise_for_status()
 
                 response_json = response.json()
