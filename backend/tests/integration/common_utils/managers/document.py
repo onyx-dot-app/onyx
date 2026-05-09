@@ -18,30 +18,6 @@ from tests.integration.common_utils.test_models import SimpleTestDocument
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
-def _build_ingestion_payload(
-    document_id: str,
-    cc_pair_id: int,
-    content: str | None = None,
-    metadata: dict | None = None,
-) -> dict:
-    text = content or f"This is test document {document_id}"
-    doc_metadata: dict = {"document_id": document_id}
-    if metadata:
-        doc_metadata.update(metadata)
-
-    return {
-        "document": {
-            "id": document_id,
-            "sections": [{"text": text, "link": document_id}],
-            "source": DocumentSource.NOT_APPLICABLE,
-            "metadata": doc_metadata,
-            "semantic_identifier": f"Test Document {document_id}",
-            "from_ingestion_api": True,
-        },
-        "cc_pair_id": cc_pair_id,
-    }
-
-
 def _verify_document_permissions(
     retrieved_doc: dict,
     cc_pair: DATestCCPair,
@@ -79,6 +55,30 @@ def _verify_document_permissions(
             raise ValueError(
                 f"Document set names mismatch. \nFound: {found_doc_set_names}, \nExpected: {set(doc_set_names)}"
             )
+
+
+def _build_ingestion_payload(
+    document_id: str,
+    cc_pair_id: int,
+    content: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    text = content or f"This is test document {document_id}"
+    doc_metadata: dict = {"document_id": document_id}
+    if metadata:
+        doc_metadata.update(metadata)
+
+    return {
+        "document": {
+            "id": document_id,
+            "sections": [{"text": text, "link": document_id}],
+            "source": DocumentSource.NOT_APPLICABLE,
+            "metadata": doc_metadata,
+            "semantic_identifier": f"Test Document {document_id}",
+            "from_ingestion_api": True,
+        },
+        "cc_pair_id": cc_pair_id,
+    }
 
 
 class DocumentManager:
