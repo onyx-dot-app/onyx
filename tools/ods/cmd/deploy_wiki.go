@@ -16,7 +16,7 @@ const (
 	wikiDeployRepo      = "onyx-dot-app/cloud-deployment-yamls"
 	wikiDeployWorkflow  = "dev-wiki-deploy.yml"
 	wikiBuildPollLimit  = 30 * time.Minute
-	wikiDeployPollLimit = 10 * time.Minute
+	wikiDeployPollLimit = 20 * time.Minute
 )
 
 // DeployWikiOptions holds options for the deploy wiki command.
@@ -144,6 +144,7 @@ func runDeploy(versionTag string, noWait bool) {
 		log.Fatalf("Failed to dispatch deploy workflow: %v", err)
 	}
 
+	log.Info("Waiting for deploy workflow to start...")
 	deployRun, err := waitForNewRun(wikiDeployRepo, wikiDeployWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
 		log.Fatalf("Failed to find dispatched deploy run: %v", err)
