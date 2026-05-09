@@ -12,7 +12,7 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { Button, Divider } from "@opal/components";
-import { MinimalAgentSnapshot } from "@/lib/agents/types";
+import { MinimalAgent } from "@/lib/agents/types";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
@@ -40,8 +40,8 @@ export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
   isDefault: boolean;
   documentSets: DocumentSetSummary[];
-  searchEnabledAgents: MinimalAgentSnapshot[];
-  nonSearchAgents: MinimalAgentSnapshot[];
+  searchEnabledAgents: MinimalAgent[];
+  nonSearchAgents: MinimalAgent[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   slack_bot_id: number;
   formikProps: any;
@@ -82,8 +82,8 @@ export function SlackChannelConfigFormFields({
   };
 
   const [syncEnabledAgents, availableAgents] = useMemo(() => {
-    const sync: MinimalAgentSnapshot[] = [];
-    const available: MinimalAgentSnapshot[] = [];
+    const sync: MinimalAgent[] = [];
+    const available: MinimalAgent[] = [];
 
     searchEnabledAgents.forEach((persona) => {
       const hasSyncSet = persona.document_sets.some(documentSetContainsSync);
@@ -383,7 +383,7 @@ export function SlackChannelConfigFormFields({
                   Un-selectable agents:
                 </p>
                 <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                  {syncEnabledAgents.map((persona: MinimalAgentSnapshot) => (
+                  {syncEnabledAgents.map((persona: MinimalAgent) => (
                     <button
                       type="button"
                       onClick={() =>

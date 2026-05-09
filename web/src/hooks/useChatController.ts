@@ -20,7 +20,7 @@ import {
   buildImmediateMessages,
   buildEmptyMessage,
 } from "@/app/app/services/messageTree";
-import { MinimalAgentSnapshot } from "@/lib/agents/types";
+import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -109,8 +109,8 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAgent: MinimalAgentSnapshot | undefined;
-  availableAgents: MinimalAgentSnapshot[];
+  liveAgent: MinimalAgent | undefined;
+  availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;

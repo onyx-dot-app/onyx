@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalAgentSnapshot } from "@/lib/agents/types";
+import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -38,7 +38,7 @@ import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
-  agent: MinimalAgentSnapshot;
+  agent: MinimalAgent;
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {

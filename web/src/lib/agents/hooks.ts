@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   FullAgent,
-  MinimalAgentSnapshot,
+  MinimalAgent,
   Agent,
   UseAdminAgentsOptions,
   PaginatedAgentsResponse,
@@ -30,7 +30,7 @@ import useChatSessions from "@/hooks/useChatSessions";
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
 export function useAgents() {
-  const { data, error, mutate } = useSWR<MinimalAgentSnapshot[]>(
+  const { data, error, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.personas,
     errorHandlingFetcher,
     {
@@ -112,9 +112,9 @@ export function usePinnedAgents() {
   const { user, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
-  const [localPinnedAgents, setLocalPinnedAgents] = useState<
-    MinimalAgentSnapshot[]
-  >([]);
+  const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
+    []
+  );
 
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
@@ -124,7 +124,7 @@ export function usePinnedAgents() {
     }
     return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
-      .filter((agent): agent is MinimalAgentSnapshot => !!agent);
+      .filter((agent): agent is MinimalAgent => !!agent);
   }, [agents, user?.preferences.pinned_assistants]);
 
   useEffect(() => {
@@ -134,7 +134,7 @@ export function usePinnedAgents() {
   }, [serverPinnedAgents, agents.length]);
 
   const togglePinnedAgent = useCallback(
-    async (agent: MinimalAgentSnapshot, shouldPin: boolean) => {
+    async (agent: MinimalAgent, shouldPin: boolean) => {
       const newPinned = shouldPin
         ? [...localPinnedAgents, agent]
         : localPinnedAgents.filter((a) => a.id !== agent.id);
@@ -146,7 +146,7 @@ export function usePinnedAgents() {
   );
 
   const updatePinnedAgents = useCallback(
-    async (newPinnedAgents: MinimalAgentSnapshot[]) => {
+    async (newPinnedAgents: MinimalAgent[]) => {
       setLocalPinnedAgents(newPinnedAgents);
       await pinAgents(newPinnedAgents.map((a) => a.id));
       refreshUser();
@@ -164,7 +164,7 @@ export function usePinnedAgents() {
 
 // ── Current agent (URL param or chat session) ─────────────────────────────────
 
-export function useCurrentAgent(): MinimalAgentSnapshot | null {
+export function useCurrentAgent(): MinimalAgent | null {
   const { agents } = useAgents();
   const searchParams = useSearchParams();
   const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -201,7 +201,7 @@ export function useAgentController({
 
   const existingChatSessionAgentId = selectedChatSession?.persona_id;
   const [selectedAgent, setSelectedAssistant] = useState<
-    MinimalAgentSnapshot | undefined
+    MinimalAgent | undefined
   >(
     existingChatSessionAgentId !== undefined
       ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
@@ -210,7 +210,7 @@ export function useAgentController({
         : undefined
   );
 
-  const liveAgent: MinimalAgentSnapshot | undefined = useMemo(() => {
+  const liveAgent: MinimalAgent | undefined = useMemo(() => {
     if (selectedAgent) return selectedAgent;
     const disableDefaultAssistant =
       combinedSettings?.settings?.disable_default_assistant ?? false;
@@ -252,7 +252,7 @@ export function useIsDefaultAgent({
   selectedChatSession,
   settings,
 }: {
-  liveAgent: MinimalAgentSnapshot | undefined;
+  liveAgent: MinimalAgent | undefined;
   existingChatSessionId: string | null;
   selectedChatSession: ChatSession | undefined;
   settings: CombinedSettings | null;

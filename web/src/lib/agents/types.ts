@@ -23,12 +23,9 @@ export interface AttachedDocumentSnapshot {
   source: ValidSources | null;
 }
 
-export interface StarterMessageBase {
-  message: string;
-}
-
-export interface StarterMessage extends StarterMessageBase {
+export interface AgentStarterMessage {
   name: string;
+  message: string;
 }
 
 export interface AgentLabel {
@@ -36,12 +33,12 @@ export interface AgentLabel {
   name: string;
 }
 
-export interface MinimalAgentSnapshot {
+export interface MinimalAgent {
   id: number;
   name: string;
   description: string;
   tools: ToolSnapshot[];
-  starter_messages: StarterMessage[] | null;
+  starter_messages: AgentStarterMessage[] | null;
   document_sets: DocumentSetSummary[];
   hierarchy_node_count?: number;
   attached_document_count?: number;
@@ -58,7 +55,7 @@ export interface MinimalAgentSnapshot {
   owner: MinimalUserSnapshot | null;
 }
 
-export interface Agent extends MinimalAgentSnapshot {
+export interface Agent extends MinimalAgent {
   user_file_ids: string[];
   users: MinimalUserSnapshot[];
   groups: number[];
@@ -86,7 +83,7 @@ export interface AgentUpsertParameters {
   document_set_ids: number[];
   is_public: boolean;
   default_model_configuration_id?: number | null;
-  starter_messages: StarterMessage[] | null;
+  starter_messages: AgentStarterMessage[] | null;
   users?: string[];
   groups: number[];
   tool_ids: number[];
@@ -110,7 +107,7 @@ export interface AgentUpsertRequest {
   document_set_ids: number[];
   is_public: boolean;
   default_model_configuration_id: number | null;
-  starter_messages: StarterMessage[] | null;
+  starter_messages: AgentStarterMessage[] | null;
   users?: string[];
   groups: number[];
   tool_ids: number[];
@@ -126,8 +123,6 @@ export interface AgentUpsertRequest {
   hierarchy_node_ids: number[];
   document_ids: string[];
 }
-
-// ── Hook option types ─────────────────────────────────────────────────────────
 
 export interface UseAdminAgentsOptions {
   includeDeleted?: boolean;

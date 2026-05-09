@@ -1,10 +1,10 @@
 import { User } from "@/lib/types";
 import { checkUserIsNoAuthUser } from "@/lib/user";
-import { MinimalAgentSnapshot, Agent } from "@/lib/agents/types";
+import { MinimalAgent, Agent } from "@/lib/agents/types";
 
 export function checkUserOwnsAgent(
   user: User | null,
-  agent: MinimalAgentSnapshot | Agent
+  agent: MinimalAgent | Agent
 ): boolean {
   if (!user) return false;
   const userId = user.id;

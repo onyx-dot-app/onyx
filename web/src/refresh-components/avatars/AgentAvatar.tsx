@@ -1,6 +1,6 @@
 "use client";
 
-import { MinimalAgentSnapshot } from "@/lib/agents/types";
+import { MinimalAgent } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -9,7 +9,7 @@ import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
 
 export interface AgentAvatarProps {
-  agent: MinimalAgentSnapshot;
+  agent: MinimalAgent;
   size?: number;
 }
 

@@ -9,7 +9,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import type { MinimalAgentSnapshot, Agent } from "@/lib/agents/types";
+import type { MinimalAgent, Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { toast } from "@/hooks/useToast";
 import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
@@ -65,10 +65,7 @@ function buildColumns(onMutate: () => void) {
       content: "icon",
       background: true,
       getContent: (row) => (props) => (
-        <AgentAvatar
-          agent={row as unknown as MinimalAgentSnapshot}
-          size={props.size}
-        />
+        <AgentAvatar agent={row as unknown as MinimalAgent} size={props.size} />
       ),
     }),
     tc.column("name", {

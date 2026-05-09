@@ -5,7 +5,7 @@ import AgentCard from "@/sections/agents/AgentCard";
 import { useUser } from "@/providers/UserProvider";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
-import { MinimalAgentSnapshot } from "@/lib/agents/types";
+import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -19,7 +19,7 @@ import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 interface AgentsSectionProps {
   title: string;
   description?: string;
-  agents: MinimalAgentSnapshot[];
+  agents: MinimalAgent[];
 }
 
 function AgentsSection({ title, description, agents }: AgentsSectionProps) {

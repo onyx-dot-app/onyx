@@ -431,7 +431,7 @@ function MCPServerCard({
   );
 }
 
-function StarterMessages() {
+function AgentStarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
   const { values } = useFormikContext<{
@@ -790,7 +790,7 @@ export default function AgentEditorPage({
         }));
 
       // Send null instead of empty array if no starter messages
-      const finalStarterMessages =
+      const finalAgentStarterMessages =
         starterMessages.length > 0 ? starterMessages : null;
 
       // Always look up tools in availableTools to ensure we can find all tools
@@ -858,7 +858,7 @@ export default function AgentEditorPage({
         is_public: values.is_public,
         default_model_configuration_id:
           (values as any).default_model_configuration_id ?? null,
-        starter_messages: finalStarterMessages,
+        starter_messages: finalAgentStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
         tool_ids: toolIds,
@@ -1363,7 +1363,7 @@ export default function AgentEditorPage({
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
                         >
-                          <StarterMessages />
+                          <AgentStarterMessages />
                         </InputVertical>
                       </GeneralLayouts.Section>
 

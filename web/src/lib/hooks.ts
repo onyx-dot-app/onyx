@@ -27,7 +27,7 @@ import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { MinimalAgentSnapshot, AgentLabel } from "@/lib/agents/types";
+import { MinimalAgent, AgentLabel } from "@/lib/agents/types";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
@@ -485,7 +485,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAgent: MinimalAgentSnapshot | null;
+  liveAgent: MinimalAgent | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -644,7 +644,7 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAgent?: MinimalAgentSnapshot
+  liveAgent?: MinimalAgent
 ): LlmManager {
   const { user } = useUser();
 
