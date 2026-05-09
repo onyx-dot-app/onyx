@@ -6,6 +6,7 @@ import pytest
 from onyx.configs.constants import QAFeedbackType
 from tests.integration.common_utils.managers.query_history import QueryHistoryManager
 from tests.integration.common_utils.test_models import DAQueryHistoryEntry
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.query_history.utils import (
     setup_chat_sessions_with_different_feedback,
@@ -54,11 +55,15 @@ def _verify_query_history_pagination(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Query history tests are enterprise only",
 )
-def test_query_history_pagination(reset: None) -> None:  # noqa: ARG001
-    (
-        admin_user,
-        chat_sessions_by_feedback_type,
-    ) = setup_chat_sessions_with_different_feedback()
+def test_query_history_pagination(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    api_key: DATestAPIKey,
+) -> None:
+    chat_sessions_by_feedback_type = setup_chat_sessions_with_different_feedback(
+        admin_user=admin_user,
+        api_key=api_key,
+    )
 
     all_chat_sessions = []
     for _, chat_sessions in chat_sessions_by_feedback_type.items():

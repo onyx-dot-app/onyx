@@ -21,11 +21,9 @@ from onyx.db.models import IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
-from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
@@ -36,19 +34,14 @@ from tests.integration.common_utils.vespa import vespa_fixture
 def test_connector_deletion(
     reset: None,  # noqa: ARG001
     vespa_client: vespa_fixture,
+    admin_user: DATestUser,
+    api_key: DATestAPIKey,
 ) -> None:
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
 
     is_ee = (
         os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-    )
-
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-    # create api key
-    api_key: DATestAPIKey = APIKeyManager.create(
-        user_performing_action=admin_user,
     )
 
     # create connectors
@@ -235,6 +228,8 @@ def test_connector_deletion(
 def test_connector_deletion_for_overlapping_connectors(
     reset: None,  # noqa: ARG001
     vespa_client: vespa_fixture,
+    admin_user: DATestUser,
+    api_key: DATestAPIKey,
 ) -> None:
     """Checks to make sure that connectors with overlapping documents work properly. Specifically, that the overlapping
     document (1) still exists and (2) has the right document set / group post-deletion of one of the connectors.
@@ -244,13 +239,6 @@ def test_connector_deletion_for_overlapping_connectors(
 
     is_ee = (
         os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-    )
-
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-    # create api key
-    api_key: DATestAPIKey = APIKeyManager.create(
-        user_performing_action=admin_user,
     )
 
     # create connectors

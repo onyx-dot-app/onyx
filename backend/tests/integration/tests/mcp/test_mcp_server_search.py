@@ -20,7 +20,6 @@ from pydantic import AnyUrl
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import MCP_SERVER_URL
-from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -128,12 +127,12 @@ def _seed_document_and_wait_for_indexing(
 def test_mcp_document_search_flow(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
+    api_key: DATestAPIKey,
 ) -> None:
     """Test the complete MCP search flow: initialization, resources, tools, and search."""
     # LLM provider is required for the document-search endpoint
     LLMProviderManager.create(user_performing_action=admin_user)
 
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     doc_text = "MCP happy path search document"
@@ -195,6 +194,7 @@ def test_mcp_document_search_flow(
 def test_mcp_search_respects_acl_filters(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
+    api_key: DATestAPIKey,
 ) -> None:
     """Test that search respects ACL filters - privileged users can access, others cannot."""
     # LLM provider is required for the document-search endpoint
@@ -202,8 +202,6 @@ def test_mcp_search_respects_acl_filters(
 
     user_without_access = UserManager.create(name="mcp-acl-user-a")
     privileged_user = UserManager.create(name="mcp-acl-user-b")
-
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
     restricted_cc_pair = CCPairManager.create_from_scratch(
         access_type=AccessType.PRIVATE,
         user_performing_action=admin_user,
@@ -248,11 +246,10 @@ def test_mcp_search_respects_acl_filters(
 def test_mcp_search_filters_by_document_set(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
+    api_key: DATestAPIKey,
 ) -> None:
     """Passing document_set_names should scope results to the named set."""
     LLMProviderManager.create(user_performing_action=admin_user)
-
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pair_in_set = CCPairManager.create_from_scratch(
         user_performing_action=admin_user,
     )

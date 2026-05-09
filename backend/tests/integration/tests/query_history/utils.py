@@ -2,13 +2,12 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 
 from onyx.configs.constants import QAFeedbackType
-from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DAQueryHistoryEntry
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -73,13 +72,12 @@ def _create_chat_session_with_feedback(
     return feedback_type, test_session
 
 
-def setup_chat_sessions_with_different_feedback() -> (
-    tuple[DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]]
-):
-    # Create admin user and required resources
-    admin_user: DATestUser = UserManager.create(name="admin_user")
+def setup_chat_sessions_with_different_feedback(
+    admin_user: DATestUser,
+    api_key: DATestAPIKey,
+) -> dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]:
+    # Create required resources
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
     LLMProviderManager.create(user_performing_action=admin_user)
 
     # Seed a document
@@ -128,4 +126,4 @@ def setup_chat_sessions_with_different_feedback() -> (
                 chat_session
             )
 
-    return admin_user, chat_sessions_by_feedback_type
+    return chat_sessions_by_feedback_type

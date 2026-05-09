@@ -9,22 +9,23 @@ import pytest
 
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
-from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.query_history import QueryHistoryManager
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
 
 @pytest.fixture
-def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
-    # Create admin user and required resources
-    admin_user: DATestUser = UserManager.create(name="admin_user")
+def setup_chat_session(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    api_key: DATestAPIKey,
+) -> tuple[DATestUser, str]:
+    # Create required resources
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
-    api_key = APIKeyManager.create(user_performing_action=admin_user)
     LLMProviderManager.create(user_performing_action=admin_user)
 
     # Seed a document
