@@ -357,6 +357,7 @@ export default function LanguageModelsPage() {
               <ModelSelector
                 value={currentDefaultConfigId}
                 onChange={handleDefaultModelChange}
+                providers={existingLlmProviders}
               />
             </InputHorizontal>
           </Card>

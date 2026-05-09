@@ -14,7 +14,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
  */
 
 const getDefaultModelSelector = (page: Page) =>
-  page.locator('[data-testid="model-picker-trigger"] button').first();
+  page.getByTestId("model-selector").locator("button").first();
 
 const getLLMProviderOptions = async (page: Page) => {
   // Click the selector to open the dropdown

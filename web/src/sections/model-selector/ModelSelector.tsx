@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import Text from "@/refresh-components/texts/Text";
 import { OpenButton } from "@opal/components";
-import { LLMOption } from "@/lib/languageModels/options";
+import { LLMOption, ProviderForOptions } from "@/lib/languageModels/options";
 import ModelSelectorContent from "./ModelSelectorContent";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 
@@ -33,6 +33,10 @@ export interface ModelSelectorProps {
   temperature?: number;
   maxTemperature?: number;
   onTemperatureCommit?: (value: number) => void;
+  /** Explicit persona ID for provider scoping; overrides auto-detection via useCurrentAgent. */
+  personaId?: number;
+  /** Pre-fetched providers (e.g. from the admin endpoint). When provided, skips useLLMProviders. */
+  providers?: ProviderForOptions[];
 }
 
 export default function ModelSelector({
@@ -44,10 +48,13 @@ export default function ModelSelector({
   temperature,
   maxTemperature,
   onTemperatureCommit,
+  personaId,
+  providers,
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const { user } = useUser();
-  const { llmProviders, isLoading } = useLLMProviders();
+  const { llmProviders: fetched, isLoading } = useLLMProviders(personaId);
+  const llmProviders = providers ?? fetched;
 
   const [localTemperature, setLocalTemperature] = useState(temperature ?? 0.5);
 
@@ -136,7 +143,7 @@ export default function ModelSelector({
         setOpen(o);
       }}
     >
-      <div data-testid="model-selector-trigger">
+      <div data-testid="model-selector">
         <Popover.Trigger asChild disabled={disabled}>
           {renderTrigger ? (
             renderTrigger(currentOption)
@@ -164,6 +171,8 @@ export default function ModelSelector({
           onSelect={handleSelect}
           isSelected={isSelected}
           footer={temperatureFooter}
+          personaId={personaId}
+          providers={providers}
         />
       </Popover.Content>
     </Popover>

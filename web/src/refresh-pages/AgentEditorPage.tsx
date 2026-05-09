@@ -1570,6 +1570,7 @@ export default function AgentEditorPage({
                                         id
                                       );
                                     }}
+                                    personaId={existingAgent?.id ?? undefined}
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

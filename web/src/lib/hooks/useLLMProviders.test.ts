@@ -11,6 +11,10 @@ jest.mock("@/lib/fetcher", () => ({
   errorHandlingFetcher: jest.fn(),
 }));
 
+jest.mock("@/hooks/useAgents", () => ({
+  useCurrentAgent: jest.fn().mockReturnValue(null),
+}));
+
 const mockUseSWR = useSWR as jest.MockedFunction<typeof useSWR>;
 
 describe("useLLMProviders", () => {

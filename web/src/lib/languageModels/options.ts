@@ -1,6 +1,18 @@
 import type { IconFunctionComponent } from "@opal/types";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor, ModelConfiguration } from "@/interfaces/llm";
 import { getModelIcon } from "@/lib/languageModels";
+
+/**
+ * Minimal provider shape accepted by buildLlmOptions. Both LLMProviderDescriptor
+ * and LLMProviderView satisfy this interface structurally, so admin pages can
+ * pass their pre-fetched admin providers without an extra conversion step.
+ */
+export interface ProviderForOptions {
+  name: string | null;
+  provider: string;
+  provider_display_name?: string | null;
+  model_configurations: ModelConfiguration[];
+}
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 
 export interface LLMOption {
@@ -29,7 +41,7 @@ export interface LLMOptionGroup {
 }
 
 export function buildLlmOptions(
-  llmProviders: LLMProviderDescriptor[] | undefined,
+  llmProviders: ProviderForOptions[] | undefined,
   currentModelName?: string
 ): LLMOption[] {
   if (!llmProviders) return [];

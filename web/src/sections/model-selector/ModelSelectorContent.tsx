@@ -9,6 +9,7 @@ import { Section } from "@/layouts/general-layouts";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import {
   LLMOption,
+  ProviderForOptions,
   buildLlmOptions,
   groupLlmOptions,
 } from "@/lib/languageModels/options";
@@ -27,6 +28,10 @@ export interface ModelSelectorContentProps {
   isSelected: (option: LLMOption) => boolean;
   isDisabled?: (option: LLMOption) => boolean;
   footer?: React.ReactNode;
+  /** Explicit persona ID for provider scoping; overrides auto-detection via useCurrentAgent. */
+  personaId?: number;
+  /** Pre-fetched providers (e.g. from the admin endpoint). When provided, skips useLLMProviders. */
+  providers?: ProviderForOptions[];
 }
 
 export default function ModelSelectorContent({
@@ -35,8 +40,11 @@ export default function ModelSelectorContent({
   isSelected,
   isDisabled,
   footer,
+  personaId,
+  providers,
 }: ModelSelectorContentProps) {
-  const { llmProviders, isLoading } = useLLMProviders();
+  const { llmProviders: fetched, isLoading } = useLLMProviders(personaId);
+  const llmProviders = providers ?? fetched;
   const [searchQuery, setSearchQuery] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 

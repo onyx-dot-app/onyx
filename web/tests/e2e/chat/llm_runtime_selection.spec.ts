@@ -406,7 +406,11 @@ test.describe("LLM Runtime Selection", () => {
 
     await new ChatPage(page).goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
+    await page
+      .getByTestId("multi-model-selector")
+      .locator("button")
+      .last()
+      .click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
@@ -428,7 +432,11 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
-    await page.getByTestId("model-selector").locator("button").last().click();
+    await page
+      .getByTestId("multi-model-selector")
+      .locator("button")
+      .last()
+      .click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const secondDialog = page.locator('[role="dialog"]');
     await secondDialog
@@ -445,7 +453,11 @@ test.describe("LLM Runtime Selection", () => {
     await anthropicModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
-    await page.getByTestId("model-selector").locator("button").last().click();
+    await page
+      .getByTestId("multi-model-selector")
+      .locator("button")
+      .last()
+      .click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
     // Verify the Anthropic option (index 0) is selected.
@@ -511,7 +523,11 @@ test.describe("LLM Runtime Selection", () => {
     await loginWithCleanCookies(page, testInfo.workerIndex);
     await new ChatPage(page).goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
+    await page
+      .getByTestId("multi-model-selector")
+      .locator("button")
+      .last()
+      .click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
     const dialog = page.locator('[role="dialog"]');
