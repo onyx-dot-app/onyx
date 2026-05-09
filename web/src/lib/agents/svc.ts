@@ -150,29 +150,6 @@ export async function updateAgentSharedStatus(
   }
 }
 
-/**
- * Updates only the labels on an agent, leaving all other sharing settings
- * untouched. Returns an error string on failure, null on success.
- */
-export async function updateAgentLabels(
-  agentId: number,
-  labelIds: number[]
-): Promise<string | null> {
-  try {
-    const res = await fetch(`/api/persona/${agentId}/share`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label_ids: labelIds }),
-    });
-    if (res.ok) return null;
-    return (
-      ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
-    );
-  } catch {
-    return "Network error. Please check your connection and try again.";
-  }
-}
-
 // ── Featured / listed / display priority ─────────────────────────────────────
 
 /**
