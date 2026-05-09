@@ -2086,6 +2086,14 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
             )
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    f"Google Drive credentials are missing required scopes. {ONYX_SCOPE_INSTRUCTIONS} Full error: {e}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Workspace directory API probe: {e}"
+            )
 
     @override
     def build_dummy_checkpoint(self) -> GoogleDriveCheckpoint:
