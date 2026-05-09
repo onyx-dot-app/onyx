@@ -183,6 +183,11 @@ def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
 
 
 @pytest.fixture
+def api_key(admin_user: DATestUser) -> DATestAPIKey:
+    return APIKeyManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture
 def image_generation_config(
     admin_user: DATestUser,
 ) -> DATestImageGenerationConfig:
