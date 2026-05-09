@@ -21,7 +21,12 @@ def validate_confluence_perm_sync(connector: ConfluenceConnector) -> None:
 def validate_drive_perm_sync(connector: GoogleDriveConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
+
+    Group sync calls `admin.directory.users.get` for the configured primary
+    admin. Probe it here so a misconfigured primary admin (403) fails at
+    connector creation instead of every external-group-sync tick.
     """
+    connector.probe_directory_admin_permission()
 
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
