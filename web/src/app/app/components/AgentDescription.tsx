@@ -1,10 +1,10 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { MinimalAgentSnapshot } from "@/lib/agents/types";
 
 export interface AgentDescriptionProps {
-  agent?: MinimalPersonaSnapshot;
+  agent?: MinimalAgentSnapshot;
 }
 
 export default function AgentDescription({ agent }: AgentDescriptionProps) {

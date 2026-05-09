@@ -36,7 +36,7 @@ export interface PersonaLabel {
   name: string;
 }
 
-export interface MinimalPersonaSnapshot {
+export interface MinimalAgentSnapshot {
   id: number;
   name: string;
   description: string;
@@ -58,7 +58,7 @@ export interface MinimalPersonaSnapshot {
   owner: MinimalUserSnapshot | null;
 }
 
-export interface Persona extends MinimalPersonaSnapshot {
+export interface Persona extends MinimalAgentSnapshot {
   user_file_ids: string[];
   users: MinimalUserSnapshot[];
   groups: number[];

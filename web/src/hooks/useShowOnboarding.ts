@@ -11,7 +11,7 @@ import {
 } from "@/interfaces/onboarding";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
-import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { MinimalAgentSnapshot } from "@/lib/agents/types";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
@@ -19,7 +19,7 @@ function getOnboardingCompletedKey(userId: string): string {
   return `onyx:onboardingCompleted:${userId}`;
 }
 
-function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
+function useOnboardingState(liveAgent?: MinimalAgentSnapshot): {
   state: OnboardingState;
   actions: OnboardingActions;
   isLoading: boolean;
@@ -248,7 +248,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
 }
 
 interface UseShowOnboardingParams {
-  liveAgent: MinimalPersonaSnapshot | undefined;
+  liveAgent: MinimalAgentSnapshot | undefined;
   isLoadingChatSessions: boolean;
   chatSessionsCount: number;
   userId: string | undefined;

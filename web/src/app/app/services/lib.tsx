@@ -19,7 +19,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { MinimalAgentSnapshot } from "@/lib/agents/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
@@ -418,7 +418,7 @@ export function processRawChatHistory(
 }
 
 export function personaIncludesRetrieval(
-  selectedPersona: MinimalPersonaSnapshot
+  selectedPersona: MinimalAgentSnapshot
 ) {
   return selectedPersona.tools.some(
     (tool) =>

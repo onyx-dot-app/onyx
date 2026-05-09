@@ -69,8 +69,8 @@ import CustomAgentAvatar, {
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents } from "@/lib/agents/hooks";
-import { createPersona, updatePersona } from "@/lib/agents/svc";
-import { PersonaUpsertParameters } from "@/lib/agents/svc";
+import { createAgent, updateAgent } from "@/lib/agents/svc";
+import { AgentUpsertParameters } from "@/lib/agents/svc";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -849,7 +849,7 @@ export default function AgentEditorPage({
       });
 
       // Build submission data
-      const submissionData: PersonaUpsertParameters = {
+      const submissionData: AgentUpsertParameters = {
         name: values.name,
         description: values.description,
         document_set_ids: values.enable_knowledge
@@ -886,9 +886,9 @@ export default function AgentEditorPage({
       // Call API
       let personaResponse;
       if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+        personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
-        personaResponse = await createPersona(submissionData);
+        personaResponse = await createAgent(submissionData);
       }
 
       // Handle response

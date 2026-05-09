@@ -58,7 +58,7 @@ interface UseUserPersonalizationOptions {
  *   const { user, updateUserPersonalization } = useUser();
  *   const {
  *     personalizationValues,
- *     updatePersonalizationField,
+ *     updateAgentlizationField,
  *     toggleUseMemories,
  *     updateMemoryAtIndex,
  *     addMemory,
@@ -73,7 +73,7 @@ interface UseUserPersonalizationOptions {
  *     <div>
  *       <input
  *         value={personalizationValues.name}
- *         onChange={(e) => updatePersonalizationField("name", e.target.value)}
+ *         onChange={(e) => updateAgentlizationField("name", e.target.value)}
  *       />
  *       <button
  *         onClick={handleSavePersonalization}
@@ -115,7 +115,7 @@ export default function useUserPersonalization(
     setPersonalizationValues(basePersonalization);
   }, [basePersonalization]);
 
-  const updatePersonalizationField = useCallback(
+  const updateAgentlizationField = useCallback(
     (field: "name" | "role", value: string) => {
       setPersonalizationValues((prev) => ({
         ...prev,
@@ -216,7 +216,7 @@ export default function useUserPersonalization(
 
   return {
     personalizationValues,
-    updatePersonalizationField,
+    updateAgentlizationField,
     toggleUseMemories,
     toggleEnableMemoryTool,
     updateUserPreferences,

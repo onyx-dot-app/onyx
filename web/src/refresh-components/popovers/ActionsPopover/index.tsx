@@ -13,7 +13,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
-import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { MinimalAgentSnapshot } from "@/lib/agents/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
@@ -151,7 +151,7 @@ type SecondaryViewState =
   | { type: "mcp"; serverId: number };
 
 export interface ActionsPopoverProps {
-  selectedAgent: MinimalPersonaSnapshot;
+  selectedAgent: MinimalAgentSnapshot;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
   disabled?: boolean;

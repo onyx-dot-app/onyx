@@ -1,6 +1,6 @@
 import { StarterMessage } from "@/lib/agents/types";
 
-export interface PersonaUpsertParameters {
+export interface AgentUpsertParameters {
   name: string;
   description: string;
   system_prompt: string;
@@ -25,7 +25,7 @@ export interface PersonaUpsertParameters {
   document_ids?: string[];
 }
 
-interface PersonaUpsertRequest {
+interface AgentUpsertRequest {
   name: string;
   description: string;
   system_prompt: string;
@@ -51,9 +51,9 @@ interface PersonaUpsertRequest {
   document_ids: string[];
 }
 
-function buildPersonaUpsertRequest(
-  params: PersonaUpsertParameters
-): PersonaUpsertRequest {
+function buildAgentUpsertRequest(
+  params: AgentUpsertParameters
+): AgentUpsertRequest {
   return {
     name: params.name,
     description: params.description,
@@ -93,25 +93,25 @@ async function parseErrorDetail(res: Response, fallback: string) {
 
 // ── Agent CRUD ───────────────────────────────────────────────────────────────
 
-export async function createPersona(
-  params: PersonaUpsertParameters
+export async function createAgent(
+  params: AgentUpsertParameters
 ): Promise<Response> {
   return fetch("/api/persona", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildPersonaUpsertRequest(params)),
+    body: JSON.stringify(buildAgentUpsertRequest(params)),
     credentials: "include",
   });
 }
 
-export async function updatePersona(
+export async function updateAgent(
   id: number,
-  params: PersonaUpsertParameters
+  params: AgentUpsertParameters
 ): Promise<Response> {
   return fetch(`/api/persona/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildPersonaUpsertRequest(params)),
+    body: JSON.stringify(buildAgentUpsertRequest(params)),
     credentials: "include",
   });
 }

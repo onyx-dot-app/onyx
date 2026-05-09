@@ -11,7 +11,7 @@ import useSWRInfinite from "swr/infinite";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { MinimalAgentSnapshot } from "@/lib/agents/types";
 import useAppFocus from "./useAppFocus";
 import { useAgents } from "@/lib/agents/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
@@ -34,7 +34,7 @@ interface UseChatSessionsOutput {
   chatSessions: ChatSession[];
   currentChatSessionId: string | null;
   currentChatSession: ChatSession | null;
-  agentForCurrentChatSession: MinimalPersonaSnapshot | null;
+  agentForCurrentChatSession: MinimalAgentSnapshot | null;
   isLoading: boolean;
   error: any;
   refreshChatSessions: () => Promise<ChatSessionsResponse[] | undefined>;
@@ -109,7 +109,7 @@ function usePendingSessions(): ChatSession[] {
 
 function useFindAgentForCurrentChatSession(
   currentChatSession: ChatSession | null
-): MinimalPersonaSnapshot | null {
+): MinimalAgentSnapshot | null {
   const { agents } = useAgents();
   const appFocus = useAppFocus();
 

@@ -218,7 +218,7 @@ function GeneralSettings() {
 
   const {
     personalizationValues,
-    updatePersonalizationField,
+    updateAgentlizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
     onSuccess: () => toast.success("Personalization updated successfully"),
@@ -301,7 +301,7 @@ function GeneralSettings() {
                 placeholder="Your name"
                 value={personalizationValues.name}
                 onChange={(e) =>
-                  updatePersonalizationField("name", e.target.value)
+                  updateAgentlizationField("name", e.target.value)
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -327,7 +327,7 @@ function GeneralSettings() {
                 placeholder="Your role"
                 value={personalizationValues.role}
                 onChange={(e) =>
-                  updatePersonalizationField("role", e.target.value)
+                  updateAgentlizationField("role", e.target.value)
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
