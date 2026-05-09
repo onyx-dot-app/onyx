@@ -4,7 +4,7 @@ import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
-export interface HierarchyNodeSnapshot {
+export interface AgentHierarchyNode {
   id: number;
   raw_node_id: string;
   display_name: string;
@@ -13,7 +13,7 @@ export interface HierarchyNodeSnapshot {
   node_type: string;
 }
 
-export interface AttachedDocumentSnapshot {
+export interface AgentAttachedDocument {
   id: string;
   title: string;
   link: string | null;
@@ -59,8 +59,8 @@ export interface Agent extends MinimalAgent {
   user_file_ids: string[];
   users: MinimalUserSnapshot[];
   groups: number[];
-  hierarchy_nodes?: HierarchyNodeSnapshot[];
-  attached_documents?: AttachedDocumentSnapshot[];
+  hierarchy_nodes?: AgentHierarchyNode[];
+  attached_documents?: AgentAttachedDocument[];
   system_prompt: string | null;
   replace_base_system_prompt: boolean;
   task_prompt: string | null;
